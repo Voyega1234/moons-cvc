@@ -1,0 +1,127 @@
+import { stages } from "./config";
+import { canSelectBrand } from "../../domain/brand";
+import type { WorkflowAction, WorkflowState } from "./model";
+
+export function isClientReviewComplete(run: WorkflowState): boolean {
+  return (
+    run.outputs.length > 0 &&
+    run.outputs.every((output) => output.clientStatus === "approved")
+  );
+}
+
+export function isStageComplete(
+  run: WorkflowState,
+  stageId: WorkflowState["stage"]
+): boolean {
+  switch (stageId) {
+    case "start":
+      return Boolean(run.brand);
+    case "brief":
+      return run.directions.length > 0;
+    case "directions":
+      return run.outputs.length > 0;
+    case "studio":
+      return run.qaComplete;
+    case "approval":
+      return run.approved;
+    case "client":
+      return isClientReviewComplete(run);
+    case "summary":
+      return run.done;
+  }
+}
+
+export function highestUnlockedStageIndex(run: WorkflowState): number {
+  const firstIncompleteIndex = stages.findIndex(
+    (stage) => !isStageComplete(run, stage.id)
+  );
+  return firstIncompleteIndex === -1
+    ? stages.length - 1
+    : firstIncompleteIndex;
+}
+
+export function canNavigateToStage(
+  run: WorkflowState,
+  target: WorkflowState["stage"]
+): boolean {
+  const targetIndex = stages.findIndex((stage) => stage.id === target);
+  return targetIndex >= 0 && targetIndex <= highestUnlockedStageIndex(run);
+}
+
+export function selectedDirectionCount(run: WorkflowState): number {
+  return run.directions.filter((direction) => direction.selected).length;
+}
+
+export function workflowActionBlockReason(
+  run: WorkflowState,
+  action: WorkflowAction
+): string | null {
+  switch (action.type) {
+    case "set-stage":
+      return canNavigateToStage(run, action.stage)
+        ? null
+        : "Finish the current step before opening that stage.";
+    case "select-brand":
+      return canSelectBrand(action.brand)
+        ? null
+        : "This client has no Moons brand memory yet.";
+    case "generate-directions":
+      if (!run.brand) return "Choose a brand first.";
+      if (!run.brief.trim()) return "Add a brief first.";
+      return null;
+    case "toggle-direction":
+      return run.directions.some((direction) => direction.id === action.id)
+        ? null
+        : "Generate hooks before selecting one.";
+    case "auto-select-directions":
+      return run.directions.length > 0
+        ? null
+        : "Generate hooks before Moons can pick.";
+    case "create-outputs":
+      if (!run.directions.length) return "Generate hooks first.";
+      return selectedDirectionCount(run) === run.quantity
+        ? null
+        : `Select ${run.quantity} hooks first.`;
+    case "run-qa":
+      return run.outputs.length > 0 ? null : "Create outputs before QA.";
+    case "approve-all":
+      if (!run.outputs.length) return "Create outputs before internal QC.";
+      return run.qaComplete ? null : "Run QA before internal approval.";
+    case "send-client":
+      if (!run.outputs.length) return "Create outputs before client review.";
+      return run.approved ? null : "Approve internally before client review.";
+    case "approve-output":
+      if (!run.clientSent) return "Send to client first.";
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "mark-delivered":
+      return isClientReviewComplete(run)
+        ? null
+        : "Client must approve every output first.";
+    case "mark-done":
+      return run.stage === "summary"
+        ? null
+        : "Mark delivered before closing the run.";
+    default:
+      return null;
+  }
+}
+
+export function canPerformWorkflowAction(
+  run: WorkflowState,
+  action: WorkflowAction
+): boolean {
+  return workflowActionBlockReason(run, action) === null;
+}
+
+export function runStatus(
+  run: WorkflowState
+): "active" | "ready" | "warning" | "delivered" {
+  if (run.done) return "delivered";
+  if (run.outputs.some((output) => output.status === "needs-revision")) {
+    return "warning";
+  }
+  if (run.qaComplete) return "ready";
+  return "active";
+}

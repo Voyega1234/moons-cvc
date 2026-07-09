@@ -1,0 +1,336 @@
+import { describe, expect, it, vi } from "vitest";
+import type { ApifyClient } from "./apify-client";
+import {
+  runClientIngestionJob,
+  type BrandMemoryWriter,
+  type BrandVisualAnalyzer,
+  type ClientIngestionStore,
+  type ImageMirror
+} from "./client-ingestion-harness";
+
+function createStore(): ClientIngestionStore & {
+  jobStatuses: unknown[];
+  clientStatuses: unknown[];
+  sources: unknown[];
+  posts: unknown[];
+  ads: unknown[];
+  visualAssets: unknown[];
+} {
+  return {
+    jobStatuses: [],
+    clientStatuses: [],
+    sources: [],
+    posts: [],
+    ads: [],
+    visualAssets: [],
+    async updateJobStatus(input) {
+      this.jobStatuses.push(input);
+    },
+    async updateClientStatus(input) {
+      this.clientStatuses.push(input);
+    },
+    async saveBrandSource(input) {
+      const source = { ...input, id: `source-${this.sources.length + 1}` };
+      this.sources.push(source);
+      return source;
+    },
+    async saveSocialPosts(input) {
+      this.posts.push(...input.posts);
+      return input.posts.map((post, index) => ({
+        id: `post-${index + 1}`,
+        postUrl: post.postUrl
+      }));
+    },
+    async saveAdLibraryItems(input) {
+      this.ads.push(...input.ads);
+      return input.ads.map((ad, index) => ({
+        id: `ad-${index + 1}`,
+        adArchiveId: ad.adArchiveId
+      }));
+    },
+    async saveVisualAsset(input) {
+      this.visualAssets.push(input);
+    }
+  };
+}
+
+describe("runClientIngestionJob", () => {
+  it("collects posts and ads, mirrors image-only assets, and leaves the job ready for analysis", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Organic brand post",
+          media: [
+            {
+              id: "video-1",
+              thumbnailImage: { uri: "https://cdn.example.com/post-thumb.jpg" },
+              browser_native_hd_url: "https://cdn.example.com/post-video.mp4"
+            }
+          ]
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [
+        {
+          ad_archive_id: "ad-1",
+          ad_library_url: "https://www.facebook.com/ads/library/?id=ad-1",
+          snapshot: {
+            body: { text: "Paid ad body" },
+            videos: [
+              {
+                video_preview_image_url:
+                  "https://cdn.example.com/ad-preview.jpg",
+                video_hd_url: "https://cdn.example.com/ad-video.mp4"
+              }
+            ]
+          }
+        }
+      ])
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      async mirror(input) {
+        return {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: `${input.clientId}/${input.jobId}/${input.index}.jpg`,
+          assetUrl: `https://storage.example.com/${input.index}.jpg`,
+          originalUrlHash: `hash-${input.index}`
+        };
+      }
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror }
+    );
+
+    expect(result).toEqual({
+      postsSaved: 1,
+      adsSaved: 1,
+      visualAssetsMirrored: 2,
+      usedFallbackSearch: false,
+      completed: false
+    });
+    expect(store.sources).toHaveLength(2);
+    expect(store.posts).toHaveLength(1);
+    expect(store.ads).toHaveLength(1);
+    expect(store.visualAssets).toHaveLength(2);
+    expect(JSON.stringify(store.visualAssets)).not.toContain(".mp4");
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "needs_review"
+    });
+  });
+
+  it("marks the client failed with a Facebook access message when both Facebook sources fail and no fallback exists", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => {
+        throw new Error("Posts unavailable");
+      }),
+      scrapeFacebookAdsLibrary: vi.fn(async () => {
+        throw new Error("Ads unavailable");
+      })
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      mirror: vi.fn()
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror }
+    );
+
+    expect(result.visualAssetsMirrored).toBe(0);
+    expect(store.sources).toHaveLength(2);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "failed",
+      errorMessage: "เข้าถึงลิงก์ Facebook นี้ไม่ได้"
+    });
+  });
+
+  it("analyzes mirrored images, writes Brand Memory, and marks the client ready", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Soft floral styling",
+          media: [
+            {
+              image: { uri: "https://cdn.example.com/post.jpg" }
+            }
+          ]
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      async mirror(input) {
+        return {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: `${input.clientId}/${input.jobId}/${input.index}.jpg`,
+          assetUrl: `https://storage.example.com/${input.index}.jpg`,
+          originalUrlHash: `hash-${input.index}`
+        };
+      }
+    };
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(
+        async (input: Parameters<BrandVisualAnalyzer["analyze"]>[0]) => ({
+        brandKitEntries: [
+          {
+            title: "Visual mood",
+            description: "Fresh, soft, feminine"
+          }
+        ],
+        learning: [
+          {
+            polarity: "working" as const,
+            note: "Use soft natural light with close product detail."
+          }
+        ],
+        products: [
+          {
+            name: "ช่อดอกไม้",
+            description: "ช่อดอกไม้สดสำหรับเป็นของขวัญ",
+            offer: "จัดส่งตามวันนัดหมาย",
+            keyBenefit: "มอบเป็นของขวัญได้สะดวก",
+            audience: "ผู้ซื้อของขวัญ",
+            claimNotes: "ตรวจสอบพื้นที่และเวลาจัดส่งก่อนใช้"
+          }
+        ],
+        visualGuidance: {
+          mood: ["fresh", "soft"],
+          colorPalette: ["cream", "green"],
+          layoutPatterns: ["centered product"],
+          textOverlay: ["minimal"],
+          typographyFeel: ["clean"],
+          productPersonEnvironment: ["product with flowers"],
+          dos: ["keep natural light"],
+          donts: ["avoid harsh contrast"],
+          sourceAssetPaths: input.visualAssets.map(
+            (asset) => asset.assetStoragePath
+          )
+        },
+        needsReview: false
+        })
+      )
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror, visualAnalyzer, brandMemoryWriter }
+    );
+
+    expect(result).toEqual({
+      postsSaved: 1,
+      adsSaved: 0,
+      visualAssetsMirrored: 1,
+      usedFallbackSearch: false,
+      completed: true
+    });
+    expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client: expect.objectContaining({ id: "client-1" }),
+        visualAssets: [
+          expect.objectContaining({
+            assetStoragePath: "client-1/job-1/0.jpg",
+            sourceType: "facebook_post"
+          })
+        ]
+      })
+    );
+    expect(brandMemoryWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-1",
+        jobId: "job-1",
+        analysis: expect.objectContaining({
+          visualGuidance: expect.objectContaining({
+            sourceAssetPaths: ["client-1/job-1/0.jpg"]
+          })
+        })
+      })
+    );
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "ready"
+    });
+  });
+
+  it("marks the client failed when visual analysis fails after image mirroring", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Post with image",
+          media: [
+            {
+              image: { uri: "https://cdn.example.com/post.jpg" }
+            }
+          ]
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      async mirror(input) {
+        return {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: `${input.clientId}/${input.jobId}/${input.index}.jpg`,
+          assetUrl: `https://storage.example.com/${input.index}.jpg`,
+          originalUrlHash: `hash-${input.index}`
+        };
+      }
+    };
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(async () => {
+        throw new Error("Vision model unavailable");
+      })
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror, visualAnalyzer, brandMemoryWriter }
+    );
+
+    expect(result).toMatchObject({
+      visualAssetsMirrored: 1,
+      completed: false
+    });
+    expect(brandMemoryWriter.write).not.toHaveBeenCalled();
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "failed",
+      errorMessage: "Vision model unavailable"
+    });
+  });
+});

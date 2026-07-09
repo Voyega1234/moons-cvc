@@ -1,0 +1,32 @@
+{
+  "name": "moons-creative-os",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "worker:client-ingestion": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/run-client-ingestion-worker.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify:prototype": "node scripts/verify-prototype.mjs",
+    "check": "npm run typecheck && npm run test && npm run verify:prototype && npm run build"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^3.2.6"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -iname \"*.env*\" -not -path \"*/node_modules/*\")",
+      "Bash(find . -type d \\\\\\( -name \"api\" -o -name \"functions\" -o -name \"netlify\" -o -name \"supabase\" \\\\\\) -not -path \"*/node_modules/*\")",
+      "Bash(find ./api -type f)",
+      "Bash(cat .env)",
+      "Bash(cat .env.local)",
+      "Bash(cat .env.example)",
+      "Bash(vercel whoami *)",
+      "Bash(vercel projects *)",
+      "Bash(vercel link *)",
+      "Bash(lsof -ti:4173)",
+      "Bash(xargs -I{} echo \"pid {} on 4173\")",
+      "Bash(nohup vercel dev --listen 3210 --yes)",
+      "Bash(disown)",
+      "Bash(curl -s -o /tmp/resp2.txt -w \"HTTP_STATUS:%{http_code}\\\\n\" -X POST http://localhost:3210/api/hook-generation-harness -H \"Content-Type: application/json\" -d '{\"runId\":\"test\",\"brand\":null,\"service\":\"single-static\",\"quantity\":1,\"brief\":\"test brief\",\"attachments\":[],\"brandMemory\":{\"working\":[],\"avoid\":[]},\"brandLibrary\":{\"brand\":[],\"products\":[],\"docs\":[],\"refs\":[]}}' --max-time 60)",
+      "Bash(pkill -f \"vercel dev --listen 3210\")",
+      "Bash(jobs)",
+      "Bash(lsof -ti:3210)",
+      "Bash(xargs -r kill)",
+      "Bash(git ls-remote *)"
+    ]
+  }
+}
