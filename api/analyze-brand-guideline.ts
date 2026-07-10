@@ -1,4 +1,4 @@
-import { handleAnalyzeGuidelineRequest } from "../src/server/brand-guideline/analyze-guideline-endpoint";
+import { handleAnalyzeGuidelineRequest } from "../src/server/brand-guideline/analyze-guideline-endpoint.js";
 
 export const config = {
   maxDuration: 90

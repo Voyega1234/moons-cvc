@@ -1,4 +1,4 @@
-import { handleArtworkGenerationRequest } from "../src/server/artwork-generation/artwork-generation-endpoint";
+import { handleArtworkGenerationRequest } from "../src/server/artwork-generation/artwork-generation-endpoint.js";
 
 export const config = {
   maxDuration: 300

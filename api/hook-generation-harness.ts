@@ -1,4 +1,4 @@
-import { handleHookGenerationHarnessRequest } from "../src/server/hook-generation/hook-generation-harness-endpoint";
+import { handleHookGenerationHarnessRequest } from "../src/server/hook-generation/hook-generation-harness-endpoint.js";
 
 type VercelRequest = {
   method?: string;

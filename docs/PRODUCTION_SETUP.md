@@ -12,6 +12,10 @@ at a time without changing the UI contract.
 
 ## Required environment
 
+In Vercel → Project Settings → General, set **Node.js Version** to `22.x`.
+The serverless handlers use the Node.js runtime; `24.x` is not supported by
+the current Vercel build pipeline for this project.
+
 Copy `.env.example` to `.env.local` and set:
 
 ```bash

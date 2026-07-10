@@ -1,4 +1,4 @@
-import { handleSuggestLearningRequest } from "../src/server/brand-learning/suggest-learning-endpoint";
+import { handleSuggestLearningRequest } from "../src/server/brand-learning/suggest-learning-endpoint.js";
 
 type VercelRequest = {
   method?: string;

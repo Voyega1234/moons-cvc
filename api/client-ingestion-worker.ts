@@ -1,4 +1,4 @@
-import { handleClientIngestionWorkerRequest } from "../src/server/client-ingestion/client-ingestion-worker-endpoint";
+import { handleClientIngestionWorkerRequest } from "../src/server/client-ingestion/client-ingestion-worker-endpoint.js";
 
 type VercelRequest = {
   method?: string;

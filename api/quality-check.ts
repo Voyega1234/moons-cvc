@@ -1,4 +1,4 @@
-import { handleQualityCheckRequest } from "../src/server/quality-check/quality-check-endpoint";
+import { handleQualityCheckRequest } from "../src/server/quality-check/quality-check-endpoint.js";
 
 export const config = {
   maxDuration: 90
