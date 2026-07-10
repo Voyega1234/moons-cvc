@@ -11,6 +11,17 @@ import {
   isSupabaseConfigured
 } from "../../lib/supabase/client";
 
+const PRODUCTION_AUTH_REDIRECT_URL = "https://moons-cvc.vercel.app/";
+
+export function emailSignInRedirectUrl(
+  location: Pick<Location, "hostname" | "origin"> = window.location
+): string {
+  const hostname = location.hostname.toLowerCase();
+  return ["localhost", "127.0.0.1", "::1"].includes(hostname)
+    ? location.origin
+    : PRODUCTION_AUTH_REDIRECT_URL;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (env.dataSource !== "supabase") return children;
   if (!isSupabaseConfigured()) {
@@ -65,7 +76,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     const { error } = await client.auth.signInWithOtp({
       email: normalizedEmail,
       options: {
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: emailSignInRedirectUrl()
       }
     });
 

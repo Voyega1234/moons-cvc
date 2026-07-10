@@ -23,6 +23,16 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 The local desktop setup also accepts `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 Only those two public Supabase values are mapped into the Vite client build.
 
+In Supabase Auth → URL Configuration, set the Site URL and add this exact
+Redirect URL:
+
+```text
+https://moons-cvc.vercel.app/
+```
+
+Moons passes this URL as `emailRedirectTo` for every non-local sign-in. Local
+development sign-ins continue to return to their active localhost origin.
+
 Do not expose the Supabase service role key in Vite/client env.
 
 Backend/worker-only secrets for client ingestion:
