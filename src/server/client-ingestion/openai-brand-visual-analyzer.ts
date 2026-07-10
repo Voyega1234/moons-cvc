@@ -3,7 +3,7 @@ import type {
   BrandVisualAnalyzer,
   BrandVisualGuidance,
   MirroredBrandVisualAsset
-} from "./client-ingestion-harness";
+} from "./client-ingestion-harness.js";
 
 type FetchLike = typeof fetch;
 

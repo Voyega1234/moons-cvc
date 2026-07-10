@@ -1,10 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database } from "../../lib/supabase/database.types.js";
 import type {
   BrandMemoryWriter,
   BrandSignalAnalysis,
   BrandVisualGuidance
-} from "./client-ingestion-harness";
+} from "./client-ingestion-harness.js";
 
 type BrandLibraryInsert =
   Database["moons"]["Tables"]["brand_library"]["Insert"];

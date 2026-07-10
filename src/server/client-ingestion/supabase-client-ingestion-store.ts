@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Json } from "../../lib/supabase/database.types";
+import type { Database, Json } from "../../lib/supabase/database.types.js";
 import type {
   ClientIngestionStore,
   IngestionJobStatus,
@@ -7,7 +7,7 @@ import type {
   SavedAdLibraryItem,
   SavedBrandSource,
   SavedSocialPost
-} from "./client-ingestion-harness";
+} from "./client-ingestion-harness.js";
 
 type BrandSourceInsert =
   Database["moons"]["Tables"]["brand_sources"]["Insert"];

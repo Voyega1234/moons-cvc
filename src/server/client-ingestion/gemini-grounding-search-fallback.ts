@@ -1,4 +1,4 @@
-import type { SearchFallbackClient } from "./client-ingestion-harness";
+import type { SearchFallbackClient } from "./client-ingestion-harness.js";
 
 type FetchLike = typeof fetch;
 

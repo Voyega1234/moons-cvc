@@ -1,4 +1,4 @@
-import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth";
+import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 
 type FetchLike = typeof fetch;
 type ReviewDecision = "approved" | "rejected" | null;

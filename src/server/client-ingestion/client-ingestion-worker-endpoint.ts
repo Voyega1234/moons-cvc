@@ -1,7 +1,7 @@
 import {
   runClientIngestionWorkerOnce,
   type ClientIngestionWorkerEnv
-} from "./client-ingestion-worker";
+} from "./client-ingestion-worker.js";
 
 export interface ClientIngestionWorkerEndpointEnv
   extends ClientIngestionWorkerEnv {

@@ -1,17 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
-import { emptyApprovalComments, emptyApprovalGate } from "../../domain/creative-run";
-import type { Database } from "../../lib/supabase/database.types";
+import { emptyApprovalComments, emptyApprovalGate } from "../../domain/creative-run.js";
+import type { Database } from "../../lib/supabase/database.types.js";
 import type {
   ArtworkGenerationRequest,
   ArtworkGenerationResponse
-} from "../../services/artwork-generation/openai-image-generation";
-import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth";
-import { generateImagePrompt } from "./image-prompt-agent";
+} from "../../services/artwork-generation/openai-image-generation.js";
+import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { generateImagePrompt } from "./image-prompt-agent.js";
 import {
   editImage,
   generateImage,
   type ReferenceImageInput
-} from "./openai-images-client";
+} from "./openai-images-client.js";
 
 type FetchLike = typeof fetch;
 type SelectedHook = ArtworkGenerationRequest["selectedHooks"][number];

@@ -2,12 +2,12 @@ import type {
   NormalizedFacebookAdLibraryItem,
   NormalizedFacebookPost,
   VisualAssetCandidate
-} from "../../services/client-ingestion/facebook-source-normalizers";
+} from "../../services/client-ingestion/facebook-source-normalizers.js";
 import {
   normalizeFacebookAdsLibraryItems,
   normalizeFacebookPosts
-} from "../../services/client-ingestion/facebook-source-normalizers";
-import type { ApifyClient } from "./apify-client";
+} from "../../services/client-ingestion/facebook-source-normalizers.js";
+import type { ApifyClient } from "./apify-client.js";
 
 export type IngestionJobStatus =
   | "queued"

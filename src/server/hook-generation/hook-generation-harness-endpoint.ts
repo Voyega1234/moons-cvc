@@ -1,16 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "../../lib/supabase/database.types";
-import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation";
-import type { RawDirection } from "../../services/creative-generation/hook-generation-types";
+import type { Database } from "../../lib/supabase/database.types.js";
+import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
+import type { RawDirection } from "../../services/creative-generation/hook-generation-types.js";
 import {
   resolveConvertCakeAuthorization,
   type ConvertCakeAuthorization
-} from "../shared/convert-cake-auth";
+} from "../shared/convert-cake-auth.js";
 import {
   fetchPastPostExamples,
   type PastPostExample,
   type PastPostsClient
-} from "./past-posts";
+} from "./past-posts.js";
 
 type FetchLike = typeof fetch;
 

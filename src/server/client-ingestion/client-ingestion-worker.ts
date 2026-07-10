@@ -1,16 +1,16 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "../../lib/supabase/database.types";
-import { createApifyClient } from "./apify-client";
-import { GeminiGroundingSearchFallback } from "./gemini-grounding-search-fallback";
+import type { Database } from "../../lib/supabase/database.types.js";
+import { createApifyClient } from "./apify-client.js";
+import { GeminiGroundingSearchFallback } from "./gemini-grounding-search-fallback.js";
 import {
   runNextClientIngestionJob,
   SupabaseClientIngestionJobQueue
-} from "./client-ingestion-runner";
-import type { ClientIngestionRunnerDependencies } from "./client-ingestion-runner";
-import { OpenAiBrandVisualAnalyzer } from "./openai-brand-visual-analyzer";
-import { SupabaseBrandMemoryWriter } from "./supabase-brand-memory-writer";
-import { SupabaseClientIngestionStore } from "./supabase-client-ingestion-store";
-import { SupabaseImageMirror } from "./supabase-image-mirror";
+} from "./client-ingestion-runner.js";
+import type { ClientIngestionRunnerDependencies } from "./client-ingestion-runner.js";
+import { OpenAiBrandVisualAnalyzer } from "./openai-brand-visual-analyzer.js";
+import { SupabaseBrandMemoryWriter } from "./supabase-brand-memory-writer.js";
+import { SupabaseClientIngestionStore } from "./supabase-client-ingestion-store.js";
+import { SupabaseImageMirror } from "./supabase-image-mirror.js";
 
 type FetchLike = typeof fetch;
 

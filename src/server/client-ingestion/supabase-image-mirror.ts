@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database } from "../../lib/supabase/database.types.js";
 import type {
   ImageMirror,
   MirroredVisualAsset
-} from "./client-ingestion-harness";
+} from "./client-ingestion-harness.js";
 
 export interface SupabaseImageMirrorOptions {
   client: SupabaseClient<Database>;

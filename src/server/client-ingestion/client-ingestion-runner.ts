@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database } from "../../lib/supabase/database.types.js";
 import {
   runClientIngestionJob,
   type ClientIngestionClient,
   type ClientIngestionHarnessDependencies,
   type ClientIngestionHarnessResult,
   type ClientIngestionJob
-} from "./client-ingestion-harness";
+} from "./client-ingestion-harness.js";
 
 export interface ClaimedClientIngestionJob {
   job: ClientIngestionJob;
