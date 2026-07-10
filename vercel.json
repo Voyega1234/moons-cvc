@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/hook-generation-harness.ts": {
+      "includeFiles": "agent_prompt/agent_hook.md"
+    }
+  }
+}

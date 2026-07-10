@@ -4,7 +4,6 @@ export interface ImagePromptAgentHook {
   hook: string;
   concept: string;
   why: string;
-  visual: string;
   cta: string;
   caption: string;
 }
@@ -17,10 +16,6 @@ export interface ImagePromptAgentInput {
   textInputs: readonly string[];
   referenceImageLabels: readonly string[];
   canvasRatio: string;
-  brandMemory: {
-    working: readonly string[];
-    avoid: readonly string[];
-  };
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
     products: readonly { title: string; description: string }[];
@@ -145,7 +140,6 @@ function buildInputBrief(input: ImagePromptAgentInput): string {
     `Hook (primary headline idea): ${input.hook.hook}`,
     `Concept: ${input.hook.concept}`,
     `Why it works: ${input.hook.why}`,
-    `Visual direction: ${input.hook.visual}`,
     `CTA: ${input.hook.cta}`,
     `Caption / supporting copy: ${input.hook.caption}`,
     "",
@@ -163,16 +157,6 @@ function buildInputBrief(input: ImagePromptAgentInput): string {
     ...(input.brandLibrary.products.length
       ? input.brandLibrary.products.map((item) => `- ${item.title}: ${item.description}`)
       : ["- Not provided."]),
-    "",
-    "What's working (reuse these patterns):",
-    ...(input.brandMemory.working.length
-      ? input.brandMemory.working.map((item) => `- ${item}`)
-      : ["- None recorded."]),
-    "",
-    "Elements to avoid:",
-    ...(input.brandMemory.avoid.length
-      ? input.brandMemory.avoid.map((item) => `- ${item}`)
-      : ["- None recorded."]),
     "",
     "Reference images attached (already provided to the model as image input, describe how to use them, do not re-describe their content from imagination):",
     ...(input.referenceImageLabels.length

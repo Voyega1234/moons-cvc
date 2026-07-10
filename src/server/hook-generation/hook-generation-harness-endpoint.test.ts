@@ -141,6 +141,13 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(secondBody.input)).toContain(
       "ต้องการ creative เพื่อชวน B2B"
     );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "CONTENT TYPE CREATIVE RULES"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "Return exactly 6 STATIC AD directions."
+    );
+    expect(JSON.stringify(secondBody.input)).not.toContain("$('Webhook')");
   });
 
   it("includes real past post captions as a style reference for caption writing", async () => {

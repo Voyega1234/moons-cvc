@@ -353,7 +353,6 @@ async function resolveImagePrompt({
           (reference) => reference.label ?? "Reference image"
         ),
         canvasRatio: "1:1",
-        brandMemory: input.brandMemory,
         brandLibrary: {
           brand: input.brandLibrary.brand,
           products: input.brandLibrary.products
@@ -377,11 +376,10 @@ function buildImagePrompt(
     }.`,
     `Hook: ${hook.hook}`,
     `Concept: ${hook.concept}`,
-    `Visual direction: ${hook.visual}`,
     `Caption context: ${hook.caption}`,
     `Brief: ${input.brief}`,
     ...input.textInputs,
-    "Design a clean, brand-safe, scroll-stopping social ad image that matches the visual direction. Avoid adding text overlays unless the visual direction explicitly calls for them."
+    "Design a clean, brand-safe, scroll-stopping social ad image that matches the hook, concept, caption, and brief. Avoid adding text overlays unless the supplied copy requires them."
   ].join("\n");
 }
 
@@ -446,7 +444,6 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     textInputs,
     referenceImages:
       value.referenceImages as ArtworkGenerationRequest["referenceImages"],
-    brandMemory: parseBrandMemory(value.brandMemory),
     brandLibrary: parseBrandLibrary(value.brandLibrary),
     output: {
       size: readString(
@@ -458,20 +455,6 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
         "output.format"
       ) as ArtworkGenerationRequest["output"]["format"]
     }
-  };
-}
-
-function parseBrandMemory(
-  value: unknown
-): ArtworkGenerationRequest["brandMemory"] {
-  if (!isRecord(value)) return { working: [], avoid: [] };
-  return {
-    working: Array.isArray(value.working)
-      ? value.working.filter((item): item is string => typeof item === "string")
-      : [],
-    avoid: Array.isArray(value.avoid)
-      ? value.avoid.filter((item): item is string => typeof item === "string")
-      : []
   };
 }
 
@@ -521,7 +504,6 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
     hook: readString(hook.hook, `selectedHooks[${index}].hook`),
     concept: readString(hook.concept, `selectedHooks[${index}].concept`),
     why: readString(hook.why, `selectedHooks[${index}].why`),
-    visual: readString(hook.visual, `selectedHooks[${index}].visual`),
     cta: readString(hook.cta, `selectedHooks[${index}].cta`),
     caption: readString(hook.caption, `selectedHooks[${index}].caption`)
   };

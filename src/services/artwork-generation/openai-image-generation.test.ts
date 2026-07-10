@@ -81,6 +81,8 @@ describe("buildArtworkGenerationRequest", () => {
       kind: "url",
       url: "https://example.com/reference.png"
     });
+    expect(request.selectedHooks[0]).not.toHaveProperty("visual");
+    expect(request).not.toHaveProperty("brandMemory");
   });
 
   it("keeps returned assets as links and storage metadata, not base64 payloads", () => {
@@ -148,5 +150,6 @@ describe("buildArtworkGenerationRequest", () => {
       }
     ]);
     expect(n8nRequest.selectedHooks).toEqual(request.selectedHooks);
+    expect(n8nRequest).not.toHaveProperty("brandMemory");
   });
 });

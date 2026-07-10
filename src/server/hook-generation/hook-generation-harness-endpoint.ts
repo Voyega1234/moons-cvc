@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
 import type { RawDirection } from "../../services/creative-generation/hook-generation-types.js";
@@ -30,6 +32,7 @@ export interface HookGenerationHarnessEndpointOptions {
     supabaseAnonKey: string;
     accessToken: string;
   }) => PastPostsClient;
+  loadAgentHookPrompt?: () => Promise<string>;
 }
 
 type ResponseContent = {
@@ -74,7 +77,8 @@ export async function handleHookGenerationHarnessRequest({
   request,
   env,
   fetchImpl = fetch,
-  createPastPostsClient = defaultCreatePastPostsClient
+  createPastPostsClient = defaultCreatePastPostsClient,
+  loadAgentHookPrompt = defaultLoadAgentHookPrompt
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -102,6 +106,7 @@ export async function handleHookGenerationHarnessRequest({
       auth,
       createPastPostsClient
     });
+    const agentHookPrompt = await loadAgentHookPrompt();
     const research = await runResearchStep({
       input,
       apiKey,
@@ -112,6 +117,7 @@ export async function handleHookGenerationHarnessRequest({
       input,
       research,
       pastPosts,
+      agentHookPrompt,
       apiKey,
       model,
       fetchImpl
@@ -124,6 +130,10 @@ export async function handleHookGenerationHarnessRequest({
   } catch (error) {
     return jsonResponse({ ok: false, error: readableError(error) }, 500);
   }
+}
+
+async function defaultLoadAgentHookPrompt(): Promise<string> {
+  return readFile(join(process.cwd(), "agent_prompt", "agent_hook.md"), "utf8");
 }
 
 function defaultCreatePastPostsClient({
@@ -207,6 +217,7 @@ async function runGenerationStep({
   input,
   research,
   pastPosts,
+  agentHookPrompt,
   apiKey,
   model,
   fetchImpl
@@ -214,6 +225,7 @@ async function runGenerationStep({
   input: HookGenerationHarnessRequest;
   research: HookResearch;
   pastPosts: readonly PastPostExample[];
+  agentHookPrompt: string;
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
@@ -225,7 +237,7 @@ async function runGenerationStep({
     content: [
       {
         type: "input_text",
-        text: buildGenerationPrompt(input, research, pastPosts)
+        text: buildGenerationPrompt(input, research, pastPosts, agentHookPrompt)
       }
     ],
     schemaName: "moons_hook_generation",
@@ -313,9 +325,12 @@ function buildResearchPrompt(input: HookGenerationHarnessRequest): string {
 function buildGenerationPrompt(
   input: HookGenerationHarnessRequest,
   research: HookResearch,
-  pastPosts: readonly PastPostExample[]
+  pastPosts: readonly PastPostExample[],
+  agentHookPrompt: string
 ): string {
   return [
+    renderAgentHookPrompt(agentHookPrompt, input, research, pastPosts),
+    "",
     "You are a world-class Creative Strategist and Senior Thai Copywriter for paid social advertising, on the level of a senior creative who deeply understands Thai language, brand voice, audience psychology, and paid-social performance.",
     "",
     "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
@@ -359,8 +374,40 @@ function buildGenerationPrompt(
     "",
     buildPastPostsBlock(pastPosts),
     "",
-    "Return only JSON ตาม schema."
+    "## Moons output adapter — this overrides only the supplied prompt's final JSON shape",
+    `Return exactly ${SHORTLIST_COUNT} STATIC AD directions. The supplied prompt's content quota is set to three STATIC AD requests, which produces six recommendations under its own count-plus-three rule.`,
+    "Return only the strict directions JSON required by the response schema. Map recommendation fields as follows: hook = copywriting.headline; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; cta = copywriting.cta; caption = combine sub_headline_1, sub_headline_2 when present, and bullets into natural Thai caption copy.",
+    "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response."
   ].join("\n");
+}
+
+function renderAgentHookPrompt(
+  template: string,
+  input: HookGenerationHarnessRequest,
+  research: HookResearch,
+  pastPosts: readonly PastPostExample[]
+): string {
+  const productFocus = input.brandLibrary.products.length
+    ? input.brandLibrary.products
+        .map((item) => `${item.title}: ${item.description}`)
+        .join("\n")
+    : "Use the product or service focus stated in the User Brief.";
+  const pastPostText = pastPosts.length
+    ? pastPosts.map((post) => post.text).join("\n\n")
+    : "No past posts are available. Use the Brand kit and Brief for voice.";
+
+  return template
+    .replaceAll("{{ $('Webhook').first().json.body.instructions }}", input.brief)
+    .replaceAll("{{ $('Webhook').first().json.body.productFocus }}", productFocus)
+    .replaceAll(
+      "{{ $('Webhook').first().json.body.contentTypeQuotas ? $('Webhook').first().json.body.contentTypeQuotas.toJsonString() : '[]' }}",
+      '[{"type":"STATIC AD","count":3}]'
+    )
+    .replaceAll("{{ $('Facebook page content').item.json.page_content }}", pastPostText)
+    .replaceAll(
+      "{{ $('Message a model').item.json.content.parts[0].text }}",
+      JSON.stringify(research)
+    );
 }
 
 function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {

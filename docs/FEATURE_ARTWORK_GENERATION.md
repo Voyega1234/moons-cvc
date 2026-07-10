@@ -92,7 +92,6 @@ type ArtworkGenerationRequest = {
     | { kind: "base64"; data: string; mediaType: string; label?: string }
     | { kind: "openai_file"; fileId: string; label?: string }
   )[];
-  brandMemory: { working: string[]; avoid: string[] };
   brandLibrary: {
     brand: { title: string; description: string }[];
     products: { title: string; description: string }[];
@@ -106,10 +105,10 @@ type ArtworkGenerationRequest = {
 };
 ```
 
-`brandMemory`/`brandLibrary` mirror the shape hook generation already sends
-(see `docs/FEATURE_HOOK_GENERATION.md`) and feed the image prompt agent
-below — the endpoint parses them leniently (defaults to empty arrays if
-absent) so this stayed backward compatible when it was added.
+`brandLibrary` feeds the image prompt agent below. Brand Learning and a hook's
+`visual` field are deliberately excluded from this request: artwork generation
+uses the hook, concept, rationale, CTA, caption, brief, Brand Kit, products,
+and selected reference images instead.
 
 ## Response shape
 
@@ -228,10 +227,9 @@ one selling mechanism, one creative mode, one energy level, one style from a
 20-name performance-ad style library, then run an anti-AI-slop rejection
 check) to the OpenAI Responses API with strict `json_schema` output
 (`{ prompt: string }`), along with the real hook/brief/brand data and —
-newly — the brand's Brand Kit voice/CI (`brandLibrary.brand`), products
-(`brandLibrary.products`), and Brand Memory working/avoid notes
-(`brandMemory`). The agent's returned prompt is what actually gets sent to
-`gpt-image-2`, not the old template.
+the brand's Brand Kit voice/CI (`brandLibrary.brand`) and products
+(`brandLibrary.products`). The agent's returned prompt is what actually gets
+sent to `gpt-image-2`, not the old template.
 
 The full `agent_prompt/agent_image.md` file (1500+ lines) is **not** read at
 runtime — its instructions were condensed into `buildAgentPrompt()` in

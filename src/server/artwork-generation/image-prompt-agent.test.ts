@@ -9,14 +9,12 @@ const baseInput = {
     hook: "Flowers that make the room feel softer",
     concept: "Lead with room mood.",
     why: "Connects the offer to a clear room mood.",
-    visual: "Soft natural light with bouquet on table.",
     cta: "Order a bouquet",
     caption: "Fresh flowers for calm homes."
   },
   textInputs: [],
   referenceImageLabels: [],
   canvasRatio: "1:1",
-  brandMemory: { working: [], avoid: [] },
   brandLibrary: { brand: [], products: [] }
 };
 
@@ -51,6 +49,8 @@ describe("generateImagePrompt", () => {
     )[0]?.content[0]?.text;
     expect(promptText).toContain("Flowers that make the room feel softer");
     expect(promptText).toContain("Neo-Brutalism");
+    expect(promptText).not.toContain("Visual direction:");
+    expect(promptText).not.toContain("What's working (reuse these patterns):");
   });
 
   it("uses the provided model override", async () => {

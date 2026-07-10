@@ -47,14 +47,10 @@ export interface ArtworkGenerationRequest {
   brief: string;
   selectedHooks: readonly Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
+    "id" | "hook" | "concept" | "why" | "cta" | "caption"
   >[];
   textInputs: readonly string[];
   referenceImages: readonly ArtworkReferenceImage[];
-  brandMemory: {
-    working: readonly string[];
-    avoid: readonly string[];
-  };
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
     products: readonly { title: string; description: string }[];
@@ -106,7 +102,7 @@ export async function regenerateOutputImage({
   run: WorkflowState;
   direction: Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
+    "id" | "hook" | "concept" | "why" | "cta" | "caption"
   >;
   extraInstructions?: string;
 }): Promise<CreativeOutput> {
@@ -162,12 +158,11 @@ export function buildArtworkGenerationRequest({
 }: GenerateArtworkForSelectedHooksInput): ArtworkGenerationRequest {
   const selectedHooks = run.directions
     .filter((direction) => direction.selected)
-    .map(({ id, hook, concept, why, visual, cta, caption }) => ({
+    .map(({ id, hook, concept, why, cta, caption }) => ({
       id,
       hook,
       concept,
       why,
-      visual,
       cta,
       caption
     }));
@@ -198,13 +193,9 @@ export function buildArtworkGenerationRequest({
 
 function buildBrandContext(brand: WorkflowState["brand"]): Pick<
   ArtworkGenerationRequest,
-  "brandMemory" | "brandLibrary"
+  "brandLibrary"
 > {
   return {
-    brandMemory: {
-      working: brand?.memory.working ?? [],
-      avoid: brand?.memory.avoid ?? []
-    },
     brandLibrary: {
       brand: compactLibraryItems(brand?.library.brand ?? []),
       products: compactLibraryItems(brand?.library.products ?? []),
