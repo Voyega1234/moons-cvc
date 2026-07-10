@@ -17,6 +17,8 @@ export interface HookGenerationHarnessRequest {
   service: HookGenerationRunInput["run"]["service"];
   quantity: number;
   brief: string;
+  extraInstructions: string;
+  existingHooks: readonly { hook: string; concept: string }[];
   attachments: readonly string[];
   brandMemory: {
     working: readonly string[];
@@ -35,12 +37,15 @@ export interface HookGenerationHarnessResponse {
 }
 
 export async function generateDirectionsWithHarness({
-  run
+  run,
+  extraInstructions
 }: HookGenerationRunInput): Promise<readonly CreativeDirection[]> {
   const response = await fetch(env.hookGenerationHarnessEndpoint, {
     method: "POST",
     headers: await buildHeaders(),
-    body: JSON.stringify(buildHookGenerationHarnessRequest({ run }))
+    body: JSON.stringify(
+      buildHookGenerationHarnessRequest({ run, extraInstructions })
+    )
   });
 
   const payload = await readJsonResponse<Partial<HookGenerationHarnessResponse>>(
@@ -63,7 +68,8 @@ export async function generateDirectionsWithHarness({
 }
 
 export function buildHookGenerationHarnessRequest({
-  run
+  run,
+  extraInstructions
 }: HookGenerationRunInput): HookGenerationHarnessRequest {
   const brand = run.brand;
 
@@ -79,6 +85,11 @@ export function buildHookGenerationHarnessRequest({
     service: run.service,
     quantity: run.quantity,
     brief: run.brief,
+    extraInstructions: extraInstructions?.trim() ?? "",
+    existingHooks: run.directions.map((direction) => ({
+      hook: direction.hook,
+      concept: direction.concept
+    })),
     attachments: run.attachments,
     brandMemory: {
       working: brand?.memory.working ?? [],

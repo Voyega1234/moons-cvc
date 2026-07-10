@@ -43,14 +43,22 @@ export function App() {
   } = useWorkspace();
   const state = getActiveRun(workspace);
 
+  // Bound to state.id (not "whichever run is active") so that an async
+  // action started against this run — hook generation, artwork generation,
+  // etc. — still lands on THIS run even if the user switches to a different
+  // run or tab before the request resolves. Recreating this callback when
+  // state.id changes is what makes it work: an in-flight promise's .then()
+  // closes over the dispatch instance (and therefore the runId) that was
+  // current when the action was kicked off, not whatever is active later.
   const dispatch = useCallback<Dispatch<WorkflowAction>>(
     (action) =>
       workspaceDispatch({
-        type: "update-active-run",
+        type: "apply-run-action",
+        runId: state.id,
         action,
         now: nowIso()
       }),
-    []
+    [state.id]
   );
 
   const createRun = useCallback((keepBrand: boolean) => {
@@ -88,6 +96,8 @@ export function App() {
             <Overview
               state={state}
               dispatch={dispatch}
+              workspace={workspace}
+              workspaceDispatch={workspaceDispatch}
               onOpenStudio={() =>
                 workspaceDispatch({ type: "set-view", view: "studio" })
               }

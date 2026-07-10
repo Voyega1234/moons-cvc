@@ -32,7 +32,7 @@ SUPABASE_URL=<project-url>
 APIFY_TOKEN=<apify-token>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 OPENAI_API_KEY=<openai-api-key>
-OPENAI_BRAND_ANALYSIS_MODEL=gpt-5.5
+OPENAI_BRAND_ANALYSIS_MODEL=gpt-5.6-terra
 GEMINI_API_KEY=<gemini-api-key>
 GEMINI_GROUNDING_MODEL=gemini-3.5-flash
 CLIENT_INGESTION_WORKER_TOKEN=<long-random-secret>
@@ -93,9 +93,22 @@ stays server-side:
 
 ```bash
 VITE_ARTWORK_GENERATION_ENDPOINT=<backend-artwork-endpoint>
+OPENAI_IMAGE_PROMPT_MODEL=gpt-5.6-terra
 ```
 
-See `docs/FEATURE_ARTWORK_GENERATION.md` for the request/response contract.
+`OPENAI_IMAGE_PROMPT_MODEL` is the model used by the image prompt agent that
+writes the actual `gpt-image-2` prompt from the hook/brief/brand context —
+see `docs/FEATURE_ARTWORK_GENERATION.md` for the request/response contract.
+
+Brand kit's "Upload guideline" button analyzes an uploaded PDF or image for
+mood/tone/style and a hex color palette:
+
+```bash
+OPENAI_GUIDELINE_ANALYSIS_MODEL=gpt-5.6-terra
+```
+
+See `docs/FEATURE_BRAND_MEMORY.md` for how the result gets written back into
+Brand kit.
 
 Hook generation can run through either the existing n8n webhook or the backend
 harness agent:
@@ -104,7 +117,7 @@ harness agent:
 VITE_HOOK_GENERATION_MODE=n8n
 VITE_HOOK_GENERATION_MODE=harness
 VITE_HOOK_GENERATION_HARNESS_ENDPOINT=/api/hook-generation-harness
-OPENAI_HOOK_GENERATION_MODEL=gpt-5.5
+OPENAI_HOOK_GENERATION_MODEL=gpt-5.6-terra
 ```
 
 Harness mode uses `OPENAI_API_KEY` on the backend only. When backend

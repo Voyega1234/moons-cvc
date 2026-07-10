@@ -8,6 +8,9 @@ export interface PublicEnv {
   hookGenerationWebhookUrl: string;
   hookGenerationHarnessEndpoint: string;
   artworkGenerationEndpoint: string | null;
+  brandLearningSuggestionEndpoint: string;
+  qualityCheckEndpoint: string;
+  guidelineAnalysisEndpoint: string;
 }
 
 function optional(value: string | undefined): string | null {
@@ -42,7 +45,16 @@ export const env: PublicEnv = {
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/hook-generation-harness`,
   artworkGenerationEndpoint: optional(
     import.meta.env.VITE_ARTWORK_GENERATION_ENDPOINT
-  )
+  ),
+  brandLearningSuggestionEndpoint:
+    import.meta.env.VITE_BRAND_LEARNING_SUGGESTION_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/suggest-brand-learning`,
+  qualityCheckEndpoint:
+    import.meta.env.VITE_QUALITY_CHECK_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/quality-check`,
+  guidelineAnalysisEndpoint:
+    import.meta.env.VITE_GUIDELINE_ANALYSIS_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/analyze-brand-guideline`
 };
 
 export function hasSupabaseEnv(

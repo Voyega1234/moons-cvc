@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleHookGenerationHarnessRequest } from "./hook-generation-harness-endpoint";
+import type { PastPostsClient } from "./past-posts";
 
 const requestBody = {
   runId: "run-1",
@@ -142,6 +143,115 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
   });
 
+  it("includes real past post captions as a style reference for caption writing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "No strong seasonal moment found.",
+              references: [],
+              searchQueriesUsed: [],
+              limitations: "Limited public data."
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              directions: [
+                {
+                  id: "hook-1",
+                  hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?",
+                  concept: "เปิดด้วยคำถามที่โยง visibility กับยอดขาย",
+                  why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
+                  visual: "Founder มอง search result + AI answer บนจอ",
+                  cta: "จองที่นั่ง Webinar",
+                  caption: "AI SEO ไม่ใช่เรื่องอนาคตสำหรับ B2B แล้ว",
+                  score: 91,
+                  reasoning: "brand fit สูงและเห็นภาพง่าย",
+                  citations: []
+                }
+              ]
+            })
+          }),
+          { status: 200 }
+        )
+      );
+
+    const fakePastPostsClient: PastPostsClient = {
+      schema() {
+        return {
+          from(table: string) {
+            return {
+              select() {
+                return {
+                  eq() {
+                    return {
+                      order() {
+                        return {
+                          async limit() {
+                            if (table === "brand_social_posts") {
+                              return {
+                                data: [
+                                  {
+                                    text: "จองด่วน! Workshop AI SEO รอบนี้ที่นั่งจำกัด 🔥 ทักแชทเลย"
+                                  }
+                                ],
+                                error: null
+                              };
+                            }
+                            return { data: [], error: null };
+                          }
+                        };
+                      }
+                    };
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify(requestBody)
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createPastPostsClient: () => fakePastPostsClient
+    });
+
+    expect(response.status).toBe(200);
+
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[2]?.[1]?.body)
+    ) as { input: unknown };
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "จองด่วน! Workshop AI SEO รอบนี้ที่นั่งจำกัด"
+    );
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "copywriter ประจำเพจนี้"
+    );
+  });
+
   it("returns a readable error when OpenAI returns an empty body", async () => {
     const fetchMock = vi.fn(async () => new Response("", { status: 200 }));
 
@@ -161,5 +271,71 @@ describe("handleHookGenerationHarnessRequest", () => {
       ok: false,
       error: "OpenAI hook harness returned an empty response body."
     });
+  });
+
+  it("tells the model about extra instructions and existing hooks to avoid duplicates", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "No strong seasonal moment found.",
+              references: [],
+              searchQueriesUsed: [],
+              limitations: "Limited public data."
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              directions: [
+                {
+                  id: "hook-2",
+                  hook: "มุมใหม่ที่ยังไม่เคยพูดถึง",
+                  concept: "Different angle",
+                  why: "Distinct from the previous batch",
+                  visual: "Clean, modern.",
+                  cta: "ดูรายละเอียด",
+                  caption: "แคปชั่นใหม่",
+                  score: 88,
+                  reasoning: "Avoids repeating the earlier hook",
+                  citations: []
+                }
+              ]
+            })
+          }),
+          { status: 200 }
+        )
+      );
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          extraInstructions: "เน้นกลุ่มเจ้าของธุรกิจขนาดเล็กรอบนี้",
+          existingHooks: [
+            { hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?", concept: "Visibility question" }
+          ]
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { input: unknown };
+    const generationPrompt = JSON.stringify(generationBody.input);
+    expect(generationPrompt).toContain("เน้นกลุ่มเจ้าของธุรกิจขนาดเล็กรอบนี้");
+    expect(generationPrompt).toContain("ลูกค้า B2B หาเราเจอบน AI หรือยัง?");
+    expect(generationPrompt).toContain("DO NOT repeat");
   });
 });

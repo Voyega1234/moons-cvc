@@ -129,7 +129,7 @@ export function readRequiredClientIngestionWorkerEnv(
     APIFY_TOKEN,
     OPENAI_API_KEY,
     OPENAI_BRAND_ANALYSIS_MODEL:
-      env.OPENAI_BRAND_ANALYSIS_MODEL?.trim() || "gpt-5.5"
+      env.OPENAI_BRAND_ANALYSIS_MODEL?.trim() || "gpt-5.6-terra"
   };
 }
 

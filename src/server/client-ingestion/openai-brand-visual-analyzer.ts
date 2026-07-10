@@ -26,7 +26,7 @@ type ResponseContent =
       detail: "auto";
     };
 
-const DEFAULT_MODEL = "gpt-5.5";
+const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
 
 export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {

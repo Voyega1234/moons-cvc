@@ -1,8 +1,22 @@
+import { emptyApprovalGate } from "../../domain/creative-run";
 import { generateMockOutputs } from "../../services/creative-generation/mock-creative-generation";
 import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 import { clamp } from "../../shared/utils/number";
+import { createId } from "../../shared/utils/id";
 import { pluralize } from "../../shared/utils/text";
 import type { WorkflowAction, WorkflowState } from "./model";
+
+function isOutputFullyApproved(output: WorkflowState["outputs"][number]): boolean {
+  return (
+    output.approval.graphicDesign === "approved" &&
+    output.approval.clientService === "approved" &&
+    output.approval.projectManager === "approved"
+  );
+}
+
+function computeApproved(outputs: WorkflowState["outputs"]): boolean {
+  return outputs.length > 0 && outputs.every(isOutputFullyApproved);
+}
 
 export const defaultBrief = `Objective: Create Meta performance creatives for this month.
 Audience: Warm and cold prospects who need one clear reason to take action.
@@ -31,6 +45,7 @@ export function createInitialWorkflowState({
     quantity: 3,
     brief: defaultBrief,
     attachments: [],
+    referenceImages: [],
     directions: [],
     outputs: [],
     qaComplete: false,
@@ -54,14 +69,34 @@ export function workflowActionToast(
       return `${action.brand.name} loaded`;
     case "attach-files":
       return `${action.names.length} ${pluralize(action.names.length, "file")} attached`;
+    case "toggle-reference-image": {
+      const nowSelected = state.referenceImages.some(
+        (item) => item.id === action.item.id
+      );
+      return nowSelected
+        ? `${action.item.label} added as reference`
+        : `${action.item.label} removed from references`;
+    }
     case "generate-directions":
       return "Hooks generated";
+    case "generate-more-directions":
+      return `${action.directions.length} more ${pluralize(action.directions.length, "hook")} added`;
     case "create-outputs":
       return "Creative set created";
-    case "run-qa":
-      return "Quality check passed";
+    case "run-qa": {
+      const failed = action.results.filter((result) => !result.passed).length;
+      return failed
+        ? `Quality check flagged ${failed} ${pluralize(failed, "creative")}`
+        : "Quality check passed";
+    }
     case "approve-all":
       return "Packet approved";
+    case "review-output":
+      return action.decision === "approved" ? "Creative approved" : "Creative rejected";
+    case "comment-output":
+      return "Comment saved";
+    case "replace-output-asset":
+      return "Replacement image uploaded";
     case "send-client":
       return "Sent to client";
     case "approve-output":
@@ -121,12 +156,35 @@ export function workflowReducer(
       return { ...state, brief: action.brief };
     case "attach-files":
       return { ...state, attachments: action.names };
+    case "toggle-reference-image": {
+      const exists = state.referenceImages.some(
+        (item) => item.id === action.item.id
+      );
+      return {
+        ...state,
+        referenceImages: exists
+          ? state.referenceImages.filter((item) => item.id !== action.item.id)
+          : [...state.referenceImages, action.item]
+      };
+    }
     case "generate-directions":
       return {
         ...state,
         directions: action.directions,
         stage: "directions"
       };
+    case "generate-more-directions": {
+      const existingIds = new Set(state.directions.map((direction) => direction.id));
+      const appended = action.directions.map((direction) =>
+        existingIds.has(direction.id)
+          ? { ...direction, id: createId("direction") }
+          : direction
+      );
+      return {
+        ...state,
+        directions: [...state.directions, ...appended]
+      };
+    }
     case "toggle-direction": {
       const selectedCount = state.directions.filter(
         (direction) => direction.selected
@@ -161,17 +219,86 @@ export function workflowReducer(
         stage: "studio",
         qaComplete: false
       };
-    case "run-qa":
+    case "run-qa": {
+      const resultsByOutputId = new Map(
+        action.results.map((result) => [result.outputId, result])
+      );
       return {
         ...state,
         qaComplete: true,
-        outputs: state.outputs.map((output) => ({
-          ...output,
-          status: "ready"
-        }))
+        outputs: state.outputs.map((output) => {
+          const result = resultsByOutputId.get(output.id);
+          if (!result) return output;
+          return {
+            ...output,
+            status: result.passed
+              ? ("ready" as const)
+              : ("needs-revision" as const),
+            qaNote: result.reason
+          };
+        })
       };
-    case "approve-all":
-      return { ...state, approved: true };
+    }
+    case "approve-all": {
+      const outputs = state.outputs.map((output) => ({
+        ...output,
+        approval: {
+          graphicDesign: output.approval.graphicDesign ?? "approved",
+          clientService: output.approval.clientService ?? "approved",
+          projectManager: output.approval.projectManager ?? "approved"
+        } as const
+      }));
+      return { ...state, outputs, approved: computeApproved(outputs) };
+    }
+    case "review-output": {
+      const outputs = state.outputs.map((output) => {
+        if (output.id !== action.id) return output;
+        const approval = { ...output.approval, [action.role]: action.decision };
+        const hasRejection =
+          approval.graphicDesign === "rejected" ||
+          approval.clientService === "rejected" ||
+          approval.projectManager === "rejected";
+        const status = hasRejection
+          ? ("needs-revision" as const)
+          : output.status === "needs-revision"
+            ? ("ready" as const)
+            : output.status;
+        return { ...output, approval, status };
+      });
+      return { ...state, outputs, approved: computeApproved(outputs) };
+    }
+    case "comment-output": {
+      const outputs = state.outputs.map((output) =>
+        output.id === action.id
+          ? {
+              ...output,
+              approvalComments: {
+                ...output.approvalComments,
+                [action.role]: action.comment
+              }
+            }
+          : output
+      );
+      return { ...state, outputs };
+    }
+    case "replace-output-asset": {
+      const outputs = state.outputs.map((output) =>
+        output.id === action.id
+          ? {
+              ...output,
+              assetUrl: action.assetUrl,
+              ...(action.assetStoragePath
+                ? { assetStoragePath: action.assetStoragePath }
+                : {}),
+              ...(action.assetBucket ? { assetBucket: action.assetBucket } : {}),
+              revisionCount: output.revisionCount + 1,
+              status: "fixed" as const,
+              approval: emptyApprovalGate
+            }
+          : output
+      );
+      return { ...state, outputs, approved: computeApproved(outputs) };
+    }
     case "send-client":
       return {
         ...state,

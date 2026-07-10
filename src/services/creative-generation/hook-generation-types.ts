@@ -7,10 +7,13 @@ export interface HookGenerationInput {
   service: WorkflowState["service"];
   quantity: number;
   brief: string;
+  extraInstructions?: string;
+  existingHooks?: readonly { hook: string; concept: string }[];
 }
 
 export interface HookGenerationRunInput {
   run: WorkflowState;
+  extraInstructions?: string;
 }
 
 export interface RawDirection {

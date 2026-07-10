@@ -1,8 +1,11 @@
 import type { Brand, LibrarySection } from "../../domain/brand";
 import type {
+  ApprovalRole,
   CreativeDirection,
   CreativeOutput,
   CreativeStage,
+  ReferenceImageSelection,
+  ReviewDecision,
   ServiceType
 } from "../../domain/creative-run";
 
@@ -21,6 +24,7 @@ export interface WorkflowState {
   quantity: number;
   brief: string;
   attachments: readonly string[];
+  referenceImages: readonly ReferenceImageSelection[];
   directions: readonly CreativeDirection[];
   outputs: readonly CreativeOutput[];
   qaComplete: boolean;
@@ -40,12 +44,43 @@ export type WorkflowAction =
   | { type: "set-quantity"; quantity: number }
   | { type: "set-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
+  | { type: "toggle-reference-image"; item: ReferenceImageSelection }
   | { type: "generate-directions"; directions: readonly CreativeDirection[] }
+  | {
+      type: "generate-more-directions";
+      directions: readonly CreativeDirection[];
+    }
   | { type: "toggle-direction"; id: string }
   | { type: "auto-select-directions" }
   | { type: "create-outputs"; outputs?: readonly CreativeOutput[] }
-  | { type: "run-qa" }
+  | {
+      type: "run-qa";
+      results: readonly {
+        outputId: string;
+        passed: boolean;
+        reason: string;
+      }[];
+    }
   | { type: "approve-all" }
+  | {
+      type: "review-output";
+      id: string;
+      role: ApprovalRole;
+      decision: NonNullable<ReviewDecision>;
+    }
+  | {
+      type: "comment-output";
+      id: string;
+      role: ApprovalRole;
+      comment: string;
+    }
+  | {
+      type: "replace-output-asset";
+      id: string;
+      assetUrl: string;
+      assetStoragePath?: string;
+      assetBucket?: string;
+    }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
   | { type: "mark-delivered" }
@@ -69,5 +104,10 @@ export type WorkspaceAction =
     }
   | { type: "switch-run"; id: string }
   | { type: "close-run"; id: string }
-  | { type: "update-active-run"; action: WorkflowAction; now: string }
+  | {
+      type: "apply-run-action";
+      runId: string;
+      action: WorkflowAction;
+      now: string;
+    }
   | { type: "clear-toast" };

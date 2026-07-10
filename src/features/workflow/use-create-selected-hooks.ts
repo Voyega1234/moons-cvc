@@ -13,7 +13,14 @@ export function useCreateSelectedHooks(
     setLoading(true);
     setError(null);
 
-    void generateArtworkForSelectedHooks({ run: state })
+    void generateArtworkForSelectedHooks({
+      run: state,
+      referenceImages: state.referenceImages.map((item) => ({
+        kind: "url" as const,
+        url: item.url,
+        label: item.label
+      }))
+    })
       .then((outputs) => {
         dispatch({ type: "create-outputs", outputs });
       })

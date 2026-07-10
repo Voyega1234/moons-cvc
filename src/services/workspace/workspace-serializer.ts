@@ -1,5 +1,6 @@
 import {
   creativeStages,
+  emptyApprovalComments,
   serviceTypes,
   type CreativeStage,
   type ServiceType
@@ -139,7 +140,10 @@ function parseRun(value: unknown): WorkflowState | null {
   ] as const);
   const directions = parseDirections(value.directions);
   const outputs = parseOutputs(value.outputs);
-  if (!librarySection || !directions || !outputs) return null;
+  const referenceImages = parseReferenceImages(value.referenceImages);
+  if (!librarySection || !directions || !outputs || !referenceImages) {
+    return null;
+  }
 
   return {
     id,
@@ -154,6 +158,7 @@ function parseRun(value: unknown): WorkflowState | null {
     quantity,
     brief,
     attachments,
+    referenceImages,
     directions,
     outputs,
     qaComplete: value.qaComplete,
@@ -227,6 +232,24 @@ function parseLibraryItems(value: unknown): readonly LibraryItem[] | null {
   return items.every((item) => item !== null) ? items : null;
 }
 
+function parseReferenceImages(
+  value: unknown
+): WorkflowState["referenceImages"] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+
+  const items = value.map((item) => {
+    if (!isRecord(item)) return null;
+    const id = parseString(item.id);
+    const url = parseString(item.url);
+    const label = parseString(item.label, true);
+    if (!id || !url || label === null) return null;
+    return { id, url, label };
+  });
+
+  return items.every((item) => item !== null) ? items : null;
+}
+
 function parseDirections(
   value: unknown
 ): WorkflowState["directions"] | null {
@@ -292,6 +315,9 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
     const status = parseMember(item.status, validStatuses);
     const clientStatus = parseMember(item.clientStatus, validClientStatuses);
     const revisionCount = parseNumber(item.revisionCount);
+    const approval = parseApprovalGate(item.approval);
+    const approvalComments =
+      parseApprovalComments(item.approvalComments) ?? emptyApprovalComments;
     const assetUrl =
       item.assetUrl === undefined ? undefined : parseString(item.assetUrl);
     const assetStoragePath =
@@ -312,6 +338,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       !clientStatus ||
       revisionCount === null ||
       revisionCount < 0 ||
+      !approval ||
       assetUrl === null ||
       assetStoragePath === null ||
       assetBucket === null ||
@@ -328,6 +355,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       status,
       clientStatus,
       revisionCount,
+      approval,
+      approvalComments,
       ...(assetUrl ? { assetUrl } : {}),
       ...(assetStoragePath ? { assetStoragePath } : {}),
       ...(assetBucket ? { assetBucket } : {}),
@@ -337,6 +366,45 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
   });
 
   return outputs.every((output) => output !== null) ? outputs : null;
+}
+
+function parseApprovalGate(value: unknown): WorkflowState["outputs"][number]["approval"] | null {
+  if (!isRecord(value)) return null;
+  const graphicDesign = parseReviewDecision(value.graphicDesign);
+  const clientService = parseReviewDecision(value.clientService);
+  const projectManager = parseReviewDecision(value.projectManager);
+  if (
+    graphicDesign === undefined ||
+    clientService === undefined ||
+    projectManager === undefined
+  ) {
+    return null;
+  }
+  return { graphicDesign, clientService, projectManager };
+}
+
+function parseApprovalComments(
+  value: unknown
+): WorkflowState["outputs"][number]["approvalComments"] | null {
+  if (!isRecord(value)) return null;
+  const graphicDesign = parseString(value.graphicDesign, true);
+  const clientService = parseString(value.clientService, true);
+  const projectManager = parseString(value.projectManager, true);
+  if (
+    graphicDesign === null ||
+    clientService === null ||
+    projectManager === null
+  ) {
+    return null;
+  }
+  return { graphicDesign, clientService, projectManager };
+}
+
+function parseReviewDecision(
+  value: unknown
+): "approved" | "rejected" | null | undefined {
+  if (value === null) return null;
+  return value === "approved" || value === "rejected" ? value : undefined;
 }
 
 function parseView(value: unknown): AppView | null {

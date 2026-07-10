@@ -66,6 +66,7 @@ export function workflowActionBlockReason(
         ? null
         : "This client has no Moons brand memory yet.";
     case "generate-directions":
+    case "generate-more-directions":
       if (!run.brand) return "Choose a brand first.";
       if (!run.brief.trim()) return "Add a brief first.";
       return null;
@@ -87,6 +88,15 @@ export function workflowActionBlockReason(
     case "approve-all":
       if (!run.outputs.length) return "Create outputs before internal QC.";
       return run.qaComplete ? null : "Run QA before internal approval.";
+    case "review-output":
+      if (!run.qaComplete) return "Run QA before internal review.";
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "replace-output-asset":
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
     case "send-client":
       if (!run.outputs.length) return "Create outputs before client review.";
       return run.approved ? null : "Approve internally before client review.";

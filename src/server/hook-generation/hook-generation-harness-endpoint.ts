@@ -1,5 +1,16 @@
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "../../lib/supabase/database.types";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation";
 import type { RawDirection } from "../../services/creative-generation/hook-generation-types";
+import {
+  resolveConvertCakeAuthorization,
+  type ConvertCakeAuthorization
+} from "../shared/convert-cake-auth";
+import {
+  fetchPastPostExamples,
+  type PastPostExample,
+  type PastPostsClient
+} from "./past-posts";
 
 type FetchLike = typeof fetch;
 
@@ -14,6 +25,11 @@ export interface HookGenerationHarnessEndpointOptions {
   request: Request;
   env: HookGenerationHarnessEndpointEnv;
   fetchImpl?: FetchLike;
+  createPastPostsClient?: (options: {
+    supabaseUrl: string;
+    supabaseAnonKey: string;
+    accessToken: string;
+  }) => PastPostsClient;
 }
 
 type ResponseContent = {
@@ -50,14 +66,15 @@ interface HookGenerationResult {
   })[];
 }
 
-const DEFAULT_MODEL = "gpt-5.5";
+const DEFAULT_MODEL = "gpt-5.6-terra";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const SHORTLIST_COUNT = 6;
 
 export async function handleHookGenerationHarnessRequest({
   request,
   env,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  createPastPostsClient = defaultCreatePastPostsClient
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -72,12 +89,19 @@ export async function handleHookGenerationHarnessRequest({
       );
     }
 
-    if (!(await isAuthorizedConvertCakeUser(request, env, fetchImpl))) {
+    const auth = await resolveConvertCakeAuthorization(request, env, fetchImpl);
+    if (!auth.authorized) {
       return jsonResponse({ ok: false, error: "Unauthorized." }, 401);
     }
 
     const input = parseRequestBody(await request.json());
     const model = env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_MODEL;
+    const pastPosts = await loadPastPostExamples({
+      input,
+      env,
+      auth,
+      createPastPostsClient
+    });
     const research = await runResearchStep({
       input,
       apiKey,
@@ -87,6 +111,7 @@ export async function handleHookGenerationHarnessRequest({
     const result = await runGenerationStep({
       input,
       research,
+      pastPosts,
       apiKey,
       model,
       fetchImpl
@@ -101,36 +126,52 @@ export async function handleHookGenerationHarnessRequest({
   }
 }
 
-async function isAuthorizedConvertCakeUser(
-  request: Request,
-  env: HookGenerationHarnessEndpointEnv,
-  fetchImpl: FetchLike
-): Promise<boolean> {
+function defaultCreatePastPostsClient({
+  supabaseUrl,
+  supabaseAnonKey,
+  accessToken
+}: {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  accessToken: string;
+}): PastPostsClient {
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } }
+  }) as unknown as PastPostsClient;
+}
+
+async function loadPastPostExamples({
+  input,
+  env,
+  auth,
+  createPastPostsClient
+}: {
+  input: HookGenerationHarnessRequest;
+  env: HookGenerationHarnessEndpointEnv;
+  auth: ConvertCakeAuthorization;
+  createPastPostsClient: (options: {
+    supabaseUrl: string;
+    supabaseAnonKey: string;
+    accessToken: string;
+  }) => PastPostsClient;
+}): Promise<readonly PastPostExample[]> {
   const supabaseUrl = env.SUPABASE_URL?.trim();
   const supabaseAnonKey = env.SUPABASE_ANON_KEY?.trim();
-  if (!supabaseUrl || !supabaseAnonKey) return true;
+  if (!input.brand || !supabaseUrl || !supabaseAnonKey || !auth.accessToken) {
+    return [];
+  }
 
-  const authorization = request.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ")) return false;
-
-  const response = await fetchImpl(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: authorization
-    }
-  });
-
-  if (!response.ok) return false;
-
-  const user = (await response.json()) as unknown;
-  if (!isRecord(user)) return false;
-
-  const email = typeof user.email === "string" ? user.email : "";
-  const metadata = isRecord(user.app_metadata) ? user.app_metadata : {};
-  const organization =
-    typeof metadata.organization === "string" ? metadata.organization : "";
-
-  return organization === "convert_cake" || email.endsWith("@convertcake.com");
+  try {
+    const client = createPastPostsClient({
+      supabaseUrl,
+      supabaseAnonKey,
+      accessToken: auth.accessToken
+    });
+    return await fetchPastPostExamples({ client, clientId: input.brand.id });
+  } catch {
+    return [];
+  }
 }
 
 async function runResearchStep({
@@ -165,12 +206,14 @@ async function runResearchStep({
 async function runGenerationStep({
   input,
   research,
+  pastPosts,
   apiKey,
   model,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
   research: HookResearch;
+  pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
@@ -182,7 +225,7 @@ async function runGenerationStep({
     content: [
       {
         type: "input_text",
-        text: buildGenerationPrompt(input, research)
+        text: buildGenerationPrompt(input, research, pastPosts)
       }
     ],
     schemaName: "moons_hook_generation",
@@ -269,27 +312,43 @@ function buildResearchPrompt(input: HookGenerationHarnessRequest): string {
 
 function buildGenerationPrompt(
   input: HookGenerationHarnessRequest,
-  research: HookResearch
+  research: HookResearch,
+  pastPosts: readonly PastPostExample[]
 ): string {
   return [
-    "You are a world-class Creative Strategist and Senior Thai Copywriter for paid social advertising.",
+    "You are a world-class Creative Strategist and Senior Thai Copywriter for paid social advertising, on the level of a senior creative who deeply understands Thai language, brand voice, audience psychology, and paid-social performance.",
     "",
-    "งานของคุณคือสร้าง expert-level creative concept ideas สำหรับ Facebook / Instagram / TikTok paid social ads",
-    "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE",
+    "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
+    "",
+    "ทุก concept ที่สร้างออกแบบมาสำหรับภาพนิ่งเดียว (STATIC AD): ต้องสื่อสารได้ภายใน ~2 วินาที มีข้อความหลักเดียวชัดเจน (offer / proof point / product focus / contrast / visual metaphor) ห้ามเสนอ concept ที่ต้องใช้ dialogue, หลายฉาก, หรือ storytelling ต่อเนื่อง",
+    "",
+    "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
+    "",
+    "CONCEPT STRATEGY: ทุก concept ต้องเชื่อมโยงชัดเจน User Brief → Audience Insight → Product Focus → Strategic Angle → Headline โดยเริ่มจาก audience moment/tension/desire/objection ที่จำเพาะ ไม่ใช่เริ่มจาก product feature ตรงๆ ใช้มุมที่หลากหลาย เช่น pain-led, insight-led, desire-led, trust-building, objection-handling, offer-led, contrast, proof-led, before-after — เลือกเฉพาะมุมที่เหมาะกับแบรนด์และ brief จริงๆ",
+    "",
+    "HEADLINE STANDARD: สื่อความคิดเดียวชัดเจน อ่านแล้วเข้าใจทันที ฟังดูเป็นธรรมชาติเมื่ออ่านออกเสียง จำเพาะกับแบรนด์และ audience มีเหตุผลจริงที่ทำให้คนหยุดเลื่อน กระชับแต่ไม่แห้งจนไร้อารมณ์ ปกติยาวประมาณ 6-13 คำภาษาไทย ห้ามใช้ ellipsis, วงเล็บ, ประโยคคำถามเชิงวาทศิลป์ยาวๆ, โครงสร้าง \"เพราะ...จึง...\", การเรียงคำแบบ keyword stacking, สัมผัสเสแสร้ง ห้ามใช้วลีสำเร็จรูปเช่น ตอบโจทย์ทุกความต้องการ / ครบจบในที่เดียว / คุ้มกว่าที่เคย / ดีที่สุดสำหรับคุณ / เพื่อคุณโดยเฉพาะ / ยกระดับประสบการณ์ / ห้ามพลาด / โปรสุดคุ้ม / ราคาโดนใจ / เหนือระดับ / พรีเมียมเหนือใคร",
+    "",
+    "VISUAL DIRECTION: อธิบายเฉพาะ mood, emotional tone, ระดับความ polish, และ information hierarchy ที่ต้องการ (เช่น สะอาด ทันสมัย น่าเชื่อถือ อบอุ่น พรีเมียม) 1-2 ประโยคสั้นๆ ห้ามระบุฉาก, ตัวละคร, มุมกล้อง, พร็อพ, หรือ layout ที่ตายตัว — ทีมสร้างภาพจะกำหนดรายละเอียดที่ execution ต่อจากนี้เอง",
     "",
     "Hook ต้อง:",
-    "- เป็นภาษาไทยที่เป็นธรรมชาติ",
+    "- เป็นภาษาไทยที่เป็นธรรมชาติ ไม่ใช่ภาษาไทยที่แปลมา",
     "- brand-native เหมือนแบรนด์นี้พูดเองได้จริง",
     "- ชัด คม performance-ready แต่ไม่ clickbait",
     "- ใช้ Brand Memory และ Brief เป็น priority สูงสุด",
     "- ใช้ research เป็น supporting context เท่านั้น ห้ามฝืนใช้ trend ถ้าไม่เกี่ยว",
     "- ไม่กล่าว claim ที่ Brand Memory/Products/Brief ไม่รองรับ",
     "",
-    "Process ภายใน:",
-    "1. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย angle",
-    "2. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
-    `3. เลือก ${SHORTLIST_COUNT} hooks ที่ดีที่สุดและหลากหลายที่สุด`,
-    "4. ใส่ concept, why, visual, CTA, caption ให้ครบ",
+    "Caption ต้อง:",
+    "- เขียนในฐานะที่คุณคือ copywriter ประจำเพจนี้ ไม่ใช่นักเขียนภายนอก",
+    "- ศึกษาตัวอย่างโพสต์/แคปชั่นเก่าของเพจด้านล่าง แล้วเลียนแบบ tone, โครงสร้างประโยค, การเว้นบรรทัด, footer/signature, hashtag, emoji และวิธีปิดท้ายด้วย CTA ให้เหมือนเพจนี้เขียนเอง",
+    "- ถ้าไม่มีตัวอย่างโพสต์เก่า ให้ยึดโทนจาก Brand Memory และ Brief แทน",
+    "",
+    "Silent internal process (ห้าม output ขั้นตอนนี้ออกมา):",
+    "1. ย่อ brief ให้เหลือ audience insight ที่แข็งแรงที่สุด และ commercial promise ที่ชัดที่สุด",
+    "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
+    "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
+    `4. เลือก ${SHORTLIST_COUNT} hooks ที่ดีที่สุดและหลากหลายที่สุด ตัดมุมที่ซ้ำกัน`,
+    "5. ใส่ concept, why, visual, CTA, caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
     "",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
     "",
@@ -298,7 +357,26 @@ function buildGenerationPrompt(
     "Research context จาก harness search:",
     JSON.stringify(research, null, 2),
     "",
+    buildPastPostsBlock(pastPosts),
+    "",
     "Return only JSON ตาม schema."
+  ].join("\n");
+}
+
+function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
+  if (pastPosts.length === 0) {
+    return [
+      "ตัวอย่างโพสต์เก่าของเพจนี้:",
+      "ไม่มีข้อมูลโพสต์เก่าของเพจนี้ในระบบ ให้เขียน caption ตามโทนของ Brand Memory และ Brief แทน"
+    ].join("\n");
+  }
+
+  return [
+    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (ใช้ศึกษาสไตล์การเขียน caption เท่านั้น ห้ามคัดลอกเนื้อหา):",
+    ...pastPosts.map(
+      (post, index) =>
+        `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
+    )
   ].join("\n");
 }
 
@@ -314,6 +392,22 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "User Brief — HIGHEST PRIORITY:",
     input.brief,
     "",
+    ...(input.extraInstructions
+      ? [
+          "Additional direction for this round — HIGH PRIORITY, on top of the brief above:",
+          input.extraInstructions,
+          ""
+        ]
+      : []),
+    ...(input.existingHooks.length
+      ? [
+          "Hooks already generated and shown to the user in this run — DO NOT repeat these hooks, concepts, or angles. Every new idea must be meaningfully different (new audience moment, new angle, new proof point, new visual metaphor — not just reworded):",
+          ...input.existingHooks.map(
+            (item, index) => `${index + 1}. Hook: ${item.hook} — Concept: ${item.concept}`
+          ),
+          ""
+        ]
+      : []),
     "Brand Memory — What's working:",
     ...input.brandMemory.working.map((item) => `- ${item}`),
     "",
@@ -457,6 +551,11 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
     service: service as HookGenerationHarnessRequest["service"],
     quantity,
     brief,
+    extraInstructions:
+      typeof value.extraInstructions === "string"
+        ? value.extraInstructions
+        : "",
+    existingHooks: readExistingHooks(value.existingHooks),
     attachments,
     brandMemory: {
       working: readStringArray(brandMemory.working, "brandMemory.working"),
@@ -472,6 +571,23 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readExistingHooks(
+  value: unknown
+): HookGenerationHarnessRequest["existingHooks"] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(isRecord)
+    .filter(
+      (item) =>
+        typeof item.hook === "string" && typeof item.concept === "string"
+    )
+    .map((item) => ({
+      hook: item.hook as string,
+      concept: item.concept as string
+    }));
 }
 
 function parseBrand(value: unknown): HookGenerationHarnessRequest["brand"] {

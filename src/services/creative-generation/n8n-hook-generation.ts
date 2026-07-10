@@ -23,7 +23,9 @@ export async function generateDirectionsFromWebhook(
       brief: {
         service: input.service,
         quantity: input.quantity,
-        text: input.brief
+        text: input.brief,
+        extraInstructions: input.extraInstructions?.trim() ?? "",
+        existingHooks: input.existingHooks ?? []
       }
     })
   });

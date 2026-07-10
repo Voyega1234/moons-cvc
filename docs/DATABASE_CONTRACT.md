@@ -116,6 +116,17 @@ Source for Brand memory library sections:
 
 `section='brand'` is writable from the Brand kit panel for voice, CI, claim
 rules, approved wording, banned wording, and brand guideline summaries.
+`asset_url` also holds the brand logo — the Brand kit panel treats the row
+titled `Logo` as a special upload slot, everything else renders as a plain
+rule or, when the description is a short delimited list with no sentence
+punctuation, as tag/color-swatch chips.
+
+Write access (insert/update/delete for `authenticated`, gated by
+`moons.is_convert_cake_user()`) was added by
+`supabase/migrations/202606240007_brand_library_writes.sql`. The base
+migration only ever granted `select`, so this file must be applied to any new
+project before Brand kit edits or logo upload will work — a `42501 permission
+denied` error on `brand_library` means it's missing.
 
 ### `moons.brand_learning`
 
@@ -131,11 +142,30 @@ Client ingestion Brand Memory write-back currently appends source references as
 text (`Source: brand_analysis_jobs/{id}`) because this table does not yet have a
 dedicated ingestion citation column.
 
+Insert access (`authenticated`, gated by `moons.is_convert_cake_user()`) was
+added by `supabase/migrations/202607091014_brand_learning_writes.sql`. The
+base migration only granted `select`. This is what the Learning suggestions
+agent (see `docs/FEATURE_BRAND_LEARNING.md`) writes to once a person approves
+a suggestion — `source_run_id` is set to the run the suggestion came from.
+No update/delete grant exists; suggestions are append-only.
+
 ### `moons.workspaces`
 
 Stores the versioned UI state snapshot per authenticated user.
 
 This is currently the persistence source of truth for refresh/login restore.
+
+**Isolation, not personalization.** `unique(owner_user_id)` plus RLS locked
+to `owner_user_id = auth.uid()` on every operation means each login has
+exactly one private row, invisible to every other login — not a filtered
+view of shared data. A run created under one Convert Cake account cannot be
+seen, reviewed, or approved by a colleague's account. This directly
+conflicts with the GD/CS/PM multi-role review flow in
+`docs/FEATURE_INTERNAL_QC.md`, which assumes different people touch the same
+run at different points. Flagged to the user 2026-07-09; not yet decided
+whether runs should move to being scoped by client/brand instead of by
+creating user. Don't build features that assume cross-login visibility of
+runs until this is resolved.
 
 ## Normalized workflow tables prepared for next slices
 
@@ -226,6 +256,18 @@ Use:
 `payload` can store prompt/version metadata but must not store base64 image
 data.
 
+**Not wired yet.** Real image generation, per-creative GD/CS/PM approval, AI
+quality-check results, and replacement-upload revisions all exist and work
+today (`docs/FEATURE_ARTWORK_GENERATION.md`, `docs/FEATURE_INTERNAL_QC.md`),
+but every bit of that state — `approval`, `status`, `qaNote`,
+`revisionCount`, `assetUrl` — lives only in `moons.workspaces.snapshot`
+(`CreativeOutput` in `src/domain/creative-run.ts`), scoped to whichever
+user's login created the run. Nothing writes to `moons.outputs`. This is the
+same situation the hook step is in relative to
+`moons.creative_directions` — see "Next adapter order" below, item 2 is
+still not started despite the features it would back being fully built on
+top of the snapshot instead.
+
 ### `moons.internal_reviews`
 
 Stores GD/CS/PM review decisions.
@@ -257,10 +299,31 @@ Stores CSV/PPTX export attempts and generated file URLs.
 
 ## Migration files
 
-Apply in order:
+Apply in order. None of these run automatically — a migration existing in
+this repo does not mean it has been applied to the live project. Twice this
+session a feature shipped against a migration that was still unapplied and
+only surfaced as a runtime `42501 permission denied` error. Verify against
+the actual project (Supabase Dashboard → SQL Editor → run the file) rather
+than assuming the repo state matches production.
 
 1. `supabase/migrations/202606240001_production_backbone.sql`
 2. `supabase/migrations/202606240003_normalized_workflow.sql`
+3. `supabase/migrations/202606240004_brand_memory.sql`
+4. `supabase/migrations/202606240005_brand_asset_storage.sql`
+5. `supabase/migrations/202606240006_brand_document_types.sql`
+6. `supabase/migrations/202606240007_brand_library_writes.sql` — brand kit
+   write access (insert/update/delete), missing from the base migration.
+7. `supabase/migrations/202606260008_creative_asset_storage.sql` — the
+   `creative-assets` storage bucket used by hook/image generation and
+   Internal QC replacement uploads.
+8. `supabase/migrations/202607090009_client_ingestion.sql`
+9. `supabase/migrations/202607090010_claim_client_ingestion_job.sql`
+10. `supabase/migrations/202607090011_queue_brand_ingestion.sql`
+11. `supabase/migrations/202607090012_client_ingestion_service_role.sql`
+12. `supabase/migrations/202607090013_brand_products_worker_access.sql`
+13. `supabase/migrations/202607091014_brand_learning_writes.sql` — brand
+    learning write access (insert only), used by the Learning suggestions
+    agent to persist approved suggestions.
 
 Seed prototype clients with:
 

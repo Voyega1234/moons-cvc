@@ -34,7 +34,7 @@ describe("client ingestion worker env", () => {
       SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
       APIFY_TOKEN: "apify-token",
       OPENAI_API_KEY: "openai-key",
-      OPENAI_BRAND_ANALYSIS_MODEL: "gpt-5.5"
+      OPENAI_BRAND_ANALYSIS_MODEL: "gpt-5.6-terra"
     });
   });
 

@@ -48,7 +48,14 @@ describe("workflow rules", () => {
     });
     run = workflowReducer(run, { type: "auto-select-directions" });
     run = workflowReducer(run, { type: "create-outputs" });
-    run = workflowReducer(run, { type: "run-qa" });
+    run = workflowReducer(run, {
+      type: "run-qa",
+      results: run.outputs.map((output) => ({
+        outputId: output.id,
+        passed: true,
+        reason: "Looks good."
+      }))
+    });
     run = workflowReducer(run, { type: "approve-all" });
     run = workflowReducer(run, { type: "set-service", service: "album-post" });
 

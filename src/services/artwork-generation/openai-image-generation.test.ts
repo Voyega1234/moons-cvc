@@ -25,6 +25,7 @@ const run: WorkflowState = {
   quantity: 1,
   brief: "Launch a soft summer bouquet offer.",
   attachments: [],
+  referenceImages: [],
   directions: [
     {
       id: "hook-1",
@@ -94,7 +95,9 @@ describe("buildArtworkGenerationRequest", () => {
       assetBucket: "creative-assets",
       provider: "openai",
       model: "gpt-image-2",
-      revisionCount: 0
+      revisionCount: 0,
+      approval: { graphicDesign: null, clientService: null, projectManager: null },
+      approvalComments: { graphicDesign: "", clientService: "", projectManager: "" }
     });
 
     expect(output.assetUrl).toContain("creative-assets");

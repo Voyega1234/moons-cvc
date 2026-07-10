@@ -21,6 +21,35 @@ Moons is a creative operations workflow with:
 The prototype also includes an overview, parallel creative runs, brand
 profiles, quota visibility, historical approved work, and mock export tools.
 
+## Async actions target a run id, not "whichever run is active"
+
+Fixed 2026-07-10. `App.tsx`'s `dispatch` wraps every `WorkflowAction` in a
+`WorkspaceAction`. It used to be `{ type: "update-active-run" }`, which
+applied the action to `getActiveRun(state)` — whichever run happened to be
+active **when the action was dispatched**, not when it was requested. That's
+fine for synchronous UI actions (click → dispatch happens in the same tick),
+but every async action in this app — hook generation, "Generate more",
+artwork generation, quality check, brand-learning suggestions — dispatches
+its result later, from a `.then()` callback, after an API round trip. If the
+user switched to a different run (or opened a new one) while a request was
+in flight, the result landed on whatever run was active when the *response*
+arrived, not the run that made the *request*. Depending on whether that
+other run satisfied the same action's guard conditions, the result either
+silently applied to the wrong run or got dropped by
+`workflowActionBlockReason` — which looked, from the run the user actually
+started generation on, like "it just stopped."
+
+The fix: `dispatch` is now `{ type: "apply-run-action", runId, action, now }`
+(`workspace-reducer.ts`), and the `useCallback` that creates it depends on
+`state.id` instead of `[]`. Every stage component's hooks (`useGenerateHooks`,
+`useCreateSelectedHooks`, etc.) receive whichever `dispatch` closure was
+current when the user clicked the button — and since that closure captured
+`state.id` at creation time, the async `.then()` it eventually calls still
+targets the original run, regardless of what's active by the time the
+request resolves. If the target run was closed in the meantime, the action
+is dropped harmlessly (see the `apply-run-action` case in
+`workspace-reducer.ts`).
+
 ## Architectural rule
 
 Dependencies point inward:
@@ -68,6 +97,10 @@ The database source-of-truth transition plan is documented in
 snapshot-backed behavior with normalized table adapters.
 
 The Start/client-picker behavior is documented in `docs/FEATURE_START.md`.
+Other implemented feature contracts: `docs/FEATURE_HOOK_GENERATION.md`,
+`docs/FEATURE_ARTWORK_GENERATION.md`, `docs/FEATURE_INTERNAL_QC.md`,
+`docs/FEATURE_BRAND_LEARNING.md`, `docs/FEATURE_BRAND_MEMORY.md`,
+`docs/FEATURE_CLIENT_INGESTION.md`.
 
 ## Migration sequence
 

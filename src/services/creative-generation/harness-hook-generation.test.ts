@@ -40,6 +40,7 @@ const run: WorkflowState = {
   quantity: 3,
   brief: "Generate hooks for AI SEO webinar.",
   attachments: ["brief.pdf"],
+  referenceImages: [],
   directions: [],
   outputs: [],
   qaComplete: false,
@@ -59,6 +60,42 @@ describe("buildHookGenerationHarnessRequest", () => {
       title: "AI SEO Workshop"
     });
     expect(request.attachments).toEqual(["brief.pdf"]);
+  });
+
+  it("maps existing directions and extra instructions for a generate-more request", () => {
+    const runWithDirections: WorkflowState = {
+      ...run,
+      directions: [
+        {
+          id: "direction-1",
+          hook: "เรียนรู้ AI SEO ใน 1 วัน",
+          concept: "Workshop urgency",
+          why: "Creates urgency for a limited seat webinar.",
+          visual: "Clean, professional.",
+          cta: "จองที่นั่ง",
+          caption: "จองด่วน!",
+          selected: false
+        }
+      ]
+    };
+
+    const request = buildHookGenerationHarnessRequest({
+      run: runWithDirections,
+      extraInstructions: "Focus more on small business owners this round."
+    });
+
+    expect(request.extraInstructions).toBe(
+      "Focus more on small business owners this round."
+    );
+    expect(request.existingHooks).toEqual([
+      { hook: "เรียนรู้ AI SEO ใน 1 วัน", concept: "Workshop urgency" }
+    ]);
+  });
+
+  it("defaults extraInstructions to an empty string when omitted", () => {
+    const request = buildHookGenerationHarnessRequest({ run });
+    expect(request.extraInstructions).toBe("");
+    expect(request.existingHooks).toEqual([]);
   });
 
   it("reports an empty backend response clearly", async () => {

@@ -28,7 +28,14 @@ Not production-ready yet:
 
 - Refresh persistence is implemented through `moons.workspaces.snapshot`, but
   most workflow slices still need normalized adapters
-- AI, artwork, QA, review, export, and learning write-back are mock behavior
+- Hooks, artwork generation, reference-image editing, regenerate-with-prompt,
+  GD/CS/PM internal review, AI vision quality-check, and learning-suggestion
+  write-back are real (see `docs/FEATURE_HOOK_GENERATION.md`,
+  `docs/FEATURE_ARTWORK_GENERATION.md`, `docs/FEATURE_INTERNAL_QC.md`,
+  `docs/FEATURE_BRAND_LEARNING.md`) — but all of it is scoped to a single
+  login's `moons.workspaces` row, not a normalized shared table (see
+  `docs/DATABASE_CONTRACT.md` isolation warning). Client review links,
+  export, and Slack notification remain mock/unbuilt.
 - Visual regression tests are not automated
 
 ## Track A: Build now
@@ -147,18 +154,23 @@ Verify:
 ### A5. Define async job behavior
 
 Status: database schema prepared in
-`supabase/migrations/202606240003_normalized_workflow.sql`. UI/job adapters are
-not wired yet. The selected-hook artwork frontend contract is prepared in
-`docs/FEATURE_ARTWORK_GENERATION.md`. Add Client ingestion has a backend
-harness contract in `docs/FEATURE_CLIENT_INGESTION.md`. Read
-`docs/DATABASE_CONTRACT.md` before continuing.
+`supabase/migrations/202606240003_normalized_workflow.sql`. UI/job adapters
+(`moons.jobs`) are still not wired — hooks, artwork, and QA all run as plain
+synchronous request/response calls with a loading spinner, not durable jobs
+with progress/retry state. The selected-hook artwork flow itself is fully
+implemented against `docs/FEATURE_ARTWORK_GENERATION.md`, just not backed by
+`moons.jobs`. Add Client ingestion has a backend harness contract in
+`docs/FEATURE_CLIENT_INGESTION.md`. Read `docs/DATABASE_CONTRACT.md` before
+continuing.
 
 Deliver:
 
 - Job database model for hooks, artwork, QA, and export
 - Statuses: queued, processing, completed, failed, cancelled
 - Progress and error fields
-- UI states such as “Generating hooks...” and “Checking quality...”
+- UI states such as "Generating hooks..." and "Checking quality..." — spinner
+  states exist today (`.spinner` in `src/styles/app.css`) but are driven by a
+  synchronous fetch's pending state, not a job status poll
 - Retry contract with idempotency key
 
 No n8n implementation is required in this milestone.
@@ -299,7 +311,10 @@ Status: first backend harness contract prepared on 2026-07-09 in
 `docs/FEATURE_HOOK_GENERATION.md`. n8n mode remains the default. Harness mode
 can be enabled with `VITE_HOOK_GENERATION_MODE=harness`; it performs a
 synchronous research step and generation/ranking step through
-`/api/hook-generation-harness`.
+`/api/hook-generation-harness`. Caption generation is grounded in the
+brand's real historical posts (`fetchPastPostExamples()` reading
+`brand_social_posts`/`brand_ad_library_items`), not just the brand voice
+summary — see `docs/FEATURE_HOOK_GENERATION.md`.
 
 Required next:
 
@@ -320,23 +335,37 @@ Then implement / complete:
 
 ### B3. Artwork, caption, and QA
 
+Status: built without Creative Compass — `gpt-image-2` direct (text-to-image
+and reference-image edit), caption generation grounded in real historical
+posts, and an AI vision quality-check agent are all live. See
+`docs/FEATURE_ARTWORK_GENERATION.md` and `docs/FEATURE_HOOK_GENERATION.md`.
+What's still open below is now about the *auto-fix* policy specifically, not
+QA existing at all.
+
 Required first:
 
-- Creative Compass artwork and caption pipeline
-- Supported input asset types and aspect ratios
-- QA rubric and prohibited claims
-- Auto-fix policy and maximum attempts
-- Provider limits, cost limits, and timeouts
+- Auto-fix policy and maximum attempts (today: quality-check only flags and
+  reports a reason; there is no bounded automatic re-generation attempt —
+  a human clicks "Regenerate" manually)
+- Provider limits, cost limits, and timeouts (today: `quality: "medium"`,
+  `maxDuration: 120`/`90` were picked empirically, not from a stated budget)
 
 Then implement:
 
-- Artwork and caption generation
-- QA agent
-- Pass / Moons fixed it / Needs revise
+- Pass / Moons fixed it / Needs revise as a stored three-way status (today:
+  binary pass/fail from the QA agent, stored as `status: "ready" |
+  "needs-revision"` on the output, not the `moons.qa_results` enum)
 - One bounded automatic fix attempt
-- Human replacement path when the fix is insufficient
+- Persist QA results to `moons.qa_results` instead of only the workspace
+  snapshot
 
-### B4. Slack internal QC
+### B4. Internal QC review
+
+Status: built without Slack — GD/CS/PM approval happens in-app
+(`docs/FEATURE_INTERNAL_QC.md`), not via Slack notification/callback. The
+original B4 plan assumed Slack as the review surface; that assumption no
+longer holds, so this track is Slack-notification-on-top-of-the-existing-flow,
+not the review mechanism itself.
 
 Required first:
 
@@ -345,14 +374,14 @@ Required first:
 - Channel ID
 - Reviewer identity mapping
 - Public callback endpoint
-- Approval order confirmation
+- Decision on whether Slack drives approval or just notifies about the
+  in-app gate that already exists
 
 Then implement:
 
-- Notify GD first
-- Approve/reject from Slack
-- Verify Slack signatures
-- Continue to CS/PM after GD approval
+- Notify GD when a run reaches Internal QC
+- Optional: approve/reject from Slack, verified by Slack signature, mirrored
+  into the same `review-output` action the in-app buttons use
 - Persist every action in the audit log
 - Link to download and replace artwork
 

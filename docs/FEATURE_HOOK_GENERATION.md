@@ -35,7 +35,7 @@ Harness mode requires backend-only env:
 
 ```bash
 OPENAI_API_KEY=<openai-api-key>
-OPENAI_HOOK_GENERATION_MODEL=gpt-5.5
+OPENAI_HOOK_GENERATION_MODEL=gpt-5.6-terra
 SUPABASE_URL=<project-url>
 SUPABASE_ANON_KEY=<anon-key>
 ```
@@ -67,6 +67,8 @@ type HookGenerationHarnessRequest = {
   service: "single-static" | "album-post" | "motion-static" | "resize" | "ugc-video";
   quantity: number;
   brief: string;
+  extraInstructions: string;
+  existingHooks: { hook: string; concept: string }[];
   attachments: string[];
   brandMemory: {
     working: string[];
@@ -83,6 +85,37 @@ type HookGenerationHarnessRequest = {
 
 The request intentionally includes Brand Kit, Products, Documents, References,
 and learning so the hook agent can use the same context visible in the UI.
+
+## Generate more (implemented 2026-07-10)
+
+The Hook step's "Regenerate all" button — which discarded every hook and
+replaced them — is gone. In its place: an "Add more direction for this round
+(optional)" input plus a "Generate more" button
+(`DirectionsStage`/`useGenerateMoreHooks` in `src/features/workflow/`).
+
+Dispatches a new `generate-more-directions` action instead of
+`generate-directions` — the reducer appends the returned batch to
+`state.directions` rather than replacing it (`reducer.ts`). Since the model
+can independently produce ids like `direction-1` in two separate calls, the
+reducer reassigns any id that collides with an existing direction
+(`createId("direction")`) before appending, so nothing is silently
+overwritten.
+
+Two things travel with the request to keep the new batch actually new:
+
+- `extraInstructions` — whatever the user typed in the optional input,
+  merged into the prompt as "Additional direction for this round — HIGH
+  PRIORITY, on top of the brief above", separate from (and layered on top
+  of) the original brief text, which stays unchanged in `state.brief`.
+- `existingHooks` — every hook + concept already generated in this run
+  (`state.directions`, both from the first generation and any prior
+  "Generate more" round), sent as an explicit "do not repeat these" list in
+  the prompt (see `buildInputBlock` in `hook-generation-harness-endpoint.ts`).
+
+Both fields are threaded through the n8n path too
+(`generateDirectionsFromWebhook`, nested under `brief.extraInstructions`/
+`brief.existingHooks`) on a best-effort basis — n8n workflows aren't
+guaranteed to use them, but the data is there if the flow is updated to.
 
 ## Backend response shape
 
@@ -145,6 +178,36 @@ The generation step keeps the same discipline as `agent_hook.md`: the hook is
 the most important output, must be natural Thai, brand-native, and useful for
 paid social.
 
+**`agent_hook.md` was substantially rewritten on 2026-07-10** — new output
+schema (`recommendations[]` with `content_type` quotas across STATIC AD /
+VIDEO AD / ALBUM AD / SHORT VIDEO, plus `audience_insight`, `strategic_angle`,
+`content_pillar`, and a `copywriting` sub-object with `sub_headline_1/2` and
+`bullets[]`), a much longer set of concrete rules, and no more n8n example
+content baked in. Decision (2026-07-10): **adapt, don't adopt wholesale.**
+`buildGenerationPrompt` absorbed the new file's stronger creative-strategy
+language — content locked to single-image (STATIC AD) behavior, factual
+grounding, concept strategy (audience insight → strategic angle → headline),
+the concrete headline avoid-list, and the mood-only visual-direction rule —
+but the request/response schema and `RawDirection`/`CreativeDirection` shape
+were deliberately left unchanged. The new file's `content_type` quota system
+(mixing video/album/short-video recommendations) was **not** adopted: Moons'
+artwork generation only produces static images via `gpt-image-2` (see
+`docs/FEATURE_ARTWORK_GENERATION.md`), so quota'd video/album recommendations
+would have nowhere to go. Revisit this if/when video or album generation gets
+built — until then every hook is generated as if it were a STATIC AD.
+
+## Caption grounding in real past posts
+
+The generation step's caption instructions ("Caption ต้อง:" in the prompt
+built by `buildGenerationPrompt`) tell the model to write in the voice of an
+actual copywriter for the page, not to write a generic caption. To make that
+concrete rather than aspirational, `fetchPastPostExamples()`
+(`src/server/hook-generation/past-posts.ts`) queries the brand's real
+`moons.brand_social_posts` and `moons.brand_ad_library_items` rows for past
+caption text and includes a sample directly in the prompt as style
+reference. Falls back to Brand Kit voice notes alone if a brand has no
+ingested post history yet (new clients, or ingestion not yet run).
+
 ## Current limitation
 
 Harness mode is synchronous. It performs research and generation in one backend
@@ -157,9 +220,11 @@ should move it to the `moons.jobs` model so the UI can show progress such as:
 
 ## Files
 
-- `src/features/workflow/use-generate-hooks.ts`
+- `src/features/workflow/use-generate-hooks.ts` — `useGenerateHooks` (initial
+  generation) and `useGenerateMoreHooks` (append, duplicate-avoiding)
 - `src/services/creative-generation/n8n-hook-generation.ts`
 - `src/services/creative-generation/harness-hook-generation.ts`
 - `src/services/creative-generation/hook-generation-types.ts`
 - `src/server/hook-generation/hook-generation-harness-endpoint.ts`
+- `src/server/hook-generation/past-posts.ts`
 - `api/hook-generation-harness.ts`

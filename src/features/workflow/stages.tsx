@@ -1,10 +1,16 @@
-import { useEffect, useState, type Dispatch, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type ReactNode
+} from "react";
 import {
   canSelectBrand,
   canStartBrandIngestion,
   type Brand,
-  type LibraryItem,
-  type LibrarySection
+  type LibraryItem
 } from "../../domain/brand";
 import {
   brandDocumentTypeLabels,
@@ -14,18 +20,31 @@ import {
   type BrandPastWorkItem,
   type BrandProduct
 } from "../../domain/brand-memory";
-import type { ServiceType } from "../../domain/creative-run";
+import type { ApprovalRole, CreativeOutput, ServiceType } from "../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../app/providers/brand-memory-provider";
 import { useBrands } from "../../app/providers/brand-provider";
 import { useClientIntakeRepository } from "../../app/providers/client-intake-provider";
 import { validateFacebookUrl } from "../../domain/client-ingestion";
+import { regenerateOutputImage } from "../../services/artwork-generation/openai-image-generation";
+import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
+import {
+  suggestBrandLearning,
+  type LearningSuggestion
+} from "../../services/brand-learning/suggest-brand-learning";
 import { getFileNames } from "../../shared/utils/files";
+import { pluralize } from "../../shared/utils/text";
 import { serviceLabels } from "./config";
-import type { WorkflowAction, WorkflowState } from "./model";
+import type {
+  WorkflowAction,
+  WorkflowState,
+  WorkspaceAction,
+  WorkspaceState
+} from "./model";
 import { selectedDirectionCount, workflowActionBlockReason } from "./rules";
 import { presentBrandMemoryText } from "./brand-memory-presentation";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
-import { useGenerateHooks } from "./use-generate-hooks";
+import { useGenerateHooks, useGenerateMoreHooks } from "./use-generate-hooks";
+import { useRunQualityCheck } from "./use-run-quality-check";
 
 interface StageProps {
   state: WorkflowState;
@@ -66,11 +85,10 @@ function DecisionCard({
 
 export function StartStage({ state, dispatch }: StageProps) {
   const { brands, loading, error, refresh } = useBrands();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(true);
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [setupBrand, setSetupBrand] = useState<Brand | null>(null);
   const [mappingBrand, setMappingBrand] = useState<Brand | null>(null);
-  const [pastWorkSelected, setPastWorkSelected] = useState(false);
   const continueAction: WorkflowAction = { type: "set-stage", stage: "brief" };
   const continueBlocked = workflowActionBlockReason(state, continueAction);
   const search = state.brandSearch.trim().toLowerCase();
@@ -79,13 +97,6 @@ export function StartStage({ state, dispatch }: StageProps) {
       .toLowerCase()
       .includes(search)
   );
-  const sections: readonly [LibrarySection, string][] = [
-    ["brand", "Brand kit"],
-    ["products", "Products"],
-    ["docs", "Documents"],
-    ["refs", "References"]
-  ];
-  const library = state.brand?.library[state.librarySection] ?? [];
 
   return (
     <DecisionCard
@@ -99,9 +110,9 @@ export function StartStage({ state, dispatch }: StageProps) {
             className="btn secondary"
             type="button"
             disabled={!state.brand}
-            onClick={() => setProfileOpen(true)}
+            onClick={() => setProfileOpen((current) => !current)}
           >
-            Open brand profile
+            {profileOpen ? "Hide brand profile" : "Open brand profile"}
           </button>
           <button
             className="btn primary"
@@ -115,7 +126,7 @@ export function StartStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <div className="start-grid">
+      <div className="start-single">
         <div>
           <div className="dropdown">
             <button
@@ -159,6 +170,15 @@ export function StartStage({ state, dispatch }: StageProps) {
                   }
                 />
               </label>
+              <AddClientPanel
+                open={addClientOpen}
+                onToggle={() => {
+                  setAddClientOpen((current) => !current);
+                  setSetupBrand(null);
+                  setMappingBrand(null);
+                }}
+                onCreated={refresh}
+              />
               {loading ? (
                 <p className="repository-message">Loading brands...</p>
               ) : error ? (
@@ -237,15 +257,6 @@ export function StartStage({ state, dispatch }: StageProps) {
               })}
             </div>
           </div>
-          <AddClientPanel
-            open={addClientOpen}
-            onToggle={() => {
-              setAddClientOpen((current) => !current);
-              setSetupBrand(null);
-              setMappingBrand(null);
-            }}
-            onCreated={refresh}
-          />
           {setupBrand ? (
             <ExistingBrandSetupPanel
               key={setupBrand.id}
@@ -273,52 +284,7 @@ export function StartStage({ state, dispatch }: StageProps) {
               <b>Start here.</b>
               <p>Load memory once. Use it everywhere.</p>
             </div>
-          ) : (
-            <BrandLearning state={state} />
-          )}
-        </div>
-        <div className="library-card">
-          <div className="tabs">
-            {sections.map(([section, label]) => (
-              <button
-                key={section}
-                type="button"
-                className={`tab ${!pastWorkSelected && state.librarySection === section ? "active" : ""}`}
-                onClick={() => {
-                  setPastWorkSelected(false);
-                  dispatch({ type: "set-library-section", section });
-                }}
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              className={`tab ${pastWorkSelected ? "active" : ""}`}
-              type="button"
-              onClick={() => setPastWorkSelected(true)}
-            >
-              Past work
-            </button>
-          </div>
-          {!state.brand ? (
-            <div className="empty">
-              <b>No library loaded.</b>
-              <p>Choose a brand first.</p>
-            </div>
-          ) : pastWorkSelected ? (
-            <PastWorkPreview state={state} clientId={state.brand.id} />
-          ) : library.length ? (
-            <div className="library-grid">
-              {library.map((entry) => (
-                <BrandMemoryCard key={entry.id} entry={entry} />
-              ))}
-            </div>
-          ) : (
-            <div className="empty">
-              <b>No items yet.</b>
-              <p>Upload production assets when the API is connected.</p>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
       {state.brand && profileOpen ? (
@@ -328,22 +294,6 @@ export function StartStage({ state, dispatch }: StageProps) {
         />
       ) : null}
     </DecisionCard>
-  );
-}
-
-function BrandMemoryCard({ entry }: { entry: LibraryItem }) {
-  const presented = presentBrandMemoryText(entry.description);
-
-  return (
-    <div className="lib-item">
-      <b>{entry.title}</b>
-      <p>{presented.text}</p>
-      {presented.citationLabel ? (
-        <span className="memory-citation" title={presented.citationTitle ?? ""}>
-          {presented.citationLabel}
-        </span>
-      ) : null}
-    </div>
   );
 }
 
@@ -686,7 +636,8 @@ type BrandProfileSection =
   | "products"
   | "docs"
   | "refs"
-  | "past";
+  | "past"
+  | "learning";
 
 function BrandProfilePanel({
   state,
@@ -704,7 +655,8 @@ function BrandProfilePanel({
     ["products", "Products", "Offers, benefits, audience, claim notes"],
     ["docs", "Documents", "Guidelines, briefs, factsheets, extracted text"],
     ["refs", "References", "Visual inspiration, avoid, competitors"],
-    ["past", "Past work", "Delivered runs and approved learnings"]
+    ["past", "Past work", "Delivered runs and approved learnings"],
+    ["learning", "Brand learning", "What's working and what to avoid"]
   ];
 
   return (
@@ -764,6 +716,7 @@ function BrandProfilePanel({
           {section === "past" ? (
             <PastWorkPreview state={state} clientId={brand.id} />
           ) : null}
+          {section === "learning" ? <BrandLearning state={state} /> : null}
         </div>
       </div>
     </aside>
@@ -1067,6 +1020,10 @@ function BrandKitMemoryList({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [analyzingGuideline, setAnalyzingGuideline] = useState(false);
+  const [guidelineError, setGuidelineError] = useState<string | null>(null);
+  const [guidelineTextOpen, setGuidelineTextOpen] = useState(false);
+  const [guidelineText, setGuidelineText] = useState("");
   const formOpen = editingId !== null;
 
   useEffect(() => {
@@ -1152,6 +1109,93 @@ function BrandKitMemoryList({
     }
   }
 
+  async function mergeColorsIntoRule(
+    ruleTitle: string,
+    newColors: readonly string[]
+  ) {
+    if (!newColors.length) return;
+
+    const rule = findRuleByTitle(items, ruleTitle);
+    const existingColors = rule
+      ? rule.description
+          .split(/[,\n]/)
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+    const merged = Array.from(
+      new Set(
+        [...existingColors, ...newColors].map((value) => value.toUpperCase())
+      )
+    );
+    const saved = rule
+      ? await repository.updateBrandRule({
+          id: rule.id,
+          title: ruleTitle,
+          description: merged.join(", ")
+        })
+      : await repository.createBrandRule({
+          clientId,
+          title: ruleTitle,
+          description: merged.join(", ")
+        });
+    setItems((current) =>
+      current.some((item) => item.id === saved.id)
+        ? current.map((item) => (item.id === saved.id ? saved : item))
+        : [...current, saved]
+    );
+  }
+
+  async function handleAnalyzeGuideline(
+    source: { file: File } | { text: string }
+  ) {
+    setAnalyzingGuideline(true);
+    setGuidelineError(null);
+
+    try {
+      const analysis = await repository.analyzeGuideline(
+        "file" in source
+          ? { clientId, file: source.file }
+          : { clientId, text: source.text }
+      );
+
+      if (analysis.summary.trim()) {
+        const existing = findRuleByTitle(items, "Tone & Style");
+        const saved = existing
+          ? await repository.updateBrandRule({
+              id: existing.id,
+              title: "Tone & Style",
+              description: analysis.summary.trim()
+            })
+          : await repository.createBrandRule({
+              clientId,
+              title: "Tone & Style",
+              description: analysis.summary.trim()
+            });
+        setItems((current) =>
+          current.some((item) => item.id === saved.id)
+            ? current.map((item) => (item.id === saved.id ? saved : item))
+            : [...current, saved]
+        );
+      }
+
+      await mergeColorsIntoRule("Colors", analysis.primaryColors);
+      await mergeColorsIntoRule("Secondary colors", analysis.secondaryColors);
+
+      if ("text" in source) {
+        setGuidelineText("");
+        setGuidelineTextOpen(false);
+      }
+    } catch (caught) {
+      setGuidelineError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not analyze guideline."
+      );
+    } finally {
+      setAnalyzingGuideline(false);
+    }
+  }
+
   async function deleteRule(item: LibraryItem) {
     setSaving(true);
     setError(null);
@@ -1167,6 +1211,55 @@ function BrandKitMemoryList({
     }
   }
 
+  const logoItem = items.find(
+    (item) => item.title.trim().toLowerCase() === "logo"
+  );
+  const colorsItem = items.find(
+    (item) => item.title.trim().toLowerCase() === "colors"
+  );
+  const secondaryColorsItem = items.find(
+    (item) => item.title.trim().toLowerCase() === "secondary colors"
+  );
+  const otherItems = items.filter(
+    (item) =>
+      item !== logoItem && item !== colorsItem && item !== secondaryColorsItem
+  );
+
+  function renderMemoryItem(item: LibraryItem) {
+    const tags = splitBrandKitTags(item.description);
+    return (
+      <article className="memory-item" key={item.id}>
+        <b>{item.title}</b>
+        {tags ? (
+          <div className="memory-tags">
+            {tags.map((tag) => (
+              <BrandKitTag key={tag} value={tag} />
+            ))}
+          </div>
+        ) : (
+          <p className="memory-item-desc">{item.description}</p>
+        )}
+        <div className="memory-item-actions">
+          <span>Usable for AI</span>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => openEditForm(item)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void deleteRule(item)}
+          >
+            Delete
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <section className="memory-editor">
       <header>
@@ -1175,13 +1268,30 @@ function BrandKitMemoryList({
           <p>Store the core rules: voice, CI, claim safety, and do/don’t.</p>
         </div>
         <div className="memory-actions">
+          <label
+            className={`btn secondary upload-inline ${analyzingGuideline ? "disabled" : ""}`}
+            title="Upload a PDF or image guideline. Moons will extract tone, style, and brand colors automatically."
+          >
+            {analyzingGuideline ? "Analyzing…" : "Upload guideline"}
+            <input
+              className="file-input"
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+              disabled={analyzingGuideline}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void handleAnalyzeGuideline({ file });
+              }}
+            />
+          </label>
           <button
             className="btn secondary"
             type="button"
-            disabled
-            title="Upload files in Documents with type Brand guideline."
+            disabled={analyzingGuideline}
+            onClick={() => setGuidelineTextOpen((current) => !current)}
           >
-            Upload guideline
+            {guidelineTextOpen ? "Cancel" : "Paste guideline text"}
           </button>
           {!formOpen ? (
             <button
@@ -1195,6 +1305,87 @@ function BrandKitMemoryList({
           ) : null}
         </div>
       </header>
+      {guidelineTextOpen ? (
+        <div className="memory-form">
+          <label>
+            <span>Guideline text</span>
+            <textarea
+              value={guidelineText}
+              disabled={analyzingGuideline}
+              placeholder="Paste brand guideline text — voice, tone, positioning, color names or hex codes..."
+              rows={4}
+              onChange={(event) => setGuidelineText(event.target.value)}
+            />
+          </label>
+          <div className="memory-form-actions">
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={analyzingGuideline}
+              onClick={() => {
+                setGuidelineTextOpen(false);
+                setGuidelineText("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={analyzingGuideline || !guidelineText.trim()}
+              onClick={() =>
+                void handleAnalyzeGuideline({ text: guidelineText })
+              }
+            >
+              {analyzingGuideline ? "Analyzing…" : "Analyze text"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {guidelineError ? <p className="memory-error">{guidelineError}</p> : null}
+      <BrandLogoCard
+        clientId={clientId}
+        logoItem={logoItem}
+        onSaved={(saved) =>
+          setItems((current) =>
+            current.some((item) => item.id === saved.id)
+              ? current.map((item) => (item.id === saved.id ? saved : item))
+              : [...current, saved]
+          )
+        }
+      />
+      <ColorsCard
+        clientId={clientId}
+        ruleTitle="Colors"
+        label="Primary colors"
+        colorsItem={colorsItem}
+        onSaved={(saved) =>
+          setItems((current) =>
+            current.some((item) => item.id === saved.id)
+              ? current.map((item) => (item.id === saved.id ? saved : item))
+              : [...current, saved]
+          )
+        }
+        onDeleted={(id) =>
+          setItems((current) => current.filter((item) => item.id !== id))
+        }
+      />
+      <ColorsCard
+        clientId={clientId}
+        ruleTitle="Secondary colors"
+        label="Secondary colors"
+        colorsItem={secondaryColorsItem}
+        onSaved={(saved) =>
+          setItems((current) =>
+            current.some((item) => item.id === saved.id)
+              ? current.map((item) => (item.id === saved.id ? saved : item))
+              : [...current, saved]
+          )
+        }
+        onDeleted={(id) =>
+          setItems((current) => current.filter((item) => item.id !== id))
+        }
+      />
       {error ? <p className="memory-error">{error}</p> : null}
       {formOpen ? (
         <div className="memory-form">
@@ -1238,39 +1429,301 @@ function BrandKitMemoryList({
         </div>
       ) : null}
       {loading ? <p className="repository-message">Loading brand kit...</p> : null}
-      {items.length ? (
+      {otherItems.length ? (
         <div className="memory-item-list">
-          {items.map((item) => (
-            <article className="memory-item" key={item.id}>
-              <b>{item.title}</b>
-              <p>{item.description}</p>
-              <div className="memory-item-actions">
-                <span>Usable for AI</span>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => openEditForm(item)}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void deleteRule(item)}
-                >
-                  Delete
-                </button>
-              </div>
-            </article>
-          ))}
+          {otherItems.map((item) => renderMemoryItem(item))}
         </div>
-      ) : !loading ? (
+      ) : !loading && !colorsItem && !secondaryColorsItem && !logoItem ? (
         <div className="empty">
           <b>No brand kit yet.</b>
           <p>Add memory here before using it in generation.</p>
         </div>
       ) : null}
     </section>
+  );
+}
+
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function ColorsCard({
+  clientId,
+  ruleTitle,
+  label,
+  colorsItem,
+  onSaved,
+  onDeleted
+}: {
+  clientId: string;
+  ruleTitle: string;
+  label: string;
+  colorsItem: LibraryItem | undefined;
+  onSaved: (item: LibraryItem) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const repository = useBrandMemoryRepository();
+  const [editingHex, setEditingHex] = useState<string | null>(null);
+  const [draftHex, setDraftHex] = useState("");
+  const [addingHex, setAddingHex] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const colors = colorsItem
+    ? colorsItem.description
+        .split(/[,\n]/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+
+  async function persist(nextColors: readonly string[]) {
+    setBusy(true);
+    setError(null);
+
+    try {
+      if (nextColors.length === 0) {
+        if (colorsItem) {
+          await repository.deleteBrandRule(colorsItem.id);
+          onDeleted(colorsItem.id);
+        }
+        return;
+      }
+
+      const description = nextColors.join(", ");
+      const saved = colorsItem
+        ? await repository.updateBrandRule({
+            id: colorsItem.id,
+            title: ruleTitle,
+            description
+          })
+        : await repository.createBrandRule({
+            clientId,
+            title: ruleTitle,
+            description
+          });
+      onSaved(saved);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not save colors."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAdd() {
+    const trimmed = addingHex.trim();
+    if (!HEX_COLOR_PATTERN.test(trimmed)) {
+      setError("Enter a valid hex color, e.g. #1D1D1F.");
+      return;
+    }
+    await persist([...colors, trimmed.toUpperCase()]);
+    setAddingHex("");
+  }
+
+  async function handleEditSave(oldHex: string) {
+    const trimmed = draftHex.trim();
+    if (!HEX_COLOR_PATTERN.test(trimmed)) {
+      setError("Enter a valid hex color, e.g. #1D1D1F.");
+      return;
+    }
+    await persist(
+      colors.map((hex) => (hex === oldHex ? trimmed.toUpperCase() : hex))
+    );
+    setEditingHex(null);
+  }
+
+  async function handleDelete(hex: string) {
+    await persist(colors.filter((current) => current !== hex));
+  }
+
+  return (
+    <div className="colors-card">
+      <b>{label}</b>
+      <div className="colors-grid">
+        {colors.map((hex) =>
+          editingHex === hex ? (
+            <div className="color-swatch color-swatch-editing" key={hex}>
+              <input
+                value={draftHex}
+                autoFocus
+                disabled={busy}
+                onChange={(event) => setDraftHex(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void handleEditSave(hex);
+                  if (event.key === "Escape") setEditingHex(null);
+                }}
+              />
+              <div className="color-swatch-edit-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleEditSave(hex)}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setEditingHex(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="color-swatch" key={hex}>
+              <button
+                type="button"
+                className="color-swatch-remove"
+                disabled={busy}
+                aria-label={`Remove ${hex}`}
+                onClick={() => void handleDelete(hex)}
+              >
+                ×
+              </button>
+              <button
+                type="button"
+                className="color-swatch-block"
+                style={{ background: hex }}
+                disabled={busy}
+                title="Click to edit"
+                onClick={() => {
+                  setEditingHex(hex);
+                  setDraftHex(hex);
+                  setError(null);
+                }}
+              />
+              <span className="color-swatch-code">{hex}</span>
+            </div>
+          )
+        )}
+        <div className="color-swatch color-swatch-add">
+          <input
+            value={addingHex}
+            placeholder="#1D1D1F"
+            disabled={busy}
+            onChange={(event) => setAddingHex(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleAdd();
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy || !addingHex.trim()}
+            onClick={() => void handleAdd()}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+      {error ? <p className="memory-error">{error}</p> : null}
+    </div>
+  );
+}
+
+const BRAND_KIT_TAG_MAX_LENGTH = 40;
+
+function splitBrandKitTags(description: string): readonly string[] | null {
+  const trimmed = description.trim();
+  if (!trimmed || trimmed.includes(".")) return null;
+
+  const segments = (
+    trimmed.includes("\n") ? trimmed.split("\n") : trimmed.split(",")
+  )
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) return null;
+  if (segments.some((segment) => segment.length > BRAND_KIT_TAG_MAX_LENGTH)) {
+    return null;
+  }
+
+  return segments;
+}
+
+function BrandKitTag({ value }: { value: string }) {
+  const isColor = HEX_COLOR_PATTERN.test(value);
+  return (
+    <span className="memory-tag">
+      {isColor ? (
+        <span className="memory-tag-swatch" style={{ background: value }} />
+      ) : null}
+      {value}
+    </span>
+  );
+}
+
+function BrandLogoCard({
+  clientId,
+  logoItem,
+  onSaved
+}: {
+  clientId: string;
+  logoItem: LibraryItem | undefined;
+  onSaved: (item: LibraryItem) => void;
+}) {
+  const repository = useBrandMemoryRepository();
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const saved = logoItem
+        ? await repository.updateBrandRule({
+            id: logoItem.id,
+            title: "Logo",
+            description: logoItem.description || "Brand logo",
+            assetFile: file
+          })
+        : await repository.createBrandRule({
+            clientId,
+            title: "Logo",
+            description: "Brand logo",
+            assetFile: file
+          });
+      onSaved(saved);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not upload logo."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="brand-logo-card">
+      <div className="brand-logo-preview">
+        {logoItem?.assetUrl ? (
+          <img src={logoItem.assetUrl} alt="Brand logo" />
+        ) : (
+          <span className="brand-logo-placeholder">Logo</span>
+        )}
+      </div>
+      <div className="brand-logo-body">
+        <b>Logo</b>
+        <p>PNG, JPEG, or WEBP. Used across generation and previews.</p>
+        {error ? <p className="memory-error">{error}</p> : null}
+      </div>
+      <label
+        className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
+      >
+        {uploading ? "Uploading…" : logoItem ? "Replace logo" : "Upload logo"}
+        <input
+          className="file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={uploading}
+          onChange={(event) => void handleUpload(event)}
+        />
+      </label>
+    </div>
   );
 }
 
@@ -1686,7 +2139,8 @@ export function BriefStage({ state, dispatch }: StageProps) {
             title={generateBlocked ?? undefined}
             onClick={generate}
           >
-            {loading ? "Generating hooks..." : "Generate hooks"}
+            {loading ? <Spinner /> : null}
+            {loading ? "Generating hooks…" : "Generate hooks"}
           </button>
         </>
       }
@@ -1795,22 +2249,439 @@ export function BriefStage({ state, dispatch }: StageProps) {
               <span className="chip">No files attached yet</span>
             )}
           </div>
-          <div className="source-checks">
-            <h3>Use from library</h3>
-            {[
-              "Brand guideline",
-              "Logo / CI assets",
-              "Product materials",
-              "Reference board"
-            ].map((label) => (
-              <label className="checkline" key={label}>
-                <input type="checkbox" defaultChecked /> {label}
-              </label>
-            ))}
-          </div>
+          <ReferenceLibraryPicker state={state} dispatch={dispatch} />
         </aside>
       </div>
     </DecisionCard>
+  );
+}
+
+type ReferenceLibraryCategory = "guideline" | "logo" | "product" | "reference";
+
+const REFERENCE_LIBRARY_CATEGORIES: readonly [
+  ReferenceLibraryCategory,
+  string
+][] = [
+  ["guideline", "Brand guideline"],
+  ["logo", "Logo / CI assets"],
+  ["product", "Product materials"],
+  ["reference", "Reference board"]
+];
+
+function libraryItemsWithImages(items: readonly LibraryItem[]) {
+  return items
+    .filter((item) => item.assetUrl)
+    .map((item) => ({
+      id: `library-${item.id}`,
+      url: item.assetUrl as string,
+      label: item.title || "Untitled"
+    }));
+}
+
+function findRuleByTitle(
+  rules: readonly LibraryItem[],
+  title: string
+): LibraryItem | undefined {
+  return rules.find(
+    (rule) => rule.title.trim().toLowerCase() === title.toLowerCase()
+  );
+}
+
+function extractColorSwatches(rule: LibraryItem | undefined): readonly string[] {
+  if (!rule) return [];
+  return rule.description
+    .split(/[,\n]/)
+    .map((value) => value.trim())
+    .filter((value) => HEX_COLOR_PATTERN.test(value));
+}
+
+function ReferenceLibraryPicker({
+  state,
+  dispatch
+}: {
+  state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  const repository = useBrandMemoryRepository();
+  const [brandRules, setBrandRules] = useState<readonly LibraryItem[]>([]);
+  const [products, setProducts] = useState<readonly BrandProduct[]>([]);
+  const [pastWork, setPastWork] = useState<readonly BrandPastWorkItem[]>([]);
+  const [refImages, setRefImages] = useState<readonly LibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<
+    Record<ReferenceLibraryCategory, boolean>
+  >({ guideline: true, logo: true, product: true, reference: true });
+  const clientId = state.brand?.id;
+  const brand = state.brand;
+
+  function toggleExpanded(key: ReferenceLibraryCategory) {
+    setExpanded((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  useEffect(() => {
+    if (!clientId) {
+      setBrandRules([]);
+      setProducts([]);
+      setPastWork([]);
+      setRefImages([]);
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setRefImages(brand?.library.refs ?? []);
+
+    void Promise.all([
+      repository.listBrandRules(clientId),
+      repository.listProducts(clientId),
+      repository.listAdsLibraryPastWork(clientId)
+    ])
+      .then(([rules, brandProducts, past]) => {
+        if (!active) return;
+        setBrandRules(rules);
+        setProducts(brandProducts);
+        setPastWork(past);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, repository]);
+
+  function upsertBrandRule(saved: LibraryItem) {
+    setBrandRules((current) =>
+      current.some((rule) => rule.id === saved.id)
+        ? current.map((rule) => (rule.id === saved.id ? saved : rule))
+        : [...current, saved]
+    );
+  }
+
+  async function addColor(hex: string) {
+    const trimmed = hex.trim();
+    if (!HEX_COLOR_PATTERN.test(trimmed)) {
+      throw new Error("Enter a valid hex color, e.g. #1D1D1F.");
+    }
+    if (!clientId) return;
+
+    const colorsRule = findRuleByTitle(brandRules, "Colors");
+    const nextDescription = colorsRule?.description
+      ? `${colorsRule.description}, ${trimmed}`
+      : trimmed;
+    const saved = colorsRule
+      ? await repository.updateBrandRule({
+          id: colorsRule.id,
+          title: "Colors",
+          description: nextDescription
+        })
+      : await repository.createBrandRule({
+          clientId,
+          title: "Colors",
+          description: nextDescription
+        });
+    upsertBrandRule(saved);
+  }
+
+  async function addProduct(name: string) {
+    if (!clientId) return;
+    const saved = await repository.createProduct({
+      clientId,
+      name: name.trim(),
+      description: "",
+      offer: "",
+      keyBenefit: "",
+      audience: "",
+      claimNotes: ""
+    });
+    setProducts((current) => [...current, saved]);
+  }
+
+  async function uploadReferenceImage(file: File) {
+    if (!clientId) return;
+    const saved = await repository.createReferenceImage({ clientId, file });
+    setRefImages((current) => [saved, ...current]);
+  }
+
+  const logoRule = findRuleByTitle(brandRules, "Logo");
+
+  const candidatesByCategory: Record<
+    ReferenceLibraryCategory,
+    { id: string; url: string; label: string }[]
+  > = {
+    guideline: libraryItemsWithImages(brand?.library.docs ?? []),
+    logo: logoRule ? libraryItemsWithImages([logoRule]) : [],
+    product: [],
+    reference: [
+      ...libraryItemsWithImages(refImages),
+      ...pastWork
+        .filter((item) => item.imageUrl)
+        .map((item) => ({
+          id: `past-work-${item.id}`,
+          url: item.imageUrl,
+          label: item.title || "Past work"
+        }))
+    ]
+  };
+
+  const toneAndStyleRule = findRuleByTitle(brandRules, "Tone & Style");
+  const colorSwatches = extractColorSwatches(findRuleByTitle(brandRules, "Colors"));
+  const secondaryColorSwatches = extractColorSwatches(
+    findRuleByTitle(brandRules, "Secondary colors")
+  );
+
+  function renderCategoryBody(key: ReferenceLibraryCategory) {
+    if (key === "product") {
+      return (
+        <div className="reference-category-body">
+          {products.length ? (
+            <div className="product-name-list">
+              {products.map((productItem) => (
+                <span className="memory-tag" key={productItem.id}>
+                  {productItem.name}
+                </span>
+              ))}
+            </div>
+          ) : !loading ? (
+            <p className="repository-message">
+              No products added yet for this brand.
+            </p>
+          ) : null}
+          <InlineAddForm
+            placeholder="Product name"
+            actionLabel="Add product"
+            onAdd={addProduct}
+          />
+        </div>
+      );
+    }
+
+    const candidates = candidatesByCategory[key];
+    const hasToneAndStyle = key === "guideline" && Boolean(toneAndStyleRule);
+
+    return (
+      <div className="reference-category-body">
+        {key === "guideline" && toneAndStyleRule ? (
+          <div className="reference-tone-style">
+            <b>Tone & Style</b>
+            <p>{toneAndStyleRule.description}</p>
+            <span className="reference-tone-style-note">
+              Sent automatically as brand context with every generation.
+            </span>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <p className="repository-message">Loading library...</p>
+        ) : candidates.length ? (
+          <div className="reference-grid">
+            {candidates.map((candidate) => {
+              const checked = state.referenceImages.some(
+                (item) => item.id === candidate.id
+              );
+              return (
+                <label
+                  className={`reference-item ${checked ? "checked" : ""}`}
+                  key={candidate.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      dispatch({
+                        type: "toggle-reference-image",
+                        item: candidate
+                      })
+                    }
+                  />
+                  <img src={candidate.url} alt={candidate.label} />
+                  <span>{candidate.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : !hasToneAndStyle ? (
+          <p className="repository-message">
+            No{" "}
+            {REFERENCE_LIBRARY_CATEGORIES.find(
+              ([id]) => id === key
+            )?.[1].toLowerCase()}{" "}
+            images available yet for this brand.
+          </p>
+        ) : null}
+
+        {key === "logo" && clientId ? (
+          <>
+            {colorSwatches.length || secondaryColorSwatches.length ? (
+              <div className="reference-color-groups">
+                {colorSwatches.length ? (
+                  <div className="reference-color-group">
+                    <span className="reference-color-group-label">
+                      Primary
+                    </span>
+                    <div className="memory-tags">
+                      {colorSwatches.map((hex) => (
+                        <BrandKitTag key={hex} value={hex} />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {secondaryColorSwatches.length ? (
+                  <div className="reference-color-group">
+                    <span className="reference-color-group-label">
+                      Secondary
+                    </span>
+                    <div className="memory-tags">
+                      {secondaryColorSwatches.map((hex) => (
+                        <BrandKitTag key={hex} value={hex} />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <BrandLogoCard
+              clientId={clientId}
+              logoItem={logoRule}
+              onSaved={upsertBrandRule}
+            />
+            <InlineAddForm
+              placeholder="#1D1D1F"
+              actionLabel="Add color"
+              onAdd={addColor}
+            />
+          </>
+        ) : null}
+
+        {key === "reference" && clientId ? (
+          <InlineUploadForm
+            actionLabel="Upload reference image"
+            onUpload={uploadReferenceImage}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="source-checks">
+      <h3>Use from library</h3>
+      <div className="reference-accordion">
+        {REFERENCE_LIBRARY_CATEGORIES.map(([key, label]) => (
+          <div className="reference-accordion-row" key={key}>
+            <label className="reference-accordion-toggle">
+              <input
+                type="checkbox"
+                checked={expanded[key]}
+                onChange={() => toggleExpanded(key)}
+              />
+              <b>{label}</b>
+            </label>
+            {expanded[key] ? renderCategoryBody(key) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InlineAddForm({
+  placeholder,
+  actionLabel,
+  onAdd
+}: {
+  placeholder: string;
+  actionLabel: string;
+  onAdd: (value: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!value.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onAdd(value);
+      setValue("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="inline-add-form">
+      <input
+        value={value}
+        placeholder={placeholder}
+        disabled={saving}
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <button
+        type="button"
+        className="btn secondary small"
+        disabled={saving}
+        onClick={() => void submit()}
+      >
+        {saving ? "Adding…" : actionLabel}
+      </button>
+      {error ? <p className="memory-error">{error}</p> : null}
+    </div>
+  );
+}
+
+function InlineUploadForm({
+  actionLabel,
+  onUpload
+}: {
+  actionLabel: string;
+  onUpload: (file: File) => Promise<void>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+    try {
+      await onUpload(file);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not upload image."
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="inline-add-form">
+      <label
+        className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
+      >
+        {uploading ? "Uploading…" : actionLabel}
+        <input
+          className="file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={uploading}
+          onChange={(event) => void handleUpload(event)}
+        />
+      </label>
+      {error ? <p className="memory-error">{error}</p> : null}
+    </div>
   );
 }
 
@@ -1826,16 +2697,22 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     createOutputsAction
   );
   const autoSelectAction: WorkflowAction = { type: "auto-select-directions" };
+  const [moreInstructions, setMoreInstructions] = useState("");
   const {
-    generate: regenerate,
-    loading: regenerating,
-    error: regenerateError
-  } = useGenerateHooks(state, dispatch);
+    generateMore,
+    loading: generatingMore,
+    error: generateMoreError
+  } = useGenerateMoreHooks(state, dispatch);
   const {
     create: createSelectedHooks,
     loading: creating,
     error: createError
   } = useCreateSelectedHooks(state, dispatch);
+
+  function handleGenerateMore() {
+    generateMore(moreInstructions);
+    setMoreInstructions("");
+  }
 
   return (
     <DecisionCard
@@ -1859,7 +2736,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             title={createOutputsBlocked ?? undefined}
             onClick={createSelectedHooks}
           >
-            {creating ? "Generating artwork..." : "Create selected hooks"}
+            {creating ? <Spinner /> : null}
+            {creating ? "Generating artwork…" : "Create selected hooks"}
           </button>
         </>
       }
@@ -1879,18 +2757,27 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           >
             Let Moons pick
           </button>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={regenerating}
-            onClick={regenerate}
-          >
-            {regenerating ? "Regenerating..." : "Regenerate all"}
-          </button>
         </div>
       </div>
-      {regenerateError ? (
-        <p className="repository-message error">{regenerateError}</p>
+      <div className="direction-generate-more">
+        <input
+          value={moreInstructions}
+          disabled={generatingMore}
+          placeholder="Add more direction for this round (optional)"
+          onChange={(event) => setMoreInstructions(event.target.value)}
+        />
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={generatingMore}
+          onClick={handleGenerateMore}
+        >
+          {generatingMore ? <Spinner /> : null}
+          {generatingMore ? "Generating more…" : "Generate more"}
+        </button>
+      </div>
+      {generateMoreError ? (
+        <p className="repository-message error">{generateMoreError}</p>
       ) : null}
       {createError ? (
         <p className="repository-message error">{createError}</p>
@@ -1937,20 +2824,37 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
 
 export function StudioStage({ state, dispatch }: StageProps) {
   const backAction: WorkflowAction = { type: "set-stage", stage: "directions" };
-  const runQaAction: WorkflowAction = { type: "run-qa" };
-  const runQaBlocked = workflowActionBlockReason(state, runQaAction);
+  const runQaBlocked = workflowActionBlockReason(state, {
+    type: "run-qa",
+    results: []
+  });
   const approvalAction: WorkflowAction = {
     type: "set-stage",
     stage: "approval"
   };
   const approvalBlocked = workflowActionBlockReason(state, approvalAction);
+  const { check, loading: checking, error: qaError } = useRunQualityCheck(
+    state,
+    dispatch
+  );
+  const failedCount = state.outputs.filter(
+    (output) => output.status === "needs-revision"
+  ).length;
 
   return (
     <DecisionCard
       eyebrow="Step 4 · Create"
       title="Create & fix."
-      status={state.qaComplete ? "Quality passed" : "Quality waiting"}
-      statusClass={state.qaComplete ? "green" : ""}
+      status={
+        checking
+          ? "Checking quality…"
+          : !state.qaComplete
+            ? "Quality waiting"
+            : failedCount
+              ? `${failedCount} flagged`
+              : "Quality passed"
+      }
+      statusClass={state.qaComplete && !failedCount ? "green" : ""}
       actions={
         <>
           <button
@@ -1963,11 +2867,16 @@ export function StudioStage({ state, dispatch }: StageProps) {
           <button
             className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
             type="button"
-            disabled={Boolean(runQaBlocked)}
+            disabled={checking || Boolean(runQaBlocked)}
             title={runQaBlocked ?? undefined}
-            onClick={() => dispatch(runQaAction)}
+            onClick={check}
           >
-            {state.qaComplete ? "Recheck quality" : "Check quality"}
+            {checking ? <Spinner /> : null}
+            {checking
+              ? "Checking…"
+              : state.qaComplete
+                ? "Recheck quality"
+                : "Check quality"}
           </button>
           <button
             className={`btn ${state.qaComplete ? "primary" : "secondary"}`}
@@ -1986,22 +2895,46 @@ export function StudioStage({ state, dispatch }: StageProps) {
           <div>
             <h3>Creative set</h3>
             <p>
-              {state.qaComplete
-                ? "All outputs passed the prototype quality check."
-                : "Create outputs, then check quality."}
+              {!state.qaComplete
+                ? "Create outputs, then check quality."
+                : failedCount
+                  ? "Moons flagged issues on some creatives — check the notes below."
+                  : "All outputs passed the AI quality review."}
             </p>
           </div>
-          <span className={`pill ${state.qaComplete ? "green" : ""}`}>
-            {state.qaComplete ? "No blockers" : "No check yet"}
+          <span
+            className={`pill ${state.qaComplete && !failedCount ? "green" : failedCount ? "red" : ""}`}
+          >
+            {!state.qaComplete
+              ? "No check yet"
+              : failedCount
+                ? `${failedCount} flagged`
+                : "No blockers"}
           </span>
         </div>
-        <OutputGrid state={state} />
+        {qaError ? <p className="repository-message error">{qaError}</p> : null}
+        <OutputGrid state={state} dispatch={dispatch} />
       </div>
     </DecisionCard>
   );
 }
 
-function OutputGrid({ state }: { state: WorkflowState }) {
+function OutputGrid({
+  state,
+  dispatch
+}: {
+  state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
+  const previewOutput =
+    state.outputs.find((output) => output.id === previewOutputId) ?? null;
+  const previewDirection = previewOutput
+    ? state.directions.find(
+        (candidate) => candidate.id === previewOutput.directionId
+      )
+    : undefined;
+
   if (!state.outputs.length) {
     return (
       <div className="empty">
@@ -2012,52 +2945,246 @@ function OutputGrid({ state }: { state: WorkflowState }) {
   }
 
   return (
-    <div className="output-grid">
-      {state.outputs.map((output, index) => {
-        const direction = state.directions.find(
-          (candidate) => candidate.id === output.directionId
-        );
-        return (
-          <article
-            className={`output-card ${output.status === "ready" ? "ready" : ""}`}
-            key={output.id}
-          >
-            <div className="output-title">
-              <b>
-                Creative {index + 1} · {output.format}
-              </b>
-              <span className={`pill ${output.status === "ready" ? "green" : ""}`}>
-                {output.status === "ready" ? "Ready" : "Draft"}
-              </span>
-            </div>
-            <div className="preview-area">
-              {output.assetUrl ? (
-                <img
-                  className="generated-preview"
-                  src={output.assetUrl}
-                  alt={direction?.hook ?? `Creative ${index + 1}`}
-                />
-              ) : (
-                <div className="static-preview">
-                  <span className="static-mark" />
-                  <div className="static-copy">
-                    <h3>{direction?.hook}</h3>
-                    <p>{direction?.concept}</p>
-                    <span>Learn more</span>
+    <>
+      <div className="output-grid">
+        {state.outputs.map((output, index) => {
+          const direction = state.directions.find(
+            (candidate) => candidate.id === output.directionId
+          );
+          return (
+            <article
+              className={`output-card ${output.status === "ready" || output.status === "fixed" ? "ready" : ""} ${output.status === "needs-revision" ? "attn" : ""}`}
+              key={output.id}
+            >
+              <div className="output-title">
+                <b>
+                  Creative {index + 1} · {output.format}
+                </b>
+                <span
+                  className={`pill ${output.status === "ready" || output.status === "fixed" ? "green" : output.status === "needs-revision" ? "red" : ""}`}
+                >
+                  {output.status === "needs-revision"
+                    ? "Needs revision"
+                    : output.status === "ready" || output.status === "fixed"
+                      ? "Ready"
+                      : "Draft"}
+                </span>
+              </div>
+              <button
+                className="preview-area"
+                type="button"
+                onClick={() => setPreviewOutputId(output.id)}
+              >
+                {output.assetUrl ? (
+                  <img
+                    className="generated-preview"
+                    src={output.assetUrl}
+                    alt={direction?.hook ?? `Creative ${index + 1}`}
+                  />
+                ) : (
+                  <div className="static-preview">
+                    <span className="static-mark" />
+                    <div className="static-copy">
+                      <h3>{direction?.hook}</h3>
+                      <p>{direction?.concept}</p>
+                      <span>Learn more</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </button>
+              {output.status === "needs-revision" && output.qaNote ? (
+                <p className="output-qa-note">{output.qaNote}</p>
+              ) : null}
+              <div className="output-caption">
+                <span className="cap-label">Caption</span>
+                <OutputCaptionText caption={direction?.caption} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {previewOutput ? (
+        <OutputRegenerateModal
+          run={state}
+          output={previewOutput}
+          direction={previewDirection}
+          dispatch={dispatch}
+          onClose={() => setPreviewOutputId(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function OutputRegenerateModal({
+  run,
+  output,
+  direction,
+  dispatch,
+  onClose
+}: {
+  run: WorkflowState;
+  output: CreativeOutput;
+  direction: WorkflowState["directions"][number] | undefined;
+  dispatch: Dispatch<WorkflowAction>;
+  onClose: () => void;
+}) {
+  const [prompt, setPrompt] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleRegenerate = async () => {
+    if (!direction) {
+      setError("Missing hook details for this creative.");
+      return;
+    }
+
+    setRegenerating(true);
+    setError(null);
+
+    try {
+      const updated = await regenerateOutputImage({
+        run,
+        direction,
+        extraInstructions: prompt
+      });
+      if (!updated.assetUrl) {
+        throw new Error("Regeneration did not return an image.");
+      }
+      dispatch({
+        type: "replace-output-asset",
+        id: output.id,
+        assetUrl: updated.assetUrl,
+        ...(updated.assetStoragePath
+          ? { assetStoragePath: updated.assetStoragePath }
+          : {}),
+        ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {})
+      });
+      setPrompt("");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not regenerate image."
+      );
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  return (
+    <div className="output-modal-backdrop" onClick={onClose}>
+      <div
+        className="output-modal"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="output-modal-head">
+          <div>
+            <p className="eyebrow">Creative preview</p>
+            <h3>{direction?.hook ?? "Creative"}</h3>
+          </div>
+          <button className="btn ghost" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="output-modal-image">
+          {output.assetUrl ? (
+            <img src={output.assetUrl} alt={direction?.hook ?? "Creative preview"} />
+          ) : (
+            <div className="static-preview">
+              <span className="static-mark" />
+              <div className="static-copy">
+                <h3>{direction?.hook}</h3>
+                <p>{direction?.concept}</p>
+                <span>Learn more</span>
+              </div>
             </div>
-            <div className="output-caption">
-              <span className="cap-label">Caption</span>
-              <p>{direction?.caption}</p>
-            </div>
-          </article>
-        );
-      })}
+          )}
+        </div>
+        <label className="output-modal-prompt-label">
+          <span>Regeneration instructions (optional)</span>
+          <textarea
+            value={prompt}
+            disabled={regenerating}
+            placeholder="Example: Make the background lighter, remove the text overlay, zoom in on the product."
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+        </label>
+        <p className="output-modal-reference-note">
+          {run.referenceImages.length
+            ? `Using ${run.referenceImages.length} reference ${
+                run.referenceImages.length === 1 ? "image" : "images"
+              } from Brief · Use from library: ${run.referenceImages
+                .map((item) => item.label)
+                .join(", ")}`
+            : "No reference images selected. Pick logo or past work in Brief · Use from library."}
+        </p>
+        {error ? <p className="repository-message error">{error}</p> : null}
+        <div className="output-modal-actions">
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={regenerating}
+            onClick={onClose}
+          >
+            Close
+          </button>
+          <button
+            className="btn primary"
+            type="button"
+            disabled={regenerating}
+            onClick={() => void handleRegenerate()}
+          >
+            {regenerating ? <Spinner /> : null}
+            {regenerating ? "Regenerating…" : "Regenerate image"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+function OutputCaptionText({ caption }: { caption: string | undefined }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!caption) return null;
+
+  return (
+    <>
+      <p className={expanded ? "expanded" : ""}>{caption}</p>
+      {caption.length > CAPTION_CLAMP_THRESHOLD ? (
+        <button
+          className="fb-see-more"
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "See less" : "See more"}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+const CAPTION_CLAMP_THRESHOLD = 220;
+
+const REVIEW_ROLES: readonly {
+  key: ApprovalRole;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "graphicDesign",
+    label: "GD Review",
+    description: "Visual craft, layout, hierarchy, safe margins"
+  },
+  {
+    key: "clientService",
+    label: "CS Review",
+    description: "Hook strength, message clarity, performance angle"
+  },
+  {
+    key: "projectManager",
+    label: "PM Review",
+    description: "Client fit, brief match, final readiness"
+  }
+];
 
 export function ApprovalStage({ state, dispatch }: StageProps) {
   const backAction: WorkflowAction = { type: "set-stage", stage: "studio" };
@@ -2068,6 +3195,20 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
   );
   const clientAction: WorkflowAction = { type: "set-stage", stage: "client" };
   const clientBlocked = workflowActionBlockReason(state, clientAction);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const scrollToIndex = (index: number) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    el.scrollTo({ left: index * el.clientWidth, behavior: "smooth" });
+  };
+
+  const handleScroll = () => {
+    const el = carouselRef.current;
+    if (!el || !el.clientWidth) return;
+    setActiveIndex(Math.round(el.scrollLeft / el.clientWidth));
+  };
 
   return (
     <DecisionCard
@@ -2105,31 +3246,371 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <div className="review-grid">
-        <OutputGrid state={state} />
-        <aside className="review-panel">
-          <h3>Approval gate</h3>
-          <div className="review-list">
-            {["Graphic design", "Client service", "Project manager"].map(
-              (role) => (
-                <div className="review-row" key={role}>
-                  <header>
-                    <div>
-                      <b>{role}</b>
-                      <p>Review brand, content, and delivery readiness.</p>
-                    </div>
-                    <span className={`pill ${state.approved ? "green" : ""}`}>
-                      {state.approved ? "Approved" : "Pending"}
-                    </span>
-                  </header>
-                </div>
-              )
-            )}
+      {state.outputs.length ? (
+        <>
+          <div className="qc-carousel" ref={carouselRef} onScroll={handleScroll}>
+            {state.outputs.map((output, index) => (
+              <div className="qc-slide" key={output.id}>
+                <QcSlide
+                  index={index}
+                  output={output}
+                  direction={state.directions.find(
+                    (candidate) => candidate.id === output.directionId
+                  )}
+                  brand={state.brand}
+                  run={state}
+                  dispatch={dispatch}
+                />
+              </div>
+            ))}
           </div>
-        </aside>
-      </div>
+          {state.outputs.length > 1 ? (
+            <div className="qc-dots">
+              {state.outputs.map((output, index) => (
+                <button
+                  key={output.id}
+                  type="button"
+                  className={`qc-dot ${index === activeIndex ? "active" : ""}`}
+                  onClick={() => scrollToIndex(index)}
+                  aria-label={`Show creative ${index + 1}`}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="empty">
+          <b>No creatives yet.</b>
+          <p>Create outputs first.</p>
+        </div>
+      )}
     </DecisionCard>
   );
+}
+
+function ApprovalCommentField({
+  value,
+  onSave
+}: {
+  value: string;
+  onSave: (comment: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="review-comment">
+      <textarea
+        value={draft}
+        placeholder="Leave a comment for the other reviewers..."
+        rows={2}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <button
+        type="button"
+        className="btn secondary small"
+        disabled={draft === value}
+        onClick={() => onSave(draft)}
+      >
+        Save comment
+      </button>
+    </div>
+  );
+}
+
+function QcSlide({
+  index,
+  output,
+  direction,
+  brand,
+  run,
+  dispatch
+}: {
+  index: number;
+  output: CreativeOutput;
+  direction: WorkflowState["directions"][number] | undefined;
+  brand: WorkflowState["brand"];
+  run: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+
+  const handleReplace = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const replacement = await uploadReplacementAsset({ run, output, file });
+      dispatch({
+        type: "replace-output-asset",
+        id: output.id,
+        ...replacement
+      });
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not upload replacement image."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fb-mockup">
+        <div className="fb-header">
+          <span className="fb-avatar">{brand?.initials ?? "MO"}</span>
+          <div className="fb-meta">
+            <div className="fb-name-row">
+              <b>{brand?.name ?? "Brand"}</b>
+              <VerifiedBadge />
+              <span className="fb-follow">· Follow</span>
+            </div>
+            <div className="fb-timestamp">
+              <span>Just now</span>
+              <GlobeIcon />
+            </div>
+          </div>
+          <span className="fb-more">···</span>
+        </div>
+        {direction?.caption ? (
+          <div>
+            <p
+              className={`fb-caption ${captionExpanded ? "expanded" : ""}`}
+            >
+              {direction.caption}
+            </p>
+            {direction.caption.length > CAPTION_CLAMP_THRESHOLD ? (
+              <button
+                className="fb-see-more"
+                type="button"
+                onClick={() => setCaptionExpanded((value) => !value)}
+              >
+                {captionExpanded ? "See less" : "See more"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="fb-image">
+          {output.assetUrl ? (
+            <img
+              src={output.assetUrl}
+              alt={direction?.hook ?? `Creative ${index + 1}`}
+            />
+          ) : (
+            <div className="static-preview">
+              <span className="static-mark" />
+              <div className="static-copy">
+                <h3>{direction?.hook}</h3>
+                <p>{direction?.concept}</p>
+                <span>Learn more</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="fb-actions">
+          <span>Like</span>
+          <span>Comment</span>
+          <span>Share</span>
+        </div>
+        <div className="qc-creative-actions">
+          <a
+            className={`btn secondary small ${output.assetUrl ? "" : "disabled"}`}
+            href={output.assetUrl}
+            download
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => {
+              if (!output.assetUrl) event.preventDefault();
+            }}
+          >
+            Download
+          </a>
+          <label
+            className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
+          >
+            {uploading ? "Uploading…" : "Upload replacement"}
+            <input
+              className="file-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={uploading}
+              onChange={handleReplace}
+            />
+          </label>
+        </div>
+        {uploadError ? (
+          <p className="repository-message error">{uploadError}</p>
+        ) : null}
+      </div>
+
+      <div
+        className={`qc-gate-panel ${output.status === "needs-revision" ? "attn" : ""}`}
+      >
+        <div className="output-title">
+          <b>
+            Creative {index + 1} · {output.format}
+          </b>
+          <span className={`pill ${qcStatusPillClass(output.status)}`}>
+            {qcStatusLabel(output.status)}
+          </span>
+        </div>
+        <div className="review-list qc-review-list">
+          <h3>Approval gate</h3>
+          {REVIEW_ROLES.map(({ key, label, description }) => {
+            const decision = output.approval[key];
+            return (
+              <div className="review-row" key={key}>
+                <header>
+                  <div>
+                    <b>{label}</b>
+                    <p>{description}</p>
+                  </div>
+                  <span className={`pill ${qcDecisionPillClass(decision)}`}>
+                    {qcDecisionLabel(decision)}
+                  </span>
+                </header>
+                <div className="review-row-actions">
+                  <button
+                    className="btn primary small"
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        type: "review-output",
+                        id: output.id,
+                        role: key,
+                        decision: "approved"
+                      })
+                    }
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="btn danger small"
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        type: "review-output",
+                        id: output.id,
+                        role: key,
+                        decision: "rejected"
+                      })
+                    }
+                  >
+                    Reject
+                  </button>
+                </div>
+                <ApprovalCommentField
+                  value={output.approvalComments[key]}
+                  onSave={(comment) =>
+                    dispatch({
+                      type: "comment-output",
+                      id: output.id,
+                      role: key,
+                      comment
+                    })
+                  }
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function VerifiedBadge() {
+  return (
+    <svg className="fb-badge" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <path
+        fill="#1877f2"
+        d="M12 2l2.2 1.3 2.5-.7 1.5 2.1 2.5 1-.1 2.6 1.7 2-1.7 2 .1 2.6-2.5 1-1.5 2.1-2.5-.7L12 22l-2.2-1.3-2.5.7-1.5-2.1-2.5-1 .1-2.6-1.7-2 1.7-2-.1-2.6 2.5-1 1.5-2.1 2.5.7z"
+      />
+      <path
+        fill="#fff"
+        d="M10 13.4l-1.7-1.7-1.2 1.2 2.9 2.9 5.3-5.3-1.2-1.2z"
+      />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg
+      className="fb-globe"
+      viewBox="0 0 16 16"
+      width="11"
+      height="11"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm5.6 4.8h-2.2a10.6 10.6 0 00-.9-2.6 6.6 6.6 0 013.1 2.6zM8 1.4c.6.8 1.1 1.8 1.4 3H6.6c.3-1.2.8-2.2 1.4-3zM1.5 9.4a6.5 6.5 0 010-2.8h2.4a10.9 10.9 0 000 2.8H1.5zm.9 1.4h2.2c.2.9.5 1.8.9 2.6a6.6 6.6 0 01-3.1-2.6zm2.2-5.6H2.4a6.6 6.6 0 013.1-2.6c-.4.8-.7 1.7-.9 2.6zM8 14.6c-.6-.8-1.1-1.8-1.4-3h2.8c-.3 1.2-.8 2.2-1.4 3zm1.8-4.4H6.2a9.4 9.4 0 010-2.8h3.6a9.4 9.4 0 010 2.8zm.2 3.8c.4-.8.7-1.7.9-2.6h2.2a6.6 6.6 0 01-3.1 2.6zm1.1-4h2.4a6.5 6.5 0 010 2.8h-2.4a10.9 10.9 0 000-2.8z" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return <span className="spinner" aria-hidden="true" />;
+}
+
+function qcStatusLabel(status: CreativeOutput["status"]): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "fixed":
+      return "Fixed";
+    case "needs-revision":
+      return "Needs revision";
+    default:
+      return "Draft";
+  }
+}
+
+function qcStatusPillClass(status: CreativeOutput["status"]): string {
+  if (status === "ready" || status === "fixed") return "green";
+  if (status === "needs-revision") return "red";
+  return "";
+}
+
+function qcDecisionLabel(decision: CreativeOutput["approval"][ApprovalRole]): string {
+  if (decision === "approved") return "Approved";
+  if (decision === "rejected") return "Rejected";
+  return "Pending";
+}
+
+function qcDecisionPillClass(
+  decision: CreativeOutput["approval"][ApprovalRole]
+): string {
+  if (decision === "approved") return "green";
+  if (decision === "rejected") return "red";
+  return "";
+}
+
+function downloadAllOutputs(outputs: WorkflowState["outputs"]) {
+  for (const output of outputs) {
+    if (!output.assetUrl) continue;
+    const link = document.createElement("a");
+    link.href = output.assetUrl;
+    link.download = "";
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 export function ClientStage({ state, dispatch }: StageProps) {
@@ -2158,8 +3639,13 @@ export function ClientStage({ state, dispatch }: StageProps) {
       statusClass={allApproved ? "green" : "blue"}
       actions={
         <>
-          <button className="btn secondary" type="button">
-            Download ▾
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={!state.outputs.some((output) => output.assetUrl)}
+            onClick={() => downloadAllOutputs(state.outputs)}
+          >
+            Download all
           </button>
           <button
             className="btn secondary"
@@ -2201,14 +3687,22 @@ export function ClientStage({ state, dispatch }: StageProps) {
           return (
             <article className="client-card" key={output.id}>
               <div className="preview-area">
-                <div className="static-preview">
-                  <span className="static-mark" />
-                  <div className="static-copy">
-                    <h3>{direction?.hook}</h3>
-                    <p>{direction?.concept}</p>
-                    <span>Learn more</span>
+                {output.assetUrl ? (
+                  <img
+                    className="generated-preview"
+                    src={output.assetUrl}
+                    alt={direction?.hook ?? `Creative ${index + 1}`}
+                  />
+                ) : (
+                  <div className="static-preview">
+                    <span className="static-mark" />
+                    <div className="static-copy">
+                      <h3>{direction?.hook}</h3>
+                      <p>{direction?.concept}</p>
+                      <span>Learn more</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               <div className="client-card-body">
                 <b>Creative {index + 1}</b>
@@ -2217,6 +3711,18 @@ export function ClientStage({ state, dispatch }: StageProps) {
                 >
                   {output.clientStatus}
                 </span>
+                <a
+                  className={`btn secondary small ${output.assetUrl ? "" : "disabled"}`}
+                  href={output.assetUrl}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => {
+                    if (!output.assetUrl) event.preventDefault();
+                  }}
+                >
+                  Download
+                </a>
                 <button
                   className="btn primary"
                   type="button"
@@ -2267,8 +3773,13 @@ export function SummaryStage({
       statusClass="green"
       actions={
         <>
-          <button className="btn secondary" type="button">
-            Download ▾
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={!state.outputs.some((output) => output.assetUrl)}
+            onClick={() => downloadAllOutputs(state.outputs)}
+          >
+            Download all
           </button>
           <button
             className="btn secondary"
@@ -2304,26 +3815,152 @@ export function SummaryStage({
       </div>
       <div className="summary-panel">
         <h3>Approved creatives</h3>
-        <OutputGrid state={state} />
+        <OutputGrid state={state} dispatch={dispatch} />
       </div>
-      <div className="summary-panel summary-learning">
-        <h3>Learning saved for next run</h3>
-        <div className="learning-grid">
-          <div className="learning">
-            <b>Hook pattern</b>
-            <p>Direct benefit hooks were approved for this run.</p>
-          </div>
-          <div className="learning">
-            <b>Visual pattern</b>
-            <p>Product-led layouts stayed clear through quality review.</p>
-          </div>
-          <div className="learning">
-            <b>Approval signal</b>
-            <p>The client approved the final set without open blockers.</p>
-          </div>
-        </div>
-      </div>
+      <LearningSuggestionsPanel state={state} />
     </DecisionCard>
+  );
+}
+
+function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {
+  const repository = useBrandMemoryRepository();
+  const [suggestions, setSuggestions] = useState<
+    readonly (LearningSuggestion & {
+      id: string;
+      status: "pending" | "approved" | "rejected";
+    })[]
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const results = await suggestBrandLearning(state);
+      setSuggestions(
+        results.map((item, index) => ({
+          ...item,
+          id: `suggestion-${index}`,
+          status: "pending" as const
+        }))
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not generate learning suggestions."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    const suggestion = suggestions.find((item) => item.id === id);
+    if (!suggestion || !state.brand) return;
+    const brand = state.brand;
+
+    setSuggestions((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, status: "approved" as const } : item
+      )
+    );
+
+    try {
+      await repository.createLearningEntry({
+        clientId: brand.id,
+        polarity: suggestion.polarity,
+        note: suggestion.note,
+        sourceRunId: state.id
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not save suggestion."
+      );
+      setSuggestions((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, status: "pending" as const } : item
+        )
+      );
+    }
+  };
+
+  const handleReject = (id: string) => {
+    setSuggestions((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, status: "rejected" as const } : item
+      )
+    );
+  };
+
+  return (
+    <div className="summary-panel summary-learning">
+      <div className="learning-head">
+        <div>
+          <h3>Learning suggestions</h3>
+          <p>
+            Moons reviews this run's approvals and rejections and proposes
+            brand learning updates for you to approve.
+          </p>
+        </div>
+        <button
+          className="btn secondary small"
+          type="button"
+          disabled={loading || !state.brand}
+          onClick={() => void handleGenerate()}
+        >
+          {loading
+            ? "Analyzing…"
+            : suggestions.length
+              ? "Regenerate"
+              : "Suggest learning"}
+        </button>
+      </div>
+      {error ? <p className="repository-message error">{error}</p> : null}
+      {suggestions.length ? (
+        <div className="learning-grid">
+          {suggestions.map((item) => (
+            <div className={`learning ${item.polarity}`} key={item.id}>
+              <b>{item.polarity === "working" ? "What's working" : "What to avoid"}</b>
+              <p>{item.note}</p>
+              {item.status === "pending" ? (
+                <div className="learning-actions">
+                  <button
+                    className="btn primary small"
+                    type="button"
+                    onClick={() => void handleApprove(item.id)}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="btn danger small"
+                    type="button"
+                    onClick={() => handleReject(item.id)}
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : (
+                <span
+                  className={`pill ${item.status === "approved" ? "green" : ""}`}
+                >
+                  {item.status === "approved"
+                    ? "Added to brand memory"
+                    : "Dismissed"}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : !loading ? (
+        <p className="repository-message">
+          Nothing generated yet. Click "Suggest learning" to have Moons
+          propose updates from this run's real approval signal.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -2336,13 +3973,96 @@ function Metric({ value, label }: { value: string; label: string }) {
   );
 }
 
+interface RunAttention {
+  runId: string;
+  brand: Brand;
+  service: ServiceType;
+  stageLabel: string;
+  note: string;
+  urgent: boolean;
+}
+
+function computeRunAttention(run: WorkflowState): RunAttention | null {
+  if (run.done || !run.brand) return null;
+  const brand = run.brand;
+
+  if (run.stage === "approval" && !run.approved) {
+    const pendingCount = run.outputs.filter(
+      (output) =>
+        output.approval.graphicDesign !== "approved" ||
+        output.approval.clientService !== "approved" ||
+        output.approval.projectManager !== "approved"
+    ).length;
+    if (!pendingCount) return null;
+    return {
+      runId: run.id,
+      brand,
+      service: run.service,
+      stageLabel: "Internal QC",
+      note: `${pendingCount} ${pluralize(pendingCount, "creative")} waiting on GD/CS/PM approval.`,
+      urgent: true
+    };
+  }
+
+  if (run.stage === "client") {
+    if (!run.clientSent) {
+      return {
+        runId: run.id,
+        brand,
+        service: run.service,
+        stageLabel: "Client review",
+        note: "Approved internally — ready to send to the client.",
+        urgent: true
+      };
+    }
+    const approvedCount = run.outputs.filter(
+      (output) => output.clientStatus === "approved"
+    ).length;
+    if (run.outputs.length && approvedCount < run.outputs.length) {
+      return {
+        runId: run.id,
+        brand,
+        service: run.service,
+        stageLabel: "Client review",
+        note: `${approvedCount}/${run.outputs.length} approved by client.`,
+        urgent: false
+      };
+    }
+  }
+
+  if (run.stage === "summary" && !run.done) {
+    return {
+      runId: run.id,
+      brand,
+      service: run.service,
+      stageLabel: "Delivered",
+      note: "Final set ready — mark sent to close this run.",
+      urgent: false
+    };
+  }
+
+  return null;
+}
+
 export function Overview({
   state,
-  dispatch,
+  workspace,
+  workspaceDispatch,
   onOpenStudio
-}: StageProps & { onOpenStudio: () => void }) {
+}: StageProps & {
+  workspace: WorkspaceState;
+  workspaceDispatch: Dispatch<WorkspaceAction>;
+  onOpenStudio: () => void;
+}) {
   const { brands, loading, error } = useBrands();
-  const rows = brands.slice(0, 3);
+
+  const attentionItems = workspace.runOrder
+    .map((id) => workspace.runsById[id])
+    .filter((run): run is WorkflowState => Boolean(run))
+    .map((run) => computeRunAttention(run))
+    .filter((item): item is RunAttention => Boolean(item))
+    .sort((a, b) => Number(b.urgent) - Number(a.urgent));
+
   return (
     <section id="overviewView">
       <div className="ov-head">
@@ -2355,7 +4075,7 @@ export function Overview({
           <span>Brands</span>
         </div>
         <div className="ov-metric">
-          <b>2</b>
+          <b>{attentionItems.length}</b>
           <span>Need action</span>
         </div>
       </div>
@@ -2363,57 +4083,45 @@ export function Overview({
         {error ? (
           <p className="repository-message error">{error.message}</p>
         ) : null}
-        <div className="ov-group-h">Needs action · 2</div>
-        {rows.map((brand, index) => {
-          const selectable = canSelectBrand(brand);
-          return (
-          <div
-            className={`brief-row ${index < 2 ? "attn" : ""} ${selectable ? "" : "disabled"}`}
-            key={brand.id}
-          >
-            <div className="brief-client">
-              <span className="avatar ov-av">{brand.initials}</span>
-              <span>
-                <b>{brand.name}</b>
-                <small>{selectable ? brand.category : "No Moons data yet"}</small>
-              </span>
-            </div>
-            <div className="brief-stage">
-              <span className="stage-chip">
-                {index === 0 ? "Create" : index === 1 ? "Internal QC" : "Brief"}
-              </span>
-            </div>
-            <div className="brief-ctx">
-              <p>
-                {index < 2
-                  ? "This brand has a review item that needs attention."
-                  : "The current brief is ready to continue."}
-              </p>
-            </div>
-            <div className="brief-actions">
-              <button
-                className="btn small primary"
-                type="button"
-                disabled={!selectable}
-                title={
-                  selectable
-                    ? undefined
-                    : "This client is in the mapping sheet but has no brand memory in Moons yet."
-                }
-                onClick={() => {
-                  dispatch({ type: "select-brand", brand });
-                  onOpenStudio();
-                }}
-              >
-                View
-              </button>
-              <button className="btn small secondary" type="button">
-                Profile
-              </button>
-            </div>
+        {attentionItems.length ? (
+          <>
+            <div className="ov-group-h">Needs action · {attentionItems.length}</div>
+            {attentionItems.map(({ runId, brand, service, stageLabel, note, urgent }) => (
+              <div className={`brief-row ${urgent ? "attn" : ""}`} key={runId}>
+                <div className="brief-client">
+                  <span className="avatar ov-av">{brand.initials}</span>
+                  <span>
+                    <b>{brand.name}</b>
+                    <small>{serviceLabels[service]}</small>
+                  </span>
+                </div>
+                <div className="brief-stage">
+                  <span className="stage-chip">{stageLabel}</span>
+                </div>
+                <div className="brief-ctx">
+                  <p>{note}</p>
+                </div>
+                <div className="brief-actions">
+                  <button
+                    className="btn small primary"
+                    type="button"
+                    onClick={() => {
+                      workspaceDispatch({ type: "switch-run", id: runId });
+                      onOpenStudio();
+                    }}
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <div className="empty">
+            <b>Nothing needs action right now.</b>
+            <p>Runs waiting on internal QC or client review will show up here.</p>
           </div>
-          );
-        })}
+        )}
       </div>
       {state.brand ? (
         <p className="overview-active">

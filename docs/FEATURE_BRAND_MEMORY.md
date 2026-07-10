@@ -52,8 +52,46 @@ Brand kit writes require:
 supabase/migrations/202606240007_brand_library_writes.sql
 ```
 
-Guideline files should still be uploaded through Documents with document type
-`brand_guideline`; Brand kit itself stores structured text rules.
+**"Upload guideline" (implemented 2026-07-10):** Brand kit's own "Upload
+guideline" button was previously a permanently-disabled stub pointing users
+to Documents instead. It's now real — accepts a PDF or image
+(`AnalyzeGuidelineInput` in `src/ports/brand-memory-repository.ts`), uploads
+it to the `brand-assets` bucket exactly like the logo upload does (signed
+URL, no service-role key needed), then calls
+`POST /api/analyze-brand-guideline`
+(`src/server/brand-guideline/analyze-guideline-endpoint.ts`). Besides a file,
+the button also accepts pasted guideline text (`AnalyzeGuidelineInput` is a
+`{file}` / `{text}` union) — sent as a plain `input_text` block instead of
+`input_file`/`input_image`; text input skips the Documents-tab step below
+since there's no file to store. That endpoint sends the file/text straight to
+the OpenAI Responses API as an `input_file` (PDF, via a `file_url` — OpenAI
+extracts both text and page images server-side, no local PDF rendering
+needed), `input_image` (PNG/JPEG/WEBP), or `input_text` (pasted text), and
+asks `gpt-5.6-terra` (`OPENAI_GUIDELINE_ANALYSIS_MODEL`) for a short
+mood/tone/style summary **in Thai** plus separate primary and secondary hex
+color palettes.
+
+The uploaded file also creates a real `moons.brand_documents` row
+(`document_type: 'brand_guideline'`, same storage path convention as the
+Documents tab's own upload) so it shows up in Documents too, not just Brand
+kit — it starts `uploaded`, then flips to `ready_for_ai` (`usable_for_ai:
+true`) once analysis succeeds, or `failed` if the analysis call errors (the
+file itself is never lost either way; only the processing status changes).
+
+The analysis result is written straight into Brand kit as three rows,
+matching the existing free-form title/description model — no new columns or
+migration: a `Tone & Style` rule (the Thai summary text), a `Colors` rule
+(the primary palette), and a `Secondary colors` rule — each a
+comma-separated hex list. If a row already exists it's updated in place; new
+colors are merged into the existing list rather than replacing it, so a
+second guideline upload adds to the palette instead of wiping out
+manually-added swatches. Unlike other Brand kit rules (which render as
+tag pills via `BrandKitTag`/`splitBrandKitTags`), `Colors` and
+`Secondary colors` get a dedicated `ColorsCard` UI directly under the Logo
+card: square swatches with the hex code beneath, a "×" to remove a color,
+click-a-swatch-to-edit inline, and an "Add" tile to add a new one — all
+backed by the same `createBrandRule`/`updateBrandRule`/`deleteBrandRule`
+calls as any other rule (deleting the last color deletes the row).
 
 ### Products
 

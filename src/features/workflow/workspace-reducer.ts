@@ -93,19 +93,22 @@ export function workspaceReducer(
         toast: "Run closed"
       };
     }
-    case "update-active-run": {
-      const currentRun = getActiveRun(state);
+    case "apply-run-action": {
+      const targetRun = state.runsById[action.runId];
+      // The run this async action was started against may have been closed
+      // before the request resolved — nothing sensible to apply it to.
+      if (!targetRun) return state;
+
       const blockedReason = workflowActionBlockReason(
-        currentRun,
+        targetRun,
         action.action
       );
-
       if (blockedReason) {
         return { ...state, toast: blockedReason };
       }
 
       const nextRun = {
-        ...workflowReducer(currentRun, action.action),
+        ...workflowReducer(targetRun, action.action),
         updatedAt: action.now
       };
       return {

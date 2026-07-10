@@ -4,6 +4,7 @@ import {
   createInitialWorkspaceState,
   workspaceReducer
 } from "../../features/workflow/workspace-reducer";
+import { buildDirectionFixtures } from "../../features/workflow/test-fixtures";
 import {
   deserializeWorkspace,
   serializeWorkspace,
@@ -20,12 +21,14 @@ describe("workspace serializer", () => {
       now: "2026-06-23T10:00:00.000Z"
     });
     workspace = workspaceReducer(workspace, {
-      type: "update-active-run",
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:01:00.000Z",
       action: { type: "select-brand", brand }
     });
     workspace = workspaceReducer(workspace, {
-      type: "update-active-run",
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:02:00.000Z",
       action: { type: "toggle-brand-menu" }
     });
@@ -36,12 +39,14 @@ describe("workspace serializer", () => {
       keepBrand: true
     });
     workspace = workspaceReducer(workspace, {
-      type: "update-active-run",
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:04:00.000Z",
       action: { type: "set-service", service: "album-post" }
     });
     workspace = workspaceReducer(workspace, {
-      type: "update-active-run",
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:00.000Z",
       action: { type: "set-brief", brief: "Album persisted brief" }
     });
@@ -58,6 +63,88 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["single-run"]?.brand?.id).toBe(brand.id);
     expect(restored?.runsById["single-run"]?.brandMenuOpen).toBe(false);
     expect(restored?.toast).toBeNull();
+  });
+
+  it("round-trips per-creative approval state on outputs", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:01:00.000Z",
+      action: { type: "select-brand", brand }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:02:00.000Z",
+      action: {
+        type: "generate-directions",
+        directions: buildDirectionFixtures(brand.name)
+      }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:02:30.000Z",
+      action: { type: "auto-select-directions" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:02:45.000Z",
+      action: { type: "create-outputs" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:02:50.000Z",
+      action: {
+        type: "run-qa",
+        results: workspace.runsById[workspace.activeRunId]?.outputs.map(
+          (output) => ({
+            outputId: output.id,
+            passed: true,
+            reason: "Looks good."
+          })
+        ) ?? []
+      }
+    });
+
+    const run = workspace.runsById["run-1"];
+    const [firstOutput] = run?.outputs ?? [];
+    if (!firstOutput) throw new Error("Expected at least one mock output.");
+
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:03:00.000Z",
+      action: {
+        type: "review-output",
+        id: firstOutput.id,
+        role: "graphicDesign",
+        decision: "rejected"
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-06-23T10:04:00.000Z")
+    );
+    const restoredOutput = restored?.runsById["run-1"]?.outputs.find(
+      (output) => output.id === firstOutput.id
+    );
+
+    expect(restoredOutput?.approval).toEqual({
+      graphicDesign: "rejected",
+      clientService: null,
+      projectManager: null
+    });
+    expect(restoredOutput?.status).toBe("needs-revision");
   });
 
   it("rejects malformed JSON and unknown schema versions", () => {

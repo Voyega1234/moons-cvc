@@ -5,7 +5,11 @@ import type {
   BrandProduct
 } from "../../domain/brand-memory";
 import type {
+  AnalyzeGuidelineInput,
   BrandMemoryRepository,
+  CreateLearningEntryInput,
+  CreateReferenceImageInput,
+  GuidelineAnalysisResult,
   SaveBrandRuleInput,
   SaveBrandProductInput,
   UpdateBrandProductInput,
@@ -26,12 +30,14 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
   async createBrandRule({
     clientId,
     title,
-    description
+    description,
+    assetFile
   }: SaveBrandRuleInput): Promise<LibraryItem> {
     const rule: LibraryItem = {
       id: createId("rule"),
       title,
-      description
+      description,
+      ...(assetFile ? { assetUrl: URL.createObjectURL(assetFile) } : {})
     };
 
     this.brandRulesByClient.set(clientId, [
@@ -45,13 +51,19 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
   async updateBrandRule({
     id,
     title,
-    description
+    description,
+    assetFile
   }: UpdateBrandRuleInput): Promise<LibraryItem> {
     for (const [clientId, rules] of this.brandRulesByClient) {
       const existing = rules.find((rule) => rule.id === id);
       if (!existing) continue;
 
-      const updated = { ...existing, title, description };
+      const updated = {
+        ...existing,
+        title,
+        description,
+        ...(assetFile ? { assetUrl: URL.createObjectURL(assetFile) } : {})
+      };
       this.brandRulesByClient.set(
         clientId,
         rules.map((rule) => (rule.id === id ? updated : rule))
@@ -161,5 +173,52 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     ]);
 
     return document;
+  }
+
+  async createLearningEntry(_input: CreateLearningEntryInput): Promise<void> {
+    // Mock mode has no persistent brand memory store to append to.
+  }
+
+  async createReferenceImage({
+    file,
+    label
+  }: CreateReferenceImageInput): Promise<LibraryItem> {
+    return {
+      id: createId("ref"),
+      title: label?.trim() || file.name,
+      description: "",
+      assetUrl: URL.createObjectURL(file)
+    };
+  }
+
+  async analyzeGuideline(
+    input: AnalyzeGuidelineInput
+  ): Promise<GuidelineAnalysisResult> {
+    if (input.text === undefined) {
+      const { clientId, file } = input;
+      const document: BrandDocument = {
+        id: createId("doc"),
+        clientId,
+        title: file.name,
+        documentType: "brand_guideline",
+        fileUrl: null,
+        storagePath: `mock/${clientId}/${file.name}`,
+        mimeType: file.type || null,
+        processingStatus: "ready_for_ai",
+        usableForAi: true,
+        uploadedAt: nowIso()
+      };
+
+      this.documentsByClient.set(clientId, [
+        ...(this.documentsByClient.get(clientId) ?? []),
+        document
+      ]);
+    }
+
+    return {
+      summary: "โทนสงบ หรูหรา ใช้ตัวอักษร sans-serif เรียบง่ายและเว้นพื้นที่ว่างมาก",
+      primaryColors: ["#1D1D1F", "#6E6E73"],
+      secondaryColors: ["#0A84FF"]
+    };
   }
 }

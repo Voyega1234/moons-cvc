@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "../../config/env";
 import type { LibraryItem } from "../../domain/brand";
 import {
@@ -10,7 +11,11 @@ import {
 import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database } from "../../lib/supabase/database.types";
 import type {
+  AnalyzeGuidelineInput,
   BrandMemoryRepository,
+  CreateLearningEntryInput,
+  CreateReferenceImageInput,
+  GuidelineAnalysisResult,
   SaveBrandProductInput,
   SaveBrandRuleInput,
   UpdateBrandProductInput,
@@ -35,6 +40,22 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
   "image/webp",
   "image/gif"
 ]);
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ASSET_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
+const MAX_GUIDELINE_SIZE_BYTES = 20 * 1024 * 1024;
+const ALLOWED_GUIDELINE_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp"
+]);
+
+// `sort_order` columns are `integer` (max ~2.1 billion); Date.now() (ms since
+// epoch) overflows that, so use seconds instead.
+function nextSortOrder(): number {
+  return Math.floor(Date.now() / 1000);
+}
 
 export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
   async listBrandRules(clientId: string): Promise<readonly LibraryItem[]> {
@@ -56,9 +77,14 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
   async createBrandRule({
     clientId,
     title,
-    description
+    description,
+    assetFile
   }: SaveBrandRuleInput): Promise<LibraryItem> {
     const client = getSupabaseClient();
+    const assetUrl = assetFile
+      ? await uploadBrandImage(client, clientId, assetFile)
+      : undefined;
+
     const { data, error } = await client
       .schema("moons")
       .from("brand_library")
@@ -67,7 +93,8 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
         section: "brand",
         title: title.trim(),
         description: description.trim(),
-        sort_order: Date.now()
+        sort_order: nextSortOrder(),
+        ...(assetUrl ? { asset_url: assetUrl } : {})
       })
       .select("*")
       .single();
@@ -80,15 +107,29 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
   async updateBrandRule({
     id,
     title,
-    description
+    description,
+    assetFile
   }: UpdateBrandRuleInput): Promise<LibraryItem> {
     const client = getSupabaseClient();
+    const { data: existing, error: existingError } = await client
+      .schema("moons")
+      .from("brand_library")
+      .select("client_id")
+      .eq("id", id)
+      .single();
+    if (existingError) throw existingError;
+
+    const assetUrl = assetFile
+      ? await uploadBrandImage(client, existing.client_id, assetFile)
+      : undefined;
+
     const { data, error } = await client
       .schema("moons")
       .from("brand_library")
       .update({
         title: title.trim(),
-        description: description.trim()
+        description: description.trim(),
+        ...(assetUrl ? { asset_url: assetUrl } : {})
       })
       .eq("id", id)
       .eq("section", "brand")
@@ -142,7 +183,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
         key_benefit: nullable(input.keyBenefit),
         audience: nullable(input.audience),
         claim_notes: nullable(input.claimNotes),
-        sort_order: Date.now()
+        sort_order: nextSortOrder()
       })
       .select("*")
       .single();
@@ -309,6 +350,173 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     return mapDocument(data);
   }
+
+  async createLearningEntry({
+    clientId,
+    polarity,
+    note,
+    sourceRunId
+  }: CreateLearningEntryInput): Promise<void> {
+    const client = getSupabaseClient();
+    const { error } = await client
+      .schema("moons")
+      .from("brand_learning")
+      .insert({
+        client_id: clientId,
+        polarity,
+        note: note.trim(),
+        ...(sourceRunId ? { source_run_id: sourceRunId } : {})
+      });
+
+    if (error) throw error;
+  }
+
+  async createReferenceImage({
+    clientId,
+    file,
+    label
+  }: CreateReferenceImageInput): Promise<LibraryItem> {
+    const client = getSupabaseClient();
+    const assetUrl = await uploadBrandImage(client, clientId, file);
+
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_library")
+      .insert({
+        client_id: clientId,
+        section: "refs",
+        title: label?.trim() || file.name,
+        description: "",
+        sort_order: nextSortOrder(),
+        asset_url: assetUrl
+      })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return mapLibraryItem(data);
+  }
+
+  async analyzeGuideline(input: AnalyzeGuidelineInput): Promise<GuidelineAnalysisResult> {
+    if (input.text !== undefined) {
+      return callGuidelineAnalysisEndpoint({ text: input.text });
+    }
+
+    const { clientId, file } = input;
+    if (file.size > MAX_GUIDELINE_SIZE_BYTES) {
+      throw new Error("Guideline file is too large. Maximum upload size is 20MB.");
+    }
+    if (file.type && !ALLOWED_GUIDELINE_TYPES.has(file.type)) {
+      throw new Error("Upload a PDF, PNG, JPEG, or WEBP guideline file.");
+    }
+
+    const client = getSupabaseClient();
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError) throw userError;
+    if (!userData.user) throw new Error("Sign in before uploading documents.");
+
+    // Same storage path convention as uploadDocument() so this also appears
+    // in the Documents tab, not just Brand kit.
+    const storagePath = `${clientId}/documents/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const uploadResult = await client.storage
+      .from(env.brandAssetsBucket)
+      .upload(storagePath, file, {
+        contentType: file.type || undefined,
+        upsert: false
+      });
+    if (uploadResult.error) throw uploadResult.error;
+
+    const { data: documentRow, error: documentError } = await client
+      .schema("moons")
+      .from("brand_documents")
+      .insert({
+        client_id: clientId,
+        title: file.name,
+        document_type: "brand_guideline",
+        storage_path: storagePath,
+        mime_type: file.type || null,
+        processing_status: "uploaded",
+        usable_for_ai: false,
+        uploaded_by: userData.user.id
+      })
+      .select("id")
+      .single();
+    if (documentError) {
+      await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
+      throw documentError;
+    }
+
+    const signedUrlResult = await client.storage
+      .from(env.brandAssetsBucket)
+      .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
+    if (signedUrlResult.error) throw signedUrlResult.error;
+
+    try {
+      const result = await callGuidelineAnalysisEndpoint({
+        fileUrl: signedUrlResult.data.signedUrl,
+        mimeType: file.type || "application/octet-stream"
+      });
+
+      await client
+        .schema("moons")
+        .from("brand_documents")
+        .update({ processing_status: "ready_for_ai", usable_for_ai: true })
+        .eq("id", documentRow.id);
+
+      return result;
+    } catch (error) {
+      await client
+        .schema("moons")
+        .from("brand_documents")
+        .update({ processing_status: "failed" })
+        .eq("id", documentRow.id);
+      throw error;
+    }
+  }
+}
+
+async function callGuidelineAnalysisEndpoint(
+  body: { text: string } | { fileUrl: string; mimeType: string }
+): Promise<GuidelineAnalysisResult> {
+  const client = getSupabaseClient();
+  const { data: sessionData } = await client.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  if (sessionData.session?.access_token) {
+    headers.Authorization = `Bearer ${sessionData.session.access_token}`;
+  }
+
+  const response = await fetch(env.guidelineAnalysisEndpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error("Guideline analysis returned an empty response.");
+  }
+
+  const payload = JSON.parse(text) as {
+    ok?: boolean;
+    summary?: string;
+    primaryColors?: string[];
+    secondaryColors?: string[];
+    error?: string;
+  };
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(
+      payload.error ?? `Guideline analysis failed (${response.status}).`
+    );
+  }
+
+  return {
+    summary: payload.summary ?? "",
+    primaryColors: payload.primaryColors ?? [],
+    secondaryColors: payload.secondaryColors ?? []
+  };
 }
 
 export function selectLatestUniqueAdAssets<
@@ -393,4 +601,36 @@ function safeFileName(fileName: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 120);
+}
+
+async function uploadBrandImage(
+  client: SupabaseClient<Database>,
+  clientId: string,
+  file: File
+): Promise<string> {
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("Image is too large. Maximum upload size is 10MB.");
+  }
+  if (file.type && !ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("Upload a PNG, JPEG, or WEBP image.");
+  }
+
+  const storagePath = `${clientId}/brand-kit/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+  const uploadResult = await client.storage
+    .from(env.brandAssetsBucket)
+    .upload(storagePath, file, {
+      contentType: file.type || undefined,
+      upsert: false
+    });
+  if (uploadResult.error) throw uploadResult.error;
+
+  const signedUrlResult = await client.storage
+    .from(env.brandAssetsBucket)
+    .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
+  if (signedUrlResult.error) {
+    await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
+    throw signedUrlResult.error;
+  }
+
+  return signedUrlResult.data.signedUrl;
 }

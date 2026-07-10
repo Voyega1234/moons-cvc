@@ -16,13 +16,67 @@ function update(
   updatedAt = now
 ): WorkspaceState {
   return workspaceReducer(state, {
-    type: "update-active-run",
+    type: "apply-run-action",
+    runId: getActiveRun(state).id,
     action,
     now: updatedAt
   });
 }
 
 describe("workspaceReducer", () => {
+  it("applies an async action to the run it was started against, even after the user switched to a different run", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let workspace = createInitialWorkspaceState({ runId: "run-a", now });
+    workspace = update(workspace, { type: "select-brand", brand });
+
+    // Simulate a hook-generation request kicked off while "run-a" is
+    // active: the async caller captured "run-a" as the target.
+    const runAId = getActiveRun(workspace).id;
+
+    // The user switches to a different run before the request resolves —
+    // this used to be exactly how "regenerate" results got misapplied or
+    // silently dropped.
+    workspace = workspaceReducer(workspace, {
+      type: "create-run",
+      id: "run-b",
+      now,
+      keepBrand: false
+    });
+    expect(workspace.activeRunId).toBe("run-b");
+
+    // The async request now resolves. It must still land on "run-a", not
+    // on whichever run happens to be active at this point.
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: runAId,
+      action: {
+        type: "generate-directions",
+        directions: buildDirectionFixtures(brand.name)
+      },
+      now
+    });
+
+    expect(workspace.runsById["run-a"]?.directions).toHaveLength(6);
+    expect(workspace.runsById["run-b"]?.directions).toEqual([]);
+    // Switching away and the async result landing elsewhere must not move
+    // the user's current view out from under them.
+    expect(workspace.activeRunId).toBe("run-b");
+  });
+
+  it("drops an async action harmlessly if its target run was closed before it resolved", () => {
+    const workspace = createInitialWorkspaceState({ runId: "run-a", now });
+    const closedRunResult = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "run-that-never-existed",
+      action: { type: "auto-select-directions" },
+      now
+    });
+
+    expect(closedRunResult).toEqual(workspace);
+  });
+
   it("isolates data between parallel runs", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -176,7 +230,14 @@ describe("workspaceReducer", () => {
     });
     workspace = update(workspace, { type: "auto-select-directions" });
     workspace = update(workspace, { type: "create-outputs" });
-    workspace = update(workspace, { type: "run-qa" });
+    workspace = update(workspace, {
+      type: "run-qa",
+      results: getActiveRun(workspace).outputs.map((output) => ({
+        outputId: output.id,
+        passed: true,
+        reason: "Looks good."
+      }))
+    });
     workspace = update(workspace, { type: "set-stage", stage: "approval" });
     workspace = update(workspace, { type: "approve-all" });
     workspace = update(workspace, { type: "set-stage", stage: "client" });

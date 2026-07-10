@@ -36,6 +36,12 @@ export interface Attachment {
   storageKey?: string;
 }
 
+export interface ReferenceImageSelection {
+  id: string;
+  url: string;
+  label: string;
+}
+
 export interface CreativeDirection {
   id: string;
   hook: string;
@@ -46,6 +52,28 @@ export interface CreativeDirection {
   caption: string;
   selected: boolean;
 }
+
+export interface ApprovalGate {
+  graphicDesign: ReviewDecision;
+  clientService: ReviewDecision;
+  projectManager: ReviewDecision;
+}
+
+export type ApprovalRole = keyof ApprovalGate;
+
+export const emptyApprovalGate: ApprovalGate = {
+  graphicDesign: null,
+  clientService: null,
+  projectManager: null
+};
+
+export type ApprovalComments = Record<ApprovalRole, string>;
+
+export const emptyApprovalComments: ApprovalComments = {
+  graphicDesign: "",
+  clientService: "",
+  projectManager: ""
+};
 
 export interface CreativeOutput {
   id: string;
@@ -59,12 +87,9 @@ export interface CreativeOutput {
   provider?: string;
   model?: string;
   revisionCount: number;
-}
-
-export interface ApprovalGate {
-  graphicDesign: ReviewDecision;
-  clientService: ReviewDecision;
-  projectManager: ReviewDecision;
+  approval: ApprovalGate;
+  approvalComments: ApprovalComments;
+  qaNote?: string;
 }
 
 export interface CreativeRun {
