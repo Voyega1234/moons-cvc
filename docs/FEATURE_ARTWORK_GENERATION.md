@@ -11,22 +11,43 @@ different in practice.
 When the user clicks `Create selected hooks`, Moons should generate artwork for
 the hooks selected in the Hook step.
 
-The frontend must not call OpenAI directly because `OPENAI_API_KEY` must stay on
-the backend. The frontend calls the configured backend endpoint instead.
+The frontend supports two generation modes: the configured OpenAI backend
+endpoint (which keeps `OPENAI_API_KEY` server-side) or an n8n webhook.
 
 ## Frontend env
 
 ```text
+VITE_ARTWORK_GENERATION_MODE=openai
 VITE_ARTWORK_GENERATION_ENDPOINT=
+VITE_N8N_ARTWORK_WEBHOOK_URL=
 ```
 
-If this value is empty, the app keeps the prototype flow working by creating
+`openai` is the default. If `VITE_ARTWORK_GENERATION_MODE=n8n`, Moons posts
+directly to `VITE_N8N_ARTWORK_WEBHOOK_URL`; otherwise it posts to
+`VITE_ARTWORK_GENERATION_ENDPOINT`. With neither OpenAI endpoint configured
+nor n8n mode selected, the app keeps the prototype flow working by creating
 draft output cards without generated assets.
 
 When Supabase auth is available, the frontend sends the current Supabase access
 token as `Authorization: Bearer <token>` so the backend can write storage/DB
 through normal user-scoped policies or verify the user before using a service
 role.
+
+### n8n request additions
+
+n8n receives every field in `ArtworkGenerationRequest`, plus:
+
+```ts
+{
+  logoUrl: string | null;
+  referenceImageUrls: { url: string; label?: string }[];
+}
+```
+
+`logoUrl` is taken automatically from the current brand's `Logo` asset when
+one exists. `referenceImageUrls` contains every image selected in **Use from
+library**. The webhook must return the same `{ outputs: [...] }` response
+shape documented below.
 
 ## Backend model
 

@@ -7,6 +7,7 @@ import {
 } from "../../domain/creative-run";
 import type { WorkflowState } from "../../features/workflow/model";
 import { getSupabaseClient } from "../../lib/supabase/client";
+import { generateArtworkFromWebhook } from "./n8n-artwork-generation";
 
 export type ArtworkReferenceImage =
   | {
@@ -81,23 +82,14 @@ export async function generateArtworkForSelectedHooks({
     referenceImages
   });
 
-  if (!env.artworkGenerationEndpoint) {
+  if (
+    env.artworkGenerationMode === "openai" &&
+    !env.artworkGenerationEndpoint
+  ) {
     return buildDraftOutputs(run, request.selectedHooks);
   }
 
-  const response = await fetch(env.artworkGenerationEndpoint, {
-    method: "POST",
-    headers: await buildHeaders(),
-    body: JSON.stringify(request)
-  });
-
-  const payload = await readJsonResponse<
-    Partial<ArtworkGenerationResponse> & { error?: string }
-  >(response, "Artwork generation");
-
-  if (!response.ok) {
-    throw new Error(payload.error ?? `Artwork generation failed (${response.status}).`);
-  }
+  const payload = await requestArtworkGeneration({ request, run });
 
   if (!Array.isArray(payload.outputs)) {
     throw new Error("Artwork generation returned no outputs.");
@@ -118,7 +110,10 @@ export async function regenerateOutputImage({
   >;
   extraInstructions?: string;
 }): Promise<CreativeOutput> {
-  if (!env.artworkGenerationEndpoint) {
+  if (
+    env.artworkGenerationMode === "openai" &&
+    !env.artworkGenerationEndpoint
+  ) {
     throw new Error("Artwork generation endpoint is not configured.");
   }
 
@@ -150,21 +145,7 @@ export async function regenerateOutputImage({
     }
   };
 
-  const response = await fetch(env.artworkGenerationEndpoint, {
-    method: "POST",
-    headers: await buildHeaders(),
-    body: JSON.stringify(request)
-  });
-
-  const payload = await readJsonResponse<
-    Partial<ArtworkGenerationResponse> & { error?: string }
-  >(response, "Artwork regeneration");
-
-  if (!response.ok) {
-    throw new Error(
-      payload.error ?? `Artwork regeneration failed (${response.status}).`
-    );
-  }
+  const payload = await requestArtworkGeneration({ request, run });
 
   const [regenerated] = payload.outputs ?? [];
   if (!regenerated) {
@@ -240,6 +221,42 @@ function compactLibraryItems(
     title: item.title,
     description: item.description
   }));
+}
+
+async function requestArtworkGeneration({
+  request,
+  run
+}: {
+  request: ArtworkGenerationRequest;
+  run: WorkflowState;
+}): Promise<ArtworkGenerationResponse> {
+  if (env.artworkGenerationMode === "n8n") {
+    return generateArtworkFromWebhook({ request, brand: run.brand });
+  }
+
+  const endpoint = env.artworkGenerationEndpoint;
+  if (!endpoint) {
+    throw new Error("Artwork generation endpoint is not configured.");
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify(request)
+  });
+  const payload = await readJsonResponse<
+    Partial<ArtworkGenerationResponse> & { error?: string }
+  >(response, "Artwork generation");
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? `Artwork generation failed (${response.status}).`);
+  }
+
+  if (!Array.isArray(payload.outputs)) {
+    throw new Error("Artwork generation returned no outputs.");
+  }
+
+  return { outputs: payload.outputs };
 }
 
 function buildDraftOutputs(

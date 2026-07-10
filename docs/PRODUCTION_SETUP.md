@@ -96,6 +96,15 @@ VITE_ARTWORK_GENERATION_ENDPOINT=<backend-artwork-endpoint>
 OPENAI_IMAGE_PROMPT_MODEL=gpt-5.6-terra
 ```
 
+Alternatively, route artwork generation through n8n. This sends the full
+artwork request plus `logoUrl` and selected `referenceImageUrls` to the
+webhook, which must return `{ outputs: [...] }`:
+
+```bash
+VITE_ARTWORK_GENERATION_MODE=n8n
+VITE_N8N_ARTWORK_WEBHOOK_URL=<n8n-artwork-webhook-url>
+```
+
 `OPENAI_IMAGE_PROMPT_MODEL` is the model used by the image prompt agent that
 writes the actual `gpt-image-2` prompt from the hook/brief/brand context —
 see `docs/FEATURE_ARTWORK_GENERATION.md` for the request/response contract.

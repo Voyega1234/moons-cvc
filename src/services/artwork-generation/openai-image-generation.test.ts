@@ -3,6 +3,7 @@ import {
   buildArtworkGenerationRequest,
   normalizeArtworkOutput
 } from "./openai-image-generation";
+import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
 import type { WorkflowState } from "../../features/workflow/model";
 
 const run: WorkflowState = {
@@ -103,5 +104,49 @@ describe("buildArtworkGenerationRequest", () => {
     expect(output.assetUrl).toContain("creative-assets");
     expect(output.assetStoragePath).toBe("flora/run-1/outputs/hook-1-v1.png");
     expect(output.model).toBe("gpt-image-2");
+  });
+
+  it("adds the logo and selected reference URLs to the n8n request", () => {
+    const brandedRun: WorkflowState = {
+      ...run,
+      brand: {
+        ...run.brand!,
+        library: {
+          ...run.brand!.library,
+          brand: [
+            {
+              id: "logo",
+              title: "Logo",
+              description: "Primary logo",
+              assetUrl: "https://assets.example.com/flora-logo.png"
+            }
+          ]
+        }
+      }
+    };
+    const request = buildArtworkGenerationRequest({
+      run: brandedRun,
+      referenceImages: [
+        {
+          kind: "url",
+          url: "https://assets.example.com/reference.png",
+          label: "Reference mood"
+        }
+      ]
+    });
+
+    const n8nRequest = buildN8nArtworkGenerationRequest({
+      request,
+      brand: brandedRun.brand
+    });
+
+    expect(n8nRequest.logoUrl).toBe("https://assets.example.com/flora-logo.png");
+    expect(n8nRequest.referenceImageUrls).toEqual([
+      {
+        url: "https://assets.example.com/reference.png",
+        label: "Reference mood"
+      }
+    ]);
+    expect(n8nRequest.selectedHooks).toEqual(request.selectedHooks);
   });
 });

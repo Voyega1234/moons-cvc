@@ -7,7 +7,9 @@ export interface PublicEnv {
   hookGenerationMode: "n8n" | "harness";
   hookGenerationWebhookUrl: string;
   hookGenerationHarnessEndpoint: string;
+  artworkGenerationMode: "openai" | "n8n";
   artworkGenerationEndpoint: string | null;
+  artworkGenerationWebhookUrl: string | null;
   brandLearningSuggestionEndpoint: string;
   qualityCheckEndpoint: string;
   guidelineAnalysisEndpoint: string;
@@ -43,8 +45,15 @@ export const env: PublicEnv = {
   hookGenerationHarnessEndpoint:
     import.meta.env.VITE_HOOK_GENERATION_HARNESS_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/hook-generation-harness`,
+  artworkGenerationMode:
+    import.meta.env.VITE_ARTWORK_GENERATION_MODE === "n8n"
+      ? "n8n"
+      : "openai",
   artworkGenerationEndpoint: optional(
     import.meta.env.VITE_ARTWORK_GENERATION_ENDPOINT
+  ),
+  artworkGenerationWebhookUrl: optional(
+    import.meta.env.VITE_N8N_ARTWORK_WEBHOOK_URL
   ),
   brandLearningSuggestionEndpoint:
     import.meta.env.VITE_BRAND_LEARNING_SUGGESTION_ENDPOINT ||
