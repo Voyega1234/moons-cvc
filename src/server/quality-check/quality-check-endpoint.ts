@@ -105,7 +105,7 @@ export async function handleQualityCheckRequest({
       apiKey,
       model,
       fetchImpl,
-      content: buildContent(input)
+      content: await buildContent(input, fetchImpl)
     });
     const results = parseResults(extractResponseText(payload), input.outputs);
 
@@ -148,15 +148,19 @@ async function callResponsesApi({
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI quality check failed: ${response.status}`);
+    const detail = await readProviderErrorDetail(response);
+    throw new Error(
+      `OpenAI quality check failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+    );
   }
 
   return readJsonResponse(response, "OpenAI quality check");
 }
 
-function buildContent(
-  input: QualityCheckRequest
-): readonly ResponseContent[] {
+async function buildContent(
+  input: QualityCheckRequest,
+  fetchImpl: FetchLike
+): Promise<readonly ResponseContent[]> {
   const content: ResponseContent[] = [
     {
       type: "input_text",
@@ -193,7 +197,11 @@ function buildContent(
     });
     content.push({
       type: "input_image",
-      image_url: reference.url,
+      image_url: await resolveImageUrlForVision(
+        reference.url,
+        `reference image "${reference.label}"`,
+        fetchImpl
+      ),
       detail: "auto"
     });
   }
@@ -214,7 +222,11 @@ function buildContent(
     });
     content.push({
       type: "input_image",
-      image_url: output.assetUrl,
+      image_url: await resolveImageUrlForVision(
+        output.assetUrl,
+        `creative "${output.id}"`,
+        fetchImpl
+      ),
       detail: "auto"
     });
   }
@@ -222,6 +234,29 @@ function buildContent(
   content.push({ type: "input_text", text: "Return only JSON ตาม schema." });
 
   return content;
+}
+
+async function resolveImageUrlForVision(
+  url: string,
+  label: string,
+  fetchImpl: FetchLike
+): Promise<string> {
+  if (url.startsWith("data:")) return url;
+
+  const response = await fetchImpl(url);
+  if (!response.ok) {
+    throw new Error(`Could not download ${label}: ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "image/png";
+  if (!contentType.startsWith("image/")) {
+    throw new Error(
+      `Could not use ${label}: expected image content, got ${contentType}.`
+    );
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return `data:${contentType};base64,${bytes.toString("base64")}`;
 }
 
 const resultsSchema = {
@@ -415,6 +450,32 @@ function extractResponseText(payload: unknown): string {
   }
 
   throw new Error("OpenAI quality check response did not include output text.");
+}
+
+async function readProviderErrorDetail(response: Response): Promise<string> {
+  const text = await response.text();
+  if (!text.trim()) return "";
+
+  let detail = text;
+  try {
+    const payload = JSON.parse(text) as unknown;
+    if (isRecord(payload)) {
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (typeof payload.error === "string") {
+        detail = payload.error;
+      } else if (
+        isRecord(payload.error) &&
+        typeof payload.error.message === "string"
+      ) {
+        detail = payload.error.message;
+      }
+    }
+  } catch {
+    // Plain-text provider errors are already safe to summarize below.
+  }
+
+  return detail.replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 function readRecord(value: unknown, field: string): Record<string, unknown> {

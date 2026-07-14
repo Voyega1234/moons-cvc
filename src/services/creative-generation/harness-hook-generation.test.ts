@@ -39,6 +39,7 @@ const run: WorkflowState = {
   service: "single-static",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
+  outputSize: "1024x1024",
   quantity: 3,
   successMetric: "CTR",
   brief: "Generate hooks for AI SEO webinar.",

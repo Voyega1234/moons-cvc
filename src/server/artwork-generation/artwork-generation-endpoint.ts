@@ -3,10 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   artworkModes,
+  artworkOutputSizes,
   emptyApprovalComments,
   emptyApprovalGate,
   imagePromptModels,
-  outputFormatForService
+  outputFormatForService,
+  type ArtworkOutputSize
 } from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type {
@@ -90,7 +92,7 @@ interface ImageRequestDebugLog {
           model: string;
           prompt: string;
           n: 1;
-          size: "1024x1024";
+          size: ArtworkOutputSize;
           quality: "medium";
         };
       }
@@ -99,7 +101,7 @@ interface ImageRequestDebugLog {
         multipartFields: {
           model: string;
           prompt: string;
-          size: "1024x1024";
+          size: ArtworkOutputSize;
           images: readonly { label?: string; mimeType: string; bytes: number }[];
         };
       };
@@ -475,7 +477,7 @@ function buildImageRequestDebugLog({
   model: string;
   hook: SelectedHook;
   prompt: string;
-  size: "1024x1024";
+  size: ArtworkOutputSize;
   references: readonly ReferenceImageInput[];
 }): ImageRequestDebugLog {
   return {
@@ -689,7 +691,7 @@ async function resolveImagePrompt({
         dataUrl: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
         label: input.referenceImages[index]?.label ?? "Reference image"
       })),
-      canvasRatio: "1:1",
+      canvasRatio: canvasRatioFromSize(input.output.size),
       brandLibrary: {
         brand: input.brandLibrary.brand,
         products: input.brandLibrary.products
@@ -799,6 +801,10 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
   }
 
   const output = readRecord(value.output, "output");
+  const outputSize = readString(output.size, "output.size");
+  if (!artworkOutputSizes.includes(outputSize as ArtworkOutputSize)) {
+    throw new Error("output.size is not supported.");
+  }
 
   return {
     model: model as ArtworkGenerationRequest["model"],
@@ -818,16 +824,25 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
       value.referenceImages as ArtworkGenerationRequest["referenceImages"],
     brandLibrary: parseBrandLibrary(value.brandLibrary),
     output: {
-      size: readString(
-        output.size,
-        "output.size"
-      ) as ArtworkGenerationRequest["output"]["size"],
+      size: outputSize as ArtworkGenerationRequest["output"]["size"],
       format: readString(
         output.format,
         "output.format"
       ) as ArtworkGenerationRequest["output"]["format"]
     }
   };
+}
+
+function canvasRatioFromSize(size: ArtworkOutputSize): string {
+  const [widthText, heightText] = size.split("x") as [string, string];
+  const width = Number(widthText);
+  const height = Number(heightText);
+  const divisor = greatestCommonDivisor(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
+function greatestCommonDivisor(a: number, b: number): number {
+  return b === 0 ? a : greatestCommonDivisor(b, a % b);
 }
 
 function parseBrandLibrary(

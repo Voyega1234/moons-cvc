@@ -20,6 +20,8 @@ import {
   type BrandProduct
 } from "../../domain/brand-memory";
 import {
+  artworkOutputSizeLabel,
+  artworkOutputSizes,
   serviceTypes,
   type AngleExportGroup,
   type ApprovalRole,
@@ -3091,6 +3093,30 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           <option value="anthropic/claude-sonnet-4.6">
             Claude Sonnet 4.6 (OpenRouter)
           </option>
+        </select>
+      </div>
+      <div className="artwork-mode-picker neo-angle-size-picker">
+        <div>
+          <h3>Output size.</h3>
+          <p>Choose the canvas size Neo should send to image generation.</p>
+        </div>
+        <select
+          className="neo-angle-model-select"
+          aria-label="Output size"
+          value={state.outputSize}
+          disabled={creating}
+          onChange={(event) =>
+            dispatch({
+              type: "set-output-size",
+              size: event.target.value as WorkflowState["outputSize"]
+            })
+          }
+        >
+          {artworkOutputSizes.map((size) => (
+            <option key={size} value={size}>
+              {artworkOutputSizeLabel(size)}
+            </option>
+          ))}
         </select>
       </div>
       <div className="direction-tools neo-angle-toolbar">

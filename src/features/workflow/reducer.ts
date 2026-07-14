@@ -1,4 +1,8 @@
-import { emptyApprovalGate, serviceTypes } from "../../domain/creative-run";
+import {
+  defaultArtworkOutputSize,
+  emptyApprovalGate,
+  serviceTypes
+} from "../../domain/creative-run";
 import {
   directionSubheadline,
   resolveSubheadlineHighlight
@@ -105,6 +109,7 @@ export function createInitialWorkflowState({
     service: "single-static",
     artworkMode: "standard",
     imagePromptModel: "gpt-5.6-terra",
+    outputSize: defaultArtworkOutputSize,
     quantity: 3,
     successMetric: "CTR",
     brief: defaultBrief,
@@ -213,6 +218,8 @@ export function workflowReducer(
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":
       return { ...state, imagePromptModel: action.model };
+    case "set-output-size":
+      return { ...state, outputSize: action.size };
     case "set-quantity":
       return withCreativeMix(state, [
         {

@@ -242,9 +242,7 @@ function renderStandardPrompt(
     },
     heroVisual: {
       subject: input.hook.visual,
-      visualMode: "conceptual graphic advertising",
-      mustShow: [input.hook.concept],
-      mustNotShow: input.brand?.mustAvoid ?? []
+      visualMode: "conceptual graphic advertising"
     },
     references: input.referenceImages.map((image, index) =>
       buildCompactReference(image.label, index)

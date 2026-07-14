@@ -43,6 +43,17 @@ describe("DirectionsStage artwork mode", () => {
       type: "set-image-prompt-model",
       model: "anthropic/claude-sonnet-4.6"
     });
+
+    const sizeSelect = screen.getByRole("combobox", {
+      name: "Output size"
+    }) as HTMLSelectElement;
+    expect(sizeSelect.value).toBe("1024x1024");
+
+    await user.selectOptions(sizeSelect, "3840x2160");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-output-size",
+      size: "3840x2160"
+    });
   });
 
   it("opens Regenerate all with one tone field for the full Hook set", async () => {

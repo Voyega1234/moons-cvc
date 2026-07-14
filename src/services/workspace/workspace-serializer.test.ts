@@ -74,6 +74,12 @@ describe("workspace serializer", () => {
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
       runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:47.000Z",
+      action: { type: "set-output-size", size: "2048x1152" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:50.000Z",
       action: { type: "set-success-metric", metric: "ROAS" }
     });
@@ -93,6 +99,7 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"
     );
+    expect(restored?.runsById["album-run"]?.outputSize).toBe("2048x1152");
     expect(restored?.runsById["album-run"]?.successMetric).toBe("ROAS");
     expect(restored?.runsById["album-run"]?.creativeMix).toEqual([
       { id: "creative-mix-1", service: "album-post", quantity: 3 },
@@ -151,6 +158,23 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["run-1"]?.imagePromptModel).toBe(
       "gpt-5.6-terra"
     );
+  });
+
+  it("loads older snapshots without an output size as 1024x1024", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { outputSize?: string }> };
+    };
+    delete parsed.data.runsById["run-1"]?.outputSize;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.outputSize).toBe("1024x1024");
   });
 
   it("migrates older single-format snapshots into one creative-mix row", () => {

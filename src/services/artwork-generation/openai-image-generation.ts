@@ -1,8 +1,10 @@
 import { env } from "../../config/env";
 import {
+  defaultArtworkOutputSize,
   emptyApprovalComments,
   emptyApprovalGate,
   outputFormatForService,
+  type ArtworkOutputSize,
   type CreativeDirection,
   type CreativeOutput
 } from "../../domain/creative-run";
@@ -73,7 +75,7 @@ export interface ArtworkGenerationRequest {
     refs: readonly { title: string; description: string }[];
   };
   output: {
-    size: "1024x1024";
+    size: ArtworkOutputSize;
     format: "png";
   };
 }
@@ -155,7 +157,7 @@ export async function regenerateOutputImage({
     })),
     ...buildBrandContext(run.brand),
     output: {
-      size: "1024x1024",
+      size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
     }
   };
@@ -262,7 +264,7 @@ function buildArtworkRequest({
     referenceImages,
     ...buildBrandContext(run.brand),
     output: {
-      size: "1024x1024",
+      size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
     }
   };

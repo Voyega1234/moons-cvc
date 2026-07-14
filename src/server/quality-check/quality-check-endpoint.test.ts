@@ -59,9 +59,21 @@ describe("handleQualityCheckRequest", () => {
   });
 
   it("sends each image inline to the vision model and returns per-output results", async () => {
-    const fetchMock = vi.fn(
-      async (_url: string | URL | Request, _init?: RequestInit) =>
-        new Response(
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("example.com/reference.png")) {
+        return new Response(Buffer.from("reference-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (href.includes("example.supabase.co/storage")) {
+        return new Response(Buffer.from("creative-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      return new Response(
           JSON.stringify({
             output_text: JSON.stringify({
               results: [
@@ -76,8 +88,8 @@ describe("handleQualityCheckRequest", () => {
             })
           }),
           { status: 200 }
-        )
-    );
+        );
+    });
 
     const response = await handleQualityCheckRequest({
       request: buildRequest(),
@@ -110,7 +122,10 @@ describe("handleQualityCheckRequest", () => {
       }
     ]);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+    const openAiCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/v1/responses")
+    );
+    const body = JSON.parse(String(openAiCall?.[1]?.body)) as {
       input: {
         content: { type: string; text?: string; image_url?: string }[];
       }[];
@@ -119,8 +134,12 @@ describe("handleQualityCheckRequest", () => {
       (block) => block.type === "input_image"
     );
     expect(imageBlocks).toEqual([
-      expect.objectContaining({ image_url: requestBody.referenceImages[0]?.url }),
-      expect.objectContaining({ image_url: requestBody.outputs[0]?.assetUrl })
+      expect.objectContaining({
+        image_url: expect.stringMatching(/^data:image\/png;base64,/)
+      }),
+      expect.objectContaining({
+        image_url: expect.stringMatching(/^data:image\/png;base64,/)
+      })
     ]);
     const prompt = body.input[0]?.content
       .filter((block) => block.type === "input_text")
@@ -148,5 +167,44 @@ describe("handleQualityCheckRequest", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, results: [] });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the OpenAI error message when quality check request is rejected", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("example.com/reference.png")) {
+        return new Response(Buffer.from("reference-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (href.includes("example.supabase.co/storage")) {
+        return new Response(Buffer.from("creative-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      return new Response(
+          JSON.stringify({
+            error: {
+              message: "Invalid value: image_url could not be downloaded."
+            }
+          }),
+          { status: 400 }
+        );
+    });
+
+    const response = await handleQualityCheckRequest({
+      request: buildRequest(),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error:
+        "OpenAI quality check failed: 400 — Invalid value: image_url could not be downloaded."
+    });
   });
 });

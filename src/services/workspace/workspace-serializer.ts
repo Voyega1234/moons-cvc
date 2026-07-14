@@ -1,7 +1,9 @@
 import {
   angleExportGroups,
   artworkModes,
+  artworkOutputSizes,
   creativeStages,
+  defaultArtworkOutputSize,
   emptyApprovalComments,
   imagePromptModels,
   serviceTypes,
@@ -120,6 +122,10 @@ function parseRun(value: unknown): WorkflowState | null {
     value.imagePromptModel === undefined
       ? "gpt-5.6-terra"
       : parseMember(value.imagePromptModel, imagePromptModels);
+  const outputSize =
+    value.outputSize === undefined
+      ? defaultArtworkOutputSize
+      : parseMember(value.outputSize, artworkOutputSizes);
   const quantity = parseNumber(value.quantity);
   const successMetric =
     value.successMetric === undefined
@@ -136,6 +142,7 @@ function parseRun(value: unknown): WorkflowState | null {
     !service ||
     !artworkMode ||
     !imagePromptModel ||
+    !outputSize ||
     !successMetric ||
     quantity === null ||
     brief === null ||
@@ -185,6 +192,7 @@ function parseRun(value: unknown): WorkflowState | null {
     service: creativeMix[0]?.service ?? (service as ServiceType),
     artworkMode,
     imagePromptModel,
+    outputSize,
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
     brief,

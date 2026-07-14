@@ -198,13 +198,68 @@ describe("handleArtworkGenerationRequest", () => {
           endpoint: "/v1/images/generations",
           body: expect.objectContaining({
             model: "gpt-image-2",
-            prompt: expect.stringContaining("Flowers that make the room feel softer")
+            prompt: expect.stringContaining("Flowers that make the room feel softer"),
+            size: "1024x1024"
           })
         })
       })
     ]);
     expect(JSON.stringify(debugLogs)).not.toContain("test-key");
     expect(JSON.stringify(debugLogs)).not.toContain("Authorization");
+  });
+
+  it("uses the requested output size and passes the matching canvas ratio to the prompt agent", async () => {
+    const promptAgentInputs: string[] = [];
+    const imageBodies: unknown[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body)) as {
+          input: Array<{ content: Array<{ type: string; text?: string }> }>;
+        };
+        promptAgentInputs.push(body.input[0]?.content[0]?.text ?? "");
+        return promptAgentResponse("AGENT-WRITTEN PROMPT: landscape artwork.");
+      }
+      if (href.includes("/v1/images/generations")) {
+        imageBodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    const { client } = fakeStorage();
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          output: { size: "3840x2160", format: "png" }
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(200);
+    expect(promptAgentInputs[0]).toContain('"ratio": "16:9"');
+    expect(imageBodies[0]).toMatchObject({ size: "3840x2160" });
   });
 
   it("generates two selected hooks at a time while preserving their order", async () => {

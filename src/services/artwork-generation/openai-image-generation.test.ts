@@ -26,6 +26,7 @@ const run: WorkflowState = {
   service: "single-static",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
+  outputSize: "1024x1024",
   quantity: 1,
   successMetric: "CTR",
   brief: "Launch a soft summer bouquet offer.",
@@ -97,6 +98,17 @@ describe("buildArtworkGenerationRequest", () => {
       mustAvoid: []
     });
     expect(request).not.toHaveProperty("brandMemory");
+  });
+
+  it("passes the selected output size to the backend contract", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        outputSize: "2160x3840"
+      }
+    });
+
+    expect(request.output.size).toBe("2160x3840");
   });
 
   it("compacts brand identity fields for the Standard prompt", () => {

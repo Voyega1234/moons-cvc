@@ -9,6 +9,7 @@ import type {
   ReferenceImageSelection,
   ReviewDecision,
   ServiceType,
+  ArtworkOutputSize,
   ImagePromptModel
 } from "../../domain/creative-run";
 
@@ -42,6 +43,7 @@ export interface WorkflowState {
   service: ServiceType;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
+  outputSize: ArtworkOutputSize;
   /** Compatibility alias for the total creative-mix quantity. */
   quantity: number;
   successMetric: SuccessMetric;
@@ -66,6 +68,7 @@ export type WorkflowAction =
   | { type: "set-service"; service: ServiceType }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
+  | { type: "set-output-size"; size: ArtworkOutputSize }
   | { type: "set-quantity"; quantity: number }
   | { type: "add-creative-mix-item" }
   | {

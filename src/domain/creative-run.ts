@@ -41,6 +41,35 @@ export const imagePromptModels = [
   "anthropic/claude-sonnet-4.6"
 ] as const;
 export type ImagePromptModel = (typeof imagePromptModels)[number];
+export const artworkOutputSizes = [
+  "1024x1024",
+  "1536x1024",
+  "1024x1536",
+  "2048x2048",
+  "2048x1152",
+  "3840x2160",
+  "2160x3840"
+] as const;
+export type ArtworkOutputSize = (typeof artworkOutputSizes)[number];
+export const defaultArtworkOutputSize: ArtworkOutputSize = "1024x1024";
+export function artworkOutputSizeLabel(size: ArtworkOutputSize): string {
+  switch (size) {
+    case "1024x1024":
+      return "1024x1024 (square)";
+    case "1536x1024":
+      return "1536x1024 (landscape)";
+    case "1024x1536":
+      return "1024x1536 (portrait)";
+    case "2048x2048":
+      return "2048x2048 (2K square)";
+    case "2048x1152":
+      return "2048x1152 (2K landscape)";
+    case "3840x2160":
+      return "3840x2160 (4K landscape)";
+    case "2160x3840":
+      return "2160x3840 (4K portrait)";
+  }
+}
 export const angleExportGroups = ["recommended", "option"] as const;
 export type AngleExportGroup = (typeof angleExportGroups)[number];
 export type ReviewDecision = "approved" | "rejected" | null;
@@ -130,6 +159,7 @@ export interface CreativeRun {
   stage: CreativeStage;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
+  outputSize: ArtworkOutputSize;
   brief: CreativeBrief;
   directions: readonly CreativeDirection[];
   outputs: readonly CreativeOutput[];

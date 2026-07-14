@@ -38,6 +38,17 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
+  it("defaults output size to square and allows larger landscape output", () => {
+    expect(initialWorkflowState.outputSize).toBe("1024x1024");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-output-size",
+      size: "3840x2160"
+    });
+
+    expect(updated.outputSize).toBe("3840x2160");
+  });
+
   it("defaults the success metric to CTR and allows a brief-specific choice", () => {
     expect(initialWorkflowState.successMetric).toBe("CTR");
 

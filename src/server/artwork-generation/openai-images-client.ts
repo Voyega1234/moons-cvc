@@ -1,3 +1,5 @@
+import type { ArtworkOutputSize } from "../../domain/creative-run.js";
+
 export interface GeneratedImage {
   base64: string;
   mimeType: string;
@@ -7,7 +9,7 @@ export interface GenerateImageOptions {
   apiKey: string;
   model: string;
   prompt: string;
-  size: "1024x1024";
+  size: ArtworkOutputSize;
   fetchImpl: typeof fetch;
 }
 
@@ -25,7 +27,7 @@ export interface EditImageOptions {
   apiKey: string;
   model: string;
   prompt: string;
-  size: "1024x1024";
+  size: ArtworkOutputSize;
   referenceImages: readonly ReferenceImageInput[];
   fetchImpl: typeof fetch;
 }

@@ -75,6 +75,8 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain('"colors": [');
     expect(promptText).toContain('"maximumTextBlocks": 2');
     expect(promptText).toContain('"copyDensity": "low"');
+    expect(promptText).not.toContain('"mustShow"');
+    expect(promptText).not.toContain('"mustNotShow"');
     expect(promptText).not.toContain(
       "Create one production-ready English GPT Image 2 prompt from this compact creative input."
     );
