@@ -169,6 +169,60 @@ describe("handleQualityCheckRequest", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("skips unavailable reference images while still checking generated creatives", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("example.com/reference.png")) {
+        return new Response("blocked", { status: 400 });
+      }
+      if (href.includes("example.supabase.co/storage")) {
+        return new Response(Buffer.from("creative-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            results: [
+              {
+                outputId: "output-1",
+                gdPassed: true,
+                gdReason: "ผ่าน",
+                csPassed: true,
+                csReason: "ผ่าน"
+              }
+            ]
+          })
+        }),
+        { status: 200 }
+      );
+    });
+
+    const response = await handleQualityCheckRequest({
+      request: buildRequest(),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    const openAiCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/v1/responses")
+    );
+    const body = JSON.parse(String(openAiCall?.[1]?.body)) as {
+      input: {
+        content: { type: string; text?: string; image_url?: string }[];
+      }[];
+    };
+    const content = body.input[0]?.content ?? [];
+    expect(content.filter((block) => block.type === "input_image")).toHaveLength(
+      1
+    );
+    expect(content.map((block) => block.text).join("\n")).toContain(
+      "ข้ามภาพนี้เพราะ backend ดาวน์โหลดไม่ได้"
+    );
+  });
+
   it("returns the OpenAI error message when quality check request is rejected", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
       const href = String(url);

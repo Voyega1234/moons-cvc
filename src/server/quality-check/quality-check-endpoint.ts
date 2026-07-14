@@ -191,19 +191,24 @@ async function buildContent(
   ];
 
   for (const reference of input.referenceImages) {
+    const imageUrl = await resolveOptionalReferenceImageUrlForVision(
+      reference.url,
+      reference.label,
+      fetchImpl
+    );
     content.push({
       type: "input_text",
-      text: `Reference Image (${reference.kind}) — ${reference.label}. ใช้เพื่อเปรียบเทียบเท่านั้น ไม่ใช่ Artwork ที่ต้องให้คะแนน`
+      text: imageUrl
+        ? `Reference Image (${reference.kind}) — ${reference.label}. ใช้เพื่อเปรียบเทียบเท่านั้น ไม่ใช่ Artwork ที่ต้องให้คะแนน`
+        : `Reference Image (${reference.kind}) — ${reference.label}. ข้ามภาพนี้เพราะ backend ดาวน์โหลดไม่ได้ ให้ตรวจต่อจาก references อื่นและข้อมูลที่มี ห้าม fail งานเพราะ reference นี้หาย`
     });
-    content.push({
-      type: "input_image",
-      image_url: await resolveImageUrlForVision(
-        reference.url,
-        `reference image "${reference.label}"`,
-        fetchImpl
-      ),
-      detail: "auto"
-    });
+    if (imageUrl) {
+      content.push({
+        type: "input_image",
+        image_url: imageUrl,
+        detail: "auto"
+      });
+    }
   }
 
   for (const output of input.outputs) {
@@ -234,6 +239,22 @@ async function buildContent(
   content.push({ type: "input_text", text: "Return only JSON ตาม schema." });
 
   return content;
+}
+
+async function resolveOptionalReferenceImageUrlForVision(
+  url: string,
+  label: string,
+  fetchImpl: FetchLike
+): Promise<string | null> {
+  try {
+    return await resolveImageUrlForVision(
+      url,
+      `reference image "${label}"`,
+      fetchImpl
+    );
+  } catch {
+    return null;
+  }
 }
 
 async function resolveImageUrlForVision(
