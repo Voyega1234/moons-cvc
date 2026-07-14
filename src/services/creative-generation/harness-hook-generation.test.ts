@@ -37,7 +37,10 @@ const run: WorkflowState = {
   brandSearch: "",
   librarySection: "brand",
   service: "single-static",
+  artworkMode: "standard",
+  imagePromptModel: "gpt-5.6-terra",
   quantity: 3,
+  successMetric: "CTR",
   brief: "Generate hooks for AI SEO webinar.",
   attachments: ["brief.pdf"],
   referenceImages: [],
@@ -60,6 +63,30 @@ describe("buildHookGenerationHarnessRequest", () => {
       title: "AI SEO Workshop"
     });
     expect(request.attachments).toEqual(["brief.pdf"]);
+    expect(request.contentTypeQuotas).toEqual([
+      { service: "single-static", count: 3 }
+    ]);
+  });
+
+  it("preserves every Creative mix type and quantity in the backend contract", () => {
+    const request = buildHookGenerationHarnessRequest({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "static", service: "single-static", quantity: 3 },
+          { id: "album", service: "album-post", quantity: 1 },
+          { id: "ugc", service: "ugc-video", quantity: 2 }
+        ],
+        quantity: 6
+      }
+    });
+
+    expect(request.quantity).toBe(6);
+    expect(request.contentTypeQuotas).toEqual([
+      { service: "single-static", count: 3 },
+      { service: "album-post", count: 1 },
+      { service: "ugc-video", count: 2 }
+    ]);
   });
 
   it("maps existing directions and extra instructions for a generate-more request", () => {
@@ -96,6 +123,40 @@ describe("buildHookGenerationHarnessRequest", () => {
     const request = buildHookGenerationHarnessRequest({ run });
     expect(request.extraInstructions).toBe("");
     expect(request.existingHooks).toEqual([]);
+  });
+
+  it("keeps generated subheadline copy separate from the internal concept", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          directions: [
+            {
+              id: "direction-1",
+              service: "single-static",
+              hook: "เว็บสวย แต่ Google อาจยังอ่านไม่ออก",
+              subheadline: "ทำโครงสร้างเว็บไซต์ให้ Search เข้าใจธุรกิจได้ชัดขึ้น",
+              concept: "ชวนเจ้าของแบรนด์มอง SEO ผ่านโครงสร้างเว็บไซต์",
+              subheadlineHighlight: "โครงสร้างเว็บไซต์",
+              why: "Makes the technical issue concrete.",
+              visual: "Search result beside a website structure diagram.",
+              cta: "ปรึกษาทีม SEO",
+              caption: "เริ่มแก้จากโครงสร้างที่ Search อ่านได้"
+            }
+          ]
+        })
+      )
+    );
+
+    const [direction] = await generateDirectionsWithHarness({ run });
+
+    expect(direction).toMatchObject({
+      subheadline: "ทำโครงสร้างเว็บไซต์ให้ Search เข้าใจธุรกิจได้ชัดขึ้น",
+      concept: "ชวนเจ้าของแบรนด์มอง SEO ผ่านโครงสร้างเว็บไซต์",
+      subheadlineHighlight: "โครงสร้างเว็บไซต์"
+    });
+    vi.stubGlobal("fetch", originalFetch);
   });
 
   it("reports an empty backend response clearly", async () => {

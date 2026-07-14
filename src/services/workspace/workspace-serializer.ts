@@ -1,16 +1,22 @@
 import {
+  angleExportGroups,
+  artworkModes,
   creativeStages,
   emptyApprovalComments,
+  imagePromptModels,
   serviceTypes,
   type CreativeStage,
   type ServiceType
 } from "../../domain/creative-run";
 import type { Brand, BrandLibrary, LibraryItem } from "../../domain/brand";
+import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
 import type {
   AppView,
+  CreativeMixItem,
   WorkspaceState,
   WorkflowState
 } from "../../features/workflow/model";
+import { successMetrics } from "../../features/workflow/model";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
 
@@ -106,7 +112,19 @@ function parseRun(value: unknown): WorkflowState | null {
   const updatedAt = parseString(value.updatedAt);
   const stage = parseMember(value.stage, creativeStages);
   const service = parseMember(value.service, serviceTypes);
+  const artworkMode =
+    value.artworkMode === undefined
+      ? "standard"
+      : parseMember(value.artworkMode, artworkModes);
+  const imagePromptModel =
+    value.imagePromptModel === undefined
+      ? "gpt-5.6-terra"
+      : parseMember(value.imagePromptModel, imagePromptModels);
   const quantity = parseNumber(value.quantity);
+  const successMetric =
+    value.successMetric === undefined
+      ? "CTR"
+      : parseMember(value.successMetric, successMetrics);
   const brief = parseString(value.brief, true);
   const attachments = parseStringArray(value.attachments);
 
@@ -116,6 +134,9 @@ function parseRun(value: unknown): WorkflowState | null {
     !updatedAt ||
     !stage ||
     !service ||
+    !artworkMode ||
+    !imagePromptModel ||
+    !successMetric ||
     quantity === null ||
     brief === null ||
     !attachments ||
@@ -131,6 +152,12 @@ function parseRun(value: unknown): WorkflowState | null {
 
   const brand = value.brand === null ? null : parseBrand(value.brand);
   if (value.brand !== null && !brand) return null;
+
+  const creativeMix =
+    value.creativeMix === undefined
+      ? [{ id: "creative-mix-1", service, quantity }]
+      : parseCreativeMix(value.creativeMix);
+  if (!creativeMix) return null;
 
   const librarySection = parseMember(value.librarySection, [
     "brand",
@@ -154,8 +181,12 @@ function parseRun(value: unknown): WorkflowState | null {
     brandMenuOpen: false,
     brandSearch: "",
     librarySection,
-    service: service as ServiceType,
-    quantity,
+    creativeMix,
+    service: creativeMix[0]?.service ?? (service as ServiceType),
+    artworkMode,
+    imagePromptModel,
+    quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
+    successMetric,
     brief,
     attachments,
     referenceImages,
@@ -166,6 +197,33 @@ function parseRun(value: unknown): WorkflowState | null {
     clientSent: value.clientSent,
     done: value.done
   };
+}
+
+function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {
+  if (!Array.isArray(value) || !value.length) return null;
+
+  const items: CreativeMixItem[] = [];
+  for (const candidate of value) {
+    if (!isRecord(candidate)) return null;
+    const id = parseString(candidate.id);
+    const service = parseMember(candidate.service, serviceTypes);
+    const quantity = parseNumber(candidate.quantity);
+    if (
+      !id ||
+      !service ||
+      quantity === null ||
+      quantity < 1 ||
+      quantity > 6
+    ) {
+      return null;
+    }
+    items.push({ id, service, quantity });
+  }
+
+  if (new Set(items.map((item) => item.id)).size !== items.length) return null;
+  if (new Set(items.map((item) => item.service)).size !== items.length) return null;
+  if (items.reduce((total, item) => total + item.quantity, 0) > 6) return null;
+  return items;
 }
 
 function parseBrand(value: unknown): Brand | null {
@@ -258,8 +316,24 @@ function parseDirections(
   const directions = value.map((item) => {
     if (!isRecord(item)) return null;
     const id = parseString(item.id);
+    const service =
+      item.service === undefined
+        ? undefined
+        : parseMember(item.service, serviceTypes);
     const hook = parseString(item.hook, true);
     const concept = parseString(item.concept, true);
+    const subheadline =
+      item.subheadline === undefined
+        ? concept
+        : parseString(item.subheadline, true);
+    const subheadlineHighlight =
+      item.subheadlineHighlight === undefined
+        ? undefined
+        : parseString(item.subheadlineHighlight, true);
+    const exportGroup =
+      item.exportGroup === undefined || item.exportGroup === null
+        ? null
+        : parseMember(item.exportGroup, angleExportGroups);
     const why =
       item.why === undefined
         ? "Works when the audience needs fast clarity."
@@ -270,8 +344,14 @@ function parseDirections(
     const caption = parseString(item.caption, true);
     if (
       !id ||
+      (item.service !== undefined && !service) ||
       hook === null ||
       concept === null ||
+      subheadline === null ||
+      subheadlineHighlight === null ||
+      (item.exportGroup !== undefined &&
+        item.exportGroup !== null &&
+        !exportGroup) ||
       why === null ||
       visual === null ||
       cta === null ||
@@ -282,8 +362,15 @@ function parseDirections(
     }
     return {
       id,
+      service: service ?? undefined,
       hook,
+      subheadline,
       concept,
+      subheadlineHighlight: resolveSubheadlineHighlight(
+        subheadline,
+        subheadlineHighlight
+      ),
+      exportGroup,
       why,
       visual,
       cta,

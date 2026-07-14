@@ -1,22 +1,23 @@
 import { readFile } from "node:fs/promises";
 
 const referencePath = new URL(
-  "../moons-prototype-22-jun-26.html",
+  "../neo-creative-compass.html",
   import.meta.url
 );
 const html = await readFile(referencePath, "utf8");
 
 const requiredMarkers = [
-  'data-stage="start"',
-  'data-stage="brief"',
-  'data-stage="directions"',
-  'data-stage="studio"',
-  'data-stage="approval"',
-  'data-stage="client"',
-  'data-stage="summary"',
-  'id="overviewView"',
-  "bootstrapRuns();",
-  "render();"
+  'id="studioView"',
+  'id="stageStart"',
+  'id="stageBrief"',
+  'id="stageAngles"',
+  'id="stageBuild"',
+  'id="stageCritique"',
+  'id="stageClient"',
+  'id="stageLearn"',
+  'id="workboardView"',
+  "function init(){",
+  "updateUI();"
 ];
 
 const missing = requiredMarkers.filter((marker) => !html.includes(marker));

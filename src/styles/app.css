@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
-
 @font-face {
   font-family: "Sukhumvit Set";
   src: url("/fonts/Sukhumvit_Set/SukhumvitSet-Text.ttf") format("truetype");
@@ -1532,7 +1530,20 @@ main {
   background: #fff;
 }
 
-.past-work-card > div {
+.past-work-media-placeholder {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 16px;
+  background: var(--accentSoft);
+  color: var(--accentSolid);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.past-work-card > div:not(.past-work-media-placeholder) {
   padding: 10px;
 }
 
@@ -2025,6 +2036,7 @@ main {
 }
 
 .direction-tools,
+.artwork-mode-picker,
 .studio-toolbar {
   display: flex;
   align-items: center;
@@ -2034,16 +2046,25 @@ main {
 }
 
 .direction-tools h3,
+.artwork-mode-picker h3,
 .studio-toolbar h3 {
   margin: 0;
   font-size: 16px;
 }
 
 .direction-tools p,
+.artwork-mode-picker p,
 .studio-toolbar p {
   margin: 3px 0 0;
   font-size: 12.5px;
   color: var(--muted);
+}
+
+.artwork-mode-picker {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
 }
 
 .dir-tool-btns {
@@ -2207,6 +2228,7 @@ main {
   color: var(--red);
   font-size: 11.3px;
   line-height: 1.4;
+  white-space: pre-line;
 }
 
 .output-title,
@@ -3083,6 +3105,7 @@ main {
   }
 
   .direction-tools,
+  .artwork-mode-picker,
   .studio-toolbar {
     align-items: flex-start;
     flex-direction: column;

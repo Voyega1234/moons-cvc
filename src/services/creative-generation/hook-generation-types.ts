@@ -1,11 +1,17 @@
 import type { Brand } from "../../domain/brand";
-import type { CreativeDirection } from "../../domain/creative-run";
+import {
+  serviceTypes,
+  type CreativeDirection,
+  type ServiceType
+} from "../../domain/creative-run";
 import type { WorkflowState } from "../../features/workflow/model";
+import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
 
 export interface HookGenerationInput {
   brand: Brand | null;
   service: WorkflowState["service"];
   quantity: number;
+  contentTypeQuotas?: readonly { service: ServiceType; count: number }[];
   brief: string;
   extraInstructions?: string;
   existingHooks?: readonly { hook: string; concept: string }[];
@@ -18,8 +24,11 @@ export interface HookGenerationRunInput {
 
 export interface RawDirection {
   id?: unknown;
+  service?: unknown;
   hook?: unknown;
+  subheadline?: unknown;
   concept?: unknown;
+  subheadlineHighlight?: unknown;
   why?: unknown;
   visual?: unknown;
   cta?: unknown;
@@ -45,10 +54,27 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
     throw new Error("Hook generation returned an unexpected hook shape.");
   }
 
+  const subheadline =
+    typeof raw.subheadline === "string" && raw.subheadline.trim()
+      ? raw.subheadline
+      : raw.concept;
+
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : `direction-${index + 1}`,
+    service:
+      typeof raw.service === "string" &&
+      serviceTypes.includes(raw.service as ServiceType)
+        ? (raw.service as ServiceType)
+        : undefined,
     hook: raw.hook,
+    subheadline,
     concept: raw.concept,
+    subheadlineHighlight: resolveSubheadlineHighlight(
+      subheadline,
+      typeof raw.subheadlineHighlight === "string"
+        ? raw.subheadlineHighlight
+        : undefined
+    ),
     why:
       typeof raw.why === "string" && raw.why
         ? raw.why

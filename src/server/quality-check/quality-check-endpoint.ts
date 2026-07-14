@@ -1,4 +1,8 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import {
+  CS_QUALITY_CHECKLIST,
+  GD_QUALITY_CHECKLIST
+} from "../../domain/quality-check.js";
 
 type FetchLike = typeof fetch;
 
@@ -22,19 +26,45 @@ export interface QualityCheckEndpointOptions {
 interface QualityCheckOutputInput {
   id: string;
   hook: string;
+  subheadline: string;
   concept: string;
   visual: string;
+  cta: string;
+  caption: string;
+  revisionFeedback: string;
   assetUrl: string;
+}
+
+interface QualityCheckBrandContext {
+  name: string;
+  category: string;
+  brandKit: readonly string[];
+  products: readonly string[];
+  documents: readonly string[];
+  working: readonly string[];
+  avoid: readonly string[];
+}
+
+interface QualityCheckReferenceImage {
+  label: string;
+  url: string;
+  kind: "brand-kit" | "creative-reference";
 }
 
 interface QualityCheckRequest {
   runId: string;
   brief: string;
+  brandContext: QualityCheckBrandContext | null;
+  referenceImages: readonly QualityCheckReferenceImage[];
   outputs: readonly QualityCheckOutputInput[];
 }
 
 interface QualityCheckResult {
   outputId: string;
+  gdPassed: boolean;
+  gdReason: string;
+  csPassed: boolean;
+  csReason: string;
   passed: boolean;
   reason: string;
 }
@@ -131,22 +161,42 @@ function buildContent(
     {
       type: "input_text",
       text: [
-        "คุณคือ QA reviewer สำหรับ creative โฆษณา ตรวจสอบภาพที่สร้างจริงแต่ละภาพเทียบกับ hook, concept, visual direction และ brief",
+        "คุณคือ Quality Agent สำหรับตรวจ Creative โฆษณา ให้ตรวจภาพจริงทุกชิ้นตาม GD Checklist และ CS Checklist ด้านล่าง",
         "",
-        "ตรวจสอบเฉพาะสิ่งที่เห็นได้จริงในภาพ:",
-        "- ข้อความในภาพอ่านไม่ออก ตัวอักษรบิดเบี้ยว หรือปะปนกันจนอ่านไม่รู้เรื่อง",
-        "- เนื้อหาที่ไม่ปลอดภัยต่อแบรนด์ (ไม่เหมาะสม, สร้างความเข้าใจผิด)",
-        "- ภาพไม่ตรงกับ visual direction หรือ concept ที่ระบุไว้อย่างชัดเจน",
+        "GD Checklist",
+        ...GD_QUALITY_CHECKLIST.map((item) => `- ${item}`),
         "",
-        "ห้ามตัดสินจากรสนิยมส่วนตัวหรือความชอบ ตัดสินเฉพาะปัญหาที่ชัดเจนและระบุได้",
-        "ถ้าภาพไม่มีปัญหาที่ชัดเจน ให้ passed เป็น true",
+        "CS Checklist",
+        ...CS_QUALITY_CHECKLIST.map((item) => `- ${item}`),
+        "",
+        "กติกาการตรวจ:",
+        "- ตรวจ GD จากองค์ประกอบ ลำดับสายตา ความประณีต ความสมจริงของภาพ Gen AI และความถูกต้องของสิ่งที่เทียบได้กับ Brand Context/Reference Images",
+        "- ตรวจ CS โดยเทียบ Artwork, Hook, Subheadline, Concept, CTA และ Caption กับ Brief / Objective / Client Context / Revision Feedback",
+        "- ถ้ามี Mockup หรือ Reference Image ให้ตรวจว่างาน Final พัฒนาต่อและไม่ดูแบนหรือเป็น Template เกินไป ถ้าไม่มีหลักฐานเปรียบเทียบ ห้ามตัดสินตกเฉพาะข้อนี้",
+        "- ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า ราคา โปรโมชัน และรายละเอียดจากข้อมูลที่ให้มาเท่านั้น ห้ามเดาหรือสร้างข้อเท็จจริงเพิ่ม",
+        "- ถ้าไม่มี Revision Feedback ให้ถือว่าข้อ Revision ผ่านโดยไม่มีสิ่งให้เทียบ",
+        "- ระบุปัญหาที่เห็นและวิธีแก้แบบสั้น ชัดเจน ห้ามใช้รสนิยมส่วนตัวที่ไม่มีหลักฐาน",
+        "- gdPassed ต้องเป็น true เมื่อไม่มีปัญหา GD ที่พิสูจน์ได้ และ csPassed ต้องเป็น true เมื่อไม่มีปัญหา CS ที่พิสูจน์ได้",
         "",
         `Brief: ${input.brief}`,
+        `Brand Context:\n${formatBrandContext(input.brandContext)}`,
         "",
         "แต่ละภาพจะมี outputId กำกับไว้ ให้ตอบกลับด้วย outputId เดียวกันทุกรายการ"
       ].join("\n")
     }
   ];
+
+  for (const reference of input.referenceImages) {
+    content.push({
+      type: "input_text",
+      text: `Reference Image (${reference.kind}) — ${reference.label}. ใช้เพื่อเปรียบเทียบเท่านั้น ไม่ใช่ Artwork ที่ต้องให้คะแนน`
+    });
+    content.push({
+      type: "input_image",
+      image_url: reference.url,
+      detail: "auto"
+    });
+  }
 
   for (const output of input.outputs) {
     content.push({
@@ -154,8 +204,12 @@ function buildContent(
       text: [
         `outputId: ${output.id}`,
         `Hook: ${output.hook}`,
+        `Subheadline: ${output.subheadline}`,
         `Concept: ${output.concept}`,
-        `Visual direction: ${output.visual}`
+        `Visual direction: ${output.visual}`,
+        `CTA: ${output.cta}`,
+        `Caption: ${output.caption}`,
+        `Revision Feedback: ${output.revisionFeedback || "ไม่มี"}`
       ].join("\n")
     });
     content.push({
@@ -181,10 +235,18 @@ const resultsSchema = {
         additionalProperties: false,
         properties: {
           outputId: { type: "string" },
-          passed: { type: "boolean" },
-          reason: { type: "string" }
+          gdPassed: { type: "boolean" },
+          gdReason: { type: "string" },
+          csPassed: { type: "boolean" },
+          csReason: { type: "string" }
         },
-        required: ["outputId", "passed", "reason"]
+        required: [
+          "outputId",
+          "gdPassed",
+          "gdReason",
+          "csPassed",
+          "csReason"
+        ]
       }
     }
   },
@@ -205,10 +267,33 @@ function parseResults(
   return value.results
     .map((item, index) => {
       const record = readRecord(item, `results[${index}]`);
+      const gdPassed = readBoolean(
+        record.gdPassed,
+        `results[${index}].gdPassed`
+      );
+      const gdReason = readString(
+        record.gdReason,
+        `results[${index}].gdReason`
+      );
+      const csPassed = readBoolean(
+        record.csPassed,
+        `results[${index}].csPassed`
+      );
+      const csReason = readString(
+        record.csReason,
+        `results[${index}].csReason`
+      );
       return {
         outputId: readString(record.outputId, `results[${index}].outputId`),
-        passed: readBoolean(record.passed, `results[${index}].passed`),
-        reason: readString(record.reason, `results[${index}].reason`)
+        gdPassed,
+        gdReason,
+        csPassed,
+        csReason,
+        passed: gdPassed && csPassed,
+        reason: [
+          `GD ${gdPassed ? "ผ่าน" : "ต้องแก้"}: ${gdReason}`,
+          `CS ${csPassed ? "ผ่าน" : "ต้องแก้"}: ${csReason}`
+        ].join("\n")
       };
     })
     .filter((result) => validIds.has(result.outputId));
@@ -226,17 +311,85 @@ function parseRequestBody(value: unknown): QualityCheckRequest {
   return {
     runId,
     brief,
+    brandContext: parseBrandContext(value.brandContext),
+    referenceImages: parseReferenceImages(value.referenceImages),
     outputs: value.outputs.map((item, index) => {
       const record = readRecord(item, `outputs[${index}]`);
       return {
         id: readString(record.id, `outputs[${index}].id`),
         hook: readString(record.hook, `outputs[${index}].hook`),
+        subheadline: readOptionalString(record.subheadline),
         concept: readString(record.concept, `outputs[${index}].concept`),
         visual: readString(record.visual, `outputs[${index}].visual`),
+        cta: readOptionalString(record.cta),
+        caption: readOptionalString(record.caption),
+        revisionFeedback: readOptionalString(record.revisionFeedback),
         assetUrl: readString(record.assetUrl, `outputs[${index}].assetUrl`)
       };
     })
   };
+}
+
+function formatBrandContext(context: QualityCheckBrandContext | null): string {
+  if (!context) return "ไม่มี Brand Context";
+
+  return [
+    `Brand: ${context.name}`,
+    `Category: ${context.category}`,
+    `Brand kit: ${formatList(context.brandKit)}`,
+    `Products: ${formatList(context.products)}`,
+    `Client documents: ${formatList(context.documents)}`,
+    `What works: ${formatList(context.working)}`,
+    `Avoid: ${formatList(context.avoid)}`
+  ].join("\n");
+}
+
+function formatList(items: readonly string[]): string {
+  return items.length ? items.join(" | ") : "ไม่มีข้อมูล";
+}
+
+function parseBrandContext(value: unknown): QualityCheckBrandContext | null {
+  if (value === undefined || value === null) return null;
+  const record = readRecord(value, "brandContext");
+  return {
+    name: readOptionalString(record.name),
+    category: readOptionalString(record.category),
+    brandKit: readStringArray(record.brandKit, "brandContext.brandKit"),
+    products: readStringArray(record.products, "brandContext.products"),
+    documents: readStringArray(record.documents, "brandContext.documents"),
+    working: readStringArray(record.working, "brandContext.working"),
+    avoid: readStringArray(record.avoid, "brandContext.avoid")
+  };
+}
+
+function parseReferenceImages(
+  value: unknown
+): readonly QualityCheckReferenceImage[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("referenceImages must be an array.");
+
+  return value.map((item, index) => {
+    const record = readRecord(item, `referenceImages[${index}]`);
+    const kind = readString(record.kind, `referenceImages[${index}].kind`);
+    if (kind !== "brand-kit" && kind !== "creative-reference") {
+      throw new Error(`referenceImages[${index}].kind is invalid.`);
+    }
+    return {
+      label: readString(record.label, `referenceImages[${index}].label`),
+      url: readString(record.url, `referenceImages[${index}].url`),
+      kind
+    };
+  });
+}
+
+function readStringArray(value: unknown, field: string): readonly string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array.`);
+  return value.map((item, index) => readString(item, `${field}[${index}]`));
+}
+
+function readOptionalString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function extractResponseText(payload: unknown): string {

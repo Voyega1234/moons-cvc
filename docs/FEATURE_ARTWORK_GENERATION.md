@@ -14,6 +14,27 @@ the hooks selected in the Hook step.
 The frontend supports two generation modes: the configured OpenAI backend
 endpoint (which keeps `OPENAI_API_KEY` server-side) or an n8n webhook.
 
+## Per-run artwork modes
+
+The Hook stage has a separate creative-mode selector. This does not replace or
+reconfigure the OpenAI/n8n provider choice above:
+
+1. `standard` — default; uses `agent_prompt/agent_image.md` as the image-agent
+   instruction and appends the run's compact campaign input.
+2. `design-system` — loads
+   `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and applies
+   its brief diagnosis, reference forensics, internal execution-route
+   selection, art-direction blueprint, fidelity rules, and QA discipline before
+   returning the final GPT Image prompt. In Moons this mode always requests a
+   fully composed, publication-ready ad because there is no downstream text,
+   CTA, or logo compositor. Selected campaign references are authoritative for
+   visual medium and design grammar, so photographic/editorial work must not
+   collapse into generic isometric 3D or SaaS illustration.
+
+The selection is stored on the run, is included in new-generation and
+regeneration requests, and survives workspace reloads. Older saved runs without
+the field load as `standard`.
+
 ## Frontend env
 
 ```text
@@ -70,6 +91,8 @@ Frontend sends:
 ```ts
 type ArtworkGenerationRequest = {
   model: "gpt-image-2";
+  artworkMode: "standard" | "design-system";
+  imagePromptModel: "gpt-5.6-terra" | "anthropic/claude-sonnet-4.6";
   runId: string;
   brand: {
     id: string;
@@ -83,7 +106,9 @@ type ArtworkGenerationRequest = {
     id: string;
     hook: string;
     concept: string;
+    why: string;
     visual: string;
+    cta: string;
     caption: string;
   }[];
   textInputs: string[];
@@ -105,10 +130,10 @@ type ArtworkGenerationRequest = {
 };
 ```
 
-`brandLibrary` feeds the image prompt agent below. Brand Learning and a hook's
-`visual` field are deliberately excluded from this request: artwork generation
-uses the hook, concept, rationale, CTA, caption, brief, Brand Kit, products,
-and selected reference images instead.
+`brandLibrary` feeds the image prompt agent below. Brand Learning remains
+excluded, while the approved hook `visual` direction is included alongside the
+hook, concept, rationale, CTA, caption, brief, Brand Kit, products, and selected
+reference images.
 
 ## Response shape
 
@@ -157,8 +182,9 @@ Backend flow (as implemented in
 1. Receive selected hooks and brief from the frontend.
 2. For each selected hook, call the image prompt agent
    (`src/server/artwork-generation/image-prompt-agent.ts`) to write a real
-   production-ready image prompt — see "Image prompt agent" below. Falls
-   back to a deterministic templated prompt if that call fails.
+   production-ready image prompt using the run's selected `artworkMode` — see
+   "Image prompt agent" below. If that call fails, stop the artwork request and
+   return the provider error; do not silently substitute another prompt.
 3. Call OpenAI `gpt-image-2` — `generateImage()` (text-only) or `editImage()`
    (when `referenceImages` is non-empty, via `/v1/images/edits` multipart
    form) in `src/server/artwork-generation/openai-images-client.ts`, using
@@ -214,41 +240,78 @@ image requests at once.
 
 ## Image prompt agent
 
-Status: implemented 2026-07-10. Previously `buildImagePrompt()` was pure
-deterministic string concatenation of the hook/concept/visual/caption/brief
-fields — no model call, no real art direction. It's now a fallback, not the
-primary path.
+Status: implemented 2026-07-10 and corrected 2026-07-14. Previously
+`buildImagePrompt()` was pure deterministic string concatenation of the
+hook/concept/visual/caption/brief fields — no model call and no real art
+direction. That fallback has been removed so a prompt-agent failure cannot
+quietly generate artwork from the wrong instructions.
 
 `resolveImagePrompt()` in `artwork-generation-endpoint.ts` calls
 `generateImagePrompt()` (`image-prompt-agent.ts`) once per selected hook,
-before image generation. That function sends a condensed adaptation of
-`agent_prompt/agent_image.md` (a "Senior Creative Director" meta-prompt: pick
-one selling mechanism, one creative mode, one energy level, one style from a
-20-name performance-ad style library, then run an anti-AI-slop rejection
-check) to the OpenAI Responses API with strict `json_schema` output
-(`{ prompt: string }`), along with the real hook/brief/brand data and —
-the brand's Brand Kit voice/CI (`brandLibrary.brand`) and products
-(`brandLibrary.products`). The agent's returned prompt is what actually gets
-sent to `gpt-image-2`, not the old template.
+before image generation. The agent's returned prompt is what actually gets
+sent to `gpt-image-2`, not the old deterministic template.
 
-The full `agent_prompt/agent_image.md` file (1500+ lines) is **not** read at
-runtime — its instructions were condensed into `buildAgentPrompt()` in
-`image-prompt-agent.ts`, the same "adapt into a TS string, don't read the
-file from disk" pattern hook generation already uses for `agent_hook.md`/
-`agent_seasonal.md` (see `docs/FEATURE_HOOK_GENERATION.md`). The full
-20-style library (names + one-line "best for" hints) and the anti-AI-slop
-checklist were kept close to verbatim since they're the most differentiated,
-non-obvious part of the source prompt; the more generic sections (lighting,
-typography, color theory boilerplate) were compressed, trusting the model's
-own knowledge.
+The two modes intentionally use different input strategies:
 
-If the prompt agent call fails or times out, `resolveImagePrompt()` silently
-falls back to the old deterministic `buildImagePrompt()` so image generation
-still succeeds — the run won't hard-fail because of this extra step, it just
-gets a less art-directed prompt for that one hook.
+- `standard` loads the complete `agent_prompt/agent_image.md` as the
+  authoritative image-agent instruction. It then appends one
+  `AUTHORITATIVE COMPACT CAMPAIGN INPUT` JSON object assembled in
+  `image-prompt-agent.ts`. That runtime object includes only brand
+  name/category/personality/colors/avoid rules, objective, Angle, exact
+  on-image copy, hero visual, compact reference roles, and output density. It
+  does not append the full campaign Brief, Caption, product library, or
+  repeated runtime blocks. Regeneration adds one optional
+  `revisionInstructions` array only when the user entered instructions. The
+  required response field is `finalPrompt`.
+- `design-system` reads
+  `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and retains
+  its `prompt` response field.
 
-Model: `OPENAI_IMAGE_PROMPT_MODEL`, defaults to `gpt-5.6-terra` (same tier as
-hook generation — both are creative-writing-quality-sensitive steps).
+Both prompt Markdown files are bundled into the Vercel function. Standard-mode
+reference files are still attached as image inputs, while their text metadata
+is reduced to `{ id, role, fidelity }`. The design-system mode retains its full
+authoritative runtime block and keeps the approved Hook fixed while evaluating
+distinct visual executions internally.
+
+If the prompt-agent call fails or times out, the endpoint fails closed before
+calling `gpt-image-2`. A sanitized provider response detail is recorded in the
+debug trace and returned as the request error. There is no deterministic or
+hidden fallback prompt.
+
+The user chooses the image prompt writer in Angles, and the choice persists on
+the creative run:
+
+- `gpt-5.6-terra` is the default and calls the OpenAI Responses API using
+  `OPENAI_API_KEY`. `OPENAI_IMAGE_PROMPT_MODEL` can override the deployed
+  OpenAI model.
+- `anthropic/claude-sonnet-4.6` calls OpenRouter's OpenAI-compatible Responses
+  API using `OPENROUTER_API_KEY`. `OPENROUTER_IMAGE_PROMPT_MODEL` can override
+  the deployed OpenRouter model while the UI remains the fixed Claude Sonnet
+  4.6 choice.
+
+This selection changes only the model that writes the production prompt. Final
+artwork still uses OpenAI `gpt-image-2`. Older saved workspaces and older API
+requests without `imagePromptModel` default to `gpt-5.6-terra`.
+
+### Prompt and image request debug logs
+
+Set `ARTWORK_GENERATION_DEBUG_LOG_DIR` (for example,
+`logs/artwork-generation`) to retain the exact generation inputs for each
+selected hook. Each hook writes two sanitized JSON files:
+
+- `*-image-agent.json` records the prompt-writer request to `/v1/responses` or
+  OpenRouter `/api/v1/responses`: provider, model, artwork mode,
+  success/failure status, the complete rendered
+  `input_text`, reference labels/MIME types/byte counts, the JSON response
+  format, and the returned production prompt or readable error.
+- The existing `*.json` file records the final request sent to
+  `/v1/images/generations` or `/v1/images/edits`, including the final prompt
+  after runtime constraints are appended.
+
+The logs never persist OpenAI or OpenRouter authorization headers, API keys, or
+base64 reference-image bodies. Prompt-agent failures are logged and stop final
+image generation. Logging is best-effort: a filesystem error emits a warning
+but does not fail the run.
 
 ## "Use from library" reference picker
 
@@ -290,21 +353,45 @@ previously a complete no-op — `run-qa` just flipped `qaComplete: true` and
 marked every output `"ready"` with no actual check.
 
 `POST /api/quality-check` → `src/server/quality-check/quality-check-endpoint.ts`.
-For each output with a real `assetUrl`, sends the image inline
-(`input_image` content block, same pattern as
-`openai-brand-visual-analyzer.ts`) alongside its hook/concept/visual
-direction and the run's brief, and asks the model to flag only clearly
-identifiable problems: illegible/garbled text baked into the image,
-brand-unsafe content, or an obvious mismatch with the visual direction —
-explicitly not personal taste. Returns `{ outputId, passed, reason }` per
-creative.
+For each output with a real `assetUrl`, the frontend sends the image inline
+alongside the full creative context: Hook, Subheadline, Concept, visual
+direction, CTA, Caption, Brief, brand/category, Brand kit, products, client
+documents, brand-memory working/avoid rules, selected reference images, Brand
+kit image references, and any existing GD/CS/PM revision comments. Duplicate
+reference URLs are removed before the request.
+
+The agent evaluates two independent gates using the shared constants in
+`src/domain/quality-check.ts` so the runtime prompt and Internal QC UI cannot
+drift.
+
+GD Checklist:
+
+- ความสวยงาม องค์ประกอบ และจุดนำสายตา
+- งาน Final ต้องพัฒนาจาก Mockup ไม่แบนหรือดูเหมือน Template เกินไป
+- ภาพ Gen AI ต้องเก็บให้สมูธ ไม่ลอยหรือดูตัดแปะ
+- ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ให้ถูกต้อง
+
+CS Checklist:
+
+- Key Message ชัด และตรง Brief / Objective
+- Visual กับ Caption สื่อสารไปในทิศทางเดียวกัน
+- ข้อมูล ราคา โปรโมชัน คำสะกด และรายละเอียดต่าง ๆ ถูกต้อง
+- งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้
+
+The structured model response is
+`{ outputId, gdPassed, gdReason, csPassed, csReason }`. The endpoint derives
+the existing compatibility result (`passed = gdPassed && csPassed`) and saves
+a two-line GD/CS reason in the output QA note. The agent may only compare facts
+against supplied evidence: missing Mockup/reference data or absent revision
+feedback cannot by itself fail a creative.
 
 The `run-qa` action now carries these results
 (`{ type: "run-qa"; results: readonly QaResult[] }` in `model.ts`) instead of
 being a bare trigger. The reducer sets each output's `status` to `"ready"`
 or `"needs-revision"` per its real result and stores the model's reasoning
 in a new `CreativeOutput.qaNote?: string` field, shown inline on the card
-(`.output-qa-note`) when a creative is flagged. `qaComplete` still just
+(`.output-qa-note`, preserving the GD/CS line break) when a creative is flagged.
+`qaComplete` still just
 means "a check has run," matching the existing rule that outputs can
 proceed to Internal QC review with open flags — the check surfaces problems,
 it doesn't hard-block.
@@ -327,5 +414,6 @@ several images can take a while.
 - `src/server/artwork-generation/artwork-generation-endpoint.ts`
 - `src/server/artwork-generation/image-prompt-agent.ts`
 - `src/server/artwork-generation/openai-images-client.ts`
-- `agent_prompt/agent_image.md` — original source prompt, condensed into
-  `image-prompt-agent.ts`, not read at runtime
+- `agent_prompt/agent_image.md` — authoritative Standard-mode prompt.
+- `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` — runtime
+  source prompt loaded only in Design System mode.

@@ -1,20 +1,36 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 type FetchLike = typeof fetch;
+
+export type ImagePromptProvider = "openai" | "openrouter";
 
 export interface ImagePromptAgentHook {
   hook: string;
   concept: string;
   why: string;
+  visual: string;
   cta: string;
   caption: string;
 }
 
 export interface ImagePromptAgentInput {
-  brand: { name: string; category: string } | null;
+  brand: {
+    name: string;
+    category: string;
+    personality: readonly string[];
+    colors: readonly string[];
+    mustAvoid: readonly string[];
+  } | null;
   service: string;
   brief: string;
   hook: ImagePromptAgentHook;
   textInputs: readonly string[];
   referenceImageLabels: readonly string[];
+  referenceImages: readonly {
+    dataUrl: string;
+    label: string;
+  }[];
   canvasRatio: string;
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
@@ -22,146 +38,333 @@ export interface ImagePromptAgentInput {
   };
 }
 
+export interface ImagePromptAgentTrace {
+  createdAt: string;
+  provider: ImagePromptProvider;
+  endpoint: "/v1/responses" | "/api/v1/responses";
+  model: string;
+  mode: "standard" | "design-system";
+  status: "succeeded" | "failed";
+  inputText: string;
+  responsePrompt?: string;
+  error?: string;
+}
+
+export type ImagePromptAgentTraceWriter = (
+  trace: ImagePromptAgentTrace
+) => Promise<void>;
+
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT =
+  "https://openrouter.ai/api/v1/responses";
 
 export async function generateImagePrompt({
   apiKey,
   model,
+  provider = "openai",
+  mode = "standard",
   fetchImpl,
-  input
+  input,
+  writeTrace,
+  loadAgentImagePrompt = defaultLoadAgentImagePrompt,
+  loadDesignSystemPrompt = defaultLoadDesignSystemPrompt
 }: {
   apiKey: string;
   model?: string;
+  provider?: ImagePromptProvider;
+  mode?: "standard" | "design-system";
   fetchImpl: FetchLike;
   input: ImagePromptAgentInput;
+  writeTrace?: ImagePromptAgentTraceWriter;
+  loadAgentImagePrompt?: () => Promise<string>;
+  loadDesignSystemPrompt?: () => Promise<string>;
 }): Promise<string> {
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: model?.trim() || DEFAULT_MODEL,
-      store: false,
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: buildAgentPrompt(input) }]
+  const resolvedModel = model?.trim() || DEFAULT_MODEL;
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const endpointPath =
+    provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const inputText =
+    mode === "design-system"
+      ? renderDesignSystemPrompt(await loadDesignSystemPrompt(), input)
+      : renderStandardPrompt(await loadAgentImagePrompt(), input);
+  const responseSchema =
+    mode === "standard" ? standardImagePromptSchema : imagePromptSchema;
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        store: false,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: inputText },
+              ...input.referenceImages.map((image) => ({
+                type: "input_image" as const,
+                image_url: image.dataUrl,
+                detail: "high" as const
+              }))
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "moons_image_generation_prompt",
+            strict: true,
+            schema: responseSchema
+          }
         }
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "moons_image_generation_prompt",
-          strict: true,
-          schema: imagePromptSchema
-        }
-      }
-    })
-  });
+      })
+    });
 
-  if (!response.ok) {
-    throw new Error(`OpenAI image prompt agent failed: ${response.status}`);
+    if (!response.ok) {
+      const detail = await readProviderErrorDetail(response);
+      throw new Error(
+        `${providerLabel} image prompt agent failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      );
+    }
+
+    const payload = await readJsonResponse(
+      response,
+      `${providerLabel} image prompt agent`
+    );
+    const text = extractResponseText(payload);
+    const parsed = JSON.parse(text) as {
+      prompt?: unknown;
+      finalPrompt?: unknown;
+    };
+    const prompt =
+      mode === "standard"
+        ? parsed.finalPrompt ?? parsed.prompt
+        : parsed.prompt ?? parsed.finalPrompt;
+
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      throw new Error(
+        `${providerLabel} image prompt agent returned an empty prompt.`
+      );
+    }
+
+    const responsePrompt = prompt.trim();
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
+      mode,
+      status: "succeeded",
+      inputText,
+      responsePrompt
+    });
+    return responsePrompt;
+  } catch (error) {
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
+      mode,
+      status: "failed",
+      inputText,
+      error: readableError(error)
+    });
+    throw error;
   }
-
-  const payload = await readJsonResponse(response, "OpenAI image prompt agent");
-  const text = extractResponseText(payload);
-  const parsed = JSON.parse(text) as { prompt?: unknown };
-
-  if (typeof parsed.prompt !== "string" || !parsed.prompt.trim()) {
-    throw new Error("OpenAI image prompt agent returned an empty prompt.");
-  }
-
-  return parsed.prompt.trim();
 }
 
-const STYLE_LIBRARY: readonly [string, string][] = [
-  ["Luxury Typography", "premium beauty, wellness, hospitality, finance, high-value products"],
-  ["Japandi", "wellness, home, mattress, skincare, natural products, mindful lifestyle"],
-  ["Art Deco", "premium events, luxury property, jewelry, nightlife, upscale food"],
-  ["Bauhaus", "technology, education, architecture, B2B, structured retail"],
-  ["Neo-Brutalism", "direct response, SaaS, agencies, youth brands, lead generation"],
-  ["Pop Art", "retail, FMCG, food, snacks, flash sales, mass-market promotions"],
-  ["Modular Typography", "headline-led ads, automotive, technology, events, B2B"],
-  ["Mixed Media", "social-native campaigns, travel, fashion, youth lifestyle"],
-  ["Surrealism", "service metaphors, technology, finance, transformation, awareness"],
-  ["Rebus / Visual Pun", "service advertising, education, B2B, witty awareness campaigns"],
-  ["Utilitarian", "automotive, engineering, clinics, technical services, proof-led B2B"],
-  ["Bento Box", "SaaS, service packages, ecosystems, multi-benefit campaigns"],
-  ["Glassmorphism", "SaaS, mobile apps, fintech, digital services"],
-  ["Tenebrism", "premium automotive, fragrance, dramatic launches, premium food"],
-  ["Mid-Century Modern", "home, travel, food, family products, optimistic lifestyle"],
-  ["Scrapbook", "UGC-inspired ads, testimonials, community, creators"],
-  ["Y2K", "Gen Z fashion, beauty, entertainment, youth technology"],
-  ["Neo Frutiger Aero", "playful technology, family apps, youth fintech"],
-  ["Kawaii", "children's products, family campaigns, snacks, playful education"],
-  ["Graffiti / Street Graphic", "streetwear, sports, music, youth events"]
-];
+async function writeTraceSafely(
+  writeTrace: ImagePromptAgentTraceWriter | undefined,
+  trace: ImagePromptAgentTrace
+): Promise<void> {
+  if (!writeTrace) return;
 
-function buildAgentPrompt(input: ImagePromptAgentInput): string {
+  try {
+    await writeTrace(trace);
+  } catch (error) {
+    console.warn("Could not write image prompt agent debug trace.", error);
+  }
+}
+
+function readableError(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown image prompt agent error.";
+}
+
+async function defaultLoadDesignSystemPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "graphic-ad-design-system",
+      "03_MASTER_CREATIVE_DIRECTOR_AGENT.md"
+    ),
+    "utf8"
+  );
+}
+
+async function defaultLoadAgentImagePrompt(): Promise<string> {
+  return readFile(join(process.cwd(), "agent_prompt", "agent_image.md"), "utf8");
+}
+
+function renderStandardPrompt(
+  source: string,
+  input: ImagePromptAgentInput
+): string {
+  const compactInput = {
+    brand: {
+      name: input.brand?.name ?? "Unknown",
+      category: input.brand?.category ?? "Unknown",
+      personality: input.brand?.personality ?? [],
+      colors: input.brand?.colors ?? [],
+      mustAvoid: input.brand?.mustAvoid ?? []
+    },
+    objective: input.hook.why || input.brief,
+    angle: {
+      headline: input.hook.hook,
+      concept: input.hook.concept,
+      visualDirection: input.hook.visual,
+      cta: input.hook.cta
+    },
+    onImageCopy: {
+      headline: input.hook.hook,
+      supportingText: null,
+      cta: input.hook.cta,
+      maximumTextBlocks: 2
+    },
+    heroVisual: {
+      subject: input.hook.visual,
+      visualMode: "conceptual graphic advertising",
+      mustShow: [input.hook.concept],
+      mustNotShow: input.brand?.mustAvoid ?? []
+    },
+    references: input.referenceImages.map((image, index) =>
+      buildCompactReference(image.label, index)
+    ),
+    output: {
+      service: compactServiceName(input.service),
+      ratio: input.canvasRatio,
+      copyDensity: "low",
+      compositionDensity: "medium-low",
+      visualFreedom: 65
+    },
+    ...(input.textInputs.length
+      ? { revisionInstructions: input.textInputs }
+      : {})
+  };
+
   return [
-    "You are a Senior Creative Director, Art Director, and AI Image Prompt Director.",
+    source.trim(),
     "",
-    "Transform the brief below into ONE final production-ready prompt for the GPT Image model to create a complete paid social advertising image.",
-    "",
-    "The result must look like a finished agency campaign key visual. It must NOT look like: a generic AI-generated ad, a Canva template, a product pasted over a gradient, a decorative moodboard, an unfinished concept, or a layout reused across unrelated brands.",
-    "",
-    "CONCRETE-DESIGN RULE: never rely on abstract words alone (premium, modern, dynamic, scroll-stopping...). Translate every such word into visible decisions: hero size and placement, camera angle, cropping, font personality, headline scale, background function, color hierarchy, lighting direction, shadow softness, CTA placement.",
-    "",
-    "SILENT INTERNAL PROCESS (do not output this reasoning):",
-    "1. Reduce the brief to: the single message the viewer must understand first, the strongest audience desire, the main commercial promise, the required action.",
-    "2. Choose ONE selling mechanism (visible benefit / problem-solution / transformation / proof / offer / emotional outcome / metaphor).",
-    "3. Choose ONE creative mode (hero product ad / offer-led / lifestyle benefit / problem-solution / trust ad / premium editorial / technical authority / social-native, etc).",
-    "4. Choose ONE energy level (calm premium / balanced commercial / high-energy promotional) and translate it into type scale, contrast, density, CTA intensity.",
-    "5. Internally sketch three different composition concepts, score each for one-second clarity, selling strength, product prominence, brand fit, and mobile readability. Keep only the strongest. Do not output the alternatives.",
-    "",
-    "STYLE SELECTION: choose exactly ONE primary style from this library (name — best for), and let it control at least 80% of the visual system. Do not blend two styles equally.",
-    ...STYLE_LIBRARY.map(([name, bestFor]) => `- ${name} — ${bestFor}`),
-    "",
-    "ANTI-AI-SLOP CHECK — reject and redesign internally if the concept relies on any of these without strategic reason: product floating over a generic gradient, hard 50/50 split layout, image-on-top-text-block-below, centered product surrounded by icons, random neon glow, glossy plastic 3D objects, floating geometric shapes, meaningless particles, fake futuristic UI, excessive lens flare/bokeh, unreadable packaging labels, duplicated products, incorrect anatomy, inconsistent shadows, unrelated scenery, stock-photo expressions, every element centered, logo larger than the selling message, or a composition reusable unchanged for another brand.",
-    "",
-    "THAI TEXT: if any provided copy is in Thai, use it exactly as given — do not rewrite, paraphrase, or invent filler text; preserve spelling, punctuation, tone marks, and line breaks based on meaning.",
-    "",
-    buildInputBrief(input),
-    "",
-    "Return only the final prompt via the schema field. The final prompt must explicitly cover: canvas ratio, selected creative mode and energy level, selected style and its concrete translation, single selling message and visual hook, hero visual (what/scale/placement/camera angle), layout archetype and visual axis, typography (personality, headline shape, emphasized keywords, CTA treatment), background function, color hierarchy, lighting direction, material/texture, product and logo fidelity, and confirmation it avoids the anti-AI-slop list above. Write it as one coherent production instruction in English, not a list of vague adjectives."
+    "AUTHORITATIVE COMPACT CAMPAIGN INPUT",
+    JSON.stringify(compactInput, null, 2)
   ].join("\n");
 }
 
-function buildInputBrief(input: ImagePromptAgentInput): string {
+function buildCompactReference(label: string, index: number) {
+  const normalized = label.trim().toLowerCase();
+  const id =
+    normalized
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-|-$/g, "") || `reference-${index + 1}`;
+
+  if (/logo|โลโก้/.test(normalized)) {
+    return { id, role: "logo", fidelity: "exact" };
+  }
+  if (/product|packshot|สินค้า/.test(normalized)) {
+    return { id, role: "product", fidelity: "exact" };
+  }
+  if (/brand|guideline|ci|style|แบรนด์|คู่มือ|ซีไอ/.test(normalized)) {
+    return { id, role: "brand-system", fidelity: "inspired" };
+  }
+  if (/layout|เลย์เอาต์|จัดวาง/.test(normalized)) {
+    return { id, role: "layout", fidelity: "inspired" };
+  }
+  return { id, role: "reference", fidelity: "inspired" };
+}
+
+function compactServiceName(service: string): string {
+  if (service === "single-static") return "static";
+  return service;
+}
+
+function renderDesignSystemPrompt(
+  source: string,
+  input: ImagePromptAgentInput
+): string {
   return [
-    "## Input brief",
-    `Brand: ${input.brand?.name ?? "Unknown"} (${input.brand?.category ?? "Unknown category"})`,
-    `Service / format: ${input.service}`,
+    extractPromptBody(source),
+    "",
+    "RUNTIME EXECUTION CONTRACT — DESIGN-SYSTEM MODE",
+    "Use the complete creative-direction workflow above internally. The selected hook and strategic concept below are already approved; keep them fixed while considering three genuinely distinct visual executions, then select the strongest execution.",
+    "The references are authoritative for the campaign's visual medium and design grammar. A new execution means a new idea and composition inside that medium—not replacing photographic/editorial montage with isometric 3D, toy-like miniatures, generic UI cards, or clean SaaS illustration. Match the references' typography dominance, photographic-versus-illustrative balance, image scale, crop energy, density, texture, grain, and compositing character before applying brand colors.",
+    "Neo does not have a downstream typography or logo compositor in this workflow. The final image prompt must request one fully composed, publication-ready advertisement containing the exact approved headline and CTA. Never request a textless base visual, blank headline zone, empty CTA zone, empty logo zone, or later deterministic assembly.",
+    "Do not return the internal diagnosis, reference analysis, routes, scores, blueprint, or QA notes. Return only one final English GPT Image 2 generation prompt in the required JSON schema field.",
+    buildRuntimeInputBlock(input)
+  ].join("\n");
+}
+
+function extractPromptBody(source: string): string {
+  const match = source.match(/```text\s*([\s\S]*?)\s*```/);
+  return match?.[1]?.trim() || source.trim();
+}
+
+function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
+  const brandInformation = [
+    ...input.brandLibrary.brand.map(
+      (item) => `${item.title}: ${item.description}`
+    ),
+    ...input.brandLibrary.products.map(
+      (item) => `${item.title}: ${item.description}`
+    )
+  ];
+  const referenceMap = input.referenceImages.length
+    ? input.referenceImages.map(
+        (image, index) =>
+          `Image ${index + 1} — ${image.label || input.referenceImageLabels[index] || "Reference image"}`
+      )
+    : ["No reference images are attached."];
+
+  return [
+    "",
+    "AUTHORITATIVE RUN INPUT",
+    `Brand: ${input.brand?.name ?? "Unknown"}`,
+    `Category: ${input.brand?.category ?? "Unknown"}`,
+    `Service: ${input.service}`,
     `Canvas ratio: ${input.canvasRatio}`,
     "",
-    `Hook (primary headline idea): ${input.hook.hook}`,
-    `Concept: ${input.hook.concept}`,
+    "Campaign brief:",
+    input.brief || "Not provided.",
+    "",
+    "Approved hook and concept:",
+    `Required headline: ${input.hook.hook}`,
+    `Strategic concept: ${input.hook.concept}`,
     `Why it works: ${input.hook.why}`,
+    `Approved visual direction: ${input.hook.visual}`,
     `CTA: ${input.hook.cta}`,
-    `Caption / supporting copy: ${input.hook.caption}`,
+    `Caption context: ${input.hook.caption}`,
     "",
-    `Brief: ${input.brief}`,
-    ...(input.textInputs.length
-      ? ["", "Extra instructions:", ...input.textInputs.map((item) => `- ${item}`)]
-      : []),
+    "Additional user instructions:",
+    input.textInputs.length ? input.textInputs.join("\n") : "None.",
     "",
-    "Brand personality / voice / CI (from Brand Kit):",
-    ...(input.brandLibrary.brand.length
-      ? input.brandLibrary.brand.map((item) => `- ${item.title}: ${item.description}`)
-      : ["- Not provided."]),
+    "Brand and product library:",
+    brandInformation.length ? brandInformation.join("\n") : "Not provided.",
     "",
-    "Products / offers (from Brand Memory):",
-    ...(input.brandLibrary.products.length
-      ? input.brandLibrary.products.map((item) => `- ${item.title}: ${item.description}`)
-      : ["- Not provided."]),
+    "Attached reference map:",
+    ...referenceMap,
+    "Use each image only for the role implied by its label. Do not average all references into one vague style.",
     "",
-    "Reference images attached (already provided to the model as image input, describe how to use them, do not re-describe their content from imagination):",
-    ...(input.referenceImageLabels.length
-      ? input.referenceImageLabels.map((label) => `- ${label}`)
-      : ["- None attached."])
+    "Non-negotiable constraints:",
+    "Use supplied Thai copy exactly. Do not invent claims, prices, logos, certifications, or unreadable text.",
+    "Reference images guide design language and asset fidelity; they do not override the approved hook or strategic concept."
   ].join("\n");
 }
 
@@ -173,6 +376,41 @@ const imagePromptSchema = {
   },
   required: ["prompt"]
 } as const;
+
+const standardImagePromptSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    finalPrompt: { type: "string" }
+  },
+  required: ["finalPrompt"]
+} as const;
+
+async function readProviderErrorDetail(response: Response): Promise<string> {
+  const text = await response.text();
+  if (!text.trim()) return "";
+
+  let detail = text;
+  try {
+    const payload = JSON.parse(text) as unknown;
+    if (isRecord(payload)) {
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (typeof payload.error === "string") {
+        detail = payload.error;
+      } else if (
+        isRecord(payload.error) &&
+        typeof payload.error.message === "string"
+      ) {
+        detail = payload.error.message;
+      }
+    }
+  } catch {
+    // Plain-text provider errors are already safe to summarize below.
+  }
+
+  return detail.replace(/\s+/g, " ").trim().slice(0, 300);
+}
 
 function extractResponseText(payload: unknown): string {
   if (isRecord(payload) && typeof payload.output_text === "string") {

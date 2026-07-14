@@ -1,12 +1,24 @@
 import { createClient } from "@supabase/supabase-js";
-import { emptyApprovalComments, emptyApprovalGate } from "../../domain/creative-run.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  artworkModes,
+  emptyApprovalComments,
+  emptyApprovalGate,
+  imagePromptModels,
+  outputFormatForService
+} from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type {
   ArtworkGenerationRequest,
   ArtworkGenerationResponse
 } from "../../services/artwork-generation/openai-image-generation.js";
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
-import { generateImagePrompt } from "./image-prompt-agent.js";
+import {
+  generateImagePrompt,
+  type ImagePromptProvider,
+  type ImagePromptAgentTrace
+} from "./image-prompt-agent.js";
 import {
   editImage,
   generateImage,
@@ -21,6 +33,9 @@ export interface ArtworkGenerationEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_GENERATION_MODEL?: string;
   OPENAI_IMAGE_PROMPT_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_IMAGE_PROMPT_MODEL?: string;
+  ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -40,6 +55,10 @@ export interface ArtworkStorageClient {
         data: { signedUrl: string } | null;
         error: { message: string } | null;
       }>;
+      download(path: string): Promise<{
+        data: Blob | null;
+        error: { message: string } | null;
+      }>;
     };
   };
 }
@@ -48,6 +67,7 @@ export interface ArtworkGenerationEndpointOptions {
   request: Request;
   env: ArtworkGenerationEndpointEnv;
   fetchImpl?: FetchLike;
+  writeDebugLog?: ArtworkGenerationDebugLogger;
   createStorageClient?: (options: {
     supabaseUrl: string;
     supabaseAnonKey: string;
@@ -59,10 +79,74 @@ const ARTWORK_BUCKET = "creative-assets";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const ARTWORK_GENERATION_CONCURRENCY = 2;
 
+interface ImageRequestDebugLog {
+  createdAt: string;
+  model: string;
+  directionId: string;
+  request:
+    | {
+        endpoint: "/v1/images/generations";
+        body: {
+          model: string;
+          prompt: string;
+          n: 1;
+          size: "1024x1024";
+          quality: "medium";
+        };
+      }
+    | {
+        endpoint: "/v1/images/edits";
+        multipartFields: {
+          model: string;
+          prompt: string;
+          size: "1024x1024";
+          images: readonly { label?: string; mimeType: string; bytes: number }[];
+        };
+      };
+}
+
+interface ImagePromptAgentDebugLog {
+  kind: "image-prompt-agent";
+  createdAt: string;
+  provider: ImagePromptProvider;
+  model: string;
+  directionId: string;
+  mode: "standard" | "design-system";
+  status: "succeeded" | "failed";
+  request: {
+    endpoint: "/v1/responses" | "/api/v1/responses";
+    store: false;
+    inputText: string;
+    referenceImages: readonly {
+      label?: string;
+      mimeType: string;
+      bytes: number;
+      detail: "high";
+    }[];
+    responseFormat: {
+      type: "json_schema";
+      name: "moons_image_generation_prompt";
+      strict: true;
+    };
+  };
+  response?: { prompt: string };
+  error?: string;
+}
+
+type ArtworkGenerationDebugLog =
+  | ImageRequestDebugLog
+  | ImagePromptAgentDebugLog;
+
+type ArtworkGenerationDebugLogger = (
+  directory: string | undefined,
+  entry: ArtworkGenerationDebugLog
+) => Promise<void>;
+
 export async function handleArtworkGenerationRequest({
   request,
   env,
   fetchImpl = fetch,
+  writeDebugLog = writeImageRequestDebugLog,
   createStorageClient = defaultCreateStorageClient
 }: ArtworkGenerationEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
@@ -100,7 +184,24 @@ export async function handleArtworkGenerationRequest({
 
     const input = parseRequestBody(await request.json());
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
-    const promptModel = env.OPENAI_IMAGE_PROMPT_MODEL?.trim();
+    const promptProvider: ImagePromptProvider =
+      input.imagePromptModel === "anthropic/claude-sonnet-4.6"
+        ? "openrouter"
+        : "openai";
+    const promptApiKey =
+      promptProvider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : apiKey;
+    if (!promptApiKey) {
+      return jsonResponse(
+        { ok: false, error: "OPENROUTER_API_KEY is required." },
+        500
+      );
+    }
+    const promptModel =
+      promptProvider === "openrouter"
+        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
+        : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
 
     const storage = createStorageClient({
       supabaseUrl,
@@ -113,7 +214,12 @@ export async function handleArtworkGenerationRequest({
       apiKey,
       model,
       promptModel,
+      promptProvider,
+      promptApiKey,
+      debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),
+      writeDebugLog,
       storage,
+      supabaseUrl,
       fetchImpl
     });
 
@@ -143,22 +249,34 @@ async function generateOutputsForSelectedHooks({
   apiKey,
   model,
   promptModel,
+  promptProvider,
+  promptApiKey,
+  debugLogDirectory,
+  writeDebugLog,
   storage,
+  supabaseUrl,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
   apiKey: string;
   model: string;
   promptModel?: string;
+  promptProvider: ImagePromptProvider;
+  promptApiKey: string;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
   storage: ArtworkStorageClient;
+  supabaseUrl: string;
   fetchImpl: FetchLike;
 }): Promise<readonly ArtworkOutput[]> {
   const references = await resolveReferenceImages(
     input.referenceImages,
-    fetchImpl
+    fetchImpl,
+    storage,
+    supabaseUrl
   );
 
-  const format = formatForService(input.service);
+  const format = outputFormatForService(input.service);
   return mapWithConcurrency(
     input.selectedHooks,
     ARTWORK_GENERATION_CONCURRENCY,
@@ -169,6 +287,10 @@ async function generateOutputsForSelectedHooks({
         apiKey,
         model,
         promptModel,
+        promptProvider,
+        promptApiKey,
+        debugLogDirectory,
+        writeDebugLog,
         references,
         format,
         storage,
@@ -183,6 +305,10 @@ async function generateOutputForHook({
   apiKey,
   model,
   promptModel,
+  promptProvider,
+  promptApiKey,
+  debugLogDirectory,
+  writeDebugLog,
   references,
   format,
   storage,
@@ -193,6 +319,10 @@ async function generateOutputForHook({
   apiKey: string;
   model: string;
   promptModel?: string;
+  promptProvider: ImagePromptProvider;
+  promptApiKey: string;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
   format: string;
   storage: ArtworkStorageClient;
@@ -201,16 +331,44 @@ async function generateOutputForHook({
   const prompt = await resolveImagePrompt({
     input,
     hook,
-    apiKey,
     promptModel,
+    promptProvider,
+    promptApiKey,
+    debugLogDirectory,
+    writeDebugLog,
+    references,
     fetchImpl
   });
+  const imagePrompt = (input.artworkMode === "design-system"
+    ? [
+        prompt,
+        buildReferenceFidelityInstruction(references, "design-system"),
+        buildConceptAlignmentInstruction(hook),
+        buildDesignSystemFinalArtworkInstruction(hook)
+      ]
+    : [
+        buildReferenceFidelityInstruction(references, "standard"),
+        buildConceptAlignmentInstruction(hook),
+        prompt
+      ])
+    .filter(Boolean)
+    .join("\n\n");
+  await writeDebugLog(
+    debugLogDirectory,
+    buildImageRequestDebugLog({
+      model,
+      hook,
+      prompt: imagePrompt,
+      size: input.output.size,
+      references
+    })
+  );
   const image =
     references.length > 0
       ? await editImage({
           apiKey,
           model,
-          prompt,
+          prompt: imagePrompt,
           size: input.output.size,
           referenceImages: references,
           fetchImpl
@@ -218,7 +376,7 @@ async function generateOutputForHook({
       : await generateImage({
           apiKey,
           model,
-          prompt,
+          prompt: imagePrompt,
           size: input.output.size,
           fetchImpl
         });
@@ -262,6 +420,111 @@ async function generateOutputForHook({
   };
 }
 
+function buildReferenceFidelityInstruction(
+  references: readonly ReferenceImageInput[],
+  mode: ArtworkGenerationRequest["artworkMode"]
+): string | null {
+  if (!references.length) return null;
+
+  const referenceMap = references.map(
+    (reference, index) =>
+      `Image ${index + 1} — ${reference.label ?? "Reference image"}`
+  );
+
+  return [
+    "REFERENCE-INFORMED DESIGN — highest priority:",
+    ...referenceMap,
+    "When the attached references are from the same client account, use them as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish.",
+    mode === "design-system"
+      ? "The dominant visual medium shown by the references is authoritative. If they are photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family. A new execution means a new message-specific idea and composition—not replacing the reference medium with simplified isometric 3D, toy-like objects, miniature SaaS scenes, generic UI cards, or sterile product renders."
+      : "Create a distinctly new execution for this brief. Invent a different visual metaphor, hero subject, composition, information arrangement, and layout geometry; never reproduce the reference's objects, scene, text placement, visual sequence, or recognisable layout.",
+    "Do not default to translucent UI cards, floating glass objects, generic search screens, phones, or blue glow merely because the category involves AI, SEO, or technology. Use those only when they are truly the strongest new visual metaphor. Use the new brief and supplied copy; do not reproduce readable reference text, logos, or artwork."
+  ].join("\n");
+}
+
+function buildConceptAlignmentInstruction(hook: SelectedHook): string {
+  return [
+    "CONCEPT ALIGNMENT — highest priority:",
+    `Required headline: ${hook.hook}`,
+    `Strategic concept: ${hook.concept}`,
+    `Reason this concept works: ${hook.why}`,
+    `Approved visual direction: ${hook.visual}`,
+    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. The references are style guidance only and must not override the concept."
+  ].join("\n");
+}
+
+function buildDesignSystemFinalArtworkInstruction(hook: SelectedHook): string {
+  return [
+    "DESIGN-SYSTEM FINAL ARTWORK CONTRACT — overrides conflicting earlier instructions:",
+    "Return one fully composed, publication-ready advertisement. This workflow has no downstream typography, CTA, or logo assembly step.",
+    `Render this exact headline once, clearly and prominently: “${hook.hook}”`,
+    `Render this exact CTA once: “${hook.cta}”`,
+    "Integrate typography as a dominant compositional element, following the attached campaign references' Thai type scale, line-break rhythm, density, alignment, and contrast.",
+    "Use an attached official logo image as the authoritative logo when one is supplied; do not invent or redraw a logo.",
+    "Do not create a textless base visual. Do not leave blank headline, CTA, or logo-safe zones for later assembly. Do not replace the reference medium with generic isometric 3D or miniature UI objects."
+  ].join("\n");
+}
+
+function buildImageRequestDebugLog({
+  model,
+  hook,
+  prompt,
+  size,
+  references
+}: {
+  model: string;
+  hook: SelectedHook;
+  prompt: string;
+  size: "1024x1024";
+  references: readonly ReferenceImageInput[];
+}): ImageRequestDebugLog {
+  return {
+    createdAt: new Date().toISOString(),
+    model,
+    directionId: hook.id,
+    request:
+      references.length
+        ? {
+            endpoint: "/v1/images/edits",
+            multipartFields: {
+              model,
+              prompt,
+              size,
+              images: references.map((reference) => ({
+                ...(reference.label ? { label: reference.label } : {}),
+                mimeType: reference.mimeType,
+                bytes: reference.bytes.length
+              }))
+            }
+          }
+        : {
+            endpoint: "/v1/images/generations",
+            body: { model, prompt, n: 1, size, quality: "medium" }
+          }
+  };
+}
+
+async function writeImageRequestDebugLog(
+  directory: string | undefined,
+  entry: ArtworkGenerationDebugLog
+): Promise<void> {
+  if (!directory) return;
+
+  try {
+    const logDirectory = join(process.cwd(), directory);
+    await mkdir(logDirectory, { recursive: true });
+    const suffix = "kind" in entry ? "-image-agent" : "";
+    const filename = `${entry.createdAt.replaceAll(/[:.]/g, "-")}-${safePathSegment(entry.directionId)}${suffix}.json`;
+    await writeFile(
+      join(logDirectory, filename),
+      `${JSON.stringify(entry, null, 2)}\n`,
+      "utf8"
+    );
+  } catch (error) {
+    console.warn("Could not write artwork-generation debug log.", error);
+  }
+}
+
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
@@ -286,15 +549,28 @@ async function mapWithConcurrency<T, R>(
 
 async function resolveReferenceImages(
   referenceImages: ArtworkGenerationRequest["referenceImages"],
-  fetchImpl: FetchLike
+  fetchImpl: FetchLike,
+  storage: ArtworkStorageClient,
+  supabaseUrl: string
 ): Promise<readonly ReferenceImageInput[]> {
   return Promise.all(
     referenceImages.map(async (reference) => {
       if (reference.kind === "url") {
         const response = await fetchImpl(reference.url);
         if (!response.ok) {
+          const storedReference = await recoverSupabaseReferenceImage({
+            url: reference.url,
+            storage,
+            supabaseUrl
+          });
+          if (storedReference) {
+            return {
+              ...storedReference,
+              ...(reference.label ? { label: reference.label } : {})
+            };
+          }
           throw new Error(
-            `Could not download reference image: ${response.status}`
+            `Could not download reference image "${reference.label ?? "Untitled"}": ${response.status}`
           );
         }
         const mimeType =
@@ -303,14 +579,16 @@ async function resolveReferenceImages(
           "image/png";
         return {
           bytes: Buffer.from(await response.arrayBuffer()),
-          mimeType
+          mimeType,
+          ...(reference.label ? { label: reference.label } : {})
         };
       }
 
       if (reference.kind === "base64") {
         return {
           bytes: Buffer.from(reference.data, "base64"),
-          mimeType: reference.mediaType
+          mimeType: reference.mediaType,
+          ...(reference.label ? { label: reference.label } : {})
         };
       }
 
@@ -321,66 +599,139 @@ async function resolveReferenceImages(
   );
 }
 
-function formatForService(service: ArtworkGenerationRequest["service"]): string {
-  return service === "ugc-video" ? "9:16 UGC" : "1:1 Static";
+async function recoverSupabaseReferenceImage({
+  url,
+  storage,
+  supabaseUrl
+}: {
+  url: string;
+  storage: ArtworkStorageClient;
+  supabaseUrl: string;
+}): Promise<ReferenceImageInput | null> {
+  const location = parseSupabaseSignedStorageUrl(url, supabaseUrl);
+  if (!location) return null;
+
+  const result = await storage.storage.from(location.bucket).download(location.path);
+  if (result.error || !result.data) return null;
+
+  return {
+    bytes: Buffer.from(await result.data.arrayBuffer()),
+    mimeType: result.data.type || "image/png"
+  };
+}
+
+function parseSupabaseSignedStorageUrl(
+  value: string,
+  supabaseUrl: string
+): { bucket: string; path: string } | null {
+  try {
+    const url = new URL(value);
+    const projectUrl = new URL(supabaseUrl);
+    const prefix = "/storage/v1/object/sign/";
+    if (url.origin !== projectUrl.origin || !url.pathname.startsWith(prefix)) {
+      return null;
+    }
+
+    const [bucket, ...pathParts] = url.pathname.slice(prefix.length).split("/");
+    if (!bucket || !pathParts.length) return null;
+    return {
+      bucket: decodeURIComponent(bucket),
+      path: pathParts.map((part) => decodeURIComponent(part)).join("/")
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function resolveImagePrompt({
   input,
   hook,
-  apiKey,
   promptModel,
+  promptProvider,
+  promptApiKey,
+  debugLogDirectory,
+  writeDebugLog,
+  references,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
-  apiKey: string;
   promptModel?: string;
+  promptProvider: ImagePromptProvider;
+  promptApiKey: string;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  references: readonly ReferenceImageInput[];
   fetchImpl: FetchLike;
 }): Promise<string> {
-  try {
-    return await generateImagePrompt({
-      apiKey,
-      model: promptModel,
-      fetchImpl,
-      input: {
-        brand: input.brand,
-        service: input.service,
-        brief: input.brief,
-        hook,
-        textInputs: input.textInputs,
-        referenceImageLabels: input.referenceImages.map(
-          (reference) => reference.label ?? "Reference image"
-        ),
-        canvasRatio: "1:1",
-        brandLibrary: {
-          brand: input.brandLibrary.brand,
-          products: input.brandLibrary.products
-        }
+  return generateImagePrompt({
+    apiKey: promptApiKey,
+    model: promptModel,
+    provider: promptProvider,
+    mode: input.artworkMode,
+    fetchImpl,
+    writeTrace: async (trace) => {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildImagePromptAgentDebugLog(trace, hook.id, references)
+      );
+    },
+    input: {
+      brand: input.brand,
+      service: input.service,
+      brief: input.brief,
+      hook,
+      textInputs: input.textInputs,
+      referenceImageLabels: input.referenceImages.map(
+        (reference) => reference.label ?? "Reference image"
+      ),
+      referenceImages: references.map((reference, index) => ({
+        dataUrl: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+        label: input.referenceImages[index]?.label ?? "Reference image"
+      })),
+      canvasRatio: "1:1",
+      brandLibrary: {
+        brand: input.brandLibrary.brand,
+        products: input.brandLibrary.products
       }
-    });
-  } catch {
-    // Fall back to the deterministic prompt so image generation still
-    // succeeds if the prompt agent call fails or times out.
-    return buildImagePrompt(input, hook);
-  }
+    }
+  });
 }
 
-function buildImagePrompt(
-  input: ArtworkGenerationRequest,
-  hook: SelectedHook
-): string {
-  return [
-    `Create a paid social ad visual for ${input.brand?.name ?? "the brand"}${
-      input.brand?.category ? ` (${input.brand.category})` : ""
-    }.`,
-    `Hook: ${hook.hook}`,
-    `Concept: ${hook.concept}`,
-    `Caption context: ${hook.caption}`,
-    `Brief: ${input.brief}`,
-    ...input.textInputs,
-    "Design a clean, brand-safe, scroll-stopping social ad image that matches the hook, concept, caption, and brief. Avoid adding text overlays unless the supplied copy requires them."
-  ].join("\n");
+function buildImagePromptAgentDebugLog(
+  trace: ImagePromptAgentTrace,
+  directionId: string,
+  references: readonly ReferenceImageInput[]
+): ImagePromptAgentDebugLog {
+  return {
+    kind: "image-prompt-agent",
+    createdAt: trace.createdAt,
+    provider: trace.provider,
+    model: trace.model,
+    directionId,
+    mode: trace.mode,
+    status: trace.status,
+    request: {
+      endpoint: trace.endpoint,
+      store: false,
+      inputText: trace.inputText,
+      referenceImages: references.map((reference) => ({
+        ...(reference.label ? { label: reference.label } : {}),
+        mimeType: reference.mimeType,
+        bytes: reference.bytes.length,
+        detail: "high"
+      })),
+      responseFormat: {
+        type: "json_schema",
+        name: "moons_image_generation_prompt",
+        strict: true
+      }
+    },
+    ...(trace.responsePrompt
+      ? { response: { prompt: trace.responsePrompt } }
+      : {}),
+    ...(trace.error ? { error: trace.error } : {})
+  };
 }
 
 function buildStoragePath({
@@ -416,6 +767,24 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
   if (!isRecord(value)) throw new Error("Invalid artwork generation request.");
 
   const model = readString(value.model, "model");
+  const artworkMode =
+    value.artworkMode === undefined
+      ? "standard"
+      : readString(value.artworkMode, "artworkMode");
+  if (!artworkModes.includes(artworkMode as (typeof artworkModes)[number])) {
+    throw new Error("artworkMode must be standard or design-system.");
+  }
+  const imagePromptModel =
+    value.imagePromptModel === undefined
+      ? "gpt-5.6-terra"
+      : readString(value.imagePromptModel, "imagePromptModel");
+  if (
+    !imagePromptModels.includes(
+      imagePromptModel as (typeof imagePromptModels)[number]
+    )
+  ) {
+    throw new Error("imagePromptModel is not supported.");
+  }
   const runId = readString(value.runId, "runId");
   const service = readString(value.service, "service");
   const quantity = readNumber(value.quantity, "quantity");
@@ -433,6 +802,9 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
 
   return {
     model: model as ArtworkGenerationRequest["model"],
+    artworkMode: artworkMode as ArtworkGenerationRequest["artworkMode"],
+    imagePromptModel:
+      imagePromptModel as ArtworkGenerationRequest["imagePromptModel"],
     runId,
     brand: value.brand == null ? null : parseBrand(value.brand),
     service: service as ArtworkGenerationRequest["service"],
@@ -493,8 +865,19 @@ function parseBrand(value: unknown): ArtworkGenerationRequest["brand"] {
   return {
     id: readString(brand.id, "brand.id"),
     name: readString(brand.name, "brand.name"),
-    category: readString(brand.category, "brand.category")
+    category: readString(brand.category, "brand.category"),
+    personality: readOptionalStringArray(brand.personality, "brand.personality"),
+    colors: readOptionalStringArray(brand.colors, "brand.colors"),
+    mustAvoid: readOptionalStringArray(brand.mustAvoid, "brand.mustAvoid")
   };
+}
+
+function readOptionalStringArray(
+  value: unknown,
+  field: string
+): readonly string[] {
+  if (value === undefined) return [];
+  return readStringArray(value, field);
 }
 
 function parseSelectedHook(value: unknown, index: number): SelectedHook {
@@ -504,6 +887,7 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
     hook: readString(hook.hook, `selectedHooks[${index}].hook`),
     concept: readString(hook.concept, `selectedHooks[${index}].concept`),
     why: readString(hook.why, `selectedHooks[${index}].why`),
+    visual: readString(hook.visual, `selectedHooks[${index}].visual`),
     cta: readString(hook.cta, `selectedHooks[${index}].cta`),
     caption: readString(hook.caption, `selectedHooks[${index}].caption`)
   };

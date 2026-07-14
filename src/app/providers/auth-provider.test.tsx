@@ -11,7 +11,7 @@ describe("emailSignInRedirectUrl", () => {
     ).toBe("http://localhost:4173");
   });
 
-  it("sends non-local sign-ins to the Moons production URL", () => {
+  it("keeps non-local sign-ins on the existing production URL", () => {
     expect(
       emailSignInRedirectUrl({
         hostname: "moons-cvc-git-feature.vercel.app",

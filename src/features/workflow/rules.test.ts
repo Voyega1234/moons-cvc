@@ -93,4 +93,97 @@ describe("workflow rules", () => {
       `Select ${run.quantity} hooks first.`
     );
   });
+
+  it("requires a comment whenever an internal reviewer rejects", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let run = createInitialWorkflowState({
+      id: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    run = workflowReducer(run, { type: "select-brand", brand });
+    run = workflowReducer(run, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    run = workflowReducer(run, { type: "auto-select-directions" });
+    run = workflowReducer(run, { type: "create-outputs" });
+    run = workflowReducer(run, {
+      type: "run-qa",
+      results: run.outputs.map((output) => ({
+        outputId: output.id,
+        passed: true,
+        reason: "Looks good."
+      }))
+    });
+
+    const output = run.outputs[0];
+    if (!output) throw new Error("Expected a generated output.");
+
+    expect(
+      workflowActionBlockReason(run, {
+        type: "review-output",
+        id: output.id,
+        role: "graphicDesign",
+        decision: "rejected",
+        comment: "   "
+      })
+    ).toBe("Add a comment before rejecting.");
+
+    expect(
+      workflowActionBlockReason(run, {
+        type: "review-output",
+        id: output.id,
+        role: "graphicDesign",
+        decision: "rejected",
+        comment: "Revise the visual hierarchy."
+      })
+    ).toBeNull();
+  });
+
+  it("requires client change requests to include feedback", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let run = createInitialWorkflowState({
+      id: "run-client-feedback",
+      now: "2026-07-14T00:00:00.000Z"
+    });
+    run = workflowReducer(run, { type: "select-brand", brand });
+    run = workflowReducer(run, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    run = workflowReducer(run, { type: "auto-select-directions" });
+    run = workflowReducer(run, { type: "create-outputs" });
+    run = workflowReducer(run, {
+      type: "run-qa",
+      results: run.outputs.map((output) => ({
+        outputId: output.id,
+        passed: true,
+        reason: "Looks good."
+      }))
+    });
+    run = workflowReducer(run, { type: "approve-all" });
+    run = workflowReducer(run, { type: "send-client" });
+
+    const output = run.outputs[0];
+    if (!output) throw new Error("Expected a generated output.");
+
+    expect(
+      workflowActionBlockReason(run, {
+        type: "request-client-change",
+        id: output.id,
+        comment: " "
+      })
+    ).toBe("Add a comment before requesting changes.");
+    expect(
+      workflowActionBlockReason(run, {
+        type: "request-client-change",
+        id: output.id,
+        comment: "Make the product larger."
+      })
+    ).toBeNull();
+  });
 });

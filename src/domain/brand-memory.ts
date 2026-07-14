@@ -62,7 +62,7 @@ export interface BrandPastWorkItem {
   id: string;
   title: string;
   description: string;
-  imageUrl: string;
+  imageUrl: string | null;
   sourceUrl: string | null;
-  sourceType: "ads_library";
+  sourceType: "facebook_post" | "ads_library";
 }

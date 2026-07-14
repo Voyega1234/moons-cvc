@@ -11,26 +11,26 @@ export const stages: readonly {
 }[] = [
   {
     id: "start",
-    name: "Start",
-    hero: "Start.",
-    sub: "Choose the brand memory before creating."
+    name: "Signal",
+    hero: "Find the idea worth scaling.",
+    sub: "Turn brand signals into sharper hooks, stronger creative, and reusable performance learning."
   },
   {
     id: "brief",
     name: "Brief",
     hero: "Brief.",
-    sub: "Give Moons the request: service, quantity, and brief."
+    sub: "Give Neo the content mix, quantities, and brief."
   },
   {
     id: "directions",
-    name: "Hook",
-    hero: "Hook.",
+    name: "Angles",
+    hero: "Angles.",
     sub: "Choose the creative direction before production."
   },
   {
     id: "studio",
-    name: "Create",
-    hero: "Create.",
+    name: "Build",
+    hero: "Build.",
     sub: "Generate artwork and captions, then quality-check."
   },
   {
@@ -41,14 +41,14 @@ export const stages: readonly {
   },
   {
     id: "client",
-    name: "Client review",
-    hero: "Client review.",
+    name: "Client",
+    hero: "Client.",
     sub: "Send creatives, capture feedback, revise, and approve."
   },
   {
     id: "summary",
-    name: "Delivered",
-    hero: "Delivered.",
+    name: "Learn",
+    hero: "Learn.",
     sub: "Final approved set, saved to past work."
   }
 ];

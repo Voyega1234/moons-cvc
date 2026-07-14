@@ -167,11 +167,17 @@ library data.
 
 Expected sources:
 
+- `moons.brand_social_posts`
+- `moons.brand_ad_library_items`
+- `moons.brand_visual_assets`
 - `moons.runs`
 - `moons.outputs`
 - `moons.creative_directions`
 - `moons.client_review_items`
 - `moons.brand_learning`
+
+The Brand Profile presents Facebook posts and Ads Library creatives as
+reference-only Past work. Delivered Neo work remains a separate group.
 
 ## Migration
 

@@ -8,6 +8,7 @@ import { BrandProvider } from "./app/providers/brand-provider";
 import { ClientIntakeProvider } from "./app/providers/client-intake-provider";
 import { WorkspaceProvider } from "./app/providers/workspace-provider";
 import "./styles/app.css";
+import "./styles/neo-redesign.css";
 
 const root = document.getElementById("app");
 

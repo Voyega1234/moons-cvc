@@ -108,6 +108,8 @@ stays server-side:
 ```bash
 VITE_ARTWORK_GENERATION_ENDPOINT=<backend-artwork-endpoint>
 OPENAI_IMAGE_PROMPT_MODEL=gpt-5.6-terra
+OPENROUTER_API_KEY=<server-side-openrouter-key>
+OPENROUTER_IMAGE_PROMPT_MODEL=anthropic/claude-sonnet-4.6
 ```
 
 Alternatively, route artwork generation through n8n. This sends the full
@@ -119,9 +121,12 @@ VITE_ARTWORK_GENERATION_MODE=n8n
 VITE_N8N_ARTWORK_WEBHOOK_URL=<n8n-artwork-webhook-url>
 ```
 
-`OPENAI_IMAGE_PROMPT_MODEL` is the model used by the image prompt agent that
-writes the actual `gpt-image-2` prompt from the hook/brief/brand context —
-see `docs/FEATURE_ARTWORK_GENERATION.md` for the request/response contract.
+Users select the image prompt writer in Angles. GPT 5.6 is the default and uses
+`OPENAI_API_KEY`; Claude Sonnet 4.6 uses `OPENROUTER_API_KEY` through
+OpenRouter. Both model environment variables are optional deployment
+overrides. The selected prompt writer creates the actual `gpt-image-2` prompt
+from the hook, brief, brand context, and references. See
+`docs/FEATURE_ARTWORK_GENERATION.md` for the full request contract.
 
 Brand kit's "Upload guideline" button analyzes an uploaded PDF or image for
 mood/tone/style and a hex color palette:

@@ -1,0 +1,123 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { brands } from "../../data/mock-brands";
+import {
+  emptyApprovalComments,
+  emptyApprovalGate,
+  type CreativeOutput
+} from "../../domain/creative-run";
+import { createInitialWorkflowState } from "../../features/workflow/reducer";
+import { buildDirectionFixtures } from "../../features/workflow/test-fixtures";
+import { runQualityCheck } from "./run-quality-check";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("runQualityCheck", () => {
+  it("sends creative copy, brand context, references, and revision feedback", async () => {
+    const sourceBrand = brands[0];
+    if (!sourceBrand) throw new Error("Expected a brand fixture.");
+
+    const brand = {
+      ...sourceBrand,
+      library: {
+        ...sourceBrand.library,
+        brand: sourceBrand.library.brand.map((item, index) =>
+          index === 0
+            ? { ...item, assetUrl: "https://example.com/logo.png" }
+            : item
+        )
+      }
+    };
+    const direction = buildDirectionFixtures(brand.name)[0];
+    if (!direction) throw new Error("Expected a direction fixture.");
+
+    const output: CreativeOutput = {
+      id: "output-1",
+      directionId: direction.id,
+      format: "1:1 Static",
+      status: "needs-revision",
+      clientStatus: "queued",
+      assetUrl: "https://example.com/output.png",
+      revisionCount: 1,
+      approval: emptyApprovalGate,
+      approvalComments: {
+        ...emptyApprovalComments,
+        clientService: "Keep the approved product name."
+      }
+    };
+    const run = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-14T00:00:00.000Z",
+        brand
+      }),
+      brief: "Promote the workday bundle.",
+      referenceImages: [
+        {
+          id: "reference-1",
+          label: "Approved layout",
+          url: "https://example.com/reference.png"
+        }
+      ],
+      directions: [direction],
+      outputs: [output]
+    };
+
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                outputId: output.id,
+                gdPassed: true,
+                gdReason: "ผ่าน",
+                csPassed: true,
+                csReason: "ผ่าน",
+                passed: true,
+                reason: "GD ผ่าน: ผ่าน\nCS ผ่าน: ผ่าน"
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runQualityCheck(run);
+
+    const request = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as {
+      brandContext: { name: string; products: string[] };
+      referenceImages: { label: string; url: string; kind: string }[];
+      outputs: {
+        subheadline: string;
+        cta: string;
+        caption: string;
+        revisionFeedback: string;
+      }[];
+    };
+    expect(request.brandContext.name).toBe("BoneFit");
+    expect(request.brandContext.products[0]).toContain("Posture support");
+    expect(request.referenceImages).toEqual([
+      {
+        label: "Logo",
+        url: "https://example.com/logo.png",
+        kind: "brand-kit"
+      },
+      {
+        label: "Approved layout",
+        url: "https://example.com/reference.png",
+        kind: "creative-reference"
+      }
+    ]);
+    expect(request.outputs[0]).toMatchObject({
+      subheadline: direction.subheadline,
+      cta: direction.cta,
+      caption: direction.caption,
+      revisionFeedback: "CS: Keep the approved product name."
+    });
+  });
+});

@@ -16,6 +16,98 @@ function passingQaResults(state: WorkflowState) {
 }
 
 describe("workflowReducer", () => {
+  it("keeps standard artwork generation as the default and allows design-system mode", () => {
+    expect(initialWorkflowState.artworkMode).toBe("standard");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-artwork-mode",
+      mode: "design-system"
+    });
+
+    expect(updated.artworkMode).toBe("design-system");
+  });
+
+  it("defaults image prompt writing to GPT 5.6 and allows OpenRouter Claude", () => {
+    expect(initialWorkflowState.imagePromptModel).toBe("gpt-5.6-terra");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-image-prompt-model",
+      model: "anthropic/claude-sonnet-4.6"
+    });
+
+    expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
+  });
+
+  it("defaults the success metric to CTR and allows a brief-specific choice", () => {
+    expect(initialWorkflowState.successMetric).toBe("CTR");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-success-metric",
+      metric: "ROAS"
+    });
+
+    expect(updated.successMetric).toBe("ROAS");
+  });
+
+  it("builds a creative mix from independently configurable content rows", () => {
+    let state = workflowReducer(initialWorkflowState, {
+      type: "add-creative-mix-item"
+    });
+    const added = state.creativeMix?.[1];
+    if (!added) throw new Error("Expected a second creative-mix item.");
+
+    state = workflowReducer(state, {
+      type: "set-creative-mix-service",
+      id: added.id,
+      service: "ugc-video"
+    });
+    state = workflowReducer(state, {
+      type: "set-creative-mix-quantity",
+      id: added.id,
+      quantity: 2
+    });
+
+    expect(state.creativeMix).toEqual([
+      { id: "creative-mix-1", service: "single-static", quantity: 3 },
+      { id: added.id, service: "ugc-video", quantity: 2 }
+    ]);
+    expect(state.service).toBe("single-static");
+    expect(state.quantity).toBe(5);
+
+    state = workflowReducer(state, {
+      type: "remove-creative-mix-item",
+      id: added.id
+    });
+    expect(state.creativeMix).toHaveLength(1);
+    expect(state.quantity).toBe(3);
+  });
+
+  it("keeps the creative mix unique and within the six-deliverable limit", () => {
+    let state = workflowReducer(initialWorkflowState, {
+      type: "add-creative-mix-item"
+    });
+    const added = state.creativeMix?.[1];
+    if (!added) throw new Error("Expected a second creative-mix item.");
+
+    const duplicate = workflowReducer(state, {
+      type: "set-creative-mix-service",
+      id: added.id,
+      service: "single-static"
+    });
+    expect(duplicate).toBe(state);
+
+    state = workflowReducer(state, {
+      type: "set-creative-mix-quantity",
+      id: added.id,
+      quantity: 6
+    });
+    expect(state.quantity).toBe(6);
+    expect(state.creativeMix?.[1]?.quantity).toBe(3);
+    expect(
+      workflowReducer(state, { type: "add-creative-mix-item" })
+    ).toBe(state);
+  });
+
   it("moves from brand selection to generated directions", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -32,6 +124,32 @@ describe("workflowReducer", () => {
     expect(generated.stage).toBe("directions");
     expect(generated.directions).toHaveLength(6);
     expect(generated.directions[0]?.hook).toContain(brand.name);
+  });
+
+  it("assigns generated directions to the requested content-type quotas", () => {
+    const mixedState: WorkflowState = {
+      ...initialWorkflowState,
+      creativeMix: [
+        { id: "static", service: "single-static", quantity: 3 },
+        { id: "album", service: "album-post", quantity: 1 },
+        { id: "ugc", service: "ugc-video", quantity: 2 }
+      ],
+      quantity: 6
+    };
+
+    const generated = workflowReducer(mixedState, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures("Mixed")
+    });
+
+    expect(generated.directions.map((direction) => direction.service)).toEqual([
+      "single-static",
+      "single-static",
+      "single-static",
+      "album-post",
+      "ugc-video",
+      "ugc-video"
+    ]);
   });
 
   it("creates only the requested number of selected outputs", () => {
@@ -51,6 +169,36 @@ describe("workflowReducer", () => {
 
     expect(state.stage).toBe("studio");
     expect(state.outputs).toHaveLength(initialWorkflowState.quantity);
+  });
+
+  it("creates outputs in the quantities and formats requested by the mix", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "add-creative-mix-item"
+    });
+    const secondItem = state.creativeMix?.[1];
+    if (!secondItem) throw new Error("Expected a second mix item.");
+    state = workflowReducer(state, {
+      type: "set-creative-mix-service",
+      id: secondItem.id,
+      service: "ugc-video"
+    });
+    state = workflowReducer(state, { type: "select-brand", brand });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+
+    expect(state.outputs.map((output) => output.format)).toEqual([
+      "1:1 Static",
+      "1:1 Static",
+      "1:1 Static",
+      "9:16 UGC"
+    ]);
   });
 
   it("requires individual client approvals before delivery is ready", () => {
@@ -104,7 +252,8 @@ describe("workflowReducer", () => {
       type: "review-output",
       id: first.id,
       role: "graphicDesign",
-      decision: "approved"
+      decision: "approved",
+      comment: "Ready for client service review."
     });
     expect(state.approved).toBe(false);
 
@@ -112,13 +261,15 @@ describe("workflowReducer", () => {
       type: "review-output",
       id: first.id,
       role: "clientService",
-      decision: "approved"
+      decision: "approved",
+      comment: ""
     });
     state = workflowReducer(state, {
       type: "review-output",
       id: first.id,
       role: "projectManager",
-      decision: "approved"
+      decision: "approved",
+      comment: ""
     });
     expect(state.approved).toBe(false);
 
@@ -128,7 +279,8 @@ describe("workflowReducer", () => {
           type: "review-output",
           id: output.id,
           role,
-          decision: "approved"
+          decision: "approved",
+          comment: ""
         });
       }
     }
@@ -159,14 +311,53 @@ describe("workflowReducer", () => {
       type: "review-output",
       id: first.id,
       role: "graphicDesign",
-      decision: "rejected"
+      decision: "rejected",
+      comment: "Logo needs more breathing room."
     });
 
     const updatedFirst = state.outputs.find((output) => output.id === first.id);
     const updatedSecond = state.outputs.find((output) => output.id === second.id);
     expect(updatedFirst?.status).toBe("needs-revision");
     expect(updatedFirst?.approval.graphicDesign).toBe("rejected");
+    expect(updatedFirst?.approvalComments.graphicDesign).toBe(
+      "Logo needs more breathing room."
+    );
     expect(updatedSecond?.status).not.toBe("needs-revision");
+  });
+
+  it("does not record a rejection without a comment", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    state = workflowReducer(state, {
+      type: "run-qa",
+      results: passingQaResults(state)
+    });
+
+    const output = state.outputs[0];
+    if (!output) throw new Error("Expected a generated output.");
+    const before = state;
+
+    state = workflowReducer(state, {
+      type: "review-output",
+      id: output.id,
+      role: "graphicDesign",
+      decision: "rejected",
+      comment: "   "
+    });
+
+    expect(state).toBe(before);
+    expect(state.outputs[0]?.approval.graphicDesign).toBeNull();
   });
 
   it("resets all approvals and bumps revision count when a replacement asset is uploaded", () => {
@@ -192,13 +383,15 @@ describe("workflowReducer", () => {
       type: "review-output",
       id: first.id,
       role: "graphicDesign",
-      decision: "approved"
+      decision: "approved",
+      comment: ""
     });
     state = workflowReducer(state, {
       type: "review-output",
       id: first.id,
       role: "clientService",
-      decision: "approved"
+      decision: "approved",
+      comment: ""
     });
 
     state = workflowReducer(state, {
@@ -246,6 +439,106 @@ describe("workflowReducer", () => {
     expect(new Set(ids).size).toBe(12);
   });
 
+  it("replaces one hook without changing its identity or selection", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+
+    const firstDirection = state.directions[0];
+    if (!firstDirection) throw new Error("Expected a generated direction.");
+    state = workflowReducer(state, {
+      type: "set-direction-export-group",
+      id: firstDirection.id,
+      group: "recommended"
+    });
+
+    const original = state.directions[0];
+    if (!original) throw new Error("Expected a generated direction.");
+
+    state = workflowReducer(state, {
+      type: "replace-direction",
+      id: original.id,
+      direction: {
+        ...original,
+        id: "regenerated-id-that-must-not-be-used",
+        exportGroup: null,
+        selected: false,
+        hook: "A sharper regenerated hook"
+      }
+    });
+
+    const replaced = state.directions[0];
+    expect(replaced?.id).toBe(original.id);
+    expect(replaced?.selected).toBe(original.selected);
+    expect(replaced?.exportGroup).toBe("recommended");
+    expect(replaced?.hook).toBe("A sharper regenerated hook");
+    expect(state.outputs).toEqual([]);
+    expect(state.qaComplete).toBe(false);
+  });
+
+  it("replaces every hook while preserving each identity and selection", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+
+    const firstDirection = state.directions[0];
+    if (!firstDirection) throw new Error("Expected a generated direction.");
+    state = workflowReducer(state, {
+      type: "set-direction-export-group",
+      id: firstDirection.id,
+      group: "option"
+    });
+
+    const identities = state.directions.map(({ id, selected }) => ({
+      id,
+      selected
+    }));
+    const replacements = state.directions.map((direction, index) => ({
+      ...direction,
+      id: `replacement-${index}`,
+      exportGroup: null,
+      selected: !direction.selected,
+      hook: `Regenerated hook ${index + 1}`,
+      subheadline: `Regenerated subheadline ${index + 1}`,
+      concept: `Regenerated concept ${index + 1}`
+    }));
+
+    state = workflowReducer(state, {
+      type: "replace-directions",
+      directions: replacements
+    });
+
+    expect(
+      state.directions.map(({ id, selected }) => ({ id, selected }))
+    ).toEqual(identities);
+    expect(state.directions[0]?.hook).toBe("Regenerated hook 1");
+    expect(state.directions[0]?.subheadline).toBe("Regenerated subheadline 1");
+    expect(state.directions[0]?.concept).toBe("Regenerated concept 1");
+    expect(state.directions[0]?.exportGroup).toBe("option");
+    expect(state.outputs).toEqual([]);
+    expect(state.qaComplete).toBe(false);
+  });
+
   it("toggles reference images on and off by id", () => {
     const item = { id: "logo-1", url: "https://example.com/logo.png", label: "Logo" };
 
@@ -260,5 +553,76 @@ describe("workflowReducer", () => {
       item
     });
     expect(state.referenceImages).toEqual([]);
+  });
+
+  it("routes a commented client change request back to Internal QC", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    state = workflowReducer(state, {
+      type: "run-qa",
+      results: passingQaResults(state)
+    });
+    state = workflowReducer(state, { type: "approve-all" });
+    state = workflowReducer(state, { type: "send-client" });
+
+    const [approvedOutput, revisionOutput] = state.outputs;
+    if (!approvedOutput || !revisionOutput) {
+      throw new Error("Expected at least two creative outputs.");
+    }
+    state = workflowReducer(state, {
+      type: "approve-output",
+      id: approvedOutput.id
+    });
+
+    const beforeBlankRequest = state;
+    state = workflowReducer(state, {
+      type: "request-client-change",
+      id: revisionOutput.id,
+      comment: "   "
+    });
+    expect(state).toBe(beforeBlankRequest);
+
+    state = workflowReducer(state, {
+      type: "request-client-change",
+      id: revisionOutput.id,
+      comment: "Make the product benefit easier to scan."
+    });
+
+    const updatedRevision = state.outputs.find(
+      (output) => output.id === revisionOutput.id
+    );
+    expect(state.stage).toBe("approval");
+    expect(state.approved).toBe(false);
+    expect(state.clientSent).toBe(false);
+    expect(updatedRevision?.status).toBe("needs-revision");
+    expect(updatedRevision?.clientStatus).toBe("revision");
+    expect(updatedRevision?.approval.projectManager).toBe("rejected");
+    expect(updatedRevision?.approvalComments.projectManager).toBe(
+      "Make the product benefit easier to scan."
+    );
+    expect(state.outputs[0]?.clientStatus).toBe("approved");
+
+    state = workflowReducer(state, {
+      type: "review-output",
+      id: revisionOutput.id,
+      role: "projectManager",
+      decision: "approved",
+      comment: "Client change completed."
+    });
+    state = workflowReducer(state, { type: "send-client" });
+
+    expect(state.outputs[0]?.clientStatus).toBe("approved");
+    expect(state.outputs[1]?.clientStatus).toBe("sent");
   });
 });

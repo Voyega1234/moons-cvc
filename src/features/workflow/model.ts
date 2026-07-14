@@ -1,15 +1,32 @@
 import type { Brand, LibrarySection } from "../../domain/brand";
 import type {
   ApprovalRole,
+  AngleExportGroup,
+  ArtworkMode,
   CreativeDirection,
   CreativeOutput,
   CreativeStage,
   ReferenceImageSelection,
   ReviewDecision,
-  ServiceType
+  ServiceType,
+  ImagePromptModel
 } from "../../domain/creative-run";
 
 export type AppView = "overview" | "studio";
+
+export const successMetrics = ["CTR", "CVR", "CPA", "ROAS"] as const;
+export type SuccessMetric = (typeof successMetrics)[number];
+
+export interface CreativeMixItem {
+  id: string;
+  service: ServiceType;
+  quantity: number;
+}
+
+export interface ContentTypeQuota {
+  service: ServiceType;
+  count: number;
+}
 
 export interface WorkflowState {
   id: string;
@@ -20,8 +37,14 @@ export interface WorkflowState {
   brandMenuOpen: boolean;
   brandSearch: string;
   librarySection: LibrarySection;
+  creativeMix?: readonly CreativeMixItem[];
+  /** Compatibility alias for the first creative-mix item. */
   service: ServiceType;
+  artworkMode: ArtworkMode;
+  imagePromptModel: ImagePromptModel;
+  /** Compatibility alias for the total creative-mix quantity. */
   quantity: number;
+  successMetric: SuccessMetric;
   brief: string;
   attachments: readonly string[];
   referenceImages: readonly ReferenceImageSelection[];
@@ -41,7 +64,18 @@ export type WorkflowAction =
   | { type: "select-brand"; brand: Brand }
   | { type: "set-library-section"; section: LibrarySection }
   | { type: "set-service"; service: ServiceType }
+  | { type: "set-artwork-mode"; mode: ArtworkMode }
+  | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-quantity"; quantity: number }
+  | { type: "add-creative-mix-item" }
+  | {
+      type: "set-creative-mix-service";
+      id: string;
+      service: ServiceType;
+    }
+  | { type: "set-creative-mix-quantity"; id: string; quantity: number }
+  | { type: "remove-creative-mix-item"; id: string }
+  | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
   | { type: "toggle-reference-image"; item: ReferenceImageSelection }
@@ -49,6 +83,13 @@ export type WorkflowAction =
   | {
       type: "generate-more-directions";
       directions: readonly CreativeDirection[];
+    }
+  | { type: "replace-direction"; id: string; direction: CreativeDirection }
+  | { type: "replace-directions"; directions: readonly CreativeDirection[] }
+  | {
+      type: "set-direction-export-group";
+      id: string;
+      group: AngleExportGroup | null;
     }
   | { type: "toggle-direction"; id: string }
   | { type: "auto-select-directions" }
@@ -67,11 +108,6 @@ export type WorkflowAction =
       id: string;
       role: ApprovalRole;
       decision: NonNullable<ReviewDecision>;
-    }
-  | {
-      type: "comment-output";
-      id: string;
-      role: ApprovalRole;
       comment: string;
     }
   | {
@@ -83,6 +119,7 @@ export type WorkflowAction =
     }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
+  | { type: "request-client-change"; id: string; comment: string }
   | { type: "mark-delivered" }
   | { type: "mark-done" };
 
@@ -111,3 +148,46 @@ export type WorkspaceAction =
       now: string;
     }
   | { type: "clear-toast" };
+
+export function creativeMixItems(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): readonly CreativeMixItem[] {
+  return state.creativeMix?.length
+    ? state.creativeMix
+    : [{ id: "creative-mix-1", service: state.service, quantity: state.quantity }];
+}
+
+export function totalCreativeMixQuantity(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): number {
+  return creativeMixItems(state).reduce((total, item) => total + item.quantity, 0);
+}
+
+export function creativeMixContentTypeQuotas(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): readonly ContentTypeQuota[] {
+  return creativeMixItems(state).map((item) => ({
+    service: item.service,
+    count: item.quantity
+  }));
+}
+
+export function creativeMixServiceAt(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">,
+  index: number
+): ServiceType {
+  let cursor = 0;
+  for (const item of creativeMixItems(state)) {
+    cursor += item.quantity;
+    if (index < cursor) return item.service;
+  }
+  return creativeMixItems(state)[0]?.service ?? state.service;
+}
+
+export function directionServiceAt(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">,
+  direction: Pick<CreativeDirection, "service">,
+  index: number
+): ServiceType {
+  return direction.service ?? creativeMixServiceAt(state, index);
+}

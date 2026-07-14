@@ -6,6 +6,8 @@ import {
 
 const requestBody = {
   model: "gpt-image-2",
+  artworkMode: "standard",
+  imagePromptModel: "gpt-5.6-terra",
   runId: "run-1",
   brand: {
     id: "flora",
@@ -42,6 +44,17 @@ function buildRequest(headers: Record<string, string> = {}): Request {
   });
 }
 
+function promptAgentResponse(
+  prompt = "AGENT-WRITTEN PROMPT: production-ready artwork."
+): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({ finalPrompt: prompt })
+    }),
+    { status: 200 }
+  );
+}
+
 function fakeStorage(): {
   client: ArtworkStorageClient;
   uploads: { bucket: string; path: string }[];
@@ -62,6 +75,9 @@ function fakeStorage(): {
               },
               error: null
             };
+          },
+          async download() {
+            return { data: null, error: { message: "Not found" } };
           }
         };
       }
@@ -94,6 +110,16 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
+      if (href.includes("/v1/responses")) {
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              finalPrompt: "AGENT-WRITTEN PROMPT: soft editorial bouquet."
+            })
+          }),
+          { status: 200 }
+        );
+      }
       if (href.includes("/v1/images/generations")) {
         return new Response(
           JSON.stringify({
@@ -106,15 +132,20 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     const { client, uploads } = fakeStorage();
+    const debugLogs: unknown[] = [];
 
     const response = await handleArtworkGenerationRequest({
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
+        ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
       fetchImpl: fetchMock as unknown as typeof fetch,
+      writeDebugLog: async (_directory, entry) => {
+        debugLogs.push(entry);
+      },
       createStorageClient: () => client
     });
 
@@ -126,6 +157,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(payload.outputs).toHaveLength(1);
     expect(payload.outputs[0]).toMatchObject({
       directionId: "hook-1",
+      format: "1:1 Static",
       status: "ready",
       clientStatus: "queued",
       assetBucket: "creative-assets",
@@ -136,6 +168,43 @@ describe("handleArtworkGenerationRequest", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0]?.bucket).toBe("creative-assets");
     expect(uploads[0]?.path).toContain("flora/run-1/outputs/hook-1-v1.png");
+    expect(debugLogs).toEqual([
+      expect.objectContaining({
+        kind: "image-prompt-agent",
+        model: "gpt-5.6-terra",
+        directionId: "hook-1",
+        mode: "standard",
+        status: "succeeded",
+        request: expect.objectContaining({
+          endpoint: "/v1/responses",
+          store: false,
+          inputText: expect.stringContaining(
+            '"headline": "Flowers that make the room feel softer"'
+          ),
+          referenceImages: [],
+          responseFormat: expect.objectContaining({
+            name: "moons_image_generation_prompt",
+            strict: true
+          })
+        }),
+        response: {
+          prompt: "AGENT-WRITTEN PROMPT: soft editorial bouquet."
+        }
+      }),
+      expect.objectContaining({
+        model: "gpt-image-2",
+        directionId: "hook-1",
+        request: expect.objectContaining({
+          endpoint: "/v1/images/generations",
+          body: expect.objectContaining({
+            model: "gpt-image-2",
+            prompt: expect.stringContaining("Flowers that make the room feel softer")
+          })
+        })
+      })
+    ]);
+    expect(JSON.stringify(debugLogs)).not.toContain("test-key");
+    expect(JSON.stringify(debugLogs)).not.toContain("Authorization");
   });
 
   it("generates two selected hooks at a time while preserving their order", async () => {
@@ -147,6 +216,9 @@ describe("handleArtworkGenerationRequest", () => {
         return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
           status: 200
         });
+      }
+      if (href.includes("/v1/responses")) {
+        return promptAgentResponse();
       }
       if (href.includes("/v1/images/generations")) {
         activeGenerations += 1;
@@ -209,6 +281,9 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
+      if (href.includes("/v1/responses")) {
+        return promptAgentResponse();
+      }
       return new Response("", { status: 200 });
     });
 
@@ -248,6 +323,9 @@ describe("handleArtworkGenerationRequest", () => {
           headers: { "content-type": "image/png" }
         });
       }
+      if (href.includes("/v1/responses")) {
+        return promptAgentResponse();
+      }
       if (href.includes("/v1/images/edits")) {
         editCalls.push({ href, body: init?.body as FormData });
         return new Response(
@@ -268,7 +346,11 @@ describe("handleArtworkGenerationRequest", () => {
       body: JSON.stringify({
         ...requestBody,
         referenceImages: [
-          { kind: "url", url: "https://example.com/reference.png" }
+          {
+            kind: "url",
+            url: "https://example.com/reference.png",
+            label: "Convert Cake campaign reference"
+          }
         ]
       })
     });
@@ -288,7 +370,87 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls).toHaveLength(1);
     const referenceFile = editCalls[0]?.body.get("image[]") as File;
     expect(referenceFile.type).toBe("image/png");
+    expect(editCalls[0]?.body.get("prompt")).toContain(
+      "REFERENCE-INFORMED DESIGN — highest priority:"
+    );
+    expect(editCalls[0]?.body.get("prompt")).toContain(
+      "CONCEPT ALIGNMENT — highest priority:"
+    );
+    expect(editCalls[0]?.body.get("prompt")).toContain(
+      "Image 1 — Convert Cake campaign reference"
+    );
     expect(uploads).toHaveLength(1);
+  });
+
+  it("recovers an expired Supabase signed reference URL through storage", async () => {
+    const editCalls: FormData[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
+      }
+      if (href.includes("/storage/v1/object/sign/brand-assets/")) {
+        return new Response("Expired signature", { status: 400 });
+      }
+      if (href.includes("/v1/responses")) {
+        return promptAgentResponse();
+      }
+      if (href.includes("/v1/images/edits")) {
+        editCalls.push(init?.body as FormData);
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const { client } = fakeStorage();
+    client.storage.from = () => ({
+      upload: async () => ({ error: null }),
+      createSignedUrl: async () => ({
+        data: { signedUrl: "https://supabase.example.com/signed.png" },
+        error: null
+      }),
+      download: async () => ({
+        data: {
+          type: "image/png",
+          arrayBuffer: async () => Buffer.from("recovered-image")
+        } as unknown as Blob,
+        error: null
+      })
+    });
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          referenceImages: [
+            {
+              kind: "url",
+              label: "Convert Cake reference",
+              url: "https://supabase.example.com/storage/v1/object/sign/brand-assets/client/ref.png?token=expired"
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(200);
+    expect(editCalls).toHaveLength(1);
+    expect((editCalls[0]?.get("image[]") as File).type).toBe("image/png");
   });
 
   it("uses the prompt written by the image prompt agent", async () => {
@@ -338,12 +500,213 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(generationCalls).toEqual([
+    expect(generationCalls).toHaveLength(1);
+    expect(generationCalls[0]).toContain(
       "AGENT-WRITTEN PROMPT: luxury typography key visual."
-    ]);
+    );
   });
 
-  it("falls back to the deterministic prompt when the prompt agent fails", async () => {
+  it("routes the selected Claude prompt model through OpenRouter", async () => {
+    const promptCalls: Array<{
+      model: string;
+      authorization: string | null;
+    }> = [];
+    const imageAuthorizations: Array<string | null> = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href === "https://openrouter.ai/api/v1/responses") {
+          const body = JSON.parse(String(init?.body)) as { model: string };
+          promptCalls.push({
+            model: body.model,
+            authorization: new Headers(init?.headers).get("Authorization")
+          });
+          return new Response(
+            JSON.stringify({
+              output_text: JSON.stringify({
+                prompt: "OPENROUTER PROMPT: editorial conversion visual."
+              })
+            }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/images/generations")) {
+          imageAuthorizations.push(
+            new Headers(init?.headers).get("Authorization")
+          );
+          return new Response(
+            JSON.stringify({
+              data: [
+                { b64_json: Buffer.from("fake-png-bytes").toString("base64") }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          imagePromptModel: "anthropic/claude-sonnet-4.6"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-image-key",
+        OPENROUTER_API_KEY: "openrouter-prompt-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(200);
+    expect(promptCalls).toEqual([
+      {
+        model: "anthropic/claude-sonnet-4.6",
+        authorization: "Bearer openrouter-prompt-key"
+      }
+    ]);
+    expect(imageAuthorizations).toEqual(["Bearer openai-image-key"]);
+  });
+
+  it("requires an OpenRouter key only when its prompt model is selected", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          imagePromptModel: "anthropic/claude-sonnet-4.6"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-image-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "OPENROUTER_API_KEY is required."
+    });
+  });
+
+  it("loads the separate master prompt for design-system mode", async () => {
+    const promptAgentInputs: string[] = [];
+    const generationPrompts: string[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body)) as {
+          input: Array<{ content: Array<{ type: string; text?: string }> }>;
+        };
+        promptAgentInputs.push(body.input[0]?.content[0]?.text ?? "");
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              prompt:
+                "Create a textless asset-safe base visual with blank headline and CTA zones using isometric 3D cards."
+            })
+          }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/images/generations")) {
+        const body = JSON.parse(String(init?.body)) as { prompt: string };
+        generationPrompts.push(body.prompt);
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    const { client } = fakeStorage();
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(200);
+    expect(promptAgentInputs).toHaveLength(1);
+    expect(promptAgentInputs[0]).toContain("PASS 2 — REFERENCE FORENSICS");
+    expect(promptAgentInputs[0]).toContain(
+      "RUNTIME EXECUTION CONTRACT — DESIGN-SYSTEM MODE"
+    );
+    expect(promptAgentInputs[0]).toContain(
+      "Required headline: Flowers that make the room feel softer"
+    );
+    expect(promptAgentInputs[0]).toContain(
+      "Approved visual direction: Soft natural light with bouquet on table."
+    );
+    expect(generationPrompts).toHaveLength(1);
+    expect(generationPrompts[0]).toContain(
+      "DESIGN-SYSTEM FINAL ARTWORK CONTRACT — overrides conflicting earlier instructions:"
+    );
+    expect(generationPrompts[0]).toContain(
+      "Render this exact headline once, clearly and prominently: “Flowers that make the room feel softer”"
+    );
+    expect(generationPrompts[0]).toContain(
+      "Render this exact CTA once: “Order a bouquet”"
+    );
+    expect(generationPrompts[0]).toContain(
+      "Do not create a textless base visual"
+    );
+    expect(generationPrompts[0]?.lastIndexOf("DESIGN-SYSTEM FINAL ARTWORK CONTRACT")).toBeGreaterThan(
+      generationPrompts[0]?.indexOf("textless asset-safe base visual") ?? -1
+    );
+  });
+
+  it("surfaces prompt-agent failure instead of silently generating with a fallback", async () => {
     const generationCalls: string[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
@@ -382,9 +745,11 @@ describe("handleArtworkGenerationRequest", () => {
       createStorageClient: () => client
     });
 
-    expect(response.status).toBe(200);
-    expect(generationCalls[0]).toContain(
-      "Hook: Flowers that make the room feel softer"
-    );
+    expect(response.status).toBe(500);
+    expect(generationCalls).toEqual([]);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "OpenAI image prompt agent failed: 500 — agent unavailable"
+    });
   });
 });

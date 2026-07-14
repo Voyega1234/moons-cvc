@@ -18,6 +18,7 @@ const OPENAI_IMAGES_EDITS_ENDPOINT = "https://api.openai.com/v1/images/edits";
 export interface ReferenceImageInput {
   bytes: Buffer;
   mimeType: string;
+  label?: string;
 }
 
 export interface EditImageOptions {

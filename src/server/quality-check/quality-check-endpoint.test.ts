@@ -4,12 +4,32 @@ import { handleQualityCheckRequest } from "./quality-check-endpoint";
 const requestBody = {
   runId: "run-1",
   brief: "Launch a soft summer bouquet offer.",
+  brandContext: {
+    name: "Petal House",
+    category: "Florist",
+    brandKit: ["Logo: green wordmark"],
+    products: ["Summer bouquet: THB 990"],
+    documents: ["Campaign brief: summer launch"],
+    working: ["Natural light"],
+    avoid: ["Hard shadows"]
+  },
+  referenceImages: [
+    {
+      label: "Approved mockup",
+      url: "https://example.com/reference.png",
+      kind: "creative-reference"
+    }
+  ],
   outputs: [
     {
       id: "output-1",
       hook: "Flowers that make the room feel softer",
+      subheadline: "A summer bouquet for a calmer room.",
       concept: "Lead with room mood.",
       visual: "Soft natural light with bouquet on table.",
+      cta: "Order today",
+      caption: "Summer bouquet, THB 990.",
+      revisionFeedback: "CS: Keep the price visible.",
       assetUrl: "https://example.supabase.co/storage/v1/object/sign/creative-assets/output-1.png"
     }
   ]
@@ -45,7 +65,13 @@ describe("handleQualityCheckRequest", () => {
           JSON.stringify({
             output_text: JSON.stringify({
               results: [
-                { outputId: "output-1", passed: false, reason: "Text in the image is garbled." }
+                {
+                  outputId: "output-1",
+                  gdPassed: false,
+                  gdReason: "ข้อความในภาพอ่านไม่ชัด",
+                  csPassed: true,
+                  csReason: "Key Message และราคาตรงกับ Brief"
+                }
               ]
             })
           }),
@@ -61,19 +87,50 @@ describe("handleQualityCheckRequest", () => {
 
     expect(response.status).toBe(200);
     const payload = (await response.json()) as {
-      results: { outputId: string; passed: boolean; reason: string }[];
+      results: {
+        outputId: string;
+        gdPassed: boolean;
+        gdReason: string;
+        csPassed: boolean;
+        csReason: string;
+        passed: boolean;
+        reason: string;
+      }[];
     };
     expect(payload.results).toEqual([
-      { outputId: "output-1", passed: false, reason: "Text in the image is garbled." }
+      {
+        outputId: "output-1",
+        gdPassed: false,
+        gdReason: "ข้อความในภาพอ่านไม่ชัด",
+        csPassed: true,
+        csReason: "Key Message และราคาตรงกับ Brief",
+        passed: false,
+        reason:
+          "GD ต้องแก้: ข้อความในภาพอ่านไม่ชัด\nCS ผ่าน: Key Message และราคาตรงกับ Brief"
+      }
     ]);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      input: { content: { type: string; image_url?: string }[] }[];
+      input: {
+        content: { type: string; text?: string; image_url?: string }[];
+      }[];
     };
-    const imageBlock = body.input[0]?.content.find(
+    const imageBlocks = body.input[0]?.content.filter(
       (block) => block.type === "input_image"
     );
-    expect(imageBlock?.image_url).toBe(requestBody.outputs[0]?.assetUrl);
+    expect(imageBlocks).toEqual([
+      expect.objectContaining({ image_url: requestBody.referenceImages[0]?.url }),
+      expect.objectContaining({ image_url: requestBody.outputs[0]?.assetUrl })
+    ]);
+    const prompt = body.input[0]?.content
+      .filter((block) => block.type === "input_text")
+      .map((block) => block.text)
+      .join("\n");
+    expect(prompt).toContain("ความสวยงาม องค์ประกอบ และจุดนำสายตา");
+    expect(prompt).toContain("Key Message ชัด และตรง Brief / Objective");
+    expect(prompt).toContain("Brand: Petal House");
+    expect(prompt).toContain("Caption: Summer bouquet, THB 990.");
+    expect(prompt).toContain("Revision Feedback: CS: Keep the price visible.");
   });
 
   it("returns no results without calling OpenAI when there are no outputs", async () => {

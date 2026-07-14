@@ -23,6 +23,9 @@ export async function generateDirectionsFromWebhook(
       brief: {
         service: input.service,
         quantity: input.quantity,
+        contentTypeQuotas: input.contentTypeQuotas ?? [
+          { service: input.service, count: input.quantity }
+        ],
         text: input.brief,
         extraInstructions: input.extraInstructions?.trim() ?? "",
         existingHooks: input.existingHooks ?? []

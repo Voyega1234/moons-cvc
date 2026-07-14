@@ -4,6 +4,10 @@ import { getSupabaseClient } from "../../lib/supabase/client";
 
 export interface QualityCheckResult {
   outputId: string;
+  gdPassed?: boolean;
+  gdReason?: string;
+  csPassed?: boolean;
+  csReason?: string;
   passed: boolean;
   reason: string;
 }
@@ -17,6 +21,18 @@ export async function runQualityCheck(
   const request = {
     runId: run.id,
     brief: run.brief,
+    brandContext: run.brand
+      ? {
+          name: run.brand.name,
+          category: run.brand.category,
+          brandKit: run.brand.library.brand.map(formatLibraryItem),
+          products: run.brand.library.products.map(formatLibraryItem),
+          documents: run.brand.library.docs.map(formatLibraryItem),
+          working: run.brand.memory.working,
+          avoid: run.brand.memory.avoid
+        }
+      : null,
+    referenceImages: collectQualityReferences(run),
     outputs: checkable.map((output) => {
       const direction = run.directions.find(
         (candidate) => candidate.id === output.directionId
@@ -24,8 +40,12 @@ export async function runQualityCheck(
       return {
         id: output.id,
         hook: direction?.hook ?? "",
+        subheadline: direction?.subheadline ?? "",
         concept: direction?.concept ?? "",
         visual: direction?.visual ?? "",
+        cta: direction?.cta ?? "",
+        caption: direction?.caption ?? "",
+        revisionFeedback: formatRevisionFeedback(output.approvalComments),
         assetUrl: output.assetUrl as string
       };
     })
@@ -51,6 +71,67 @@ export async function runQualityCheck(
   }
 
   return payload.results;
+}
+
+function formatLibraryItem(item: {
+  title: string;
+  description: string;
+}): string {
+  return item.description.trim()
+    ? `${item.title}: ${item.description}`
+    : item.title;
+}
+
+function collectQualityReferences(run: WorkflowState): readonly {
+  label: string;
+  url: string;
+  kind: "brand-kit" | "creative-reference";
+}[] {
+  const seen = new Set<string>();
+  const references: {
+    label: string;
+    url: string;
+    kind: "brand-kit" | "creative-reference";
+  }[] = [];
+
+  for (const item of run.brand?.library.brand ?? []) {
+    if (!item.assetUrl || seen.has(item.assetUrl)) continue;
+    seen.add(item.assetUrl);
+    references.push({
+      label: item.title,
+      url: item.assetUrl,
+      kind: "brand-kit"
+    });
+  }
+
+  for (const item of run.referenceImages) {
+    if (seen.has(item.url)) continue;
+    seen.add(item.url);
+    references.push({
+      label: item.label,
+      url: item.url,
+      kind: "creative-reference"
+    });
+  }
+
+  return references;
+}
+
+function formatRevisionFeedback(
+  comments: WorkflowState["outputs"][number]["approvalComments"]
+): string {
+  const labels = {
+    graphicDesign: "GD",
+    clientService: "CS",
+    projectManager: "PM / Client"
+  } as const;
+
+  return Object.entries(comments)
+    .filter((entry): entry is [keyof typeof labels, string] =>
+      Boolean(entry[1].trim())
+    )
+    .map(([role, comment]) => `${labels[role]}: ${comment.trim()}`)
+    .join("\n");
 }
 
 async function readJsonResponse<T>(

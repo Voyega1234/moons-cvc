@@ -391,12 +391,14 @@ are removed. Manually authored rows have no marker and are preserved. Existing
 products with the same normalized name are also preserved so user edits are not
 overwritten by a later extraction.
 
-Brand Profile → Past work uses mirrored Ads Library images as default reference
-work when available. It deduplicates by ad archive ID across ingestion runs,
-shows at most 12 recent ads, labels them as reference-only, and creates fresh
-one-hour signed URLs from the private `brand-source-assets` bucket. Delivered
-Moons outputs remain a separate section. The Start-page **Past work** tab uses
-the same data source and switches the right-side library panel directly.
+Brand Profile → Past work uses saved Facebook posts and mirrored Ads Library
+images as default reference work when available. It deduplicates Facebook posts
+by post URL and ads by archive ID across ingestion runs, shows at most 12 recent
+items from each source, labels them as reference-only, and creates fresh
+one-hour signed URLs from the private `brand-source-assets` bucket. Text-only
+Facebook posts remain visible even when no image was mirrored. Delivered Moons
+outputs remain a separate section. The Start-page **Past work** tab uses the
+same data source and switches the right-side library panel directly.
 
 Current `SupabaseBrandMemoryWriter` appends:
 

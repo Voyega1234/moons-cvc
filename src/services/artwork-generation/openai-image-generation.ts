@@ -2,10 +2,20 @@ import { env } from "../../config/env";
 import {
   emptyApprovalComments,
   emptyApprovalGate,
+  outputFormatForService,
   type CreativeDirection,
   type CreativeOutput
 } from "../../domain/creative-run";
-import type { WorkflowState } from "../../features/workflow/model";
+import {
+  creativeMixItems,
+  creativeMixServiceAt,
+  directionServiceAt,
+  type WorkflowState
+} from "../../features/workflow/model";
+import type {
+  ArtworkMode,
+  ImagePromptModel
+} from "../../domain/creative-run";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import { generateArtworkFromWebhook } from "./n8n-artwork-generation";
 
@@ -36,18 +46,23 @@ export interface GenerateArtworkForSelectedHooksInput {
 
 export interface ArtworkGenerationRequest {
   model: "gpt-image-2";
+  artworkMode: ArtworkMode;
+  imagePromptModel: ImagePromptModel;
   runId: string;
   brand: {
     id: string;
     name: string;
     category: string;
+    personality: readonly string[];
+    colors: readonly string[];
+    mustAvoid: readonly string[];
   } | null;
   service: WorkflowState["service"];
   quantity: number;
   brief: string;
   selectedHooks: readonly Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "cta" | "caption"
+    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
   >[];
   textInputs: readonly string[];
   referenceImages: readonly ArtworkReferenceImage[];
@@ -72,7 +87,7 @@ export async function generateArtworkForSelectedHooks({
   textInputs = [],
   referenceImages = []
 }: GenerateArtworkForSelectedHooksInput): Promise<readonly CreativeOutput[]> {
-  const request = buildArtworkGenerationRequest({
+  const requests = buildArtworkGenerationRequests({
     run,
     textInputs,
     referenceImages
@@ -82,16 +97,18 @@ export async function generateArtworkForSelectedHooks({
     env.artworkGenerationMode === "openai" &&
     !env.artworkGenerationEndpoint
   ) {
-    return buildDraftOutputs(run, request.selectedHooks);
+    return buildDraftOutputs(
+      run,
+      requests.flatMap((request) => request.selectedHooks)
+    );
   }
 
-  const payload = await requestArtworkGeneration({ request, run });
-
-  if (!Array.isArray(payload.outputs)) {
-    throw new Error("Artwork generation returned no outputs.");
-  }
-
-  return payload.outputs.map(normalizeArtworkOutput);
+  const payloads = await Promise.all(
+    requests.map((request) => requestArtworkGeneration({ request, run }))
+  );
+  return payloads.flatMap((payload) =>
+    payload.outputs.map(normalizeArtworkOutput)
+  );
 }
 
 export async function regenerateOutputImage({
@@ -102,7 +119,7 @@ export async function regenerateOutputImage({
   run: WorkflowState;
   direction: Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "cta" | "caption"
+    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
   >;
   extraInstructions?: string;
 }): Promise<CreativeOutput> {
@@ -114,17 +131,19 @@ export async function regenerateOutputImage({
   }
 
   const trimmedInstructions = extraInstructions?.trim();
+  const directionIndex = run.directions.findIndex(
+    (item) => item.id === direction.id
+  );
+  const savedDirection = run.directions[directionIndex];
   const request: ArtworkGenerationRequest = {
     model: "gpt-image-2",
+    artworkMode: run.artworkMode,
+    imagePromptModel: run.imagePromptModel,
     runId: run.id,
-    brand: run.brand
-      ? {
-          id: run.brand.id,
-          name: run.brand.name,
-          category: run.brand.category
-        }
-      : null,
-    service: run.service,
+    brand: buildBrandIdentity(run.brand),
+    service: savedDirection
+      ? directionServiceAt(run, savedDirection, directionIndex)
+      : creativeMixServiceAt(run, 0),
     quantity: 1,
     brief: run.brief,
     selectedHooks: [direction],
@@ -156,29 +175,87 @@ export function buildArtworkGenerationRequest({
   textInputs = [],
   referenceImages = []
 }: GenerateArtworkForSelectedHooksInput): ArtworkGenerationRequest {
+  const [request] = buildArtworkGenerationRequests({
+    run,
+    textInputs,
+    referenceImages
+  });
+  if (request) return request;
+
+  return buildArtworkRequest({
+    run,
+    service: creativeMixItems(run)[0]?.service ?? run.service,
+    quantity: 0,
+    selectedHooks: [],
+    textInputs,
+    referenceImages
+  });
+}
+
+export function buildArtworkGenerationRequests({
+  run,
+  textInputs = [],
+  referenceImages = []
+}: GenerateArtworkForSelectedHooksInput): readonly ArtworkGenerationRequest[] {
   const selectedHooks = run.directions
-    .filter((direction) => direction.selected)
-    .map(({ id, hook, concept, why, cta, caption }) => ({
-      id,
-      hook,
-      concept,
-      why,
-      cta,
-      caption
-    }));
+    .map((direction, index) => ({
+      direction,
+      service: directionServiceAt(run, direction, index)
+    }))
+    .filter(({ direction }) => direction.selected);
+
+  return creativeMixItems(run).flatMap((item) => {
+    const hooks = selectedHooks
+      .filter(({ service }) => service === item.service)
+      .slice(0, item.quantity)
+      .map(({ direction: { id, hook, concept, why, visual, cta, caption } }) => ({
+        id,
+        hook,
+        concept,
+        why,
+        visual,
+        cta,
+        caption
+      }));
+    return hooks.length
+      ? [
+          buildArtworkRequest({
+            run,
+            service: item.service,
+            quantity: hooks.length,
+            selectedHooks: hooks,
+            textInputs,
+            referenceImages
+          })
+        ]
+      : [];
+  });
+}
+
+function buildArtworkRequest({
+  run,
+  service,
+  quantity,
+  selectedHooks,
+  textInputs,
+  referenceImages
+}: {
+  run: WorkflowState;
+  service: WorkflowState["service"];
+  quantity: number;
+  selectedHooks: ArtworkGenerationRequest["selectedHooks"];
+  textInputs: readonly string[];
+  referenceImages: readonly ArtworkReferenceImage[];
+}): ArtworkGenerationRequest {
 
   return {
     model: "gpt-image-2",
+    artworkMode: run.artworkMode,
+    imagePromptModel: run.imagePromptModel,
     runId: run.id,
-    brand: run.brand
-      ? {
-          id: run.brand.id,
-          name: run.brand.name,
-          category: run.brand.category
-        }
-      : null,
-    service: run.service,
-    quantity: run.quantity,
+    brand: buildBrandIdentity(run.brand),
+    service,
+    quantity,
     brief: run.brief,
     selectedHooks,
     textInputs,
@@ -189,6 +266,50 @@ export function buildArtworkGenerationRequest({
       format: "png"
     }
   };
+}
+
+function buildBrandIdentity(
+  brand: WorkflowState["brand"]
+): ArtworkGenerationRequest["brand"] {
+  if (!brand) return null;
+
+  return {
+    id: brand.id,
+    name: brand.name,
+    category: brand.category,
+    personality: extractBrandRuleValues(
+      brand.library.brand,
+      /personality|tone|voice|words|guideline|บุคลิก|น้ำเสียง/i
+    ),
+    colors: extractBrandRuleValues(
+      brand.library.brand,
+      /colou?r|palette|สี/i
+    ),
+    mustAvoid: compactUnique([
+      ...brand.memory.avoid,
+      ...extractBrandRuleValues(
+        [...brand.library.brand, ...brand.library.refs],
+        /avoid|must not|restriction|ห้าม|ไม่ควร/i
+      )
+    ])
+  };
+}
+
+function extractBrandRuleValues(
+  items: readonly { title: string; description: string }[],
+  titlePattern: RegExp
+): readonly string[] {
+  return compactUnique(
+    items
+      .filter((item) => titlePattern.test(item.title))
+      .flatMap((item) => item.description.split(/[,;|\n]+/))
+  );
+}
+
+function compactUnique(values: readonly string[]): readonly string[] {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean))
+  ).slice(0, 8);
 }
 
 function buildBrandContext(brand: WorkflowState["brand"]): Pick<
@@ -254,10 +375,18 @@ function buildDraftOutputs(
   run: WorkflowState,
   selectedHooks: ArtworkGenerationRequest["selectedHooks"]
 ): readonly CreativeOutput[] {
-  return selectedHooks.map((hook, index) => ({
+  return selectedHooks.map((hook, index) => {
+    const directionIndex = run.directions.findIndex(
+      (direction) => direction.id === hook.id
+    );
+    const direction = run.directions[directionIndex];
+    const service = direction
+      ? directionServiceAt(run, direction, directionIndex)
+      : creativeMixServiceAt(run, index);
+    return {
     id: `output-${index + 1}`,
     directionId: hook.id,
-    format: run.service === "ugc-video" ? "9:16 UGC" : "1:1 Static",
+    format: outputFormatForService(service),
     status: "draft",
     clientStatus: "queued",
     provider: "openai",
@@ -265,7 +394,8 @@ function buildDraftOutputs(
     revisionCount: 0,
     approval: emptyApprovalGate,
     approvalComments: emptyApprovalComments
-  }));
+  };
+  });
 }
 
 export function normalizeArtworkOutput(output: CreativeOutput): CreativeOutput {

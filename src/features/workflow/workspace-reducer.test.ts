@@ -195,7 +195,7 @@ describe("workspaceReducer", () => {
     });
 
     expect(getActiveRun(result).brand).toBeNull();
-    expect(result.toast).toBe("This client has no Moons brand memory yet.");
+    expect(result.toast).toBe("This client has no Neo brand memory yet.");
   });
 
   it("prevents internal review before QA completes", () => {

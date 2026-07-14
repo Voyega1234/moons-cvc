@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildArtworkGenerationRequest,
+  buildArtworkGenerationRequests,
   normalizeArtworkOutput
 } from "./openai-image-generation";
 import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
@@ -23,7 +24,10 @@ const run: WorkflowState = {
   brandSearch: "",
   librarySection: "brand",
   service: "single-static",
+  artworkMode: "standard",
+  imagePromptModel: "gpt-5.6-terra",
   quantity: 1,
+  successMetric: "CTR",
   brief: "Launch a soft summer bouquet offer.",
   attachments: [],
   referenceImages: [],
@@ -71,6 +75,8 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.model).toBe("gpt-image-2");
+    expect(request.artworkMode).toBe("standard");
+    expect(request.imagePromptModel).toBe("gpt-5.6-terra");
     expect(request.brief).toBe(run.brief);
     expect(request.selectedHooks).toHaveLength(1);
     expect(request.selectedHooks[0]?.hook).toBe(
@@ -81,8 +87,130 @@ describe("buildArtworkGenerationRequest", () => {
       kind: "url",
       url: "https://example.com/reference.png"
     });
-    expect(request.selectedHooks[0]).not.toHaveProperty("visual");
+    expect(request.selectedHooks[0]?.visual).toBe(
+      "Soft natural light with bouquet on table."
+    );
+    expect(request.brand).toMatchObject({
+      name: "Flora Daily",
+      personality: [],
+      colors: [],
+      mustAvoid: []
+    });
     expect(request).not.toHaveProperty("brandMemory");
+  });
+
+  it("compacts brand identity fields for the Standard prompt", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        brand: {
+          ...run.brand!,
+          library: {
+            ...run.brand!.library,
+            brand: [
+              {
+                id: "tone",
+                title: "Brand personality",
+                description: "expert, direct, approachable"
+              },
+              {
+                id: "colors",
+                title: "Colors",
+                description: "deep blue, bright blue, white"
+              }
+            ]
+          },
+          memory: {
+            working: [],
+            avoid: ["cheap sales graphics", "generic AI robots"]
+          }
+        }
+      }
+    });
+
+    expect(request.brand).toMatchObject({
+      personality: ["expert", "direct", "approachable"],
+      colors: ["deep blue", "bright blue", "white"],
+      mustAvoid: ["cheap sales graphics", "generic AI robots"]
+    });
+  });
+
+  it("passes design-system mode without changing the provider contract", () => {
+    const request = buildArtworkGenerationRequest({
+      run: { ...run, artworkMode: "design-system" }
+    });
+
+    expect(request.artworkMode).toBe("design-system");
+    expect(request.model).toBe("gpt-image-2");
+    expect(request.selectedHooks).toHaveLength(1);
+  });
+
+  it("passes the selected OpenRouter prompt model without changing the image model", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        imagePromptModel: "anthropic/claude-sonnet-4.6"
+      }
+    });
+
+    expect(request.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
+    expect(request.model).toBe("gpt-image-2");
+  });
+
+  it("splits a mixed content plan into existing per-service backend requests", () => {
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "mix-static", service: "single-static", quantity: 1 },
+          { id: "mix-ugc", service: "ugc-video", quantity: 1 }
+        ],
+        quantity: 2,
+        directions: run.directions.map((direction) => ({
+          ...direction,
+          selected: true
+        }))
+      }
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.service)).toEqual([
+      "single-static",
+      "ugc-video"
+    ]);
+    expect(requests.map((request) => request.quantity)).toEqual([1, 1]);
+    expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-1");
+    expect(requests[1]?.selectedHooks[0]?.id).toBe("hook-2");
+  });
+
+  it("groups replacement choices by their saved content type, not array position", () => {
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "mix-static", service: "single-static", quantity: 1 },
+          { id: "mix-ugc", service: "ugc-video", quantity: 1 }
+        ],
+        quantity: 2,
+        directions: [
+          { ...run.directions[0]!, service: "single-static", selected: false },
+          { ...run.directions[1]!, service: "ugc-video", selected: true },
+          {
+            ...run.directions[0]!,
+            id: "hook-static-replacement",
+            service: "single-static",
+            selected: true
+          }
+        ]
+      }
+    });
+
+    expect(requests.map((request) => request.service)).toEqual([
+      "single-static",
+      "ugc-video"
+    ]);
+    expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-static-replacement");
+    expect(requests[1]?.selectedHooks[0]?.id).toBe("hook-2");
   });
 
   it("keeps returned assets as links and storage metadata, not base64 payloads", () => {

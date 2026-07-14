@@ -226,19 +226,26 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     if (error) throw error;
   }
 
-  async listAdsLibraryPastWork(
+  async listPastWork(
     clientId: string
   ): Promise<readonly BrandPastWorkItem[]> {
     const client = getSupabaseClient();
-    const [assetsResult, adsResult] = await Promise.all([
+    const [assetsResult, postsResult, adsResult] = await Promise.all([
       client
         .schema("moons")
         .from("brand_visual_assets")
         .select(
-          "id, source_item_id, source_url, asset_bucket, asset_storage_path, caption_context, created_at"
+          "id, source_type, source_item_id, source_url, asset_bucket, asset_storage_path, caption_context, created_at"
         )
         .eq("client_id", clientId)
-        .eq("source_type", "facebook_ad")
+        .in("source_type", ["facebook_post", "facebook_ad"])
+        .order("created_at", { ascending: false })
+        .limit(200),
+      client
+        .schema("moons")
+        .from("brand_social_posts")
+        .select("id, post_url, text, created_at")
+        .eq("client_id", clientId)
         .order("created_at", { ascending: false })
         .limit(100),
       client
@@ -252,6 +259,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     ]);
 
     if (assetsResult.error) throw assetsResult.error;
+    if (postsResult.error) throw postsResult.error;
     if (adsResult.error) throw adsResult.error;
 
     const adsByArchiveId = new Map<
@@ -263,7 +271,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
         adsByArchiveId.set(ad.ad_archive_id, ad);
       }
     }
-    const assets = selectLatestUniqueAdAssets(assetsResult.data);
+    const assets = selectLatestUniquePastWorkAssets(assetsResult.data);
     const signedUrls = await Promise.all(
       assets.map(async (asset) => {
         const { data, error } = await client.storage
@@ -274,21 +282,55 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
         return data.signedUrl;
       })
     );
+    const imageUrlByAssetId = new Map(
+      assets.map((asset, index) => [asset.id, signedUrls[index] ?? null])
+    );
+    const postAssetByUrl = new Map(
+      assets
+        .filter(
+          (asset) => asset.source_type === "facebook_post" && asset.source_url
+        )
+        .map((asset) => [asset.source_url as string, asset])
+    );
+    const seenPostUrls = new Set<string>();
+    const posts = postsResult.data
+      .filter((post) => {
+        if (seenPostUrls.has(post.post_url)) return false;
+        seenPostUrls.add(post.post_url);
+        return true;
+      })
+      .slice(0, 12)
+      .map((post, index) => {
+        const asset = postAssetByUrl.get(post.post_url);
+        return {
+          id: `facebook-post-${post.id}`,
+          title: `Facebook post ${index + 1}`,
+          description: post.text || asset?.caption_context || "",
+          imageUrl: asset ? imageUrlByAssetId.get(asset.id) ?? null : null,
+          sourceUrl: post.post_url,
+          sourceType: "facebook_post" as const
+        };
+      });
 
-    return assets.map((asset, index) => {
-      const ad = asset.source_item_id
-        ? adsByArchiveId.get(asset.source_item_id)
-        : undefined;
+    const ads = assets
+      .filter((asset) => asset.source_type === "facebook_ad")
+      .map((asset, index) => {
+        const ad = asset.source_item_id
+          ? adsByArchiveId.get(asset.source_item_id)
+          : undefined;
 
-      return {
-        id: asset.id,
-        title: ad?.title || ad?.page_name || `Ads Library creative ${index + 1}`,
-        description: ad?.body_text || asset.caption_context,
-        imageUrl: signedUrls[index] ?? "",
-        sourceUrl: ad?.ad_library_url || asset.source_url,
-        sourceType: "ads_library"
-      };
-    });
+        return {
+          id: asset.id,
+          title:
+            ad?.title || ad?.page_name || `Ads Library creative ${index + 1}`,
+          description: ad?.body_text || asset.caption_context,
+          imageUrl: imageUrlByAssetId.get(asset.id) ?? null,
+          sourceUrl: ad?.ad_library_url || asset.source_url,
+          sourceType: "ads_library" as const
+        };
+      });
+
+    return [...posts, ...ads];
   }
 
   async listDocuments(clientId: string): Promise<readonly BrandDocument[]> {
@@ -532,6 +574,32 @@ export function selectLatestUniqueAdAssets<
       return true;
     })
     .slice(0, limit);
+}
+
+export function selectLatestUniquePastWorkAssets<
+  T extends {
+    source_type: "facebook_post" | "facebook_ad" | "google_search";
+    source_item_id: string | null;
+    source_url: string | null;
+  }
+>(assets: readonly T[], limitPerType = 12): T[] {
+  const seen = new Set<string>();
+  const counts = { facebook_post: 0, facebook_ad: 0 };
+
+  return assets.filter((asset) => {
+    if (asset.source_type === "google_search") return false;
+    const sourceKey =
+      asset.source_type === "facebook_post"
+        ? asset.source_url ?? asset.source_item_id
+        : asset.source_item_id ?? asset.source_url;
+    if (!sourceKey || counts[asset.source_type] >= limitPerType) return false;
+
+    const key = `${asset.source_type}:${sourceKey}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    counts[asset.source_type] += 1;
+    return true;
+  });
 }
 
 function mapLibraryItem(row: BrandLibraryRow): LibraryItem {

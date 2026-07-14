@@ -1,6 +1,10 @@
 import { stages } from "./config";
 import { canSelectBrand } from "../../domain/brand";
-import type { WorkflowAction, WorkflowState } from "./model";
+import {
+  totalCreativeMixQuantity,
+  type WorkflowAction,
+  type WorkflowState
+} from "./model";
 
 export function isClientReviewComplete(run: WorkflowState): boolean {
   return (
@@ -64,7 +68,7 @@ export function workflowActionBlockReason(
     case "select-brand":
       return canSelectBrand(action.brand)
         ? null
-        : "This client has no Moons brand memory yet.";
+        : "This client has no Neo brand memory yet.";
     case "generate-directions":
     case "generate-more-directions":
       if (!run.brand) return "Choose a brand first.";
@@ -74,15 +78,24 @@ export function workflowActionBlockReason(
       return run.directions.some((direction) => direction.id === action.id)
         ? null
         : "Generate hooks before selecting one.";
+    case "replace-direction":
+      return run.directions.some((direction) => direction.id === action.id)
+        ? null
+        : "Hook not found.";
+    case "replace-directions":
+      if (!run.directions.length) return "Generate hooks first.";
+      return action.directions.length === run.directions.length
+        ? null
+        : "Regenerated hook count does not match the current set.";
     case "auto-select-directions":
       return run.directions.length > 0
         ? null
-        : "Generate hooks before Moons can pick.";
+        : "Generate hooks before Neo can pick.";
     case "create-outputs":
       if (!run.directions.length) return "Generate hooks first.";
-      return selectedDirectionCount(run) === run.quantity
+      return selectedDirectionCount(run) === totalCreativeMixQuantity(run)
         ? null
-        : `Select ${run.quantity} hooks first.`;
+        : `Select ${totalCreativeMixQuantity(run)} hooks first.`;
     case "run-qa":
       return run.outputs.length > 0 ? null : "Create outputs before QA.";
     case "approve-all":
@@ -90,6 +103,9 @@ export function workflowActionBlockReason(
       return run.qaComplete ? null : "Run QA before internal approval.";
     case "review-output":
       if (!run.qaComplete) return "Run QA before internal review.";
+      if (action.decision === "rejected" && !action.comment.trim()) {
+        return "Add a comment before rejecting.";
+      }
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";
@@ -102,6 +118,12 @@ export function workflowActionBlockReason(
       return run.approved ? null : "Approve internally before client review.";
     case "approve-output":
       if (!run.clientSent) return "Send to client first.";
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "request-client-change":
+      if (!run.clientSent) return "Send to client first.";
+      if (!action.comment.trim()) return "Add a comment before requesting changes.";
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";

@@ -76,5 +76,5 @@ function initialsFromName(clientName: string): string {
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
 
-  return initials || "—";
+  return initials || "-";
 }

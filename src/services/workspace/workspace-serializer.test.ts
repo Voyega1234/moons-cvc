@@ -47,8 +47,35 @@ describe("workspace serializer", () => {
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
       runId: workspace.activeRunId,
+      now: "2026-06-23T10:04:30.000Z",
+      action: { type: "add-creative-mix-item" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:00.000Z",
       action: { type: "set-brief", brief: "Album persisted brief" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:30.000Z",
+      action: { type: "set-artwork-mode", mode: "design-system" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:45.000Z",
+      action: {
+        type: "set-image-prompt-model",
+        model: "anthropic/claude-sonnet-4.6"
+      }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:50.000Z",
+      action: { type: "set-success-metric", metric: "ROAS" }
     });
 
     const restored = deserializeWorkspace(
@@ -60,9 +87,87 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["album-run"]?.brief).toBe(
       "Album persisted brief"
     );
+    expect(restored?.runsById["album-run"]?.artworkMode).toBe(
+      "design-system"
+    );
+    expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
+      "anthropic/claude-sonnet-4.6"
+    );
+    expect(restored?.runsById["album-run"]?.successMetric).toBe("ROAS");
+    expect(restored?.runsById["album-run"]?.creativeMix).toEqual([
+      { id: "creative-mix-1", service: "album-post", quantity: 3 },
+      expect.objectContaining({ service: "single-static", quantity: 1 })
+    ]);
+    expect(restored?.runsById["album-run"]?.quantity).toBe(4);
     expect(restored?.runsById["single-run"]?.brand?.id).toBe(brand.id);
     expect(restored?.runsById["single-run"]?.brandMenuOpen).toBe(false);
     expect(restored?.toast).toBeNull();
+  });
+
+  it("loads older snapshots without an artwork mode as standard", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as { data: { runsById: Record<string, { artworkMode?: string }> } };
+    delete parsed.data.runsById["run-1"]?.artworkMode;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.artworkMode).toBe("standard");
+  });
+
+  it("loads older snapshots without a success metric as CTR", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as { data: { runsById: Record<string, { successMetric?: string }> } };
+    delete parsed.data.runsById["run-1"]?.successMetric;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.successMetric).toBe("CTR");
+  });
+
+  it("loads older snapshots without an image prompt model as GPT 5.6", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { imagePromptModel?: string }> };
+    };
+    delete parsed.data.runsById["run-1"]?.imagePromptModel;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.imagePromptModel).toBe(
+      "gpt-5.6-terra"
+    );
+  });
+
+  it("migrates older single-format snapshots into one creative-mix row", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as { data: { runsById: Record<string, { creativeMix?: unknown }> } };
+    delete parsed.data.runsById["run-1"]?.creativeMix;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.creativeMix).toEqual([
+      { id: "creative-mix-1", service: "single-static", quantity: 3 }
+    ]);
   });
 
   it("round-trips per-creative approval state on outputs", () => {
@@ -93,6 +198,19 @@ describe("workspace serializer", () => {
       runId: workspace.activeRunId,
       now: "2026-06-23T10:02:30.000Z",
       action: { type: "auto-select-directions" }
+    });
+    const firstDirectionId = workspace.runsById[workspace.activeRunId]
+      ?.directions[0]?.id;
+    if (!firstDirectionId) throw new Error("Expected a generated direction.");
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:02:35.000Z",
+      action: {
+        type: "set-direction-export-group",
+        id: firstDirectionId,
+        group: "recommended"
+      }
     });
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
@@ -128,7 +246,8 @@ describe("workspace serializer", () => {
         type: "review-output",
         id: firstOutput.id,
         role: "graphicDesign",
-        decision: "rejected"
+        decision: "rejected",
+        comment: "Please revise the hierarchy."
       }
     });
 
@@ -144,7 +263,16 @@ describe("workspace serializer", () => {
       clientService: null,
       projectManager: null
     });
+    expect(restoredOutput?.approvalComments.graphicDesign).toBe(
+      "Please revise the hierarchy."
+    );
     expect(restoredOutput?.status).toBe("needs-revision");
+    expect(restored?.runsById["run-1"]?.directions[0]).toMatchObject({
+      service: "single-static",
+      subheadline: "Subheadline 1",
+      subheadlineHighlight: "Subheadline 1",
+      exportGroup: "recommended"
+    });
   });
 
   it("rejects malformed JSON and unknown schema versions", () => {

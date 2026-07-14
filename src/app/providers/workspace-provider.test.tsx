@@ -36,7 +36,7 @@ describe("WorkspaceProvider", () => {
       </WorkspaceProvider>
     );
 
-    expect(screen.getByText("Loading Moons...")).toBeTruthy();
+    expect(screen.getByText("Loading Neo...")).toBeTruthy();
     expect(save).not.toHaveBeenCalled();
 
     await act(async () => {

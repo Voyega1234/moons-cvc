@@ -85,7 +85,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
       return;
     }
 
-    setMessage("Check your email for the Moons sign-in link.");
+    setMessage("Check your email for the Neo sign-in link.");
   }
 
   if (loading) {
@@ -102,7 +102,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     <main className="boot-auth">
       <form className="auth-card" onSubmit={submit}>
         <p className="eyebrow">Convert Cake only</p>
-        <h1>Sign in to Moons</h1>
+        <h1>Sign in to Neo</h1>
         <p>Use your Convert Cake email to access production data.</p>
         <label>
           Email

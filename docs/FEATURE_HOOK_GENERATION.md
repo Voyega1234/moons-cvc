@@ -13,10 +13,11 @@ Moons supports two hook generation modes:
    - New backend harness mode.
    - Frontend sends the active run context to `/api/hook-generation-harness`.
    - Backend keeps model/search API keys server-side.
-   - Backend performs two model steps:
+   - Backend performs three model steps:
      1. research/search for provable Thai moments, consumer behavior, cultural
         signals, platform buzz, and category signals;
-     2. generate, judge, rank, and return six hook directions.
+     2. generate, judge, and rank the requested hook directions;
+     3. select exact Subheadline highlight spans in one dedicated batch pass.
 
 Switch modes with:
 
@@ -123,8 +124,11 @@ guaranteed to use them, but the data is there if the flow is updated to.
 type HookGenerationHarnessResponse = {
   directions: {
     id: string;
+    service: ServiceType;
     hook: string;
+    subheadline: string;
     concept: string;
+    subheadlineHighlight: string;
     why: string;
     visual: string;
     cta: string;
@@ -139,8 +143,13 @@ type HookGenerationHarnessResponse = {
 The UI currently persists:
 
 - `id`
+- `service`
 - `hook`
+- `subheadline` — concise user-facing supporting copy mapped from
+  `copywriting.sub_headline_1`
 - `concept`
+- `subheadlineHighlight` — exact phrase inside `subheadline` used for bold
+  emphasis on screen and in PDF export
 - `why`
 - `visual`
 - `cta`
@@ -150,6 +159,33 @@ The UI currently persists:
 `score`, `reasoning`, and `citations` are returned by the backend for future UI
 work but are not persisted in `CreativeDirection` yet.
 
+## Subheadline highlight pass
+
+After direction generation finishes, the harness sends every generated
+`{ id, subheadline }` to a separate structured-output call. The generation
+prompt no longer selects `subheadlineHighlight`; the dedicated pass is the
+single source of that decision.
+
+The runtime prompt is the stakeholder-supplied prompt beginning with:
+
+```text
+Bold the sentence of this text that you think it's a highlight of this sub-headline
+Rules:
+- Return JSON only.
+- Use exact text spans from subheadline. Do not rewrite.
+- Prefer only the strongest strategic noun, product/service term, audience pain, proof, or conversion angle.
+- Avoid generic words, filler, conjunctions, and common Thai particles.
+- If the subheadline has no clearly important term, return an empty array.
+```
+
+It requests `{ items: [{ id, highlights: [...] }] }` and appends the generated
+items with `JSON.stringify(items, null, 2)`. The schema permits zero or one
+highlight per item. The server accepts only an exact continuous span found in
+the matching Subheadline. Rewritten or invalid phrases become `""`, and an
+empty `highlights` array remains intentionally unbolded in the Angle card,
+workspace persistence, regeneration flow, and PDF export. Only legacy saved
+data where the highlight field is absent uses the deterministic fallback.
+
 ## Prompt source
 
 The harness prompt is adapted from:
@@ -157,7 +193,7 @@ The harness prompt is adapted from:
 - `agent_prompt/agent_hook.md`
 - `agent_prompt/agent_seasonal.md`
 
-The n8n placeholders from those files are replaced with the current Moons run
+The n8n placeholders from those files are replaced with the current Neo run
 context:
 
 - user brief

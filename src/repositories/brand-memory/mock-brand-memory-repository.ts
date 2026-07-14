@@ -139,7 +139,7 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     }
   }
 
-  async listAdsLibraryPastWork(
+  async listPastWork(
     _clientId: string
   ): Promise<readonly BrandPastWorkItem[]> {
     return [];

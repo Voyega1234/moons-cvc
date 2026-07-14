@@ -10,7 +10,12 @@ const requestBody = {
     category: "AI marketing agency"
   },
   service: "single-static",
-  quantity: 3,
+  quantity: 6,
+  contentTypeQuotas: [
+    { service: "single-static", count: 3 },
+    { service: "album-post", count: 1 },
+    { service: "ugc-video", count: 2 }
+  ],
   brief: "ต้องการ creative เพื่อชวน B2B เข้าร่วม AI SEO webinar",
   attachments: [],
   brandMemory: {
@@ -34,6 +39,17 @@ const requestBody = {
     refs: []
   }
 };
+
+function highlightResponse(id: string, highlights: readonly string[]) {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        items: [{ id, highlights }]
+      })
+    }),
+    { status: 200 }
+  );
+}
 
 describe("handleHookGenerationHarnessRequest", () => {
   it("requires a Supabase user token when backend Supabase env is configured", async () => {
@@ -86,8 +102,11 @@ describe("handleHookGenerationHarnessRequest", () => {
               directions: [
                 {
                   id: "hook-1",
+                  service: "single-static",
                   hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?",
+                  subheadline: "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น",
                   concept: "เปิดด้วยคำถามที่โยง visibility กับยอดขาย",
+                  subheadlineHighlight: "visibility กับยอดขาย",
                   why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
                   visual: "Founder มอง search result + AI answer บนจอ",
                   cta: "จองที่นั่ง Webinar",
@@ -101,6 +120,9 @@ describe("handleHookGenerationHarnessRequest", () => {
           }),
           { status: 200 }
         )
+      )
+      .mockResolvedValueOnce(
+        highlightResponse("hook-1", ["visibility กับยอดขาย"])
       );
 
     const response = await handleHookGenerationHarnessRequest({
@@ -119,17 +141,25 @@ describe("handleHookGenerationHarnessRequest", () => {
     const payload = await response.json();
     expect(payload.directions[0]).toMatchObject({
       hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?",
+      subheadline: "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น",
+      subheadlineHighlight: "visibility กับยอดขาย",
       why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
       cta: "จองที่นั่ง Webinar"
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const firstBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { tools?: unknown[]; model: string; input: unknown };
     const secondBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as { tools?: unknown[]; input: unknown };
+    const thirdBody = JSON.parse(
+      String(fetchMock.mock.calls[2]?.[1]?.body)
+    ) as {
+      input: { content: { text: string }[] }[];
+      text: { format: { name: string } };
+    };
 
     expect(firstBody.model).toBe("gpt-test");
     expect(firstBody.tools).toEqual([{ type: "web_search_preview" }]);
@@ -145,9 +175,34 @@ describe("handleHookGenerationHarnessRequest", () => {
       "CONTENT TYPE CREATIVE RULES"
     );
     expect(JSON.stringify(secondBody.input)).toContain(
-      "Return exactly 6 STATIC AD directions."
+      "Return exactly 6 directions matching this quota exactly"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain("ALBUM AD");
+    expect(JSON.stringify(secondBody.input)).toContain("UGC VIDEO");
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "caption and cta must never contain 'ครับ' or 'ค่ะ'"
+    );
+    expect(JSON.stringify(secondBody.input)).not.toContain(
+      "subheadlineHighlight"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "subheadline = copywriting.sub_headline_1"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "one concise Thai sentence"
     );
     expect(JSON.stringify(secondBody.input)).not.toContain("$('Webhook')");
+    const highlightPrompt = thirdBody.input[0]?.content[0]?.text ?? "";
+    expect(thirdBody.text.format.name).toBe("neo_subheadline_highlights");
+    expect(highlightPrompt).toContain(
+      "Bold the sentence of this text that you think it's a highlight of this sub-headline"
+    );
+    expect(highlightPrompt).toContain(
+      "Use exact text spans from subheadline. Do not rewrite."
+    );
+    expect(highlightPrompt).toContain(
+      '"subheadline": "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น"'
+    );
   });
 
   it("includes real past post captions as a style reference for caption writing", async () => {
@@ -178,8 +233,11 @@ describe("handleHookGenerationHarnessRequest", () => {
               directions: [
                 {
                   id: "hook-1",
+                  service: "single-static",
                   hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?",
+                  subheadline: "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น",
                   concept: "เปิดด้วยคำถามที่โยง visibility กับยอดขาย",
+                  subheadlineHighlight: "visibility กับยอดขาย",
                   why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
                   visual: "Founder มอง search result + AI answer บนจอ",
                   cta: "จองที่นั่ง Webinar",
@@ -193,6 +251,9 @@ describe("handleHookGenerationHarnessRequest", () => {
           }),
           { status: 200 }
         )
+      )
+      .mockResolvedValueOnce(
+        highlightResponse("hook-1", ["visibility กับยอดขาย"])
       );
 
     const fakePastPostsClient: PastPostsClient = {
@@ -303,8 +364,11 @@ describe("handleHookGenerationHarnessRequest", () => {
               directions: [
                 {
                   id: "hook-2",
+                  service: "single-static",
                   hook: "มุมใหม่ที่ยังไม่เคยพูดถึง",
+                  subheadline: "สนับสนุนมุมใหม่โดยไม่ซ้ำเดิม",
                   concept: "Different angle",
+                  subheadlineHighlight: "มุมใหม่",
                   why: "Distinct from the previous batch",
                   visual: "Clean, modern.",
                   cta: "ดูรายละเอียด",
@@ -318,6 +382,9 @@ describe("handleHookGenerationHarnessRequest", () => {
           }),
           { status: 200 }
         )
+      )
+      .mockResolvedValueOnce(
+        highlightResponse("hook-2", [])
       );
 
     const response = await handleHookGenerationHarnessRequest({
@@ -336,6 +403,8 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.directions[0]?.subheadlineHighlight).toBe("");
 
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)

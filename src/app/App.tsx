@@ -1,8 +1,33 @@
 import {
   useCallback,
   useMemo,
+  useState,
   type Dispatch
 } from "react";
+import {
+  ArrowClockwise,
+  Bell,
+  Books,
+  Brain,
+  ChartLineUp,
+  CheckCircle,
+  Kanban,
+  Lightbulb,
+  NotePencil,
+  PaintBrush,
+  Plus,
+  ShieldCheck,
+  Sparkle,
+  SquaresFour,
+  Tray,
+  Users,
+  X
+} from "@phosphor-icons/react";
+import type { Brand } from "../domain/brand";
+import {
+  useBrands,
+  type BrandNotification
+} from "./providers/brand-provider";
 import { useWorkspace } from "./providers/workspace-provider";
 import type { CreativeStage } from "../domain/creative-run";
 import { serviceLabels, stages } from "../features/workflow/config";
@@ -11,6 +36,10 @@ import type {
   WorkspaceState,
   WorkflowAction,
   WorkflowState
+} from "../features/workflow/model";
+import {
+  creativeMixItems,
+  totalCreativeMixQuantity
 } from "../features/workflow/model";
 import {
   highestUnlockedStageIndex,
@@ -81,51 +110,78 @@ export function App() {
 
   return (
     <div
-      className={`app ${workspace.view === "overview" ? "mode-overview" : ""}`}
+      className={`app neo-app ${workspace.view === "overview" ? "mode-overview" : ""}`}
     >
-      <Header
+      <NavigationRail
         workspace={workspace}
         state={state}
         dispatch={dispatch}
         workspaceDispatch={workspaceDispatch}
         createRun={createRun}
       />
-      <main>
-        <div className="shell">
-          {workspace.view === "overview" ? (
-            <Overview
-              state={state}
-              dispatch={dispatch}
-              workspace={workspace}
-              workspaceDispatch={workspaceDispatch}
-              onOpenStudio={() =>
-                workspaceDispatch({ type: "set-view", view: "studio" })
-              }
-            />
-          ) : (
-            <>
-              <section className="hero">
-                <div>
-                  <h1>{stage.hero}</h1>
-                  <p>{stage.sub}</p>
-                </div>
-                <aside>
-                  <span className="pill">
-                    {state.brand
-                      ? `${state.brand.name} · ${serviceLabels[state.service]} · ${state.quantity}`
-                      : "Waiting for client"}
-                  </span>
-                </aside>
-              </section>
-              <CurrentStage
+      <div className="neo-page">
+        <Header
+          workspace={workspace}
+          state={state}
+          dispatch={dispatch}
+          workspaceDispatch={workspaceDispatch}
+          createRun={createRun}
+        />
+        <main>
+          <div className="shell neo-workspace">
+            {workspace.view === "overview" ? (
+              <Overview
                 state={state}
                 dispatch={dispatch}
-                onCreateRun={() => createRun(true)}
+                workspace={workspace}
+                workspaceDispatch={workspaceDispatch}
+                onOpenStudio={() =>
+                  workspaceDispatch({ type: "set-view", view: "studio" })
+                }
               />
-            </>
-          )}
-        </div>
-      </main>
+            ) : (
+              <>
+                {state.stage === "start" ? (
+                  <section className="hero neo-hero">
+                    <div className="neo-hero-copy">
+                      <span className="neo-kicker">
+                        <span aria-hidden="true" /> Creative intelligence studio
+                      </span>
+                      <h1>{stage.hero}</h1>
+                      <p>{stage.sub}</p>
+                    </div>
+                    <aside className="neo-hero-signals" aria-label="Run summary">
+                      <div className="neo-signal-card neo-signal-primary">
+                        <span>Active brand</span>
+                        <b>{state.brand?.name ?? "Choose a brand"}</b>
+                        <small>Memory and approved signals</small>
+                      </div>
+                      <div className="neo-signal-card neo-signal-lime">
+                        <span>Creative set</span>
+                        <b>{totalCreativeMixQuantity(state)}</b>
+                        <small>
+                          {creativeMixItems(state).length} content
+                          {creativeMixItems(state).length === 1 ? " type" : " types"}
+                        </small>
+                      </div>
+                      <div className="neo-signal-card neo-signal-orange">
+                        <span>Workflow</span>
+                        <b>7</b>
+                        <small>Connected decisions</small>
+                      </div>
+                    </aside>
+                  </section>
+                ) : null}
+                <CurrentStage
+                  state={state}
+                  dispatch={dispatch}
+                  onCreateRun={() => createRun(true)}
+                />
+              </>
+            )}
+          </div>
+        </main>
+      </div>
       <div className="toast-wrap" role="status" aria-live="polite">
         {persistenceError ? (
           <div className="toast show persistence-toast">
@@ -137,6 +193,87 @@ export function App() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export function NavigationRail({
+  workspace,
+  state,
+  dispatch,
+  workspaceDispatch,
+  createRun
+}: {
+  workspace: WorkspaceState;
+  state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
+  workspaceDispatch: Dispatch<WorkspaceAction>;
+  createRun: (keepBrand: boolean) => void;
+}) {
+  const learnAction: WorkflowAction = { type: "set-stage", stage: "summary" };
+  const learnBlocked = workflowActionBlockReason(state, learnAction);
+
+  const openStudioStage = (stage: CreativeStage) => {
+    workspaceDispatch({ type: "set-view", view: "studio" });
+    dispatch({ type: "set-stage", stage });
+  };
+
+  return (
+    <aside className="neo-rail" aria-label="Primary navigation">
+      <button
+        className="neo-logo-button"
+        type="button"
+        aria-label="Open Neo studio"
+        onClick={() => workspaceDispatch({ type: "set-view", view: "studio" })}
+      >
+        neo
+      </button>
+      <nav className="neo-rail-nav">
+        <button
+          className={workspace.view === "studio" ? "active" : ""}
+          type="button"
+          onClick={() => workspaceDispatch({ type: "set-view", view: "studio" })}
+        >
+          <SquaresFour size={21} weight="duotone" aria-hidden="true" />
+          <span>Studio</span>
+        </button>
+        <button
+          className={workspace.view === "overview" ? "active" : ""}
+          type="button"
+          onClick={() => workspaceDispatch({ type: "set-view", view: "overview" })}
+        >
+          <Kanban size={21} weight="duotone" aria-hidden="true" />
+          <span>Workboard</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => workspaceDispatch({ type: "set-view", view: "overview" })}
+        >
+          <Tray size={21} weight="duotone" aria-hidden="true" />
+          <span>Inbox</span>
+        </button>
+        <button type="button" onClick={() => openStudioStage("start")}>
+          <Books size={21} weight="duotone" aria-hidden="true" />
+          <span>Library</span>
+        </button>
+        <button
+          type="button"
+          disabled={Boolean(learnBlocked)}
+          title={learnBlocked ?? undefined}
+          onClick={() => openStudioStage("summary")}
+        >
+          <Lightbulb size={21} weight="duotone" aria-hidden="true" />
+          <span>Learnings</span>
+        </button>
+      </nav>
+      <button
+        className="neo-rail-create"
+        type="button"
+        onClick={() => createRun(true)}
+      >
+        <Plus size={21} weight="bold" aria-hidden="true" />
+        <span>New</span>
+      </button>
+    </aside>
   );
 }
 
@@ -157,40 +294,24 @@ function Header({
     <header className="topbar">
       <div className="shell">
         <div className="nav">
-          <button
-            className="brand"
-            type="button"
-            onClick={() =>
-              workspaceDispatch({ type: "set-view", view: "overview" })
-            }
-          >
-            <span className="logo" aria-hidden="true" />
-            <span>
-              <b>Moons</b>
-              <span>Creative OS</span>
-            </span>
-          </button>
-          <div className="view-toggle">
-            <button
-              type="button"
-              className={workspace.view === "overview" ? "on" : ""}
-              onClick={() =>
-                workspaceDispatch({ type: "set-view", view: "overview" })
-              }
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              className={workspace.view === "studio" ? "on" : ""}
-              onClick={() =>
-                workspaceDispatch({ type: "set-view", view: "studio" })
-              }
-            >
-              Studio
-            </button>
-          </div>
+          {workspace.view === "studio" ? (
+            <Journey state={state} dispatch={dispatch} />
+          ) : (
+            <div className="neo-workboard-label">
+              <Kanban size={20} weight="duotone" aria-hidden="true" />
+              <span><b>Workboard</b><small>Live workspace decisions</small></span>
+            </div>
+          )}
           <div className="nav-right">
+            <NotificationMailbox
+              onOpenNotification={(notification, brand) => {
+                workspaceDispatch({ type: "set-view", view: "studio" });
+                dispatch({ type: "set-stage", stage: "start" });
+                if (brand && notification.status !== "failed") {
+                  dispatch({ type: "select-brand", brand });
+                }
+              }}
+            />
             <div className="client-pill">
               <span className="mini-avatar">
                 {state.brand?.initials ?? "MO"}
@@ -204,7 +325,7 @@ function Header({
               aria-label="Refresh studio"
               onClick={() => createRun(false)}
             >
-              ↻
+              <ArrowClockwise size={18} weight="bold" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -215,12 +336,117 @@ function Header({
               workspaceDispatch={workspaceDispatch}
               createRun={createRun}
             />
-            <Journey state={state} dispatch={dispatch} />
             <MemoryRibbon state={state} />
           </>
         ) : null}
       </div>
     </header>
+  );
+}
+
+export function NotificationMailbox({
+  onOpenNotification
+}: {
+  onOpenNotification: (
+    notification: BrandNotification,
+    brand: Brand | undefined
+  ) => void;
+}) {
+  const {
+    brands,
+    notifications,
+    unreadNotificationCount,
+    markAllNotificationsRead
+  } = useBrands();
+  const [open, setOpen] = useState(false);
+
+  function toggleMailbox() {
+    const next = !open;
+    setOpen(next);
+    if (next) markAllNotificationsRead();
+  }
+
+  return (
+    <div className="neo-notification-wrap">
+      <button
+        className={`neo-notification-button ${open ? "open" : ""}`}
+        type="button"
+        aria-label={
+          unreadNotificationCount
+            ? `Notifications, ${unreadNotificationCount} unread`
+            : "Notifications"
+        }
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={toggleMailbox}
+      >
+        <Bell size={18} weight="regular" aria-hidden="true" />
+        {unreadNotificationCount ? (
+          <span className="neo-notification-badge" aria-hidden="true" />
+        ) : null}
+      </button>
+      {open ? (
+        <section
+          className="neo-notification-popover"
+          role="dialog"
+          aria-label="Notifications"
+        >
+          <header>
+            <div>
+              <b>Notifications</b>
+              <span>Brand setup updates</span>
+            </div>
+            <button
+              type="button"
+              aria-label="Close notifications"
+              onClick={() => setOpen(false)}
+            >
+              <X size={18} weight="bold" aria-hidden="true" />
+            </button>
+          </header>
+          <div className="neo-notification-list">
+            {notifications.length ? (
+              notifications.map((notification) => {
+                const brand = brands.find(
+                  (candidate) => candidate.id === notification.brandId
+                );
+                return (
+                  <button
+                    className={`neo-notification-item ${notification.status}`}
+                    type="button"
+                    key={notification.id}
+                    onClick={() => {
+                      onOpenNotification(notification, brand);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="neo-notification-avatar">
+                      {brand?.initials ??
+                        notification.brandName.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="neo-notification-copy">
+                      <b>{notification.title}</b>
+                      <span>{notification.message}</span>
+                      <small>
+                        {notification.status === "failed"
+                          ? "Open Signal"
+                          : "Open brand"}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="neo-notification-empty">
+                <Bell size={22} weight="duotone" aria-hidden="true" />
+                <b>No notifications yet</b>
+                <span>Completed brand setups will appear here.</span>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -257,7 +483,9 @@ function RunBar({
                 <span className="run-tab-meta">
                   <b>{run.brand?.name ?? "New run"}</b>
                   <small>
-                    {serviceLabels[run.service]} ·{" "}
+                    {creativeMixItems(run).length === 1
+                      ? serviceLabels[run.service]
+                      : `${creativeMixItems(run).length} content types`} ·{" "}
                     {stages.find((stage) => stage.id === run.stage)?.name}
                   </small>
                 </span>
@@ -340,9 +568,7 @@ function Journey({
               className={`${active ? "active" : ""} ${done ? "done" : ""} ${locked ? "locked" : ""}`}
               onClick={() => dispatch(navigationAction)}
             >
-              <span className="phase" aria-hidden="true">
-                <span className="moon-phase" />
-              </span>
+              <StageIcon stage={stage.id} done={done} />
               <b>{stage.name}</b>
             </button>
           );
@@ -350,6 +576,34 @@ function Journey({
       </div>
     </div>
   );
+}
+
+function StageIcon({
+  stage,
+  done
+}: {
+  stage: CreativeStage;
+  done: boolean;
+}) {
+  if (done) {
+    return <CheckCircle size={18} weight="fill" aria-hidden="true" />;
+  }
+  switch (stage) {
+    case "start":
+      return <ChartLineUp size={18} weight="duotone" aria-hidden="true" />;
+    case "brief":
+      return <NotePencil size={18} weight="duotone" aria-hidden="true" />;
+    case "directions":
+      return <Sparkle size={18} weight="duotone" aria-hidden="true" />;
+    case "studio":
+      return <PaintBrush size={18} weight="duotone" aria-hidden="true" />;
+    case "approval":
+      return <ShieldCheck size={18} weight="duotone" aria-hidden="true" />;
+    case "client":
+      return <Users size={18} weight="duotone" aria-hidden="true" />;
+    case "summary":
+      return <Brain size={18} weight="duotone" aria-hidden="true" />;
+  }
 }
 
 function MemoryRibbon({ state }: { state: WorkflowState }) {

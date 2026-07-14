@@ -2,9 +2,9 @@
 
 ## Current objective
 
-Preserve the approved HTML prototype while implementing the product in React
-and strict TypeScript. The HTML file is a visual reference and is not loaded or
-executed by the application.
+Preserve the production workflow and backend contracts while migrating the
+React application to the approved `neo-creative-compass.html` UX/UI. The HTML
+file is a visual reference and is not loaded or executed by the application.
 
 ## Product model
 
@@ -140,9 +140,13 @@ can be selected when deployment and operational requirements are known.
 
 ## Visual contract
 
-`moons-prototype-22-jun-26.html` is the visual source of truth. Do not restyle,
-rename, or remove its selectors during migration unless the design itself has
-been explicitly changed.
+`neo-creative-compass.html` is the visual source of truth as of 2026-07-13.
+Its inline JavaScript and fake data are not application contracts. Preserve the
+React workflow actions, persistence, accessibility, responsive behavior, and
+backend integrations while translating its visual hierarchy into components.
+
+Implementation progress and continuation notes live in
+`docs/UX_REDESIGN_HANDOFF.md`.
 
 Implementation milestones and integration prerequisites are maintained in
 `docs/ROADMAP.md`.

@@ -6,6 +6,11 @@ import {
   type HookGenerationRunInput,
   type RawDirection
 } from "./hook-generation-types";
+import {
+  creativeMixContentTypeQuotas,
+  creativeMixItems,
+  totalCreativeMixQuantity
+} from "../../features/workflow/model";
 
 export interface HookGenerationHarnessRequest {
   runId: string;
@@ -16,6 +21,10 @@ export interface HookGenerationHarnessRequest {
   } | null;
   service: HookGenerationRunInput["run"]["service"];
   quantity: number;
+  contentTypeQuotas: readonly {
+    service: HookGenerationRunInput["run"]["service"];
+    count: number;
+  }[];
   brief: string;
   extraInstructions: string;
   existingHooks: readonly { hook: string; concept: string }[];
@@ -82,8 +91,9 @@ export function buildHookGenerationHarnessRequest({
           category: brand.category
         }
       : null,
-    service: run.service,
-    quantity: run.quantity,
+    service: creativeMixItems(run)[0]?.service ?? run.service,
+    quantity: totalCreativeMixQuantity(run),
+    contentTypeQuotas: creativeMixContentTypeQuotas(run),
     brief: run.brief,
     extraInstructions: extraInstructions?.trim() ?? "",
     existingHooks: run.directions.map((direction) => ({

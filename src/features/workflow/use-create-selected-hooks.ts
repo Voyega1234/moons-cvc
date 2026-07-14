@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
+import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import type { WorkflowAction, WorkflowState } from "./model";
 
 export function useCreateSelectedHooks(
@@ -23,6 +24,7 @@ export function useCreateSelectedHooks(
     })
       .then((outputs) => {
         dispatch({ type: "create-outputs", outputs });
+        playGenerationSuccessSound();
       })
       .catch((caught: unknown) => {
         setError(

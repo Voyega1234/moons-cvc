@@ -1,6 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  serviceTypes,
+  type ServiceType
+} from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
 import type { RawDirection } from "../../services/creative-generation/hook-generation-types.js";
@@ -61,17 +65,27 @@ interface HookResearch {
   limitations: string;
 }
 
+interface GeneratedDirection extends RawDirection {
+  id: string;
+  service: ServiceType;
+  hook: string;
+  subheadline: string;
+  concept: string;
+  why: string;
+  visual: string;
+  cta: string;
+  caption: string;
+  score: number;
+  reasoning: string;
+  citations: readonly string[];
+}
+
 interface HookGenerationResult {
-  directions: readonly (RawDirection & {
-    score?: unknown;
-    reasoning?: unknown;
-    citations?: unknown;
-  })[];
+  directions: readonly GeneratedDirection[];
 }
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-const SHORTLIST_COUNT = 6;
 
 export async function handleHookGenerationHarnessRequest({
   request,
@@ -122,10 +136,17 @@ export async function handleHookGenerationHarnessRequest({
       model,
       fetchImpl
     });
+    const directions = result.directions.slice(0, input.quantity);
+    const highlightedDirections = await runSubheadlineHighlightStep({
+      directions,
+      apiKey,
+      model,
+      fetchImpl
+    });
 
     return jsonResponse({
       ok: true,
-      directions: result.directions.slice(0, SHORTLIST_COUNT)
+      directions: highlightedDirections
     });
   } catch (error) {
     return jsonResponse({ ok: false, error: readableError(error) }, 500);
@@ -247,6 +268,69 @@ async function runGenerationStep({
   return parseHookGenerationResult(extractResponseText(payload));
 }
 
+async function runSubheadlineHighlightStep({
+  directions,
+  apiKey,
+  model,
+  fetchImpl
+}: {
+  directions: readonly GeneratedDirection[];
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+}): Promise<readonly GeneratedDirection[]> {
+  const items = directions.map((direction) => ({
+    id: direction.id,
+    subheadline: direction.subheadline
+  }));
+  const payload = await callResponsesApi({
+    apiKey,
+    model,
+    fetchImpl,
+    content: [
+      {
+        type: "input_text",
+        text: buildSubheadlineHighlightPrompt(items)
+      }
+    ],
+    schemaName: "neo_subheadline_highlights",
+    schema: subheadlineHighlightSchema
+  });
+  const highlights = parseSubheadlineHighlights(
+    extractResponseText(payload),
+    items
+  );
+
+  return directions.map((direction) => ({
+    ...direction,
+    subheadlineHighlight: highlights.get(direction.id) ?? ""
+  }));
+}
+
+function buildSubheadlineHighlightPrompt(
+  items: readonly { id: string; subheadline: string }[]
+): string {
+  return [
+    "Bold the sentence of this text that you think it's a highlight of this sub-headline",
+    "Rules:",
+    "- Return JSON only.",
+    "- Use exact text spans from subheadline. Do not rewrite.",
+    "- Prefer only the strongest strategic noun, product/service term, audience pain, proof, or conversion angle.",
+    "- Avoid generic words, filler, conjunctions, and common Thai particles.",
+    "- If the subheadline has no clearly important term, return an empty array.",
+    "",
+    "Return this exact shape:",
+    "{",
+    '  "items": [',
+    '    { "id": "same id", "highlights": ["one exact continuous clause"] }',
+    "  ]",
+    "}",
+    "",
+    "Items:",
+    JSON.stringify(items, null, 2)
+  ].join("\n");
+}
+
 async function callResponsesApi({
   apiKey,
   model,
@@ -335,7 +419,7 @@ function buildGenerationPrompt(
     "",
     "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
     "",
-    "ทุก concept ที่สร้างออกแบบมาสำหรับภาพนิ่งเดียว (STATIC AD): ต้องสื่อสารได้ภายใน ~2 วินาที มีข้อความหลักเดียวชัดเจน (offer / proof point / product focus / contrast / visual metaphor) ห้ามเสนอ concept ที่ต้องใช้ dialogue, หลายฉาก, หรือ storytelling ต่อเนื่อง",
+    "CONTENT TYPE EXECUTION: เขียนแต่ละ direction ให้เหมาะกับ service ที่กำหนดใน content-type quota. single-static ต้องสื่อสารในภาพเดียวภายใน ~2 วินาที; album-post ต้องมีแกนเรื่องที่แตกเป็นลำดับ swipe ได้; ugc-video ต้องเป็น creator-led vertical video ที่เปิดเรื่องได้ทันที; motion-static ต้องมี motion-first progression; resize ต้องเป็นแนวคิดที่ adapt จาก approved work ไป placement ใหม่ได้โดยไม่เสียสารหลัก",
     "",
     "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
     "",
@@ -357,12 +441,17 @@ function buildGenerationPrompt(
     "- เขียนในฐานะที่คุณคือ copywriter ประจำเพจนี้ ไม่ใช่นักเขียนภายนอก",
     "- ศึกษาตัวอย่างโพสต์/แคปชั่นเก่าของเพจด้านล่าง แล้วเลียนแบบ tone, โครงสร้างประโยค, การเว้นบรรทัด, footer/signature, hashtag, emoji และวิธีปิดท้ายด้วย CTA ให้เหมือนเพจนี้เขียนเอง",
     "- ถ้าไม่มีตัวอย่างโพสต์เก่า ให้ยึดโทนจาก Brand Memory และ Brief แทน",
+    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' ใน caption แม้ตัวอย่างโพสต์เก่าจะใช้",
+    "",
+    "CTA ต้อง:",
+    "- สั้น ตรงประเด็น เป็นคำสั่งให้ทำ action ชัดเจน ปกติ 2-5 คำ เช่น 'ลงทะเบียนฟรี', 'ดูรายละเอียด', 'รับข้อเสนอ'",
+    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' และห้ามเขียน CTA เป็นประโยคยาว",
     "",
     "Silent internal process (ห้าม output ขั้นตอนนี้ออกมา):",
     "1. ย่อ brief ให้เหลือ audience insight ที่แข็งแรงที่สุด และ commercial promise ที่ชัดที่สุด",
     "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
     "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
-    `4. เลือก ${SHORTLIST_COUNT} hooks ที่ดีที่สุดและหลากหลายที่สุด ตัดมุมที่ซ้ำกัน`,
+    `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
     "5. ใส่ concept, why, visual, CTA, caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
     "",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
@@ -374,10 +463,12 @@ function buildGenerationPrompt(
     "",
     buildPastPostsBlock(pastPosts),
     "",
-    "## Moons output adapter — this overrides only the supplied prompt's final JSON shape",
-    `Return exactly ${SHORTLIST_COUNT} STATIC AD directions. The supplied prompt's content quota is set to three STATIC AD requests, which produces six recommendations under its own count-plus-three rule.`,
-    "Return only the strict directions JSON required by the response schema. Map recommendation fields as follows: hook = copywriting.headline; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; cta = copywriting.cta; caption = combine sub_headline_1, sub_headline_2 when present, and bullets into natural Thai caption copy.",
-    "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response."
+    "## Neo output adapter — this overrides only the supplied prompt's final JSON shape",
+    `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
+    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; cta = copywriting.cta; caption = combine sub_headline_1, sub_headline_2 when present, and bullets into natural Thai caption copy.",
+    "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
+    "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a short, direct action phrase, not a complete sentence.",
+    "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response. The schema's service field is required."
   ].join("\n");
 }
 
@@ -401,7 +492,7 @@ function renderAgentHookPrompt(
     .replaceAll("{{ $('Webhook').first().json.body.productFocus }}", productFocus)
     .replaceAll(
       "{{ $('Webhook').first().json.body.contentTypeQuotas ? $('Webhook').first().json.body.contentTypeQuotas.toJsonString() : '[]' }}",
-      '[{"type":"STATIC AD","count":3}]'
+      JSON.stringify(contentTypeQuotasForPrompt(input))
     )
     .replaceAll("{{ $('Facebook page content').item.json.page_content }}", pastPostText)
     .replaceAll(
@@ -429,12 +520,13 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
   return [
-    "## Moons current input",
+    "## Neo current input",
     `Run ID: ${input.runId}`,
     `Brand: ${input.brand?.name ?? "Unknown"}`,
     `Category: ${input.brand?.category ?? "Unknown"}`,
     `Service: ${input.service}`,
     `Selected output quantity later: ${input.quantity}`,
+    `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
     "",
     "User Brief — HIGHEST PRIORITY:",
     input.brief,
@@ -484,6 +576,22 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "Attached file names:",
     ...input.attachments.map((item) => `- ${item}`)
   ].join("\n");
+}
+
+const servicePromptLabels: Record<ServiceType, string> = {
+  "single-static": "STATIC AD",
+  "album-post": "ALBUM AD",
+  "motion-static": "SHORT VIDEO",
+  resize: "RESIZE",
+  "ugc-video": "UGC VIDEO"
+};
+
+function contentTypeQuotasForPrompt(input: HookGenerationHarnessRequest) {
+  return input.contentTypeQuotas.map((quota) => ({
+    service: quota.service,
+    type: servicePromptLabels[quota.service],
+    count: quota.count
+  }));
 }
 
 const stringArraySchema = {
@@ -553,7 +661,9 @@ const hookGenerationSchema = {
         additionalProperties: false,
         properties: {
           id: { type: "string" },
+          service: { type: "string", enum: serviceTypes },
           hook: { type: "string" },
+          subheadline: { type: "string" },
           concept: { type: "string" },
           why: { type: "string" },
           visual: { type: "string" },
@@ -565,7 +675,9 @@ const hookGenerationSchema = {
         },
         required: [
           "id",
+          "service",
           "hook",
+          "subheadline",
           "concept",
           "why",
           "visual",
@@ -581,6 +693,30 @@ const hookGenerationSchema = {
   required: ["directions"]
 } as const;
 
+const subheadlineHighlightSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          highlights: {
+            type: "array",
+            maxItems: 1,
+            items: { type: "string" }
+          }
+        },
+        required: ["id", "highlights"]
+      }
+    }
+  },
+  required: ["items"]
+} as const;
+
 function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   if (!isRecord(value)) throw new Error("Invalid hook generation request.");
 
@@ -592,11 +728,18 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   const brandMemory = readRecord(value.brandMemory, "brandMemory");
   const brandLibrary = readRecord(value.brandLibrary, "brandLibrary");
 
+  const contentTypeQuotas = readContentTypeQuotas(
+    value.contentTypeQuotas,
+    service as ServiceType,
+    quantity
+  );
+
   return {
     runId,
     brand: value.brand === null ? null : parseBrand(value.brand),
     service: service as HookGenerationHarnessRequest["service"],
     quantity,
+    contentTypeQuotas,
     brief,
     extraInstructions:
       typeof value.extraInstructions === "string"
@@ -635,6 +778,42 @@ function readExistingHooks(
       hook: item.hook as string,
       concept: item.concept as string
     }));
+}
+
+function readContentTypeQuotas(
+  value: unknown,
+  fallbackService: ServiceType,
+  expectedTotal: number
+): HookGenerationHarnessRequest["contentTypeQuotas"] {
+  if (value === undefined) {
+    return [{ service: fallbackService, count: expectedTotal }];
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("contentTypeQuotas must be a non-empty array.");
+  }
+
+  const quotas = value.map((item, index) => {
+    const quota = readRecord(item, `contentTypeQuotas[${index}]`);
+    const count = readNumber(quota.count, `contentTypeQuotas[${index}].count`);
+    if (!Number.isInteger(count) || count < 1) {
+      throw new Error(`contentTypeQuotas[${index}].count must be a positive integer.`);
+    }
+    return {
+      service: readServiceType(
+        quota.service,
+        `contentTypeQuotas[${index}].service`
+      ),
+      count
+    };
+  });
+
+  const total = quotas.reduce((sum, quota) => sum + quota.count, 0);
+  if (total !== expectedTotal) {
+    throw new Error(
+      `contentTypeQuotas total ${total} does not match quantity ${expectedTotal}.`
+    );
+  }
+  return quotas;
 }
 
 function parseBrand(value: unknown): HookGenerationHarnessRequest["brand"] {
@@ -720,7 +899,15 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       const direction = readRecord(item, `directions[${index}]`);
       return {
         id: readString(direction.id, `directions[${index}].id`),
+        service: readServiceType(
+          direction.service,
+          `directions[${index}].service`
+        ),
         hook: readString(direction.hook, `directions[${index}].hook`),
+        subheadline: readString(
+          direction.subheadline,
+          `directions[${index}].subheadline`
+        ),
         concept: readString(direction.concept, `directions[${index}].concept`),
         why: readString(direction.why, `directions[${index}].why`),
         visual: readString(direction.visual, `directions[${index}].visual`),
@@ -738,6 +925,42 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       };
     })
   };
+}
+
+function parseSubheadlineHighlights(
+  text: string,
+  items: readonly { id: string; subheadline: string }[]
+): ReadonlyMap<string, string> {
+  const parsed = JSON.parse(text) as unknown;
+  const value = readRecord(parsed, "subheadlineHighlights");
+  if (!Array.isArray(value.items)) {
+    throw new Error("highlight items must be an array.");
+  }
+
+  const subheadlineById = new Map(
+    items.map((item) => [item.id, item.subheadline])
+  );
+  const highlights = new Map<string, string>();
+
+  value.items.forEach((item, index) => {
+    const record = readRecord(item, `items[${index}]`);
+    const id = readString(record.id, `items[${index}].id`);
+    const candidates = readStringArray(
+      record.highlights,
+      `items[${index}].highlights`
+    );
+    const subheadline = subheadlineById.get(id);
+    if (subheadline === undefined) return;
+
+    const candidate = candidates[0]?.replace(/\s+/g, " ").trim() ?? "";
+    const normalizedSubheadline = subheadline.replace(/\s+/g, " ").trim();
+    highlights.set(
+      id,
+      candidate && normalizedSubheadline.includes(candidate) ? candidate : ""
+    );
+  });
+
+  return highlights;
 }
 
 function extractResponseText(payload: unknown): string {
@@ -781,6 +1004,16 @@ function readNumber(value: unknown, field: string): number {
     throw new Error(`${field} must be a number.`);
   }
   return value;
+}
+
+function readServiceType(value: unknown, field: string): ServiceType {
+  if (
+    typeof value !== "string" ||
+    !serviceTypes.includes(value as ServiceType)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as ServiceType;
 }
 
 function readStringArray(value: unknown, field: string): readonly string[] {

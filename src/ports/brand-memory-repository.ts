@@ -73,9 +73,7 @@ export interface BrandMemoryRepository {
   createProduct(input: SaveBrandProductInput): Promise<BrandProduct>;
   updateProduct(input: UpdateBrandProductInput): Promise<BrandProduct>;
   deleteProduct(id: string): Promise<void>;
-  listAdsLibraryPastWork(
-    clientId: string
-  ): Promise<readonly BrandPastWorkItem[]>;
+  listPastWork(clientId: string): Promise<readonly BrandPastWorkItem[]>;
   listDocuments(clientId: string): Promise<readonly BrandDocument[]>;
   uploadDocument(input: UploadBrandDocumentInput): Promise<BrandDocument>;
   createLearningEntry(input: CreateLearningEntryInput): Promise<void>;
