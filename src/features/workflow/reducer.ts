@@ -1,6 +1,7 @@
 import {
   defaultArtworkOutputSize,
-  emptyApprovalGate
+  emptyApprovalGate,
+  type ApprovalRole
 } from "../../domain/creative-run";
 import {
   directionSubheadline,
@@ -42,11 +43,12 @@ function assignDirectionsToMix(
 }
 
 function isOutputFullyApproved(output: WorkflowState["outputs"][number]): boolean {
-  return (
-    output.approval.graphicDesign === "approved" &&
-    output.approval.clientService === "approved" &&
-    output.approval.projectManager === "approved"
-  );
+  return output.format.includes("UGC")
+    ? output.approval.clientService === "approved" &&
+        output.approval.projectManager === "approved"
+    : output.approval.graphicDesign === "approved" &&
+        output.approval.clientService === "approved" &&
+        output.approval.projectManager === "approved";
 }
 
 function computeApproved(outputs: WorkflowState["outputs"]): boolean {
@@ -175,10 +177,16 @@ export function workflowActionToast(
         ? `Quality check flagged ${failed} ${pluralize(failed, "creative")}`
         : "Quality check passed";
     }
+    case "resolve-qa-output":
+      return "Current version kept";
+    case "edit-output-direction":
+      return "Creative copy updated";
     case "approve-all":
       return "Packet approved";
     case "review-output":
       return action.decision === "approved" ? "Creative approved" : "Creative rejected";
+    case "route-output-changes":
+      return "Changes routed to the fix owner";
     case "replace-output-asset":
       return "Replacement image uploaded";
     case "send-client":
@@ -480,11 +488,41 @@ export function workflowReducer(
         })
       };
     }
+    case "resolve-qa-output":
+      return {
+        ...state,
+        outputs: state.outputs.map((output) =>
+          output.id === action.id
+            ? { ...output, status: "ready" as const, qaNote: undefined }
+            : output
+        )
+      };
+    case "edit-output-direction": {
+      const output = state.outputs.find((item) => item.id === action.id);
+      if (!output) return state;
+      return {
+        ...state,
+        directions: state.directions.map((direction) =>
+          direction.id === output.directionId
+            ? {
+                ...direction,
+                hook: action.hook.trim() || direction.hook,
+                caption: action.caption.trim() || direction.caption,
+                formatBeats: action.formatBeats
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              }
+            : direction
+        )
+      };
+    }
     case "approve-all": {
       const outputs = state.outputs.map((output) => ({
         ...output,
         approval: {
-          graphicDesign: output.approval.graphicDesign ?? "approved",
+          graphicDesign: output.format.includes("UGC")
+            ? null
+            : output.approval.graphicDesign ?? "approved",
           clientService: output.approval.clientService ?? "approved",
           projectManager: output.approval.projectManager ?? "approved"
         } as const
@@ -512,6 +550,34 @@ export function workflowReducer(
             ? ("ready" as const)
             : output.status;
         return { ...output, approval, approvalComments, status };
+      });
+      return { ...state, outputs, approved: computeApproved(outputs) };
+    }
+    case "route-output-changes": {
+      if (!action.comment.trim()) return state;
+      const roleOrder: readonly ApprovalRole[] = [
+        "graphicDesign",
+        "clientService",
+        "projectManager"
+      ];
+      const targetIndex = roleOrder.indexOf(action.targetRole);
+      const outputs = state.outputs.map((output) => {
+        if (output.id !== action.id) return output;
+        const approval = { ...output.approval };
+        roleOrder.forEach((role, index) => {
+          if (index === targetIndex) approval[role] = "rejected";
+          if (index > targetIndex) approval[role] = null;
+        });
+        const approvalComments = {
+          ...output.approvalComments,
+          [action.targetRole]: action.comment.trim()
+        };
+        return {
+          ...output,
+          approval,
+          approvalComments,
+          status: "needs-revision" as const
+        };
       });
       return { ...state, outputs, approved: computeApproved(outputs) };
     }

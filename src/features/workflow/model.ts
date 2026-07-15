@@ -110,12 +110,27 @@ export type WorkflowAction =
         reason: string;
       }[];
     }
+  | { type: "resolve-qa-output"; id: string }
+  | {
+      type: "edit-output-direction";
+      id: string;
+      hook: string;
+      caption: string;
+      formatBeats: readonly string[];
+    }
   | { type: "approve-all" }
   | {
       type: "review-output";
       id: string;
       role: ApprovalRole;
       decision: NonNullable<ReviewDecision>;
+      comment: string;
+    }
+  | {
+      type: "route-output-changes";
+      id: string;
+      requestedBy: ApprovalRole;
+      targetRole: ApprovalRole;
       comment: string;
     }
   | {

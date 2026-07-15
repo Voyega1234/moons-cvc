@@ -70,6 +70,7 @@ export interface ArtworkGenerationRequest {
     | "visual"
     | "cta"
     | "supportingPoints"
+    | "formatBeats"
     | "ctaActionType"
     | "ctaDestination"
     | "contactLine"
@@ -103,23 +104,30 @@ export async function generateArtworkForSelectedHooks({
     textInputs,
     referenceImages
   });
+  const templateOutputs = buildUgcTemplateOutputs(run);
 
   if (
     env.artworkGenerationMode === "openai" &&
     !env.artworkGenerationEndpoint
   ) {
-    return buildDraftOutputs(
-      run,
-      requests.flatMap((request) => request.selectedHooks)
-    );
+    return sortOutputsBySelectedDirection(run, [
+      ...buildDraftOutputs(
+        run,
+        requests.flatMap((request) => request.selectedHooks)
+      ),
+      ...templateOutputs
+    ]);
   }
 
   const payloads = await Promise.all(
     requests.map((request) => requestArtworkGeneration({ request, run }))
   );
-  return payloads.flatMap((payload) =>
-    payload.outputs.map(normalizeArtworkOutput)
-  );
+  return sortOutputsBySelectedDirection(run, [
+    ...payloads.flatMap((payload) =>
+      payload.outputs.map(normalizeArtworkOutput)
+    ),
+    ...templateOutputs
+  ]);
 }
 
 export async function regenerateOutputImage({
@@ -137,6 +145,7 @@ export async function regenerateOutputImage({
     | "visual"
     | "cta"
     | "supportingPoints"
+    | "formatBeats"
     | "ctaActionType"
     | "ctaDestination"
     | "contactLine"
@@ -156,6 +165,12 @@ export async function regenerateOutputImage({
     (item) => item.id === direction.id
   );
   const savedDirection = run.directions[directionIndex];
+  if (
+    savedDirection &&
+    directionServiceAt(run, savedDirection, directionIndex) === "ugc-video"
+  ) {
+    throw new Error("UGC uses the editable 9:16 template, not image generation.");
+  }
   const request: ArtworkGenerationRequest = {
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
@@ -229,6 +244,7 @@ export function buildArtworkGenerationRequests({
     .filter(({ direction }) => direction.selected);
 
   return creativeMixItems(run).flatMap((item) => {
+    if (item.service === "ugc-video") return [];
     const hooks = selectedHooks
       .filter(({ service }) => service === item.service)
       .slice(0, item.quantity)
@@ -240,6 +256,7 @@ export function buildArtworkGenerationRequests({
         visual,
         cta,
         supportingPoints,
+        formatBeats,
         ctaActionType,
         ctaDestination,
         contactLine,
@@ -252,6 +269,7 @@ export function buildArtworkGenerationRequests({
         visual,
         cta,
         supportingPoints,
+        formatBeats,
         ctaActionType,
         ctaDestination,
         contactLine,
@@ -270,6 +288,44 @@ export function buildArtworkGenerationRequests({
         ]
       : [];
   });
+}
+
+function buildUgcTemplateOutputs(run: WorkflowState): readonly CreativeOutput[] {
+  return run.directions
+    .map((direction, index) => ({ direction, index }))
+    .filter(
+      ({ direction, index }) =>
+        direction.selected &&
+        directionServiceAt(run, direction, index) === "ugc-video"
+    )
+    .map(({ direction }, index) => ({
+      id: `ugc-template-${direction.id}-${index + 1}`,
+      directionId: direction.id,
+      format: outputFormatForService("ugc-video"),
+      status: "draft" as const,
+      clientStatus: "queued" as const,
+      provider: "template",
+      model: "neo-ugc-template",
+      revisionCount: 0,
+      approval: emptyApprovalGate,
+      approvalComments: emptyApprovalComments
+    }));
+}
+
+function sortOutputsBySelectedDirection(
+  run: WorkflowState,
+  outputs: readonly CreativeOutput[]
+): readonly CreativeOutput[] {
+  const selectedOrder = new Map(
+    run.directions
+      .filter((direction) => direction.selected)
+      .map((direction, index) => [direction.id, index])
+  );
+  return [...outputs].sort(
+    (left, right) =>
+      (selectedOrder.get(left.directionId) ?? Number.MAX_SAFE_INTEGER) -
+      (selectedOrder.get(right.directionId) ?? Number.MAX_SAFE_INTEGER)
+  );
 }
 
 function buildArtworkRequest({

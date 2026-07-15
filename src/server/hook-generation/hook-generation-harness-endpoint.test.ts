@@ -202,6 +202,19 @@ describe("handleHookGenerationHarnessRequest", () => {
       "one concise Thai sentence"
     );
     expect(JSON.stringify(secondBody.input)).toContain(
+      "album-post: คิดเป็น swipeable story"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "3 supporting topics"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "ugc-video: คิดเป็น creator-led vertical video"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "single-static: รักษามาตรฐานเดิม"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain("formatBeats");
+    expect(JSON.stringify(secondBody.input)).toContain(
       "hero-bottle.png | role=main-object"
     );
     expect(JSON.stringify(secondBody.input)).toContain(

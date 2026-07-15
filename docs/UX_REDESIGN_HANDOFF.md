@@ -645,6 +645,36 @@ lime/orange semantic accents, soft borders, and medium information density.
     backward compatible and persist the typed material metadata. Verification
     passes all 45 test files / 199 tests, TypeScript, and the production build;
     the existing non-blocking bundle-size warning remains.
+  - Content-type-native Hook output was added on 2026-07-15 following review
+    feedback. Static is intentionally unchanged and continues to use one Hook,
+    one Sub-headline, and one Concept. Album is no longer treated as a relabeled
+    Static idea: its cover Hook must create a real swipe reason/open loop and it
+    must return exactly three `formatBeats`, shown as the three supporting topics
+    for inside slides. UGC uses a creator-native opening plus exactly three video
+    beats (situation/tension, demonstration/proof, action/close). Motion-static
+    uses three motion/reveal beats. These sequences persist in workspace state,
+    remain editable, travel into artwork prompting, and are included as bullets
+    in Angles export data. Format-specific labels now appear only on the relevant
+    cards, leaving Static card layout and wording unchanged. Full verification
+    passes all 45 test files / 199 tests, TypeScript, and the production build.
+
+  - Build and Internal QC were aligned to the prototype’s production behavior
+    on 2026-07-15. Failed Build QA results now expose the prototype’s explicit
+    next steps: `Use suggestion` opens the relevant revision editor and `Keep
+    current` records that decision; Internal QC remains locked until every QA
+    suggestion is resolved. UGC no longer calls image generation: selected UGC
+    Hooks create a local, editable 9:16 phone-story template containing the
+    hook, script direction, three scene/creator beats, and CTA. Legacy UGC image
+    URLs are intentionally ignored by Build and QC previews so the format cannot
+    regress to a square static mockup. Internal QC now skips GD for UGC, makes
+    the content type prominent on every card, shows UGC ownership, and uses
+    format-specific checklists. The permanent Reject button was removed. Role
+    actions now match `neo-creative-compass.html`: Approve opens a handoff modal;
+    CS/PM change requests open the decision modal, require one actionable note,
+    and route artwork to GD or copy/UGC to CS. CS can edit copy or UGC script and
+    flow without clearing the generated output set. Verification passes all 45
+    test files / 201 tests, TypeScript, the production build, and `git diff
+    --check`; the existing non-blocking bundle-size warning remains.
 
 ### In progress
 

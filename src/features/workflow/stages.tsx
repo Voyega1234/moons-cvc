@@ -3831,18 +3831,39 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               </div>
             </div>
             <div className="neo-angle-hook-wrap">
-              <span className="neo-angle-card-kicker">Hook</span>
+              <span className="neo-angle-card-kicker">
+                {angleHookLabel(group.service)}
+              </span>
               <h3>{direction.hook}</h3>
             </div>
             <div className="neo-angle-copy-block">
-              <span className="neo-angle-card-kicker">Sub-headline</span>
+              <span className="neo-angle-card-kicker">
+                {angleSubheadlineLabel(group.service)}
+              </span>
               <AngleSubheadline
                 text={directionSubheadline(direction)}
                 highlight={direction.subheadlineHighlight}
               />
             </div>
+            {direction.formatBeats?.length ? (
+              <div className="neo-angle-copy-block neo-angle-format-beats">
+                <span className="neo-angle-card-kicker">
+                  {angleFormatBeatsLabel(group.service)}
+                </span>
+                <ol>
+                  {direction.formatBeats.map((beat, beatIndex) => (
+                    <li key={`${direction.id}-beat-${beatIndex}`}>
+                      <span>{beatIndex + 1}</span>
+                      <p>{beat}</p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
             <div className="neo-angle-copy-block neo-angle-concept-block">
-              <span className="neo-angle-card-kicker">Concept</span>
+              <span className="neo-angle-card-kicker">
+                {angleConceptLabel(group.service)}
+              </span>
               <p>{direction.concept}</p>
             </div>
             <div className="neo-angle-copy-block">
@@ -3928,6 +3949,33 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       ) : null}
     </DecisionCard>
   );
+}
+
+function angleHookLabel(service: ServiceType): string {
+  if (service === "album-post") return "Cover hook";
+  if (service === "ugc-video") return "Opening hook";
+  if (service === "motion-static") return "Opening frame";
+  return "Hook";
+}
+
+function angleSubheadlineLabel(service: ServiceType): string {
+  if (service === "album-post") return "Cover sub-headline";
+  if (service === "ugc-video") return "Creator setup";
+  if (service === "motion-static") return "Supporting line";
+  return "Sub-headline";
+}
+
+function angleFormatBeatsLabel(service: ServiceType): string {
+  if (service === "album-post") return "Inside slides · 3 supporting topics";
+  if (service === "ugc-video") return "UGC video flow · 3 beats";
+  return "Motion flow · 3 beats";
+}
+
+function angleConceptLabel(service: ServiceType): string {
+  if (service === "album-post") return "Album concept";
+  if (service === "ugc-video") return "UGC concept";
+  if (service === "motion-static") return "Motion concept";
+  return "Concept";
 }
 
 function AngleSubheadline({
@@ -4061,6 +4109,27 @@ function HookEditModal({
               }
             />
           </label>
+          {draft.service &&
+          draft.service !== "single-static" &&
+          draft.service !== "resize" ? (
+            <label>
+              <span>{angleFormatBeatsLabel(draft.service)} (one per line)</span>
+              <textarea
+                rows={4}
+                value={(draft.formatBeats ?? []).join("\n")}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    formatBeats: event.target.value
+                      .split("\n")
+                      .map((item) => item.trim())
+                      .filter(Boolean)
+                      .slice(0, 3)
+                  }))
+                }
+              />
+            </label>
+          ) : null}
           <label>
             <span>CTA action</span>
             <select
@@ -4396,6 +4465,42 @@ export function StudioStage({ state, dispatch }: StageProps) {
   );
 }
 
+function isUgcOutput(output: CreativeOutput): boolean {
+  return output.format.toUpperCase().includes("UGC");
+}
+
+function UgcTemplatePreview({
+  direction,
+  compact = false
+}: {
+  direction: WorkflowState["directions"][number] | undefined;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`neo-ugc-template ${compact ? "compact" : ""}`}>
+      <div className="neo-ugc-story" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
+      <span className="neo-ugc-creator-dot" aria-hidden="true" />
+      <div className="neo-ugc-copy">
+        <small>Creator-led UGC</small>
+        <b>{direction?.hook ?? "UGC hook"}</b>
+        <p>{direction ? directionSubheadline(direction) : "Script direction"}</p>
+        {direction?.formatBeats?.length ? (
+          <ol>
+            {direction.formatBeats.slice(0, 3).map((beat) => (
+              <li key={beat}>{beat}</li>
+            ))}
+          </ol>
+        ) : null}
+        <span>{direction?.cta ?? "See how it works"}</span>
+      </div>
+    </div>
+  );
+}
+
 function OutputGrid({
   state,
   dispatch
@@ -4404,6 +4509,8 @@ function OutputGrid({
   dispatch: Dispatch<WorkflowAction>;
 }) {
   const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
+  const [qaPrompt, setQaPrompt] = useState<string | undefined>();
+  const [editOutputId, setEditOutputId] = useState<string | null>(null);
   const previewOutput =
     state.outputs.find((output) => output.id === previewOutputId) ?? null;
   const previewDirection = previewOutput
@@ -4411,6 +4518,10 @@ function OutputGrid({
         (candidate) => candidate.id === previewOutput.directionId
       )
     : undefined;
+  const editOutput = state.outputs.find((output) => output.id === editOutputId);
+  const editDirection = state.directions.find(
+    (direction) => direction.id === editOutput?.directionId
+  );
   const outputGroups = Array.from(
     state.outputs.reduce((groups, output) => {
       const group = groups.get(output.format) ?? [];
@@ -4488,7 +4599,9 @@ function OutputGrid({
                       aria-label={`Open Creative ${index + 1} preview`}
                       onClick={() => setPreviewOutputId(output.id)}
                     >
-                      {output.assetUrl ? (
+                      {isUgcOutput(output) ? (
+                        <UgcTemplatePreview direction={direction} />
+                      ) : output.assetUrl ? (
                         <img
                           className="generated-preview"
                           src={output.assetUrl}
@@ -4510,7 +4623,36 @@ function OutputGrid({
                       )}
                     </button>
                     {output.status === "needs-revision" && output.qaNote ? (
-                      <p className="output-qa-note">{output.qaNote}</p>
+                      <div className="neo-output-qa-callout">
+                        <span>Suggested improvement</span>
+                        <b>Quality check found a fix</b>
+                        <p>{output.qaNote}</p>
+                        <div>
+                          <button
+                            className="btn primary small"
+                            type="button"
+                            onClick={() => {
+                              if (isUgcOutput(output)) {
+                                setEditOutputId(output.id);
+                              } else {
+                                setQaPrompt(output.qaNote);
+                                setPreviewOutputId(output.id);
+                              }
+                            }}
+                          >
+                            Use suggestion
+                          </button>
+                          <button
+                            className="btn ghost small"
+                            type="button"
+                            onClick={() =>
+                              dispatch({ type: "resolve-qa-output", id: output.id })
+                            }
+                          >
+                            Keep current
+                          </button>
+                        </div>
+                      </div>
                     ) : null}
                     <div className="output-caption">
                       <span className="neo-create-card-kicker">Caption</span>
@@ -4542,7 +4684,20 @@ function OutputGrid({
           output={previewOutput}
           direction={previewDirection}
           dispatch={dispatch}
-          onClose={() => setPreviewOutputId(null)}
+          initialPrompt={qaPrompt}
+          onClose={() => {
+            setPreviewOutputId(null);
+            setQaPrompt(undefined);
+          }}
+        />
+      ) : null}
+      {editOutput && editDirection ? (
+        <CreativeCopyEditModal
+          output={editOutput}
+          direction={editDirection}
+          dispatch={dispatch}
+          resolveQa
+          onClose={() => setEditOutputId(null)}
         />
       ) : null}
     </>
@@ -4554,15 +4709,17 @@ function OutputRegenerateModal({
   output,
   direction,
   dispatch,
-  onClose
+  onClose,
+  initialPrompt
 }: {
   run: WorkflowState;
   output: CreativeOutput;
   direction: WorkflowState["directions"][number] | undefined;
   dispatch: Dispatch<WorkflowAction>;
   onClose: () => void;
+  initialPrompt?: string;
 }) {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -4595,6 +4752,7 @@ function OutputRegenerateModal({
       });
       setPrompt("");
       playGenerationSuccessSound();
+      onClose();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Could not regenerate image."
@@ -4620,7 +4778,9 @@ function OutputRegenerateModal({
           </button>
         </div>
         <div className="output-modal-image">
-          {output.assetUrl ? (
+          {isUgcOutput(output) ? (
+            <UgcTemplatePreview direction={direction} />
+          ) : output.assetUrl ? (
             <img src={output.assetUrl} alt={direction?.hook ?? "Creative preview"} />
           ) : (
             <div className="static-preview">
@@ -4670,7 +4830,11 @@ function OutputRegenerateModal({
             onClick={() => void handleRegenerate()}
           >
             {regenerating ? <Spinner /> : null}
-            {regenerating ? "Regenerating…" : "Regenerate image"}
+            {regenerating
+              ? "Regenerating…"
+              : initialPrompt
+                ? "Apply suggestion"
+                : "Regenerate image"}
           </button>
         </div>
       </div>
@@ -4712,6 +4876,86 @@ function OutputCaptionText({
   );
 }
 
+function CreativeCopyEditModal({
+  output,
+  direction,
+  dispatch,
+  onClose,
+  resolveQa = false
+}: {
+  output: CreativeOutput;
+  direction: WorkflowState["directions"][number];
+  dispatch: Dispatch<WorkflowAction>;
+  onClose: () => void;
+  resolveQa?: boolean;
+}) {
+  const ugc = isUgcOutput(output);
+  const [hook, setHook] = useState(direction.hook);
+  const [caption, setCaption] = useState(direction.caption ?? "");
+  const [beats, setBeats] = useState((direction.formatBeats ?? []).join("\n"));
+
+  function save() {
+    dispatch({
+      type: "edit-output-direction",
+      id: output.id,
+      hook,
+      caption,
+      formatBeats: beats.split("\n")
+    });
+    if (resolveQa) dispatch({ type: "resolve-qa-output", id: output.id });
+    onClose();
+  }
+
+  return (
+    <div className="output-modal-backdrop" onClick={onClose}>
+      <div
+        className="output-modal neo-copy-edit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={ugc ? "Edit UGC script and flow" : "Edit creative copy"}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="output-modal-head">
+          <div>
+            <p className="eyebrow">{ugc ? "UGC template" : "Creative copy"}</p>
+            <h3>{ugc ? "Edit script & flow" : "Edit copy"}</h3>
+          </div>
+          <button className="btn ghost" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <p className="output-modal-reference-note">
+          {ugc
+            ? "Update the text placed in the 9:16 phone template. No image generation is used."
+            : "Update the hook and caption without leaving Internal QC."}
+        </p>
+        <label className="output-modal-prompt-label">
+          <span>Hook</span>
+          <textarea rows={2} value={hook} onChange={(event) => setHook(event.target.value)} />
+        </label>
+        <label className="output-modal-prompt-label">
+          <span>{ugc ? "Script direction" : "Caption"}</span>
+          <textarea rows={5} value={caption} onChange={(event) => setCaption(event.target.value)} />
+        </label>
+        {ugc ? (
+          <label className="output-modal-prompt-label">
+            <span>Scene / creator flow · one beat per line</span>
+            <textarea rows={4} value={beats} onChange={(event) => setBeats(event.target.value)} />
+          </label>
+        ) : null}
+        <div className="output-modal-actions">
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" type="button" onClick={save}>
+            Save {ugc ? "UGC update" : "copy"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CAPTION_CLAMP_THRESHOLD = 220;
 
 const REVIEW_ROLES: readonly {
@@ -4748,12 +4992,25 @@ function reviewRoleShort(role: ApprovalRole): string {
 
 function reviewRoleGuide(role: ApprovalRole): string {
   if (role === "graphicDesign") {
-    return "Review artwork quality, layout, hierarchy, safe margins, and final-file readiness.";
+    return "Review artwork quality, layout, hierarchy, and final-file readiness. UGC starts with CS.";
   }
   if (role === "clientService") {
     return "Review the Hook, message, caption, and visual as one clear performance idea.";
   }
   return "Confirm the brief, requested scope, approval history, and client readiness.";
+}
+
+function approvalRolesForOutput(output: CreativeOutput): readonly ApprovalRole[] {
+  return isUgcOutput(output)
+    ? ["clientService", "projectManager"]
+    : ["graphicDesign", "clientService", "projectManager"];
+}
+
+function outputIsEligibleForRole(
+  output: CreativeOutput,
+  role: ApprovalRole
+): boolean {
+  return approvalRolesForOutput(output).includes(role);
 }
 
 export function ApprovalStage({ state, dispatch }: StageProps) {
@@ -4770,24 +5027,32 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       ? "projectManager"
       : "graphicDesign"
   );
-  const totalChecks = state.outputs.length * REVIEW_ROLES.length;
+  const totalChecks = state.outputs.reduce(
+    (total, output) => total + approvalRolesForOutput(output).length,
+    0
+  );
   const approvedChecks = state.outputs.reduce(
     (total, output) =>
       total +
-      Object.values(output.approval).filter(
-        (decision) => decision === "approved"
+      approvalRolesForOutput(output).filter(
+        (role) => output.approval[role] === "approved"
       ).length,
     0
   );
   const readyAssets = state.outputs.filter((output) =>
-    REVIEW_ROLES.every(({ key }) => output.approval[key] === "approved")
+    approvalRolesForOutput(output).every(
+      (role) => output.approval[role] === "approved"
+    )
   ).length;
   const activeRoleConfig =
     REVIEW_ROLES.find(({ key }) => key === activeRole) ?? REVIEW_ROLES[0]!;
-  const activeRoleApproved = state.outputs.filter(
+  const activeRoleOutputs = state.outputs.filter((output) =>
+    outputIsEligibleForRole(output, activeRole)
+  );
+  const activeRoleApproved = activeRoleOutputs.filter(
     (output) => output.approval[activeRole] === "approved"
   ).length;
-  const activeRoleWaiting = state.outputs.length - activeRoleApproved;
+  const activeRoleWaiting = activeRoleOutputs.length - activeRoleApproved;
 
   return (
     <DecisionCard
@@ -4861,7 +5126,10 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
               </div>
               <div className="neo-qc-role-list">
                 {REVIEW_ROLES.map(({ key, label }) => {
-                  const approvedForRole = state.outputs.filter(
+                  const eligible = state.outputs.filter((output) =>
+                    outputIsEligibleForRole(output, key)
+                  );
+                  const approvedForRole = eligible.filter(
                     (output) => output.approval[key] === "approved"
                   ).length;
                   return (
@@ -4872,13 +5140,13 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                       <div>
                         <b>{label}</b>
                         <small>
-                          {approvedForRole === state.outputs.length
+                          {approvedForRole === eligible.length
                             ? "Queue clear"
-                            : `${state.outputs.length - approvedForRole} waiting`}
+                            : `${eligible.length - approvedForRole} waiting`}
                         </small>
                       </div>
                       <strong>
-                        {approvedForRole}/{state.outputs.length}
+                        {approvedForRole}/{eligible.length}
                       </strong>
                     </div>
                   );
@@ -4899,16 +5167,19 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   aria-label="Internal review roles"
                 >
                   {REVIEW_ROLES.map(({ key, label, summary }) => {
-                    const rejected = state.outputs.filter(
+                    const eligible = state.outputs.filter((output) =>
+                      outputIsEligibleForRole(output, key)
+                    );
+                    const rejected = eligible.filter(
                       (output) => output.approval[key] === "rejected"
                     ).length;
-                    const approvedForRole = state.outputs.filter(
+                    const approvedForRole = eligible.filter(
                       (output) => output.approval[key] === "approved"
                     ).length;
-                    const waiting = state.outputs.length - approvedForRole;
+                    const waiting = eligible.length - approvedForRole;
                     return (
                       <button
-                        className={`neo-qc-role-tab ${key === activeRole ? "active" : ""} ${rejected ? "attention" : approvedForRole === state.outputs.length ? "complete" : ""}`}
+                        className={`neo-qc-role-tab ${key === activeRole ? "active" : ""} ${rejected ? "attention" : approvedForRole === eligible.length ? "complete" : ""}`}
                         type="button"
                         role="tab"
                         aria-selected={key === activeRole}
@@ -4948,12 +5219,12 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   <span className="neo-context-label">Creative review queue</span>
                   <h3>Assets in {reviewRoleShort(activeRole)} review</h3>
                 </div>
-                <span>{state.outputs.length} creatives</span>
+                <span>{activeRoleOutputs.length} creatives</span>
               </div>
               <div className="neo-qc-focus-grid">
-                {state.outputs.map((output, index) => (
+                {activeRoleOutputs.map((output) => (
                   <QcSlide
-                    index={index}
+                    index={state.outputs.indexOf(output)}
                     output={output}
                     direction={state.directions.find(
                       (candidate) => candidate.id === output.directionId
@@ -4978,85 +5249,98 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
 }
 
 function ApprovalDecisionField({
-  outputId,
+  output,
   role,
-  value,
   dispatch
 }: {
-  outputId: string;
+  output: CreativeOutput;
   role: ApprovalRole;
-  value: string;
   dispatch: Dispatch<WorkflowAction>;
 }) {
-  const [rejecting, setRejecting] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [mode, setMode] = useState<"approve" | "changes" | null>(null);
+  const [changeType, setChangeType] = useState<"artwork" | "caption" | "both" | null>(null);
+  const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const roleShort = reviewRoleShort(role);
-  const dialogTitleId = `qc-reject-title-${outputId}-${role}`;
-  const dialogDescriptionId = `qc-reject-description-${outputId}-${role}`;
+  const ugc = isUgcOutput(output);
+  const nextLabel = role === "graphicDesign" ? "CS" : role === "clientService" ? "PM" : "Client";
+  const dialogTitleId = `qc-decision-title-${output.id}-${role}`;
+  const dialogDescriptionId = `qc-decision-description-${output.id}-${role}`;
 
   useEffect(() => {
-    setRejecting(false);
-    setDraft(value);
+    setMode(null);
+    setDraft("");
+    setChangeType(null);
     setError(null);
-  }, [role, value]);
+  }, [role, output.id]);
 
-  function approve() {
-    dispatch({
-      type: "review-output",
-      id: outputId,
-      role,
-      decision: "approved",
-      comment: ""
-    });
-  }
-
-  function reject() {
-    const comment = draft.trim();
-    if (!comment) {
-      setError("Add a comment before rejecting.");
+  function submit() {
+    if (mode === "approve") {
+      dispatch({
+        type: "review-output",
+        id: output.id,
+        role,
+        decision: "approved",
+        comment: draft.trim()
+      });
+      setMode(null);
       return;
     }
+    const resolvedType = ugc ? "both" : changeType;
+    if (!resolvedType || !draft.trim()) {
+      setError("Choose what needs to change and add one clear instruction.");
+      return;
+    }
+    const targetRole: ApprovalRole =
+      ugc || resolvedType === "caption" ? "clientService" : "graphicDesign";
     dispatch({
-      type: "review-output",
-      id: outputId,
-      role,
-      decision: "rejected",
-      comment
+      type: "route-output-changes",
+      id: output.id,
+      requestedBy: role,
+      targetRole,
+      comment: draft.trim()
     });
-    setRejecting(false);
+    setMode(null);
+  }
+
+  function open(nextMode: "approve" | "changes", preset?: "artwork" | "caption" | "both") {
+    setMode(nextMode);
+    setChangeType(preset ?? (ugc ? "both" : null));
+    setDraft("");
     setError(null);
   }
 
   return (
     <>
       <div className="review-decision-actions neo-qc-decision-actions">
+        {role === "clientService" ? (
+          <button
+            className="btn secondary small"
+            type="button"
+            onClick={() => open("changes", ugc ? "both" : "artwork")}
+          >
+            {ugc ? "Needs UGC update" : "Request design changes"}
+          </button>
+        ) : role === "projectManager" ? (
+          <button className="btn secondary small" type="button" onClick={() => open("changes")}>
+            Request changes
+          </button>
+        ) : null}
         <button
           className="btn primary small"
           type="button"
-          onClick={approve}
+          onClick={() => open("approve")}
         >
-          Approve {roleShort}
-        </button>
-        <button
-          className="btn danger small"
-          type="button"
-          onClick={() => {
-            setDraft(value);
-            setError(null);
-            setRejecting(true);
-          }}
-        >
-          Reject
+          Approve → {nextLabel}
         </button>
       </div>
-      {rejecting ? (
+      {mode ? (
         <div
           className="output-modal-backdrop"
-          onClick={() => setRejecting(false)}
+          onClick={() => setMode(null)}
         >
           <div
-            className="output-modal neo-qc-reject-modal"
+            className="output-modal neo-qc-decision-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby={dialogTitleId}
@@ -5065,27 +5349,66 @@ function ApprovalDecisionField({
           >
             <div className="output-modal-head">
               <div>
-                <p className="eyebrow">Reject creative</p>
-                <h3 id={dialogTitleId}>What needs to change?</h3>
+                <p className="eyebrow">QC decision</p>
+                <h3 id={dialogTitleId}>
+                  {mode === "approve"
+                    ? `${roleShort} → ${nextLabel}`
+                    : ugc
+                      ? "Request UGC update"
+                      : "Request changes"}
+                </h3>
               </div>
               <button
                 className="btn ghost"
                 type="button"
-                onClick={() => setRejecting(false)}
+                onClick={() => setMode(null)}
               >
                 Close
               </button>
             </div>
             <p className="output-modal-reference-note" id={dialogDescriptionId}>
-              A comment is required and will be saved with this decision.
+              {mode === "approve"
+                ? `Marks ${roleShort} approved and sends this creative to ${nextLabel}.`
+                : "Choose the fix owner and add one clear instruction."}
             </p>
+            <div className="neo-qc-decision-meta">
+              <b>{roleShort} approval</b> · {output.format} · V{output.revisionCount + 1}
+            </div>
+            {mode === "changes" && !ugc ? (
+              <div className="neo-qc-change-type-field">
+                <span>What needs to change?</span>
+                <div>
+                  {(["artwork", "caption", "both"] as const).map((item) => (
+                    <button
+                      className={changeType === item ? "on" : ""}
+                      type="button"
+                      key={item}
+                      onClick={() => setChangeType(item)}
+                    >
+                      {item === "caption" ? "Caption" : item === "both" ? "Both" : "Artwork"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {mode === "changes" ? (
+              <div className="neo-qc-route-preview">
+                {ugc || changeType === "caption"
+                  ? "Fix owner: CS · Update the hook, script, scenes, creator direction, or caption."
+                  : changeType === "artwork"
+                    ? "Fix owner: GD · Update and replace the artwork in Internal QC."
+                    : changeType === "both"
+                      ? "Fix route: GD → CS · Artwork first, then copy."
+                      : "Choose one and Neo will route the revision to the right owner."}
+              </div>
+            ) : null}
             <label className="output-modal-prompt-label">
-              <span>Rejection comment</span>
+              <span>{mode === "approve" ? "Handoff note (optional)" : "Change instruction"}</span>
               <textarea
                 autoFocus
                 value={draft}
                 rows={4}
-                placeholder="Describe the change needed before approval."
+                placeholder={mode === "approve" ? `Optional context for ${nextLabel}.` : "Add one clear, actionable note."}
                 aria-invalid={Boolean(error)}
                 onChange={(event) => {
                   setDraft(event.target.value);
@@ -5098,12 +5421,12 @@ function ApprovalDecisionField({
               <button
                 className="btn secondary"
                 type="button"
-                onClick={() => setRejecting(false)}
+                onClick={() => setMode(null)}
               >
                 Cancel
               </button>
-              <button className="btn danger" type="button" onClick={reject}>
-                Reject creative
+              <button className={mode === "approve" ? "btn primary" : "btn danger"} type="button" onClick={submit}>
+                {mode === "approve" ? `Mark ✓ ${roleShort} approved` : "Route changes"}
               </button>
             </div>
           </div>
@@ -5130,6 +5453,7 @@ function QcSlide({
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [editingCopy, setEditingCopy] = useState(false);
   const roleConfig =
     REVIEW_ROLES.find(({ key }) => key === role) ?? REVIEW_ROLES[0]!;
   const roleShort = reviewRoleShort(role);
@@ -5167,7 +5491,9 @@ function QcSlide({
     >
       <div className="neo-qc-focus-asset">
         <div className="neo-qc-focus-visual">
-          {output.assetUrl ? (
+          {isUgcOutput(output) ? (
+            <UgcTemplatePreview direction={direction} compact />
+          ) : output.assetUrl ? (
             <img
               className="neo-qc-focus-image"
               src={output.assetUrl}
@@ -5186,7 +5512,7 @@ function QcSlide({
         </div>
         {direction?.caption ? (
           <div className="neo-qc-focus-caption">
-            <span>Caption</span>
+            <span>{isUgcOutput(output) ? "Caption / script direction" : "Caption"}</span>
             <OutputCaptionText caption={direction.caption} scrollable />
           </div>
         ) : null}
@@ -5199,6 +5525,10 @@ function QcSlide({
               {roleConfig.label}
             </span>
             <span className="neo-qc-card-kicker">Creative {index + 1}</span>
+            <span className="neo-qc-content-type-badge">
+              <i>{isUgcOutput(output) ? "UG" : output.format.toLowerCase().includes("album") ? "AL" : "ST"}</i>
+              {output.format}
+            </span>
             <h4>{direction?.hook ?? `Creative ${index + 1}`}</h4>
           </div>
           <span className={`neo-qc-state-badge ${decisionClass}`}>
@@ -5206,13 +5536,19 @@ function QcSlide({
           </span>
         </header>
         <div className="neo-qc-card-meta">
-          <span>{output.format}</span>
+          <span>Content type · {output.format}</span>
           <span>{qcStatusLabel(output.status)}</span>
         </div>
+        {isUgcOutput(output) ? (
+          <div className="neo-qc-ugc-ownership">
+            <i>UG</i>
+            UGC skips GD · CS owns script, scenes, and creator direction
+          </div>
+        ) : null}
         <div className="neo-qc-check-box">
           <b>{roleShort} Checklist</b>
           <ul className="neo-qc-check-list">
-            {roleConfig.checklist.map((check) => (
+            {qcChecklistFor(output, role, roleConfig.checklist).map((check) => (
               <li key={check}>{check}</li>
             ))}
           </ul>
@@ -5232,7 +5568,7 @@ function QcSlide({
         <div className="neo-qc-card-actions">
           <div className="neo-qc-card-utilities">
             <div className="neo-qc-asset-actions">
-              <a
+              {role === "graphicDesign" ? <><a
                 className={`btn secondary small download-action ${output.assetUrl ? "" : "disabled"}`}
                 href={output.assetUrl}
                 download
@@ -5256,21 +5592,50 @@ function QcSlide({
                   onChange={handleReplace}
                 />
               </label>
+              </> : role === "clientService" ? (
+                <button className="btn secondary small" type="button" onClick={() => setEditingCopy(true)}>
+                  {isUgcOutput(output) ? "Edit script & flow" : "Edit copy"}
+                </button>
+              ) : null}
             </div>
             {uploadError ? (
               <p className="repository-message error">{uploadError}</p>
             ) : null}
           </div>
           <ApprovalDecisionField
-            outputId={output.id}
+            output={output}
             role={role}
-            value={output.approvalComments[role]}
             dispatch={dispatch}
           />
         </div>
       </div>
+      {editingCopy && direction ? (
+        <CreativeCopyEditModal
+          output={output}
+          direction={direction}
+          dispatch={dispatch}
+          onClose={() => setEditingCopy(false)}
+        />
+      ) : null}
     </article>
   );
+}
+
+function qcChecklistFor(
+  output: CreativeOutput,
+  role: ApprovalRole,
+  fallback: readonly string[]
+): readonly string[] {
+  if (role === "graphicDesign" && output.format.toLowerCase().includes("album")) {
+    return ["Hero image", "Supporting frames", "Visual consistency", "Final files"];
+  }
+  if (role === "clientService" && isUgcOutput(output)) {
+    return ["Hook & script", "Scene flow", "Creator direction", "Brand fit"];
+  }
+  if (role === "projectManager" && isUgcOutput(output)) {
+    return ["Brief & offer", "Script accuracy", "Production readiness"];
+  }
+  return fallback;
 }
 
 function Spinner() {

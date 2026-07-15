@@ -25,7 +25,10 @@ export function isStageComplete(
     case "directions":
       return run.outputs.length > 0;
     case "studio":
-      return run.qaComplete;
+      return (
+        run.qaComplete &&
+        run.outputs.every((output) => output.status !== "needs-revision")
+      );
     case "approval":
       return run.approved;
     case "client":
@@ -103,12 +106,28 @@ export function workflowActionBlockReason(
       return run.outputs.length > 0 ? null : "Create outputs before QA.";
     case "approve-all":
       if (!run.outputs.length) return "Create outputs before internal QC.";
-      return run.qaComplete ? null : "Run QA before internal approval.";
+      if (!run.qaComplete) return "Run QA before internal approval.";
+      return run.outputs.some((output) => output.status === "needs-revision")
+        ? "Resolve every quality suggestion before internal approval."
+        : null;
     case "review-output":
       if (!run.qaComplete) return "Run QA before internal review.";
       if (action.decision === "rejected" && !action.comment.trim()) {
         return "Add a comment before rejecting.";
       }
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "resolve-qa-output":
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "edit-output-direction":
+      return run.outputs.some((output) => output.id === action.id)
+        ? null
+        : "Output not found.";
+    case "route-output-changes":
+      if (!action.comment.trim()) return "Add one clear change instruction.";
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";

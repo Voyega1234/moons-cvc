@@ -179,6 +179,7 @@ describe("buildHookGenerationHarnessRequest", () => {
               subheadlineHighlight: "โครงสร้างเว็บไซต์",
               why: "Makes the technical issue concrete.",
               visual: "Search result beside a website structure diagram.",
+              formatBeats: [],
               cta: "ปรึกษาทีม SEO",
               caption: "เริ่มแก้จากโครงสร้างที่ Search อ่านได้",
               score: 87
@@ -194,6 +195,7 @@ describe("buildHookGenerationHarnessRequest", () => {
       subheadline: "ทำโครงสร้างเว็บไซต์ให้ Search เข้าใจธุรกิจได้ชัดขึ้น",
       concept: "ชวนเจ้าของแบรนด์มอง SEO ผ่านโครงสร้างเว็บไซต์",
       subheadlineHighlight: "โครงสร้างเว็บไซต์",
+      formatBeats: [],
       score: 87
     });
     vi.stubGlobal("fetch", originalFetch);

@@ -216,7 +216,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.model).toBe("gpt-image-2");
   });
 
-  it("splits a mixed content plan into existing per-service backend requests", () => {
+  it("sends image requests for visual formats and keeps UGC in the local template", () => {
     const requests = buildArtworkGenerationRequests({
       run: {
         ...run,
@@ -232,14 +232,10 @@ describe("buildArtworkGenerationRequest", () => {
       }
     });
 
-    expect(requests).toHaveLength(2);
-    expect(requests.map((request) => request.service)).toEqual([
-      "single-static",
-      "ugc-video"
-    ]);
-    expect(requests.map((request) => request.quantity)).toEqual([1, 1]);
+    expect(requests).toHaveLength(1);
+    expect(requests.map((request) => request.service)).toEqual(["single-static"]);
+    expect(requests.map((request) => request.quantity)).toEqual([1]);
     expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-1");
-    expect(requests[1]?.selectedHooks[0]?.id).toBe("hook-2");
   });
 
   it("groups replacement choices by their saved content type, not array position", () => {
@@ -264,12 +260,8 @@ describe("buildArtworkGenerationRequest", () => {
       }
     });
 
-    expect(requests.map((request) => request.service)).toEqual([
-      "single-static",
-      "ugc-video"
-    ]);
+    expect(requests.map((request) => request.service)).toEqual(["single-static"]);
     expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-static-replacement");
-    expect(requests[1]?.selectedHooks[0]?.id).toBe("hook-2");
   });
 
   it("keeps returned assets as links and storage metadata, not base64 payloads", () => {

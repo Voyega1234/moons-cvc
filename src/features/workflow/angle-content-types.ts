@@ -109,6 +109,12 @@ function directionToExportIdea(
     copywriting: {
       headline: direction.hook,
       sub_headline_1: directionSubheadline(direction),
+      ...(direction.formatBeats?.length
+        ? {
+            sub_headline_2: direction.formatBeats[0],
+            bullets: [...direction.formatBeats]
+          }
+        : {}),
       cta: direction.cta
     }
   };

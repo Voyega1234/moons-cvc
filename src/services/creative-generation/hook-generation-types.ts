@@ -39,6 +39,7 @@ export interface RawDirection {
   visual?: unknown;
   cta?: unknown;
   supportingPoints?: unknown;
+  formatBeats?: unknown;
   ctaActionType?: unknown;
   ctaDestination?: unknown;
   contactLine?: unknown;
@@ -96,6 +97,15 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
       ? raw.supportingPoints.filter(
           (item): item is string => typeof item === "string" && item.trim().length > 0
         )
+      : [],
+    formatBeats: Array.isArray(raw.formatBeats)
+      ? raw.formatBeats
+          .filter(
+            (item): item is string =>
+              typeof item === "string" && item.trim().length > 0
+          )
+          .map((item) => item.trim())
+          .slice(0, 3)
       : [],
     ...(typeof raw.ctaActionType === "string" &&
     ctaActionTypes.includes(raw.ctaActionType as (typeof ctaActionTypes)[number])

@@ -68,7 +68,19 @@ function buildMixedAngleState() {
     type: "generate-directions",
     directions: buildDirectionFixtures("Mixed")
   });
-  return workflowReducer(generated, { type: "auto-select-directions" });
+  const formatNative = {
+    ...generated,
+    directions: generated.directions.map((direction) => ({
+      ...direction,
+      formatBeats:
+        direction.service === "album-post"
+          ? ["ปัญหาที่คนมองข้าม", "สิ่งที่ควรเปรียบเทียบ", "ทางเลือกที่นำไปใช้ได้"]
+          : direction.service === "ugc-video"
+            ? ["เปิดด้วยสถานการณ์จริง", "สาธิตให้เห็นผล", "ปิดด้วยทางเลือกของแบรนด์"]
+            : []
+    }))
+  };
+  return workflowReducer(formatNative, { type: "auto-select-directions" });
 }
 
 describe("redesigned workflow stages", () => {
@@ -231,6 +243,12 @@ describe("redesigned workflow stages", () => {
       ...baseState,
       directions: baseState.directions.map((direction, index) => ({
         ...direction,
+        formatBeats:
+          direction.service === "album-post"
+            ? ["ปัญหาที่คนมองข้าม", "สิ่งที่ควรเปรียบเทียบ", "ทางเลือกที่นำไปใช้ได้"]
+            : direction.service === "ugc-video"
+              ? ["เปิดด้วยสถานการณ์จริง", "สาธิตให้เห็นผล", "ปิดด้วยทางเลือกของแบรนด์"]
+              : [],
         score: index === 0 ? 82 : direction.score,
         exportGroup:
           index === 0
@@ -273,6 +291,17 @@ describe("redesigned workflow stages", () => {
     );
     expect(angleCards[0]?.querySelector(".neo-angle-hook-wrap")).toBeTruthy();
     expect(angleCards[0]?.querySelectorAll(".neo-angle-copy-block")).toHaveLength(3);
+    const albumCard = Array.from(angleCards).find((card) =>
+      card.textContent?.includes("ALBUM AD")
+    );
+    const ugcCard = Array.from(angleCards).find((card) =>
+      card.textContent?.includes("UGC VIDEO")
+    );
+    expect(albumCard?.textContent).toContain("Cover hook");
+    expect(albumCard?.textContent).toContain("Inside slides · 3 supporting topics");
+    expect(albumCard?.textContent).toContain("ปัญหาที่คนมองข้าม");
+    expect(ugcCard?.textContent).toContain("Opening hook");
+    expect(ugcCard?.textContent).toContain("UGC video flow · 3 beats");
     expect(angleCards[0]?.querySelector(".neo-angle-card-foot")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("82")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("score")).toBeTruthy();
@@ -387,6 +416,11 @@ describe("redesigned workflow stages", () => {
       concept_idea: "Concept 1",
       copywriting: { sub_headline_1: "Subheadline 1" }
     });
+    expect(review.sections[0]?.ideas[1]?.copywriting?.bullets).toEqual([
+      "ปัญหาที่คนมองข้าม",
+      "สิ่งที่ควรเปรียบเทียบ",
+      "ทางเลือกที่นำไปใช้ได้"
+    ]);
     expect(
       review.sections.flatMap((section) => section.ideas)
     ).toHaveLength(4);
@@ -410,6 +444,36 @@ describe("redesigned workflow stages", () => {
     expect(createCards[0]?.querySelector(".neo-create-card-foot")).toBeTruthy();
   });
 
+  it("renders UGC as a 9:16 editable phone template instead of generated artwork", () => {
+    const state = workflowReducer(buildMixedAngleState(), { type: "create-outputs" });
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+
+    expect(view.container.querySelectorAll(".neo-ugc-template").length).toBeGreaterThan(0);
+    expect(within(view.container).getByRole("heading", { name: "9:16 UGC creatives" })).toBeTruthy();
+  });
+
+  it("gives every failed Build quality result a next step", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const first = base.outputs[0];
+    if (!first) throw new Error("Expected a creative output fixture.");
+    const state = workflowReducer(base, {
+      type: "run-qa",
+      results: base.outputs.map((output) => ({
+        outputId: output.id,
+        passed: output.id !== first.id,
+        reason: output.id === first.id ? "Increase the headline contrast." : "Ready."
+      }))
+    });
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    expect(stage.getByRole("button", { name: "Use suggestion" })).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Keep current" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
+  });
+
   it("presents Internal QC as a role-focused asset review queue", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -418,6 +482,14 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
     const firstOutput = state.outputs[0];
     if (!firstOutput) throw new Error("Expected a creative output fixture.");
+    const gdOutputCount = state.outputs.filter(
+      (output) => !output.format.toUpperCase().includes("UGC")
+    ).length;
+    const standardGdOutputCount = state.outputs.filter(
+      (output) =>
+        !output.format.toUpperCase().includes("UGC") &&
+        !output.format.toLowerCase().includes("album")
+    ).length;
 
     expect(view.container.querySelector(".neo-stage-qc")).toBeTruthy();
     expect(
@@ -428,14 +500,14 @@ describe("redesigned workflow stages", () => {
     expect(stage.getByRole("heading", { name: "Assets in GD review" })).toBeTruthy();
     expect(
       stage.getAllByText("ความสวยงาม องค์ประกอบ และจุดนำสายตา")
-    ).toHaveLength(state.outputs.length);
+    ).toHaveLength(standardGdOutputCount);
     expect(
       stage.getAllByText(
         "ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ให้ถูกต้อง"
       )
-    ).toHaveLength(state.outputs.length);
-    expect(stage.getAllByRole("button", { name: "Approve GD" })).toHaveLength(
-      state.outputs.length
+    ).toHaveLength(standardGdOutputCount);
+    expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(
+      gdOutputCount
     );
     const firstCard = view.container.querySelector(".neo-qc-focus-card");
     const firstCardContent = firstCard?.querySelector(".neo-qc-focus-content");
@@ -448,28 +520,18 @@ describe("redesigned workflow stages", () => {
     ).toBeNull();
     expect(stage.queryByText("Review route")).toBeNull();
     expect(stage.queryByRole("dialog")).toBeNull();
-    expect(
-      stage.queryByRole("textbox", { name: "Rejection comment" })
-    ).toBeNull();
+    expect(stage.queryByRole("button", { name: "Reject" })).toBeNull();
 
-    await user.click(stage.getAllByRole("button", { name: "Reject" })[0]!);
-
-    expect(stage.getByRole("dialog", { name: "What needs to change?" })).toBeTruthy();
-    await user.click(stage.getByRole("button", { name: "Reject creative" }));
-    expect(stage.getByText("Add a comment before rejecting.")).toBeTruthy();
-
-    await user.type(
-      stage.getByRole("textbox", { name: "Rejection comment" }),
-      "Increase the headline contrast."
-    );
-    await user.click(stage.getByRole("button", { name: "Reject creative" }));
+    await user.click(stage.getAllByRole("button", { name: "Approve → CS" })[0]!);
+    expect(stage.getByRole("dialog", { name: "GD → CS" })).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Mark ✓ GD approved" }));
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "review-output",
       id: firstOutput.id,
       role: "graphicDesign",
-      decision: "rejected",
-      comment: "Increase the headline contrast."
+      decision: "approved",
+      comment: ""
     });
     expect(stage.queryByRole("dialog")).toBeNull();
 
@@ -478,15 +540,31 @@ describe("redesigned workflow stages", () => {
     expect(stage.getByRole("heading", { name: "Assets in CS review" })).toBeTruthy();
     expect(
       stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
-    ).toHaveLength(state.outputs.length);
+    ).toHaveLength(gdOutputCount);
     expect(
       stage.getAllByText(
         "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"
       )
-    ).toHaveLength(state.outputs.length);
-    expect(stage.getAllByRole("button", { name: "Approve CS" })).toHaveLength(
+    ).toHaveLength(gdOutputCount);
+    expect(stage.getAllByRole("button", { name: "Approve → PM" })).toHaveLength(
       state.outputs.length
     );
+    await user.click(
+      stage.getAllByRole("button", { name: "Request design changes" })[0]!
+    );
+    expect(stage.getByRole("dialog", { name: "Request changes" })).toBeTruthy();
+    await user.type(
+      stage.getByRole("textbox", { name: "Change instruction" }),
+      "Increase product contrast and keep the brand layout."
+    );
+    await user.click(stage.getByRole("button", { name: "Route changes" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "route-output-changes",
+      id: firstOutput.id,
+      requestedBy: "clientService",
+      targetRole: "graphicDesign",
+      comment: "Increase product contrast and keep the brand layout."
+    });
   });
 
   it("requires client feedback before routing a creative to Internal QC", async () => {

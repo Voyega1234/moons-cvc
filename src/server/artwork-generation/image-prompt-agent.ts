@@ -12,6 +12,7 @@ export interface ImagePromptAgentHook {
   visual: string;
   cta: string;
   supportingPoints?: readonly string[];
+  formatBeats?: readonly string[];
   ctaActionType?: string;
   ctaDestination?: string;
   contactLine?: string;
@@ -234,6 +235,9 @@ function renderStandardPrompt(
       headline: input.hook.hook,
       concept: input.hook.concept,
       visualDirection: input.hook.visual,
+      ...(input.hook.formatBeats?.length
+        ? { formatBeats: input.hook.formatBeats }
+        : {}),
       cta: input.hook.cta
     },
     onImageCopy: {
@@ -359,6 +363,7 @@ function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
     `Why it works: ${input.hook.why}`,
     `Approved visual direction: ${input.hook.visual}`,
     `Supporting detail: ${input.hook.supportingPoints?.[0] ?? "None"}`,
+    `Format-specific sequence: ${input.hook.formatBeats?.length ? input.hook.formatBeats.join(" → ") : "None"}`,
     `CTA: ${input.hook.cta}`,
     `Caption context: ${input.hook.caption}`,
     "",

@@ -141,6 +141,8 @@ export interface CreativeDirection {
   cta: string;
   /** Short, verified facts that may support the caption or one artwork text block. */
   supportingPoints?: readonly string[];
+  /** Format-native story beats. Album/UGC/video directions use exactly three. */
+  formatBeats?: readonly string[];
   /** Intended conversion route for the CTA. Optional for saved legacy runs. */
   ctaActionType?: CtaActionType;
   /** Verified destination copied from brand context. Never generated from inference. */

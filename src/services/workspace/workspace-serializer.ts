@@ -411,6 +411,8 @@ function parseDirections(
       item.supportingPoints === undefined
         ? []
         : parseStringArray(item.supportingPoints);
+    const formatBeats =
+      item.formatBeats === undefined ? [] : parseStringArray(item.formatBeats);
     const ctaActionType =
       item.ctaActionType === undefined
         ? undefined
@@ -438,6 +440,7 @@ function parseDirections(
       visual === null ||
       cta === null ||
       supportingPoints === null ||
+      formatBeats === null ||
       (item.ctaActionType !== undefined && !ctaActionType) ||
       ctaDestination === null ||
       contactLine === null ||
@@ -461,6 +464,7 @@ function parseDirections(
       visual,
       cta,
       supportingPoints,
+      formatBeats,
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,
       contactLine: contactLine ?? undefined,

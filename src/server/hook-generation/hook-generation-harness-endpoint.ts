@@ -83,6 +83,7 @@ interface GeneratedDirection extends RawDirection {
   visual: string;
   cta: string;
   supportingPoints: readonly string[];
+  formatBeats: readonly string[];
   ctaActionType: CtaActionType;
   ctaDestination: string;
   contactLine: string;
@@ -436,7 +437,12 @@ function buildGenerationPrompt(
     "",
     "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
     "",
-    "CONTENT TYPE EXECUTION: เขียนแต่ละ direction ให้เหมาะกับ service ที่กำหนดใน content-type quota. single-static ต้องสื่อสารในภาพเดียวภายใน ~2 วินาที; album-post ต้องมีแกนเรื่องที่แตกเป็นลำดับ swipe ได้; ugc-video ต้องเป็น creator-led vertical video ที่เปิดเรื่องได้ทันที; motion-static ต้องมี motion-first progression; resize ต้องเป็นแนวคิดที่ adapt จาก approved work ไป placement ใหม่ได้โดยไม่เสียสารหลัก",
+    "CONTENT TYPE EXECUTION — แต่ละ format ต้องคิดคนละแบบ ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
+    "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
+    "- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดีสำหรับภาพด้านใน 3 ใบ; แต่ละ topic ต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic.",
+    "- ugc-video: คิดเป็น creator-led vertical video ที่ฟังเหมือนคนจริงพูด ไม่ใช่ headline บนโปสเตอร์. Hook ต้องเปิดเรื่องได้ใน 1-3 วินาที. formatBeats ต้องมี 3 beat พอดี: opening situation/tension → demonstration/proof → brand-fit action/close.",
+    "- motion-static: คิดเป็น short motion creative. Hook ต้องทำงานกับ movement/reveal. formatBeats ต้องมี 3 beat พอดี: opening frame → motion/reveal → resolved message/CTA.",
+    "- resize: adapt approved work ไป placement ใหม่โดยไม่เสียสารหลัก และคืน formatBeats เป็น [].",
     "",
     "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
     "",
@@ -488,7 +494,7 @@ function buildGenerationPrompt(
     "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
     "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
     `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
-    "5. ใส่ concept, why, visual, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
+    "5. ใส่ concept, why, visual, formatBeats, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
     "",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
     "",
@@ -501,8 +507,9 @@ function buildGenerationPrompt(
     "",
     "## Neo output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; supportingPoints = only verified useful detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
+    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; formatBeats = the exact format-native sequence defined above; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
+    "Format-beat validation: album-post, ugc-video, and motion-static must return exactly 3 non-empty formatBeats. single-static and resize must return an empty array. Album formatBeats are the three inside-slide supporting topics—not hidden rationale and not generic filler.",
     "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
     "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response. The schema's service field is required."
   ].join("\n");
@@ -711,6 +718,11 @@ const hookGenerationSchema = {
           visual: { type: "string" },
           cta: { type: "string" },
           supportingPoints: stringArraySchema,
+          formatBeats: {
+            type: "array",
+            maxItems: 3,
+            items: { type: "string" }
+          },
           ctaActionType: { type: "string", enum: ctaActionTypes },
           ctaDestination: { type: "string" },
           contactLine: { type: "string" },
@@ -729,6 +741,7 @@ const hookGenerationSchema = {
           "visual",
           "cta",
           "supportingPoints",
+          "formatBeats",
           "ctaActionType",
           "ctaDestination",
           "contactLine",
@@ -991,12 +1004,20 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
   return {
     directions: value.directions.map((item, index) => {
       const direction = readRecord(item, `directions[${index}]`);
+      const service = readServiceType(
+        direction.service,
+        `directions[${index}].service`
+      );
+      const rawFormatBeats =
+        direction.formatBeats === undefined
+          ? []
+          : readStringArray(
+              direction.formatBeats,
+              `directions[${index}].formatBeats`
+            );
       return {
         id: readString(direction.id, `directions[${index}].id`),
-        service: readServiceType(
-          direction.service,
-          `directions[${index}].service`
-        ),
+        service,
         hook: readString(direction.hook, `directions[${index}].hook`),
         subheadline: readString(
           direction.subheadline,
@@ -1013,6 +1034,7 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
                 direction.supportingPoints,
                 `directions[${index}].supportingPoints`
               ),
+        formatBeats: validateFormatBeats(service, rawFormatBeats, index),
         ctaActionType:
           direction.ctaActionType === undefined
             ? "other"
@@ -1047,6 +1069,21 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       };
     })
   };
+}
+
+function validateFormatBeats(
+  service: ServiceType,
+  beats: readonly string[],
+  index: number
+): readonly string[] {
+  if (service === "single-static" || service === "resize") return [];
+  const normalized = beats.map((beat) => beat.trim()).filter(Boolean);
+  if (normalized.length !== 3) {
+    throw new Error(
+      `directions[${index}].formatBeats must contain exactly 3 items for ${service}.`
+    );
+  }
+  return normalized;
 }
 
 function parseSubheadlineHighlights(
