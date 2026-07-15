@@ -3845,7 +3845,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                 highlight={direction.subheadlineHighlight}
               />
             </div>
-            {direction.formatBeats?.length ? (
+            {group.service !== "single-static" &&
+            group.service !== "resize" &&
+            direction.formatBeats?.length ? (
               <div className="neo-angle-copy-block neo-angle-format-beats">
                 <span className="neo-angle-card-kicker">
                   {angleFormatBeatsLabel(group.service)}
@@ -4469,6 +4471,12 @@ function isUgcOutput(output: CreativeOutput): boolean {
   return output.format.toUpperCase().includes("UGC");
 }
 
+function qcContentTypeLabel(output: CreativeOutput): "Static" | "UGC" | "ALBUM" {
+  if (isUgcOutput(output)) return "UGC";
+  if (output.format.toLowerCase().includes("album")) return "ALBUM";
+  return "Static";
+}
+
 function UgcTemplatePreview({
   direction,
   compact = false
@@ -4625,8 +4633,7 @@ function OutputGrid({
                     {output.status === "needs-revision" && output.qaNote ? (
                       <div className="neo-output-qa-callout">
                         <span>Suggested improvement</span>
-                        <b>Quality check found a fix</b>
-                        <p>{output.qaNote}</p>
+                        <p title={output.qaNote}>{output.qaNote}</p>
                         <div>
                           <button
                             className="btn primary small"
@@ -5372,7 +5379,7 @@ function ApprovalDecisionField({
                 : "Choose the fix owner and add one clear instruction."}
             </p>
             <div className="neo-qc-decision-meta">
-              <b>{roleShort} approval</b> · {output.format} · V{output.revisionCount + 1}
+              <b>{roleShort} approval</b> · {qcContentTypeLabel(output)} · V{output.revisionCount + 1}
             </div>
             {mode === "changes" && !ugc ? (
               <div className="neo-qc-change-type-field">
@@ -5542,7 +5549,7 @@ function QcSlide({
             <span className="neo-qc-card-kicker">Creative {index + 1}</span>
             <span className="neo-qc-content-type-badge">
               <i>{isUgcOutput(output) ? "UG" : output.format.toLowerCase().includes("album") ? "AL" : "ST"}</i>
-              {output.format}
+              {qcContentTypeLabel(output)}
             </span>
             <h4>{direction?.hook ?? `Creative ${index + 1}`}</h4>
           </div>
@@ -5551,7 +5558,7 @@ function QcSlide({
           </span>
         </header>
         <div className="neo-qc-card-meta">
-          <span>Content type · {output.format}</span>
+          <span>Content type · {qcContentTypeLabel(output)}</span>
           <span>{qcStatusLabel(output.status)}</span>
         </div>
         {isUgcOutput(output) ? (

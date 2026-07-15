@@ -673,12 +673,38 @@ lime/orange semantic accents, soft borders, and medium information density.
     CS/PM change requests open the decision modal, require one actionable note,
     and route artwork to GD or copy/UGC to CS. CS can edit copy or UGC script and
     flow without clearing the generated output set. Verification passes all 45
-    test files / 202 tests, TypeScript, the production build, and `git diff
+    test files / 203 tests, TypeScript, the production build, and `git diff
     --check`; the existing non-blocking bundle-size warning remains.
   - Download actions were corrected on 2026-07-15. QC, Client, and bulk download
     controls now fetch each signed storage URL as a Blob, create a temporary
     object URL, and trigger a named local-file download. They no longer use a
     cross-origin anchor that can open the asset URL in a browser tab.
+  - Standard-mode image-agent input was corrected on 2026-07-15 after prompt-log
+    review. `renderStandardPrompt` no longer constructs or sends `onImageCopy`,
+    `heroVisual`, `visualDirection`, or `maximumTextBlocks`. The agent now
+    receives the approved angle concept plus neutral `supportingDetails`,
+    allowing it to decide which useful text, hero treatment, and visual
+    execution belong in the artwork. Design-system mode is
+    unchanged. Regression tests assert that the forbidden keys are absent from
+    the exact text sent to the selected OpenAI/OpenRouter prompt model.
+  - Build QA suggestion cards were compacted on 2026-07-15. The redundant
+    "Quality check found a fix" heading was removed and the visible suggestion
+    is clamped to three lines. The complete QA instruction remains available to
+    the revision workflow and is still passed when `Use suggestion` is chosen.
+  - Internal QC content-type labels were simplified on 2026-07-15. Ratios and
+    execution suffixes are hidden in QC; cards and decision modals show only
+    `Static`, `UGC`, or `ALBUM`. Stored output formats and backend contracts are
+    unchanged. The compact QC UGC phone preview also uses smaller hook,
+    supporting-copy, scene-beat, and CTA typography for safer 9:16 spacing.
+  - Hook candidate service assignment was corrected on 2026-07-15. The reducer
+    previously reassigned the generated `+2` optional candidates using the
+    smaller requested-deliverable quota, which could relabel UGC candidates as
+    Static while leaving their video beats attached. Generated candidates now
+    preserve the validated service returned by the hook endpoint; service-aware
+    normalization removes all `formatBeats` from Static/Resize while retaining
+    exactly the returned flow/topics for UGC, Album, and motion formats. Angles
+    also defensively hides beat UI for Static/Resize, and saved Static records
+    are cleaned during workspace deserialization.
 
 ### In progress
 

@@ -7,6 +7,7 @@ import {
   defaultArtworkOutputSize,
   emptyApprovalComments,
   imagePromptModels,
+  normalizeFormatBeatsForService,
   serviceTypes,
   type CreativeStage,
   type ServiceType
@@ -464,7 +465,10 @@ function parseDirections(
       visual,
       cta,
       supportingPoints,
-      formatBeats,
+      formatBeats: normalizeFormatBeatsForService(
+        service ?? undefined,
+        formatBeats
+      ),
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,
       contactLine: contactLine ?? undefined,

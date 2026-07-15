@@ -138,6 +138,56 @@ describe("workflowReducer", () => {
     ]);
   });
 
+  it("preserves +2 candidate types and strips flow beats from Static only", () => {
+    const template = buildDirectionFixtures("Candidate")[0]!;
+    const beats = ["Beat one", "Beat two", "Beat three"];
+    const directions = ([
+      "single-static",
+      "ugc-video",
+      "album-post"
+    ] as const).flatMap((service) =>
+      Array.from({ length: 3 }, (_, index) => ({
+        ...template,
+        id: `${service}-${index + 1}`,
+        service,
+        formatBeats: service === "single-static" ? ["Wrong motion flow"] : beats
+      }))
+    );
+    const state: WorkflowState = {
+      ...initialWorkflowState,
+      creativeMix: [
+        { id: "static", service: "single-static", quantity: 1 },
+        { id: "ugc", service: "ugc-video", quantity: 1 },
+        { id: "album", service: "album-post", quantity: 1 }
+      ],
+      quantity: 3
+    };
+
+    const generated = workflowReducer(state, {
+      type: "generate-directions",
+      directions
+    });
+
+    expect(generated.directions.map((direction) => direction.service)).toEqual(
+      directions.map((direction) => direction.service)
+    );
+    expect(
+      generated.directions
+        .filter((direction) => direction.service === "single-static")
+        .every((direction) => direction.formatBeats?.length === 0)
+    ).toBe(true);
+    expect(
+      generated.directions
+        .filter((direction) => direction.service === "ugc-video")
+        .every((direction) => direction.formatBeats?.length === 3)
+    ).toBe(true);
+    expect(
+      generated.directions
+        .filter((direction) => direction.service === "album-post")
+        .every((direction) => direction.formatBeats?.length === 3)
+    ).toBe(true);
+  });
+
   it("creates only the requested number of selected outputs", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

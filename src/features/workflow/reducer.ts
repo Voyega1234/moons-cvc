@@ -1,6 +1,7 @@
 import {
   defaultArtworkOutputSize,
   emptyApprovalGate,
+  normalizeFormatBeatsForService,
   type ApprovalRole
 } from "../../domain/creative-run";
 import {
@@ -16,6 +17,7 @@ import {
   creativeMixItems,
   creativeMixServiceAt,
   directionServiceAt,
+  hookGenerationContentTypeQuotas,
   totalCreativeMixQuantity,
   type CreativeMixItem,
   type WorkflowAction,
@@ -27,11 +29,23 @@ function assignDirectionsToMix(
   directions: WorkflowState["directions"]
 ): WorkflowState["directions"] {
   const total = Math.max(1, totalCreativeMixQuantity(state));
+  const candidateServices = hookGenerationContentTypeQuotas(state).flatMap(
+    ({ service, count }) => Array.from({ length: count }, () => service)
+  );
+  const usesCandidatePool = directions.length > total;
   return directions.map((direction, index) => {
     const subheadline = directionSubheadline(direction);
+    const fallbackService = usesCandidatePool
+      ? candidateServices[index % candidateServices.length]
+      : creativeMixServiceAt(state, index % total);
+    const service = direction.service ?? fallbackService;
     return {
       ...direction,
-      service: creativeMixServiceAt(state, index % total),
+      service,
+      formatBeats: normalizeFormatBeatsForService(
+        service,
+        direction.formatBeats
+      ),
       subheadline,
       exportGroup: direction.exportGroup ?? null,
       subheadlineHighlight: resolveSubheadlineHighlight(
@@ -356,6 +370,10 @@ export function workflowReducer(
                   ...action.direction,
                   id: direction.id,
                   service: directionServiceAt(state, direction, index),
+                  formatBeats: normalizeFormatBeatsForService(
+                    directionServiceAt(state, direction, index),
+                    action.direction.formatBeats
+                  ),
                   subheadline,
                   subheadlineHighlight: resolveSubheadlineHighlight(
                     subheadline,
@@ -384,6 +402,10 @@ export function workflowReducer(
             id: state.directions[index]?.id ?? direction.id,
             service:
               state.directions[index]?.service ?? creativeMixServiceAt(state, index),
+            formatBeats: normalizeFormatBeatsForService(
+              state.directions[index]?.service ?? creativeMixServiceAt(state, index),
+              direction.formatBeats
+            ),
             subheadline,
             subheadlineHighlight: resolveSubheadlineHighlight(
               subheadline,

@@ -234,21 +234,13 @@ function renderStandardPrompt(
     angle: {
       headline: input.hook.hook,
       concept: input.hook.concept,
-      visualDirection: input.hook.visual,
+      ...(input.hook.supportingPoints?.length
+        ? { supportingDetails: input.hook.supportingPoints }
+        : {}),
       ...(input.hook.formatBeats?.length
         ? { formatBeats: input.hook.formatBeats }
         : {}),
       cta: input.hook.cta
-    },
-    onImageCopy: {
-      headline: input.hook.hook,
-      supportingText: input.hook.supportingPoints?.[0] ?? null,
-      cta: input.hook.cta,
-      maximumTextBlocks: input.hook.supportingPoints?.length ? 3 : 2
-    },
-    heroVisual: {
-      subject: input.hook.visual,
-      visualMode: "conceptual graphic advertising"
     },
     references: input.referenceImages.map((image, index) =>
       buildCompactReference(image.label, index)

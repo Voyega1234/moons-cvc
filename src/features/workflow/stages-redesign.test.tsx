@@ -507,6 +507,7 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(stage.getByRole("button", { name: "Use suggestion" })).toBeTruthy();
+    expect(stage.queryByText("Quality check found a fix")).toBeNull();
     await user.click(stage.getByRole("button", { name: "Keep current" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
   });
@@ -535,6 +536,8 @@ describe("redesigned workflow stages", () => {
         .getAttribute("aria-valuenow")
     ).toBe("0");
     expect(stage.getByRole("heading", { name: "Assets in GD review" })).toBeTruthy();
+    expect(stage.queryByText("1:1 Static")).toBeNull();
+    expect(stage.getAllByText("Static").length).toBeGreaterThan(0);
     expect(
       stage.getAllByText("ความสวยงาม องค์ประกอบ และจุดนำสายตา")
     ).toHaveLength(standardGdOutputCount);
@@ -575,6 +578,10 @@ describe("redesigned workflow stages", () => {
     await user.click(stage.getByRole("tab", { name: /CS Review/i }));
 
     expect(stage.getByRole("heading", { name: "Assets in CS review" })).toBeTruthy();
+    expect(stage.queryByText("9:16 UGC")).toBeNull();
+    expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
+    expect(stage.queryByText("Album post")).toBeNull();
+    expect(stage.getAllByText("ALBUM").length).toBeGreaterThan(0);
     expect(
       stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
     ).toHaveLength(gdOutputCount);

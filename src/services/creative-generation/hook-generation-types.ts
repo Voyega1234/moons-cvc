@@ -2,6 +2,7 @@ import type { Brand } from "../../domain/brand";
 import type { UploadedCreativeMaterial } from "../../domain/creative-run";
 import {
   ctaActionTypes,
+  normalizeFormatBeatsForService,
   serviceTypes,
   type CreativeDirection,
   type ServiceType
@@ -70,14 +71,15 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
     typeof raw.subheadline === "string" && raw.subheadline.trim()
       ? raw.subheadline
       : raw.concept;
+  const service =
+    typeof raw.service === "string" &&
+    serviceTypes.includes(raw.service as ServiceType)
+      ? (raw.service as ServiceType)
+      : undefined;
 
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : `direction-${index + 1}`,
-    service:
-      typeof raw.service === "string" &&
-      serviceTypes.includes(raw.service as ServiceType)
-        ? (raw.service as ServiceType)
-        : undefined,
+    service,
     hook: raw.hook,
     subheadline,
     concept: raw.concept,
@@ -98,15 +100,14 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
           (item): item is string => typeof item === "string" && item.trim().length > 0
         )
       : [],
-    formatBeats: Array.isArray(raw.formatBeats)
-      ? raw.formatBeats
-          .filter(
-            (item): item is string =>
-              typeof item === "string" && item.trim().length > 0
+    formatBeats: normalizeFormatBeatsForService(
+      service,
+      Array.isArray(raw.formatBeats)
+        ? raw.formatBeats.filter(
+            (item): item is string => typeof item === "string"
           )
-          .map((item) => item.trim())
-          .slice(0, 3)
-      : [],
+        : []
+    ),
     ...(typeof raw.ctaActionType === "string" &&
     ctaActionTypes.includes(raw.ctaActionType as (typeof ctaActionTypes)[number])
       ? { ctaActionType: raw.ctaActionType as (typeof ctaActionTypes)[number] }

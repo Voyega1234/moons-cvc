@@ -70,7 +70,10 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain('"personality": [');
     expect(promptText).toContain('"colors": [');
     expect(promptText).not.toContain('"mustAvoid"');
-    expect(promptText).toContain('"maximumTextBlocks": 2');
+    expect(promptText).not.toContain('"onImageCopy"');
+    expect(promptText).not.toContain('"heroVisual"');
+    expect(promptText).not.toContain('"visualDirection"');
+    expect(promptText).not.toContain('"maximumTextBlocks"');
     expect(promptText).toContain('"copyDensity": "low"');
     expect(promptText).not.toContain('"mustShow"');
     expect(promptText).not.toContain('"mustNotShow"');
@@ -80,7 +83,7 @@ describe("generateImagePrompt", () => {
     expect(promptText).not.toContain("Fresh flowers for calm homes.");
   });
 
-  it("sends only the first verified supporting point as optional on-image copy", async () => {
+  it("sends useful supporting details without prescribing on-image copy", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push({
@@ -112,11 +115,12 @@ describe("generateImagePrompt", () => {
     const promptText = (
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
-    expect(promptText).toContain(
-      '"supportingText": "Same-day delivery in Bangkok"'
-    );
-    expect(promptText).toContain('"maximumTextBlocks": 3');
-    expect(promptText).not.toContain("Seasonal stems selected daily");
+    expect(promptText).toContain('"supportingDetails": [');
+    expect(promptText).toContain("Same-day delivery in Bangkok");
+    expect(promptText).toContain("Seasonal stems selected daily");
+    expect(promptText).not.toContain('"onImageCopy"');
+    expect(promptText).not.toContain('"heroVisual"');
+    expect(promptText).not.toContain('"visualDirection"');
   });
 
   it("writes a sanitized trace with the exact agent input and returned prompt", async () => {

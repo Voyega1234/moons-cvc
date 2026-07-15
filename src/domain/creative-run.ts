@@ -34,6 +34,14 @@ export function outputFormatForService(service: ServiceType): string {
       return "9:16 UGC";
   }
 }
+
+export function normalizeFormatBeatsForService(
+  service: ServiceType | undefined,
+  beats: readonly string[] | undefined
+): readonly string[] {
+  if (service === "single-static" || service === "resize") return [];
+  return (beats ?? []).map((beat) => beat.trim()).filter(Boolean).slice(0, 3);
+}
 export const artworkModes = ["standard", "design-system"] as const;
 export type ArtworkMode = (typeof artworkModes)[number];
 export const imagePromptModels = [
