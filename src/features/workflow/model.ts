@@ -86,6 +86,7 @@ export type WorkflowAction =
       changes: Partial<Pick<UploadedCreativeMaterial, "role" | "description">>;
     }
   | { type: "remove-uploaded-material"; id: string }
+  | { type: "select-reference-image"; item: ReferenceImageSelection }
   | { type: "toggle-reference-image"; item: ReferenceImageSelection }
   | { type: "generate-directions"; directions: readonly CreativeDirection[] }
   | {

@@ -705,6 +705,11 @@ lime/orange semantic accents, soft borders, and medium information density.
     exactly the returned flow/topics for UGC, Album, and motion formats. Angles
     also defensively hides beat UI for Static/Resize, and saved Static records
     are cleaned during workspace deserialization.
+  - Internal QC cards regained the prototype approval trail on 2026-07-15.
+    Static and Album show `GD → CS → PM → Client`; UGC correctly skips GD
+    and shows `CS → PM → Client`. Trail pills derive completed/current/future
+    styling from each output's real approval state and switch the final Client
+    pill to `Client ready` after all applicable internal gates pass.
 
 ### In progress
 

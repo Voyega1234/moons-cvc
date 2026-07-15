@@ -115,7 +115,7 @@ interface ImagePromptAgentDebugLog {
   provider: ImagePromptProvider;
   model: string;
   directionId: string;
-  mode: "standard" | "design-system";
+  mode: ArtworkGenerationRequest["artworkMode"];
   status: "succeeded" | "failed";
   request: {
     endpoint: "/v1/responses" | "/api/v1/responses";
@@ -350,11 +350,17 @@ async function generateOutputForHook({
         buildConceptAlignmentInstruction(hook),
         buildDesignSystemFinalArtworkInstruction(hook)
       ]
-    : [
-        buildReferenceFidelityInstruction(references, "standard"),
-        buildConceptAlignmentInstruction(hook),
-        prompt
-      ])
+    : input.artworkMode === "reference-library"
+      ? [
+          prompt,
+          buildReferenceFidelityInstruction(references, "reference-library"),
+          buildConceptAlignmentInstruction(hook)
+        ]
+      : [
+          buildReferenceFidelityInstruction(references, "standard"),
+          buildConceptAlignmentInstruction(hook),
+          prompt
+        ])
     .filter(Boolean)
     .join("\n\n");
   await writeDebugLog(
@@ -442,7 +448,7 @@ function buildReferenceFidelityInstruction(
     "REFERENCE-INFORMED DESIGN — highest priority:",
     ...referenceMap,
     "When the attached references are from the same client account, use them as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish.",
-    mode === "design-system"
+    mode !== "standard"
       ? "The dominant visual medium shown by the references is authoritative. If they are photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family. A new execution means a new message-specific idea and composition—not replacing the reference medium with simplified isometric 3D, toy-like objects, miniature SaaS scenes, generic UI cards, or sterile product renders."
       : hasUploadedSourceMaterials
         ? "Create a distinctly new execution for this brief, but preserve and visibly use every uploaded source material according to its label. A main object or product must remain recognisable and serve the requested role; a supporting component must be integrated as a real component. For ordinary style references, invent a different composition and never copy their readable text or recognisable layout."
@@ -781,7 +787,9 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
       ? "standard"
       : readString(value.artworkMode, "artworkMode");
   if (!artworkModes.includes(artworkMode as (typeof artworkModes)[number])) {
-    throw new Error("artworkMode must be standard or design-system.");
+    throw new Error(
+      "artworkMode must be standard, design-system, or reference-library."
+    );
   }
   const imagePromptModel =
     value.imagePromptModel === undefined

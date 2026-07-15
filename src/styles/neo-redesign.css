@@ -2701,7 +2701,7 @@
 .neo-app .neo-angle-mode-options {
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--line);
@@ -4276,6 +4276,50 @@
   background: #f8f9fb;
   color: #6d7483;
   font-size: 12px;
+}
+
+.neo-app .neo-qc-mini-trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.neo-app .neo-qc-mini-trail > b {
+  color: #9096a2;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.neo-app .neo-qc-mini-trail > span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #dfe2e8;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d2027;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.neo-app .neo-qc-mini-trail > span.current {
+  border-color: rgba(86, 100, 245, 0.28);
+  background: #eef0ff;
+  color: #5664f5;
+}
+
+.neo-app .neo-qc-mini-trail > span.done {
+  border-color: rgba(22, 129, 90, 0.22);
+  background: #e9f8f2;
+  color: #16815a;
+}
+
+.neo-app .neo-qc-mini-trail i {
+  font-style: normal;
 }
 
 .neo-app .neo-qc-decision-modal {

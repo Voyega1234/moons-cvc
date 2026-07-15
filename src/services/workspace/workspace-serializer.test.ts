@@ -54,7 +54,7 @@ describe("workspace serializer", () => {
       type: "apply-run-action",
       runId: workspace.activeRunId,
       now: "2026-06-23T10:05:30.000Z",
-      action: { type: "set-artwork-mode", mode: "design-system" }
+      action: { type: "set-artwork-mode", mode: "reference-library" }
     });
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
@@ -108,7 +108,7 @@ describe("workspace serializer", () => {
       "Album persisted brief"
     );
     expect(restored?.runsById["album-run"]?.artworkMode).toBe(
-      "design-system"
+      "reference-library"
     );
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"

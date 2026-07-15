@@ -6,7 +6,7 @@ import { DirectionsStage } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
 
 describe("DirectionsStage artwork mode", () => {
-  it("shows Standard by default and dispatches Design system selection", async () => {
+  it("shows Standard by default and dispatches artwork mode selections", async () => {
     const user = userEvent.setup();
     const dispatch = vi.fn();
     const state = {
@@ -31,6 +31,15 @@ describe("DirectionsStage artwork mode", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-artwork-mode",
       mode: "design-system"
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Reference library" })
+    );
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "reference-library"
     });
 
     const modelSelect = screen.getByRole("combobox", {

@@ -30,6 +30,13 @@ reconfigure the OpenAI/n8n provider choice above:
    CTA, or logo compositor. Selected campaign references are authoritative for
    visual medium and design grammar, so photographic/editorial work must not
    collapse into generic isometric 3D or SaaS illustration.
+3. `reference-library` — loads
+   `agent_prompt/agent_artwork_reference.md`, a deployment-safe catalog
+   distilled from the verified specs and reconstruction prompts in
+   `agent_prompt/Images/output`. It selects one relevant structural pattern
+   for layout, hierarchy, palette roles, lighting, density, and storytelling,
+   then translates that reasoning into a new brand-specific execution. It does
+   not copy the source artwork's brand, product, copy, characters, or scene.
 
 The selection is stored on the run, is included in new-generation and
 regeneration requests, and survives workspace reloads. Older saved runs without
@@ -91,7 +98,7 @@ Frontend sends:
 ```ts
 type ArtworkGenerationRequest = {
   model: "gpt-image-2";
-  artworkMode: "standard" | "design-system";
+  artworkMode: "standard" | "design-system" | "reference-library";
   imagePromptModel: "gpt-5.6-terra" | "anthropic/claude-sonnet-4.6";
   runId: string;
   brand: {
@@ -251,7 +258,7 @@ quietly generate artwork from the wrong instructions.
 before image generation. The agent's returned prompt is what actually gets
 sent to `gpt-image-2`, not the old deterministic template.
 
-The two modes intentionally use different input strategies:
+The three modes intentionally use different input strategies:
 
 - `standard` loads the complete `agent_prompt/agent_image.md` as the
   authoritative image-agent instruction. It then appends one
@@ -266,12 +273,17 @@ The two modes intentionally use different input strategies:
 - `design-system` reads
   `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and retains
   its `prompt` response field.
+- `reference-library` reads `agent_prompt/agent_artwork_reference.md`, appends
+  the full authoritative runtime input used by Design System mode, and returns
+  `finalPrompt`. Attached client references remain authoritative for brand and
+  product fidelity; the internal pattern catalog supplies transferable design
+  reasoning only.
 
-Both prompt Markdown files are bundled into the Vercel function. Standard-mode
-reference files are still attached as image inputs, while their text metadata
-is reduced to `{ id, role, fidelity }`. The design-system mode retains its full
-authoritative runtime block and keeps the approved Hook fixed while evaluating
-distinct visual executions internally.
+All three prompt Markdown files are bundled into the Vercel function.
+Standard-mode reference files are still attached as image inputs, while their
+text metadata is reduced to `{ id, role, fidelity }`. The design-system mode
+retains its full authoritative runtime block and keeps the approved Hook fixed
+while evaluating distinct visual executions internally.
 
 If the prompt-agent call fails or times out, the endpoint fails closed before
 calling `gpt-image-2`. A sanitized provider response detail is recorded in the
@@ -415,5 +427,7 @@ several images can take a while.
 - `src/server/artwork-generation/image-prompt-agent.ts`
 - `src/server/artwork-generation/openai-images-client.ts`
 - `agent_prompt/agent_image.md` — authoritative Standard-mode prompt.
+- `agent_prompt/agent_artwork_reference.md` — verified structural pattern
+  catalog loaded only in Reference Library mode.
 - `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` — runtime
   source prompt loaded only in Design System mode.

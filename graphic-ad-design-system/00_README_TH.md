@@ -27,6 +27,12 @@ Source แยกจากโหมด `Standard` เดิม โดย Brief, H
 Additional Instructions และ Reference ที่เลือกจะถูกส่งเข้า Workflow นี้
 อัตโนมัติ การเลือกโหมดจะถูกบันทึกกับ Run และใช้ต่อในการ Regenerate ภาพ
 
+โหมด `Reference library` เป็นอีกทางเลือกหนึ่ง โดยใช้
+`agent_prompt/agent_artwork_reference.md` ซึ่งสรุป Design Pattern จากงานโฆษณา
+ที่วิเคราะห์ไว้ใน `agent_prompt/Images/output` ระบบจะนำ Logic ด้าน Layout,
+Hierarchy, สี, Lighting, Density และ Storytelling มาปรับใช้กับ Brief ใหม่
+โดยไม่คัดลอก Brand, Copy, Product หรือฉากของงานต้นฉบับ
+
 ### วิธีที่ 1: Agent ตัวเดียว
 
 นำ `03_MASTER_CREATIVE_DIRECTOR_AGENT.md` ไปใส่เป็น System Prompt หรือข้อความแรก จากนั้นแนบ Brief, Brand Assets, Product Packshot และ Reference

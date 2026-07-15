@@ -252,6 +252,52 @@ describe("generateImagePrompt", () => {
     );
   });
 
+  it("loads the verified artwork pattern catalog in reference-library mode", async () => {
+    const calls: { body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            finalPrompt: "Reference-informed production prompt."
+          })
+        }),
+        { status: 200 }
+      );
+    });
+
+    const result = await generateImagePrompt({
+      apiKey: "test-key",
+      mode: "reference-library",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input: baseInput,
+      loadReferenceLibraryPrompt: async () =>
+        "MOONS VERIFIED PATTERNS\nPattern C — Premium environmental irony"
+    });
+
+    expect(result).toBe("Reference-informed production prompt.");
+    const promptText = (
+      calls[0]?.body.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(promptText).toContain("MOONS VERIFIED PATTERNS");
+    expect(promptText).toContain(
+      "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE"
+    );
+    expect(promptText).toContain(
+      "Required headline: Flowers that make the room feel softer"
+    );
+    expect(promptText).toContain(
+      "Approved visual direction: Photographic editorial bouquet scene with tactile grain."
+    );
+    expect(calls[0]?.body.text).toMatchObject({
+      format: {
+        schema: {
+          required: ["finalPrompt"]
+        }
+      }
+    });
+  });
+
   it("keeps regeneration instructions as one optional compact field", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {

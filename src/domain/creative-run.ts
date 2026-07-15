@@ -42,7 +42,11 @@ export function normalizeFormatBeatsForService(
   if (service === "single-static" || service === "resize") return [];
   return (beats ?? []).map((beat) => beat.trim()).filter(Boolean).slice(0, 3);
 }
-export const artworkModes = ["standard", "design-system"] as const;
+export const artworkModes = [
+  "standard",
+  "design-system",
+  "reference-library"
+] as const;
 export type ArtworkMode = (typeof artworkModes)[number];
 export const imagePromptModels = [
   "gpt-5.6-terra",

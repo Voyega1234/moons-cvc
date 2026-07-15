@@ -165,6 +165,8 @@ export function workflowActionToast(
       return null;
     case "remove-uploaded-material":
       return "Creative material removed";
+    case "select-reference-image":
+      return null;
     case "toggle-reference-image": {
       const nowSelected = state.referenceImages.some(
         (item) => item.id === action.item.id
@@ -329,6 +331,13 @@ export function workflowReducer(
           (item) => item.id !== action.id
         )
       };
+    case "select-reference-image":
+      return state.referenceImages.some((item) => item.id === action.item.id)
+        ? state
+        : {
+            ...state,
+            referenceImages: [...state.referenceImages, action.item]
+          };
     case "toggle-reference-image": {
       const exists = state.referenceImages.some(
         (item) => item.id === action.item.id

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ArtworkMode } from "../../domain/creative-run.js";
 
 type FetchLike = typeof fetch;
 
@@ -47,7 +48,7 @@ export interface ImagePromptAgentTrace {
   provider: ImagePromptProvider;
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
-  mode: "standard" | "design-system";
+  mode: ArtworkMode;
   status: "succeeded" | "failed";
   inputText: string;
   responsePrompt?: string;
@@ -72,17 +73,19 @@ export async function generateImagePrompt({
   input,
   writeTrace,
   loadAgentImagePrompt = defaultLoadAgentImagePrompt,
-  loadDesignSystemPrompt = defaultLoadDesignSystemPrompt
+  loadDesignSystemPrompt = defaultLoadDesignSystemPrompt,
+  loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt
 }: {
   apiKey: string;
   model?: string;
   provider?: ImagePromptProvider;
-  mode?: "standard" | "design-system";
+  mode?: ArtworkMode;
   fetchImpl: FetchLike;
   input: ImagePromptAgentInput;
   writeTrace?: ImagePromptAgentTraceWriter;
   loadAgentImagePrompt?: () => Promise<string>;
   loadDesignSystemPrompt?: () => Promise<string>;
+  loadReferenceLibraryPrompt?: () => Promise<string>;
 }): Promise<string> {
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
   const endpoint =
@@ -95,9 +98,14 @@ export async function generateImagePrompt({
   const inputText =
     mode === "design-system"
       ? renderDesignSystemPrompt(await loadDesignSystemPrompt(), input)
-      : renderStandardPrompt(await loadAgentImagePrompt(), input);
+      : mode === "reference-library"
+        ? renderReferenceLibraryPrompt(
+            await loadReferenceLibraryPrompt(),
+            input
+          )
+        : renderStandardPrompt(await loadAgentImagePrompt(), input);
   const responseSchema =
-    mode === "standard" ? standardImagePromptSchema : imagePromptSchema;
+    mode === "design-system" ? imagePromptSchema : standardImagePromptSchema;
 
   try {
     const response = await fetchImpl(endpoint, {
@@ -150,9 +158,9 @@ export async function generateImagePrompt({
       finalPrompt?: unknown;
     };
     const prompt =
-      mode === "standard"
-        ? parsed.finalPrompt ?? parsed.prompt
-        : parsed.prompt ?? parsed.finalPrompt;
+      mode === "design-system"
+        ? parsed.prompt ?? parsed.finalPrompt
+        : parsed.finalPrompt ?? parsed.prompt;
 
     if (typeof prompt !== "string" || !prompt.trim()) {
       throw new Error(
@@ -217,6 +225,13 @@ async function defaultLoadDesignSystemPrompt(): Promise<string> {
 
 async function defaultLoadAgentImagePrompt(): Promise<string> {
   return readFile(join(process.cwd(), "agent_prompt", "agent_image.md"), "utf8");
+}
+
+async function defaultLoadReferenceLibraryPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_artwork_reference.md"),
+    "utf8"
+  );
 }
 
 function renderStandardPrompt(
@@ -313,6 +328,22 @@ function renderDesignSystemPrompt(
     "The references are authoritative for the campaign's visual medium and design grammar. A new execution means a new idea and composition inside that medium—not replacing photographic/editorial montage with isometric 3D, toy-like miniatures, generic UI cards, or clean SaaS illustration. Match the references' typography dominance, photographic-versus-illustrative balance, image scale, crop energy, density, texture, grain, and compositing character before applying brand colors.",
     "Neo does not have a downstream typography or logo compositor in this workflow. The final image prompt must request one fully composed, publication-ready advertisement containing the exact approved headline and CTA. Never request a textless base visual, blank headline zone, empty CTA zone, empty logo zone, or later deterministic assembly.",
     "Do not return the internal diagnosis, reference analysis, routes, scores, blueprint, or QA notes. Return only one final English GPT Image 2 generation prompt in the required JSON schema field.",
+    buildRuntimeInputBlock(input)
+  ].join("\n");
+}
+
+function renderReferenceLibraryPrompt(
+  source: string,
+  input: ImagePromptAgentInput
+): string {
+  return [
+    source.trim(),
+    "",
+    "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE",
+    "Use the verified structural pattern library above to choose one relevant composition system. Transfer its design reasoning only; create a new execution for the approved campaign angle.",
+    "Attached client references and labeled source assets override the internal library for brand identity, product fidelity, and visual-medium consistency.",
+    "The selected hook and strategic concept are approved. Do not replace them with a library example's message, objects, brand, or scene.",
+    "Return only one final English GPT Image 2 prompt in the required finalPrompt JSON field.",
     buildRuntimeInputBlock(input)
   ].join("\n");
 }

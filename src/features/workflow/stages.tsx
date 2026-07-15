@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useState,
   type ChangeEvent,
@@ -25,6 +26,7 @@ import {
   creativeMaterialRoles,
   type AngleExportGroup,
   type ApprovalRole,
+  type ArtworkMode,
   type CreativeOutput,
   type CreativeMaterialRole,
   type ServiceType
@@ -77,6 +79,17 @@ import { useRunQualityCheck } from "./use-run-quality-check";
 interface StageProps {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
+}
+
+function artworkModeLabel(mode: ArtworkMode): string {
+  switch (mode) {
+    case "standard":
+      return "Standard";
+    case "design-system":
+      return "Design system";
+    case "reference-library":
+      return "Reference library";
+  }
 }
 
 function DecisionCard({
@@ -2512,6 +2525,7 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
 };
 
 export function BriefStage({ state, dispatch }: StageProps) {
+  const brandMemoryRepository = useBrandMemoryRepository();
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [materialsSection, setMaterialsSection] =
     useState<BriefMaterialsSection>("uploads");
@@ -2578,6 +2592,33 @@ export function BriefStage({ state, dispatch }: StageProps) {
   useEffect(() => {
     if (!fixedMixReady) dispatch({ type: "apply-monthly-quota" });
   }, [dispatch, fixedMixReady]);
+
+  useEffect(() => {
+    const clientId = state.brand?.id;
+    if (!clientId) return;
+
+    let active = true;
+    void brandMemoryRepository
+      .listBrandRules(clientId)
+      .then((rules) => {
+        if (!active) return;
+        const logoRule = findRuleByTitle(rules, "Logo");
+        const [logoCandidate] = logoRule
+          ? libraryItemsWithImages([logoRule])
+          : [];
+        if (logoCandidate) {
+          dispatch({
+            type: "select-reference-image",
+            item: logoCandidate
+          });
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [brandMemoryRepository, dispatch, state.brand?.id]);
 
   async function handleCreativeMaterialUpload(
     event: ChangeEvent<HTMLInputElement>
@@ -3601,6 +3642,22 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               }
             >
               Design system
+            </button>
+            <button
+              className={
+                state.artworkMode === "reference-library" ? "active" : ""
+              }
+              type="button"
+              disabled={creating}
+              aria-pressed={state.artworkMode === "reference-library"}
+              onClick={() =>
+                dispatch({
+                  type: "set-artwork-mode",
+                  mode: "reference-library"
+                })
+              }
+            >
+              Reference library
             </button>
           </div>
         </div>
@@ -4810,7 +4867,7 @@ function OutputRegenerateModal({
           />
         </label>
         <p className="output-modal-reference-note">
-          {`${run.artworkMode === "design-system" ? "Design system" : "Standard"} mode · ${
+          {`${artworkModeLabel(run.artworkMode)} mode · ${
             run.referenceImages.length
               ? `using ${run.referenceImages.length} reference ${
                 run.referenceImages.length === 1 ? "image" : "images"
@@ -5575,6 +5632,7 @@ function QcSlide({
             ))}
           </ul>
         </div>
+        <QcApprovalTrail output={output} />
         {output.clientStatus === "revision" &&
         output.approvalComments.projectManager ? (
           <div className="neo-qc-work-note client-request">
@@ -5654,6 +5712,40 @@ function qcChecklistFor(
     return ["Brief & offer", "Script accuracy", "Production readiness"];
   }
   return fallback;
+}
+
+function QcApprovalTrail({ output }: { output: CreativeOutput }) {
+  const roles = approvalRolesForOutput(output);
+  const currentRole = roles.find(
+    (role) => output.approval[role] !== "approved"
+  );
+  const internallyApproved = roles.every(
+    (role) => output.approval[role] === "approved"
+  );
+
+  return (
+    <div className="neo-qc-mini-trail" aria-label="Approval route">
+      {roles.map((role, index) => {
+        const approved = output.approval[role] === "approved";
+        const current = role === currentRole;
+        const short = reviewRoleShort(role);
+        return (
+          <Fragment key={role}>
+            <span className={approved ? "done" : current ? "current" : "future"}>
+              {approved ? <i aria-hidden="true">✓</i> : null}
+              {approved ? `${short} approved` : short}
+            </span>
+            {index < roles.length - 1 ? <b aria-hidden="true">→</b> : null}
+          </Fragment>
+        );
+      })}
+      <b aria-hidden="true">→</b>
+      <span className={internallyApproved ? "done" : "future"}>
+        {internallyApproved ? <i aria-hidden="true">✓</i> : null}
+        {internallyApproved ? "Client ready" : "Client"}
+      </span>
+    </div>
+  );
 }
 
 function Spinner() {

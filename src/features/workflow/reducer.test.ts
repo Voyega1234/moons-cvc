@@ -16,7 +16,7 @@ function passingQaResults(state: WorkflowState) {
 }
 
 describe("workflowReducer", () => {
-  it("keeps standard artwork generation as the default and allows design-system mode", () => {
+  it("keeps standard artwork generation as the default and allows other modes", () => {
     expect(initialWorkflowState.artworkMode).toBe("standard");
 
     const updated = workflowReducer(initialWorkflowState, {
@@ -25,6 +25,13 @@ describe("workflowReducer", () => {
     });
 
     expect(updated.artworkMode).toBe("design-system");
+
+    const referenceLibrary = workflowReducer(updated, {
+      type: "set-artwork-mode",
+      mode: "reference-library"
+    });
+
+    expect(referenceLibrary.artworkMode).toBe("reference-library");
   });
 
   it("defaults image prompt writing to GPT 5.6 and allows OpenRouter Claude", () => {
@@ -582,6 +589,26 @@ describe("workflowReducer", () => {
       item
     });
     expect(state.referenceImages).toEqual([]);
+  });
+
+  it("selects a default reference image without toggling an existing selection", () => {
+    const item = {
+      id: "library-logo-1",
+      url: "https://example.com/logo.png",
+      label: "Logo"
+    };
+
+    const selected = workflowReducer(initialWorkflowState, {
+      type: "select-reference-image",
+      item
+    });
+    expect(selected.referenceImages).toEqual([item]);
+
+    const selectedAgain = workflowReducer(selected, {
+      type: "select-reference-image",
+      item
+    });
+    expect(selectedAgain).toBe(selected);
   });
 
   it("routes a commented client change request back to Internal QC", () => {

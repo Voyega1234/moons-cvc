@@ -1,4 +1,4 @@
-import { render, within } from "@testing-library/react";
+import { render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
@@ -271,6 +271,37 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.queryByRole("dialog", { name: "Uploaded materials" })
     ).toBeNull();
+  });
+
+  it("selects an available brand logo as the default artwork reference", async () => {
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const memoryRepository = new MockBrandMemoryRepository();
+    vi.spyOn(memoryRepository, "listBrandRules").mockResolvedValue([
+      {
+        id: "logo-1",
+        title: "Logo",
+        description: "Primary logo",
+        assetUrl: "https://example.com/logo.png"
+      }
+    ]);
+
+    render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "select-reference-image",
+        item: {
+          id: "library-logo-1",
+          url: "https://example.com/logo.png",
+          label: "Logo"
+        }
+      })
+    );
   });
 
   it("presents Angles as the prototype-style hook selection workspace", async () => {
@@ -552,6 +583,9 @@ describe("redesigned workflow stages", () => {
     const firstCard = view.container.querySelector(".neo-qc-focus-card");
     const firstCardContent = firstCard?.querySelector(".neo-qc-focus-content");
     expect(firstCard?.querySelector(".neo-caption-scroll")).toBeTruthy();
+    expect(firstCard?.querySelector(".neo-qc-mini-trail")?.textContent).toContain(
+      "GD→CS→PM→Client"
+    );
     expect(firstCard?.querySelector(".fb-see-more")).toBeNull();
     expect(firstCardContent?.querySelector(".download-action")).toBeTruthy();
     expect(firstCardContent?.querySelector(".upload-inline")).toBeTruthy();
@@ -582,6 +616,15 @@ describe("redesigned workflow stages", () => {
     expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
     expect(stage.queryByText("Album post")).toBeNull();
     expect(stage.getAllByText("ALBUM").length).toBeGreaterThan(0);
+    const ugcCard = view.container
+      .querySelector(".neo-qc-ugc-ownership")
+      ?.closest(".neo-qc-focus-card");
+    expect(ugcCard?.querySelector(".neo-qc-mini-trail")?.textContent).toContain(
+      "CS→PM→Client"
+    );
+    expect(ugcCard?.querySelector(".neo-qc-mini-trail")?.textContent).not.toContain(
+      "GD"
+    );
     expect(
       stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
     ).toHaveLength(gdOutputCount);
