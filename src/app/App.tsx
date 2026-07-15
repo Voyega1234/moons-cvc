@@ -21,6 +21,8 @@ import {
   SquaresFour,
   Tray,
   Users,
+  UserCircle,
+  SignOut,
   X
 } from "@phosphor-icons/react";
 import type { Brand } from "../domain/brand";
@@ -29,6 +31,7 @@ import {
   type BrandNotification
 } from "./providers/brand-provider";
 import { useWorkspace } from "./providers/workspace-provider";
+import { useAuth } from "./providers/auth-provider";
 import type { CreativeStage } from "../domain/creative-run";
 import { serviceLabels, stages } from "../features/workflow/config";
 import type {
@@ -38,8 +41,7 @@ import type {
   WorkflowState
 } from "../features/workflow/model";
 import {
-  creativeMixItems,
-  totalCreativeMixQuantity
+  creativeMixItems
 } from "../features/workflow/model";
 import {
   highestUnlockedStageIndex,
@@ -147,27 +149,88 @@ export function App() {
                       <span className="neo-kicker">
                         <span aria-hidden="true" /> Creative intelligence studio
                       </span>
-                      <h1>{stage.hero}</h1>
-                      <p>{stage.sub}</p>
+                      <h1>
+                        Find the idea
+                        <br />
+                        worth <em>scaling.</em>
+                      </h1>
+                      <p>
+                        Turn brand signals into sharper angles, stronger
+                        creative, and reusable performance memory. Less creative
+                        admin. More creative judgment.
+                      </p>
+                      <div className="neo-hero-meta">
+                        <span className="neo-status-pill">
+                          {state.brand
+                            ? `${state.brand.name} workspace ready`
+                            : "Waiting for a brand"}
+                        </span>
+                        <span className="neo-status-pill">
+                          Signal → idea → evidence
+                        </span>
+                      </div>
                     </div>
-                    <aside className="neo-hero-signals" aria-label="Run summary">
+                    <aside
+                      className="neo-hero-signals"
+                      aria-label="Creative welcome motion"
+                    >
                       <div className="neo-signal-card neo-signal-primary">
-                        <span>Active brand</span>
-                        <b>{state.brand?.name ?? "Choose a brand"}</b>
-                        <small>Memory and approved signals</small>
+                        <span>Creative playground</span>
+                        <div className="neo-motion-stage" aria-hidden="true">
+                          <div className="neo-spark-lines">
+                            <i />
+                            <i />
+                            <i />
+                            <i />
+                            <i />
+                          </div>
+                          <div className="neo-motion-stack">
+                            <i />
+                            <i />
+                            <i />
+                          </div>
+                        </div>
+                        <div>
+                          <b>
+                            Upload signal.
+                            <br />
+                            Shape the brief.
+                            <br />
+                            Build the set.
+                          </b>
+                          <small>
+                            A lighter welcome that keeps the energy high without
+                            turning the page into a scorecard.
+                          </small>
+                        </div>
                       </div>
                       <div className="neo-signal-card neo-signal-lime">
-                        <span>Creative set</span>
-                        <b>{totalCreativeMixQuantity(state)}</b>
-                        <small>
-                          {creativeMixItems(state).length} content
-                          {creativeMixItems(state).length === 1 ? " type" : " types"}
-                        </small>
+                        <span>What neo is doing</span>
+                        <div className="neo-orbit-wrap">
+                          <div>
+                            <b>
+                              Connecting
+                              <br />
+                              brand cues
+                            </b>
+                            <small>
+                              CI, references, product truths, and business
+                              context travel with the work.
+                            </small>
+                          </div>
+                          <div className="neo-orbit" aria-hidden="true">
+                            <i />
+                            <i />
+                            <i />
+                          </div>
+                        </div>
                       </div>
                       <div className="neo-signal-card neo-signal-orange">
-                        <span>Workflow</span>
-                        <b>7</b>
-                        <small>Connected decisions</small>
+                        <div className="neo-flip-words" aria-label="Creative principles">
+                          <b>Make it clearer.</b>
+                          <b>Make it sharper.</b>
+                          <b>Make it memorable.</b>
+                        </div>
                       </div>
                     </aside>
                   </section>
@@ -182,16 +245,13 @@ export function App() {
           </div>
         </main>
       </div>
-      <div className="toast-wrap" role="status" aria-live="polite">
-        {persistenceError ? (
+      {persistenceError ? (
+        <div className="toast-wrap" role="alert" aria-live="assertive">
           <div className="toast show persistence-toast">
             {persistenceError.message}
           </div>
-        ) : null}
-        {workspace.toast ? (
-          <div className="toast show">{workspace.toast}</div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -318,6 +378,7 @@ function Header({
               </span>
               <span>{state.brand?.name ?? "No client"}</span>
             </div>
+            <AccountMenu />
             <button
               className="btn ghost refresh"
               type="button"
@@ -341,6 +402,58 @@ function Header({
         ) : null}
       </div>
     </header>
+  );
+}
+
+function AccountMenu() {
+  const { enabled, session, signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!enabled || !session) return null;
+
+  const email = session.user.email ?? "Signed-in account";
+
+  async function handleSignOut() {
+    setPending(true);
+    setError(null);
+    try {
+      await signOut();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not sign out.");
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="neo-account-wrap">
+      <button
+        className={`neo-account-button ${open ? "open" : ""}`}
+        type="button"
+        aria-label="Open account menu"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((current) => !current);
+          setError(null);
+        }}
+      >
+        <UserCircle size={20} weight="duotone" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="neo-account-popover" role="dialog" aria-label="Account">
+          <div className="neo-account-copy">
+            <span>Signed in as</span>
+            <b>{email}</b>
+          </div>
+          <button type="button" disabled={pending} onClick={handleSignOut}>
+            <SignOut size={17} weight="bold" aria-hidden="true" />
+            {pending ? "Signing out…" : "Sign out"}
+          </button>
+          {error ? <p role="alert">{error}</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

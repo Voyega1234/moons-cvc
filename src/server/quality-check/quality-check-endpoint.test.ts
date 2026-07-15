@@ -223,6 +223,51 @@ describe("handleQualityCheckRequest", () => {
     );
   });
 
+  it("returns failed QA results instead of crashing when the agent returns malformed JSON", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("example.com/reference.png")) {
+        return new Response(Buffer.from("reference-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (href.includes("example.supabase.co/storage")) {
+        return new Response(Buffer.from("creative-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          output_text:
+            '{"results":[{"outputId":"output-1","gdPassed":true,"gdReason":"unterminated'
+        }),
+        { status: 200 }
+      );
+    });
+
+    const response = await handleQualityCheckRequest({
+      request: buildRequest(),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      results: { outputId: string; passed: boolean; reason: string }[];
+    };
+    expect(payload.results).toEqual([
+      expect.objectContaining({
+        outputId: "output-1",
+        passed: false,
+        reason: expect.stringContaining(
+          "Quality agent returned malformed JSON"
+        )
+      })
+    ]);
+  });
+
   it("returns the OpenAI error message when quality check request is rejected", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
       const href = String(url);

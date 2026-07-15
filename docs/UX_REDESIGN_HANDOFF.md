@@ -1,6 +1,6 @@
 # Neo UX/UI redesign handoff
 
-Last updated: 2026-07-13 (Asia/Bangkok)
+Last updated: 2026-07-14 (Asia/Bangkok)
 
 ## Objective
 
@@ -67,6 +67,119 @@ lime/orange semantic accents, soft borders, and medium information density.
 7. Run the full verification gate before removing any legacy CSS.
 
 ## Progress log
+
+### Page-by-page HTML parity pass (2026-07-14)
+
+- Scope is deliberately page-by-page. **Signal and Brief are now completed**;
+  Angles, Build, Internal QC, Client, and Learn remain for later parity passes.
+- Signal now copies the final active layout in `neo-creative-compass.html`
+  instead of reinterpreting it:
+  - The extra active-run tab bar and brand-memory ribbon are hidden globally;
+    neither surface exists in the reference HTML. Their workflow state and
+    reducers remain untouched.
+  - The welcome hero uses the reference headline, supporting copy, status
+    pills, Creative playground animation, Connecting brand cues card, and coral
+    rotating-message card. The previous Active brand / Creative set / Workflow
+    metric cards were removed.
+  - The welcome hero's responsive values now also match the prototype: 25px
+    kicker and 610px copy width; the headline switches to 45px below 760px,
+    then the hero uses 20px padding and hides the motion board below 700px.
+    The lime accent is isolated beneath only `scaling.` in both empty and
+    selected-brand states.
+  - The stage uses the exact `01 / Signal` heading, helper copy, Memory status,
+    two-column Brand workspace + Brand memory composition, Signal before output
+    footer badge, and Continue to brief action.
+  - Existing brand selection, mapping, setup, ingestion, and add-client actions
+    remain wired to the same providers and repositories.
+  - The compact Brand materials rows show live counts from the selected brand
+    and open the matching existing memory editor: CI, Guideline, Reference
+    style, Business context, and Product list & info.
+  - The Brand memory panel uses the reference tab-pill treatment while keeping
+    the real Brand kit, Products, Documents, References, Past work, and Brand
+    learning editors. Its content area is bounded and scrollable so growing
+    memory cannot stretch the page indefinitely.
+  - Primary colors and Secondary colors now share one palette section, with
+    Primary on the left and Secondary on the right. The section collapses to
+    one column on mobile.
+  - Visual guidance is collapsed by default inside Brand kit. See more expands
+    the exact stored guidance and the bounded memory panel handles the added
+    scroll; See less collapses it again.
+  - Manage library and each compact material Add action now open a large modal
+    based on the prototype's Brand Library manager. The modal uses folder
+    navigation and the existing real editors rather than a fake asset list.
+    Closing it refreshes the inline memory panel from the repository.
+- Added Signal composition coverage to `stages-redesign.test.tsx`.
+- Brief parity pass now copies the reference `02 / Brief` header, helper copy,
+  context-ready badge, orange Generate angles action, two-column brief layout,
+  compact module surfaces, 218px working-brief editor, character counter
+  placement, lime active metric state, and neutral Creative principle card.
+  The fixed content-type quantity rows remain connected to workflow state.
+- Added the reference **Use monthly quota** action as a reducer-backed preset:
+  3 Static, 2 UGC, and 1 Album. It clears stale generated work through the
+  existing creative-mix reducer path.
+- The large reference-library accordion no longer stretches the Brief sidebar.
+  Uploaded materials now renders as the compact reference summary; clicking it
+  opens a modal containing the existing working-file upload and reference
+  library controls, preserving all data and generation inputs.
+- Brief uses the source's compact 58px plan rows, 36px counters, fixed service
+  labels, 54px metric choices, and 1150px sidebar stacking breakpoint. The
+  earlier Google Sans Flex font direction is superseded by the global Sukhumvit
+  decision documented below.
+- Final Brief correction from the 19:54 stakeholder reference: **Creative
+  brief / Working brief is visible again**. New runs use the exact 440-character
+  reference copy. Creative mix is no longer configurable by type and has no Add
+  item flow: it always renders permanent Static, UGC, and Album rows with only
+  quantity counters, defaulting to 3 / 2 / 1. Legacy runs missing those rows are
+  normalized through the existing monthly-quota reducer action when Brief opens.
+- Primary success metric is locked to the reference two-by-two card treatment.
+  New runs default to CTR; the active card uses the source HTML's pale lime fill,
+  soft lime border, and subtle lime outer ring while CVR, CPA, and ROAS remain
+  selectable. Click, active, and focus states all preserve the same treatment.
+- Creative-mix counters can be zero, but zero-count rows are now omitted from
+  hook-generation payloads and prompt instructions. Generation is blocked only
+  when all three rows are zero.
+- Angles keeps the added artwork-mode, prompt-model, and output-size behavior,
+  but the three full-width explanatory cards have been replaced by one compact
+  source-style settings strip. On desktop all three controls share one row;
+  smaller layouts wrap to two columns and then one without horizontal overflow.
+- Angles card typography deliberately uses the bundled **Sukhumvit Set** family
+  for Thai hooks and supporting copy, with the Neo page font stack only as its
+  fallback. The hook heading uses the source card's strong 700 weight while
+  retaining the more readable 1.08 Thai line height and -0.035em tracking.
+- Angles card density is tightened toward the HTML: 450px minimum height, a
+  compact Concept block, a pill-sized top-right export selector, and smaller
+  footer controls. Generic `Creative direction · CTR` metadata is replaced by
+  a user-facing success objective (`Awareness`, `Conversion`, `Efficiency`, or
+  `Revenue`) derived from the selected Brief metric without adding prompt input.
+- The Angles review toolbar no longer exposes four competing controls. Only the
+  primary **Let Neo pick** action and a compact overflow trigger remain visible;
+  Export PDF, Regenerate all, and Generate more live in the overflow menu.
+  Generate more reveals its direction composer only on demand and collapses it
+  again after submission or cancellation.
+- The complete Build stage is scoped to the bundled **Sukhumvit Set** family,
+  including creative cards, hooks, subheadlines, captions, controls, preview
+  copy, and the artwork detail modal. The Neo page stack remains its fallback.
+- The entire application now uses the bundled **Sukhumvit Set** family through
+  the global Neo `--font` and `--display` tokens. The external Google Sans Flex
+  request was removed, so navigation, stages, cards, dialogs, forms, and review
+  surfaces all resolve to the same local font without a font-swap mismatch.
+- Hook generation now creates **two extra candidates per active content type**.
+  A quota of 7 requests 9 candidates; a quota of 4 requests 6. Mixed sets apply
+  the surplus independently to Static, UGC, and Album, while zero-count rows
+  remain absent. Selection and artwork creation still enforce the original
+  Brief quota rather than the larger candidate pool.
+- Internal QC captions no longer use See more / See less. They render in a
+  bounded 92px region with keyboard-accessible vertical scrolling so long copy
+  cannot stretch or break the review card.
+- Black workflow action toasts (for example, `Creative approved`) are no longer
+  rendered. Persistence failures remain visible as red alerts because they
+  require user attention.
+- Verification after the Signal pass:
+  - `npm run typecheck`: passed.
+  - Focused navigation and redesigned-stage tests: 2 files, 9 tests passed.
+  - `npm run build`: passed. Vite emitted only the existing large-chunk warning.
+  - Local 1440×1100 mock-data screenshot confirmed the reference hero and empty
+    Signal layout render without horizontal overflow.
 
 ### Completed
 
@@ -172,10 +285,9 @@ lime/orange semantic accents, soft borders, and medium information density.
     rail contains **Signal stack**, **Primary success metric**, **Creative
     principle**, **Uploaded materials**, and the existing bounded reference
     library accordions.
-  - Stakeholder correction: Creative mix is now a real ordered list instead of
-    one service plus one global quantity. Users can add a content item, choose
-    its type, set its quantity, and remove it. Types stay unique and the total
-    remains within the existing six-deliverable generation limit.
+  - Superseded correction: an earlier pass allowed adding and removing content
+    types. The final 19:54 decision replaces it with permanent Static, UGC, and
+    Album rows; only their quantities are editable.
   - `creativeMix` is authoritative workflow state. The legacy `service` and
     `quantity` fields remain synchronized compatibility aliases so existing
     backend request schemas do not change. Older snapshots without
@@ -478,6 +590,61 @@ lime/orange semantic accents, soft borders, and medium information density.
     all 44 test files / 179 tests, prototype-reference verification,
     TypeScript, and the production build. The existing non-blocking large-chunk
     warning remains.
+  - Hook production-detail expansion added on 2026-07-15. `CreativeDirection`
+    remains backward compatible and now supports up to three verified
+    `supportingPoints`, `ctaActionType`, `ctaDestination`, and `contactLine`.
+    Hook generation must use only facts and contact routes found in the Brief,
+    Brand kit, Products, Documents, or real past posts. It rejects vague CTAs
+    such as `ดูที่นี่` and asks for a brand/offer-specific action plus object.
+  - Caption generation now analyzes the full set of real past organic posts and
+    ad captions for repeated opening style, paragraph rhythm, line breaks,
+    bullets, emoji, hashtags, footer/signature, contact details, and closing CTA.
+    Ad caption fields retain line breaks instead of being flattened with `|`.
+    Recurring contact/footer copy may be reused exactly; one-off or conflicting
+    contact data must be omitted rather than inferred.
+  - Supporting points and verified CTA/contact metadata stay out of the visible
+    Angles cards. Workspace serialization preserves these optional fields.
+    Standard image prompting stays compact: only the first supporting point is
+    promoted to optional on-image supporting text, while contact details remain
+    caption/run context and are not automatically rendered into artwork. The
+    Edit modal retains these fields for deliberate correction when needed.
+    Verification passes all 44 test files / 191 tests, TypeScript, and the
+    production build; only the existing non-blocking bundle-size warning remains.
+  - Supabase authentication was expanded on 2026-07-15 from a magic-link-only
+    gate into an email/password account flow. It now supports Convert Cake
+    account creation, email confirmation, sign-in, restored sessions, forgot
+    password, recovery-time password updates, and sign-out from a top-right
+    account menu. Client-side signup validation matches the existing
+    `@convertcake.com` RLS/server authorization contract; no database policy was
+    loosened. Mock/local data mode still bypasses authentication for development.
+    Verification passes all 45 test files / 197 tests, TypeScript, and the
+    production build. Supabase production still needs Email provider, redirect,
+    confirmation, and SMTP settings configured as documented in
+    `docs/PRODUCTION_SETUP.md`.
+  - Signal memory/material interaction was tightened on 2026-07-15. The right
+    Brand Memory panel is collapsed and non-scrollable by default, ends in a
+    white gradient, and exposes a dedicated `See more` control. Expanding it
+    enables the bounded scroll region; changing memory tabs collapses it again.
+    Brief `Uploaded materials` now reuses the full Manage library interaction
+    shell with the same backdrop, header, toolbar, folder navigation, and
+    browser layout for Working files and References. Focused Signal/Brief UI
+    tests and the production build pass.
+  - Brief creative-material uploads became first-class generation input on
+    2026-07-15. `Uploaded materials > Working files` now accepts PNG, JPEG, and
+    WEBP product/client images (up to 8 per brief and 10MB each), stores them in
+    the existing private `brand-assets` bucket when Supabase is configured, and
+    records a required usage role: Main object, Product, Supporting component,
+    or Client context. Each image also supports an optional usage note.
+  - Hook generation receives both the material metadata and the actual images.
+    The prompt requires ideas that can genuinely use the visible uploaded
+    products/client assets without inventing unseen details. The legacy n8n
+    payload also carries the typed material array. Artwork generation attaches
+    the same images automatically; main-object/product/component roles override
+    the old Standard-mode rule that treated every reference as style-only.
+    Ordinary library references remain design guidance. Workspace snapshots are
+    backward compatible and persist the typed material metadata. Verification
+    passes all 45 test files / 199 tests, TypeScript, and the production build;
+    the existing non-blocking bundle-size warning remains.
 
 ### In progress
 
@@ -512,7 +679,10 @@ lime/orange semantic accents, soft borders, and medium information density.
   generation services - structured Creative mix quota transport and response
   typing.
 - `src/services/artwork-generation/openai-image-generation.ts` - preserves the
-  selected direction service through grouped artwork requests.
+  selected direction service through grouped artwork requests and carries
+  uploaded product/client source images into every selected artwork request.
+- `src/services/creative-materials/upload-creative-material.ts` - validates and
+  stores uploaded Brief image materials, with a data-URL fallback for mock mode.
 - `src/features/workflow/reducer.test.ts` and `rules.test.ts` - feedback behavior
   regression coverage.
 - `src/services/workspace/workspace-serializer.ts` and its tests - persist the

@@ -6,8 +6,8 @@ import { playGenerationSuccessSound } from "../../shared/utils/notification-soun
 import { serviceLabels } from "./config";
 import {
   creativeMixContentTypeQuotas,
-  creativeMixItems,
-  totalCreativeMixQuantity,
+  hookGenerationContentTypeQuotas,
+  totalHookGenerationQuantity,
   type WorkflowAction,
   type WorkflowState
 } from "./model";
@@ -18,11 +18,18 @@ export function buildSuccessMetricInstructions(
   return `Primary success metric: ${metric}. Make the angle support this outcome without inventing performance claims.`;
 }
 
-export function buildCreativeMixInstructions(state: WorkflowState): string {
-  const mix = creativeMixItems(state)
-    .map((item) => `${serviceLabels[item.service]} × ${item.quantity}`)
+export function buildCreativeMixInstructions(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): string {
+  const requestedQuotas = creativeMixContentTypeQuotas(state);
+  const generationQuotas = hookGenerationContentTypeQuotas(state);
+  const requestedMix = requestedQuotas
+    .map((item) => `${serviceLabels[item.service]} × ${item.count}`)
     .join("; ");
-  return `Creative mix: ${mix}. Generate ${totalCreativeMixQuantity(state)} hooks in total so each requested deliverable can use one hook.`;
+  const candidateMix = generationQuotas
+    .map((item) => `${serviceLabels[item.service]} × ${item.count}`)
+    .join("; ");
+  return `Creative mix quota: ${requestedMix}. Generate ${totalHookGenerationQuantity(state)} hook candidates in total. Candidate pool by content type: ${candidateMix}. Always generate 2 extra candidates for every active content type.`;
 }
 
 function withCreativeMixInstructions(
@@ -50,15 +57,17 @@ export function useGenerateHooks(
       buildSuccessMetricInstructions(state.successMetric)
     );
 
+    const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
     const generation =
       env.hookGenerationMode === "harness"
         ? generateDirectionsWithHarness({ run: state, extraInstructions })
         : generateDirectionsFromWebhook({
             brand: state.brand,
-            service: creativeMixItems(state)[0]?.service ?? state.service,
-            quantity: totalCreativeMixQuantity(state),
-            contentTypeQuotas: creativeMixContentTypeQuotas(state),
+            service: contentTypeQuotas[0]?.service ?? state.service,
+            quantity: totalHookGenerationQuantity(state),
+            contentTypeQuotas,
             brief: state.brief,
+            uploadedMaterials: state.uploadedMaterials,
             extraInstructions
           });
 
@@ -103,6 +112,7 @@ export function useGenerateMoreHooks(
         state,
         extraInstructions
       );
+      const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
       const generation =
         env.hookGenerationMode === "harness"
           ? generateDirectionsWithHarness({
@@ -111,10 +121,11 @@ export function useGenerateMoreHooks(
             })
           : generateDirectionsFromWebhook({
               brand: state.brand,
-              service: creativeMixItems(state)[0]?.service ?? state.service,
-              quantity: totalCreativeMixQuantity(state),
-              contentTypeQuotas: creativeMixContentTypeQuotas(state),
+              service: contentTypeQuotas[0]?.service ?? state.service,
+              quantity: totalHookGenerationQuantity(state),
+              contentTypeQuotas,
               brief: state.brief,
+              uploadedMaterials: state.uploadedMaterials,
               extraInstructions: combinedInstructions,
               existingHooks
             });
@@ -172,16 +183,18 @@ export function useRegenerateHook(
         hook: item.hook,
         concept: item.concept
       }));
+      const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
 
       const generation =
         env.hookGenerationMode === "harness"
           ? generateDirectionsWithHarness({ run: state, extraInstructions })
           : generateDirectionsFromWebhook({
               brand: state.brand,
-              service: creativeMixItems(state)[0]?.service ?? state.service,
-              quantity: totalCreativeMixQuantity(state),
-              contentTypeQuotas: creativeMixContentTypeQuotas(state),
+              service: contentTypeQuotas[0]?.service ?? state.service,
+              quantity: totalHookGenerationQuantity(state),
+              contentTypeQuotas,
               brief: state.brief,
+              uploadedMaterials: state.uploadedMaterials,
               extraInstructions,
               existingHooks
             });
@@ -262,6 +275,7 @@ export function useRegenerateAllHooks(
             hook: direction.hook,
             concept: direction.concept
           }));
+          const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
           const generated =
             env.hookGenerationMode === "harness"
               ? await generateDirectionsWithHarness({
@@ -270,10 +284,11 @@ export function useRegenerateAllHooks(
                 })
               : await generateDirectionsFromWebhook({
                   brand: state.brand,
-                  service: creativeMixItems(state)[0]?.service ?? state.service,
-                  quantity: totalCreativeMixQuantity(state),
-                  contentTypeQuotas: creativeMixContentTypeQuotas(state),
+                  service: contentTypeQuotas[0]?.service ?? state.service,
+                  quantity: totalHookGenerationQuantity(state),
+                  contentTypeQuotas,
                   brief: state.brief,
+                  uploadedMaterials: state.uploadedMaterials,
                   extraInstructions,
                   existingHooks
                 });

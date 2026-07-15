@@ -7,6 +7,7 @@ import type {
   CreativeOutput,
   CreativeStage,
   ReferenceImageSelection,
+  UploadedCreativeMaterial,
   ReviewDecision,
   ServiceType,
   ArtworkOutputSize,
@@ -29,6 +30,8 @@ export interface ContentTypeQuota {
   count: number;
 }
 
+export const EXTRA_HOOK_CANDIDATES_PER_TYPE = 2;
+
 export interface WorkflowState {
   id: string;
   createdAt: string;
@@ -49,6 +52,7 @@ export interface WorkflowState {
   successMetric: SuccessMetric;
   brief: string;
   attachments: readonly string[];
+  uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
   directions: readonly CreativeDirection[];
   outputs: readonly CreativeOutput[];
@@ -70,17 +74,18 @@ export type WorkflowAction =
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-output-size"; size: ArtworkOutputSize }
   | { type: "set-quantity"; quantity: number }
-  | { type: "add-creative-mix-item" }
-  | {
-      type: "set-creative-mix-service";
-      id: string;
-      service: ServiceType;
-    }
+  | { type: "apply-monthly-quota" }
   | { type: "set-creative-mix-quantity"; id: string; quantity: number }
-  | { type: "remove-creative-mix-item"; id: string }
   | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
+  | { type: "add-uploaded-materials"; items: readonly UploadedCreativeMaterial[] }
+  | {
+      type: "update-uploaded-material";
+      id: string;
+      changes: Partial<Pick<UploadedCreativeMaterial, "role" | "description">>;
+    }
+  | { type: "remove-uploaded-material"; id: string }
   | { type: "toggle-reference-image"; item: ReferenceImageSelection }
   | { type: "generate-directions"; directions: readonly CreativeDirection[] }
   | {
@@ -169,10 +174,30 @@ export function totalCreativeMixQuantity(
 export function creativeMixContentTypeQuotas(
   state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
 ): readonly ContentTypeQuota[] {
-  return creativeMixItems(state).map((item) => ({
-    service: item.service,
-    count: item.quantity
+  return creativeMixItems(state)
+    .filter((item) => item.quantity > 0)
+    .map((item) => ({
+      service: item.service,
+      count: item.quantity
+    }));
+}
+
+export function hookGenerationContentTypeQuotas(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): readonly ContentTypeQuota[] {
+  return creativeMixContentTypeQuotas(state).map((quota) => ({
+    ...quota,
+    count: quota.count + EXTRA_HOOK_CANDIDATES_PER_TYPE
   }));
+}
+
+export function totalHookGenerationQuantity(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
+): number {
+  return hookGenerationContentTypeQuotas(state).reduce(
+    (total, quota) => total + quota.count,
+    0
+  );
 }
 
 export function creativeMixServiceAt(

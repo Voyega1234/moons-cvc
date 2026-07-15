@@ -11,6 +11,10 @@ export interface ImagePromptAgentHook {
   why: string;
   visual: string;
   cta: string;
+  supportingPoints?: readonly string[];
+  ctaActionType?: string;
+  ctaDestination?: string;
+  contactLine?: string;
   caption: string;
 }
 
@@ -20,7 +24,6 @@ export interface ImagePromptAgentInput {
     category: string;
     personality: readonly string[];
     colors: readonly string[];
-    mustAvoid: readonly string[];
   } | null;
   service: string;
   brief: string;
@@ -224,8 +227,7 @@ function renderStandardPrompt(
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
       personality: input.brand?.personality ?? [],
-      colors: input.brand?.colors ?? [],
-      mustAvoid: input.brand?.mustAvoid ?? []
+      colors: input.brand?.colors ?? []
     },
     objective: input.hook.why || input.brief,
     angle: {
@@ -236,9 +238,9 @@ function renderStandardPrompt(
     },
     onImageCopy: {
       headline: input.hook.hook,
-      supportingText: null,
+      supportingText: input.hook.supportingPoints?.[0] ?? null,
       cta: input.hook.cta,
-      maximumTextBlocks: 2
+      maximumTextBlocks: input.hook.supportingPoints?.length ? 3 : 2
     },
     heroVisual: {
       subject: input.hook.visual,
@@ -277,8 +279,17 @@ function buildCompactReference(label: string, index: number) {
   if (/logo|โลโก้/.test(normalized)) {
     return { id, role: "logo", fidelity: "exact" };
   }
+  if (/main object|hero\/source object|hero object/.test(normalized)) {
+    return { id, role: "source-object", fidelity: "exact" };
+  }
   if (/product|packshot|สินค้า/.test(normalized)) {
     return { id, role: "product", fidelity: "exact" };
+  }
+  if (/supporting component/.test(normalized)) {
+    return { id, role: "supporting-component", fidelity: "exact" };
+  }
+  if (/client material|client context/.test(normalized)) {
+    return { id, role: "client-context", fidelity: "inspired" };
   }
   if (/brand|guideline|ci|style|แบรนด์|คู่มือ|ซีไอ/.test(normalized)) {
     return { id, role: "brand-system", fidelity: "inspired" };
@@ -347,6 +358,7 @@ function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
     `Strategic concept: ${input.hook.concept}`,
     `Why it works: ${input.hook.why}`,
     `Approved visual direction: ${input.hook.visual}`,
+    `Supporting detail: ${input.hook.supportingPoints?.[0] ?? "None"}`,
     `CTA: ${input.hook.cta}`,
     `Caption context: ${input.hook.caption}`,
     "",

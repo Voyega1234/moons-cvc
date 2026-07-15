@@ -73,6 +73,9 @@ export function workflowActionBlockReason(
     case "generate-more-directions":
       if (!run.brand) return "Choose a brand first.";
       if (!run.brief.trim()) return "Add a brief first.";
+      if (totalCreativeMixQuantity(run) < 1) {
+        return "Choose at least one deliverable.";
+      }
       return null;
     case "toggle-direction":
       return run.directions.some((direction) => direction.id === action.id)

@@ -57,14 +57,23 @@ export interface ArtworkGenerationRequest {
     category: string;
     personality: readonly string[];
     colors: readonly string[];
-    mustAvoid: readonly string[];
   } | null;
   service: WorkflowState["service"];
   quantity: number;
   brief: string;
   selectedHooks: readonly Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
+    | "id"
+    | "hook"
+    | "concept"
+    | "why"
+    | "visual"
+    | "cta"
+    | "supportingPoints"
+    | "ctaActionType"
+    | "ctaDestination"
+    | "contactLine"
+    | "caption"
   >[];
   textInputs: readonly string[];
   referenceImages: readonly ArtworkReferenceImage[];
@@ -121,7 +130,17 @@ export async function regenerateOutputImage({
   run: WorkflowState;
   direction: Pick<
     CreativeDirection,
-    "id" | "hook" | "concept" | "why" | "visual" | "cta" | "caption"
+    | "id"
+    | "hook"
+    | "concept"
+    | "why"
+    | "visual"
+    | "cta"
+    | "supportingPoints"
+    | "ctaActionType"
+    | "ctaDestination"
+    | "contactLine"
+    | "caption"
   >;
   extraInstructions?: string;
 }): Promise<CreativeOutput> {
@@ -150,11 +169,14 @@ export async function regenerateOutputImage({
     brief: run.brief,
     selectedHooks: [direction],
     textInputs: trimmedInstructions ? [trimmedInstructions] : [],
-    referenceImages: run.referenceImages.map((item) => ({
-      kind: "url" as const,
-      url: item.url,
-      label: item.label
-    })),
+    referenceImages: [
+      ...run.referenceImages.map((item) => ({
+        kind: "url" as const,
+        url: item.url,
+        label: item.label
+      })),
+      ...creativeMaterialReferences(run)
+    ],
     ...buildBrandContext(run.brand),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
@@ -210,13 +232,29 @@ export function buildArtworkGenerationRequests({
     const hooks = selectedHooks
       .filter(({ service }) => service === item.service)
       .slice(0, item.quantity)
-      .map(({ direction: { id, hook, concept, why, visual, cta, caption } }) => ({
+      .map(({ direction: {
         id,
         hook,
         concept,
         why,
         visual,
         cta,
+        supportingPoints,
+        ctaActionType,
+        ctaDestination,
+        contactLine,
+        caption
+      } }) => ({
+        id,
+        hook,
+        concept,
+        why,
+        visual,
+        cta,
+        supportingPoints,
+        ctaActionType,
+        ctaDestination,
+        contactLine,
         caption
       }));
     return hooks.length
@@ -261,13 +299,57 @@ function buildArtworkRequest({
     brief: run.brief,
     selectedHooks,
     textInputs,
-    referenceImages,
+    referenceImages: [...referenceImages, ...creativeMaterialReferences(run)],
     ...buildBrandContext(run.brand),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
     }
   };
+}
+
+function creativeMaterialReferences(
+  run: WorkflowState
+): readonly ArtworkReferenceImage[] {
+  return run.uploadedMaterials.map((material) => {
+    const role = creativeMaterialRoleLabel(material.role);
+    const label = [
+      `Uploaded ${role}: ${material.name}`,
+      material.description
+    ]
+      .filter(Boolean)
+      .join(" — ");
+    const dataUrl = /^data:([^;]+);base64,(.+)$/i.exec(material.url);
+    if (dataUrl) {
+      return {
+        kind: "base64" as const,
+        mediaType: dataUrl[1] || material.mediaType,
+        data: dataUrl[2] || "",
+        label
+      };
+    }
+    return {
+      kind: "url" as const,
+      url: material.url,
+      mediaType: material.mediaType,
+      label
+    };
+  });
+}
+
+function creativeMaterialRoleLabel(
+  role: WorkflowState["uploadedMaterials"][number]["role"]
+): string {
+  switch (role) {
+    case "main-object":
+      return "main object (use as the hero/source object)";
+    case "product":
+      return "product (preserve its visible identity)";
+    case "supporting-component":
+      return "supporting component";
+    case "client-context":
+      return "client material/context";
+  }
 }
 
 function buildBrandIdentity(
@@ -283,18 +365,43 @@ function buildBrandIdentity(
       brand.library.brand,
       /personality|tone|voice|words|guideline|บุคลิก|น้ำเสียง/i
     ),
-    colors: extractBrandRuleValues(
-      brand.library.brand,
-      /colou?r|palette|สี/i
-    ),
-    mustAvoid: compactUnique([
-      ...brand.memory.avoid,
-      ...extractBrandRuleValues(
-        [...brand.library.brand, ...brand.library.refs],
-        /avoid|must not|restriction|ห้าม|ไม่ควร/i
-      )
-    ])
+    colors: extractBrandPaletteColors(brand.library.brand)
   };
+}
+
+function extractBrandPaletteColors(
+  items: readonly { title: string; description: string }[]
+): readonly string[] {
+  return compactUnique(
+    items.flatMap((item) => {
+      const title = item.title.trim().toLowerCase();
+      if (title === "colors" || title === "secondary colors") {
+        return extractColorTokens(item.description);
+      }
+
+      if (title === "visual guidance") {
+        return extractPaletteLineColors(item.description);
+      }
+
+      return [];
+    })
+  );
+}
+
+function extractPaletteLineColors(description: string): readonly string[] {
+  const line = description
+    .split("\n")
+    .find((candidate) => /^color palette\s*:/i.test(candidate.trim()));
+  if (!line) return [];
+
+  return extractColorTokens(line.replace(/^color palette\s*:/i, ""));
+}
+
+function extractColorTokens(value: string): readonly string[] {
+  return value
+    .split(/[,;|\n]+/)
+    .map((token) => token.trim())
+    .filter((token) => /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(token));
 }
 
 function extractBrandRuleValues(

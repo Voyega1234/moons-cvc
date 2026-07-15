@@ -31,6 +31,7 @@ const run: WorkflowState = {
   successMetric: "CTR",
   brief: "Launch a soft summer bouquet offer.",
   attachments: [],
+  uploadedMaterials: [],
   referenceImages: [],
   directions: [
     {
@@ -94,9 +95,9 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.brand).toMatchObject({
       name: "Flora Daily",
       personality: [],
-      colors: [],
-      mustAvoid: []
+      colors: []
     });
+    expect(request.brand).not.toHaveProperty("mustAvoid");
     expect(request).not.toHaveProperty("brandMemory");
   });
 
@@ -109,6 +110,35 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.output.size).toBe("2160x3840");
+  });
+
+  it("passes uploaded creative materials to artwork generation with their intended role", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        uploadedMaterials: [
+          {
+            id: "material-1",
+            name: "bouquet.png",
+            mediaType: "image/png",
+            role: "main-object",
+            description: "Keep this bouquet as the hero",
+            url: "https://example.com/bouquet.png"
+          }
+        ]
+      }
+    });
+
+    expect(request.referenceImages).toEqual([
+      expect.objectContaining({
+        kind: "url",
+        url: "https://example.com/bouquet.png",
+        label: expect.stringContaining("main object")
+      })
+    ]);
+    expect(request.referenceImages[0]?.label).toContain(
+      "Keep this bouquet as the hero"
+    );
   });
 
   it("compacts brand identity fields for the Standard prompt", () => {
@@ -128,7 +158,23 @@ describe("buildArtworkGenerationRequest", () => {
               {
                 id: "colors",
                 title: "Colors",
-                description: "deep blue, bright blue, white"
+                description: "#0A1628, #1A56DB"
+              },
+              {
+                id: "secondary-colors",
+                title: "Secondary colors",
+                description: "#00D4FF"
+              },
+              {
+                id: "visual-guidance",
+                title: "Visual guidance",
+                description:
+                  "Mood: confident\nColor palette: #111111, warm blue, #222222\nLayout: clean"
+              },
+              {
+                id: "bad-colors",
+                title: "Campaign notes",
+                description: "premium, direct, this should not be parsed"
               }
             ]
           },
@@ -142,9 +188,10 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request.brand).toMatchObject({
       personality: ["expert", "direct", "approachable"],
-      colors: ["deep blue", "bright blue", "white"],
-      mustAvoid: ["cheap sales graphics", "generic AI robots"]
+      colors: ["#0A1628", "#1A56DB", "#00D4FF", "#111111", "#222222"]
     });
+    expect(request.brand).not.toHaveProperty("mustAvoid");
+    expect(request.brand?.colors).not.toContain("warm blue");
   });
 
   it("passes design-system mode without changing the provider contract", () => {

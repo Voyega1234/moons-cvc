@@ -1,5 +1,8 @@
 import { env } from "../../config/env";
-import type { CreativeDirection } from "../../domain/creative-run";
+import type {
+  CreativeDirection,
+  UploadedCreativeMaterial
+} from "../../domain/creative-run";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import {
   normalizeCreativeDirections,
@@ -7,9 +10,9 @@ import {
   type RawDirection
 } from "./hook-generation-types";
 import {
-  creativeMixContentTypeQuotas,
   creativeMixItems,
-  totalCreativeMixQuantity
+  hookGenerationContentTypeQuotas,
+  totalHookGenerationQuantity
 } from "../../features/workflow/model";
 
 export interface HookGenerationHarnessRequest {
@@ -29,6 +32,10 @@ export interface HookGenerationHarnessRequest {
   extraInstructions: string;
   existingHooks: readonly { hook: string; concept: string }[];
   attachments: readonly string[];
+  uploadedMaterials: readonly Pick<
+    UploadedCreativeMaterial,
+    "id" | "name" | "mediaType" | "role" | "description" | "url"
+  >[];
   brandMemory: {
     working: readonly string[];
     avoid: readonly string[];
@@ -81,6 +88,7 @@ export function buildHookGenerationHarnessRequest({
   extraInstructions
 }: HookGenerationRunInput): HookGenerationHarnessRequest {
   const brand = run.brand;
+  const contentTypeQuotas = hookGenerationContentTypeQuotas(run);
 
   return {
     runId: run.id,
@@ -91,9 +99,9 @@ export function buildHookGenerationHarnessRequest({
           category: brand.category
         }
       : null,
-    service: creativeMixItems(run)[0]?.service ?? run.service,
-    quantity: totalCreativeMixQuantity(run),
-    contentTypeQuotas: creativeMixContentTypeQuotas(run),
+    service: contentTypeQuotas[0]?.service ?? creativeMixItems(run)[0]?.service ?? run.service,
+    quantity: totalHookGenerationQuantity(run),
+    contentTypeQuotas,
     brief: run.brief,
     extraInstructions: extraInstructions?.trim() ?? "",
     existingHooks: run.directions.map((direction) => ({
@@ -101,6 +109,16 @@ export function buildHookGenerationHarnessRequest({
       concept: direction.concept
     })),
     attachments: run.attachments,
+    uploadedMaterials: run.uploadedMaterials.map(
+      ({ id, name, mediaType, role, description, url }) => ({
+        id,
+        name,
+        mediaType,
+        role,
+        description,
+        url
+      })
+    ),
     brandMemory: {
       working: brand?.memory.working ?? [],
       avoid: brand?.memory.avoid ?? []

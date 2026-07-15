@@ -29,7 +29,8 @@ export async function generateDirectionsFromWebhook(
         text: input.brief,
         extraInstructions: input.extraInstructions?.trim() ?? "",
         existingHooks: input.existingHooks ?? []
-      }
+      },
+      uploadedMaterials: input.uploadedMaterials ?? []
     })
   });
 

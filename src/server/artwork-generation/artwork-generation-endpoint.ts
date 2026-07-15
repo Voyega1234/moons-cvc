@@ -4,11 +4,13 @@ import { join } from "node:path";
 import {
   artworkModes,
   artworkOutputSizes,
+  ctaActionTypes,
   emptyApprovalComments,
   emptyApprovalGate,
   imagePromptModels,
   outputFormatForService,
-  type ArtworkOutputSize
+  type ArtworkOutputSize,
+  type CtaActionType
 } from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type {
@@ -432,6 +434,9 @@ function buildReferenceFidelityInstruction(
     (reference, index) =>
       `Image ${index + 1} — ${reference.label ?? "Reference image"}`
   );
+  const hasUploadedSourceMaterials = references.some((reference) =>
+    reference.label?.startsWith("Uploaded ")
+  );
 
   return [
     "REFERENCE-INFORMED DESIGN — highest priority:",
@@ -439,7 +444,9 @@ function buildReferenceFidelityInstruction(
     "When the attached references are from the same client account, use them as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish.",
     mode === "design-system"
       ? "The dominant visual medium shown by the references is authoritative. If they are photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family. A new execution means a new message-specific idea and composition—not replacing the reference medium with simplified isometric 3D, toy-like objects, miniature SaaS scenes, generic UI cards, or sterile product renders."
-      : "Create a distinctly new execution for this brief. Invent a different visual metaphor, hero subject, composition, information arrangement, and layout geometry; never reproduce the reference's objects, scene, text placement, visual sequence, or recognisable layout.",
+      : hasUploadedSourceMaterials
+        ? "Create a distinctly new execution for this brief, but preserve and visibly use every uploaded source material according to its label. A main object or product must remain recognisable and serve the requested role; a supporting component must be integrated as a real component. For ordinary style references, invent a different composition and never copy their readable text or recognisable layout."
+        : "Create a distinctly new execution for this brief. Invent a different visual metaphor, hero subject, composition, information arrangement, and layout geometry; never reproduce the reference's objects, scene, text placement, visual sequence, or recognisable layout.",
     "Do not default to translucent UI cards, floating glass objects, generic search screens, phones, or blue glow merely because the category involves AI, SEO, or technology. Use those only when they are truly the strongest new visual metaphor. Use the new brief and supplied copy; do not reproduce readable reference text, logos, or artwork."
   ].join("\n");
 }
@@ -451,7 +458,7 @@ function buildConceptAlignmentInstruction(hook: SelectedHook): string {
     `Strategic concept: ${hook.concept}`,
     `Reason this concept works: ${hook.why}`,
     `Approved visual direction: ${hook.visual}`,
-    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. The references are style guidance only and must not override the concept."
+    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. Library references are style guidance; uploaded source materials must be used for the role stated in their label without overriding the concept."
   ].join("\n");
 }
 
@@ -882,8 +889,7 @@ function parseBrand(value: unknown): ArtworkGenerationRequest["brand"] {
     name: readString(brand.name, "brand.name"),
     category: readString(brand.category, "brand.category"),
     personality: readOptionalStringArray(brand.personality, "brand.personality"),
-    colors: readOptionalStringArray(brand.colors, "brand.colors"),
-    mustAvoid: readOptionalStringArray(brand.mustAvoid, "brand.mustAvoid")
+    colors: readOptionalStringArray(brand.colors, "brand.colors")
   };
 }
 
@@ -904,8 +910,36 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
     why: readString(hook.why, `selectedHooks[${index}].why`),
     visual: readString(hook.visual, `selectedHooks[${index}].visual`),
     cta: readString(hook.cta, `selectedHooks[${index}].cta`),
+    supportingPoints: readOptionalStringArray(
+      hook.supportingPoints,
+      `selectedHooks[${index}].supportingPoints`
+    ),
+    ...(hook.ctaActionType === undefined
+      ? {}
+      : {
+          ctaActionType: readCtaActionType(
+            hook.ctaActionType,
+            `selectedHooks[${index}].ctaActionType`
+          )
+        }),
+    ...(typeof hook.ctaDestination === "string"
+      ? { ctaDestination: hook.ctaDestination }
+      : {}),
+    ...(typeof hook.contactLine === "string"
+      ? { contactLine: hook.contactLine }
+      : {}),
     caption: readString(hook.caption, `selectedHooks[${index}].caption`)
   };
+}
+
+function readCtaActionType(value: unknown, field: string): CtaActionType {
+  if (
+    typeof value !== "string" ||
+    !ctaActionTypes.includes(value as CtaActionType)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as CtaActionType;
 }
 
 function readRecord(value: unknown, field: string): Record<string, unknown> {

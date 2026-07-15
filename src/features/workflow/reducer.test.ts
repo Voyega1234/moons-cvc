@@ -60,63 +60,38 @@ describe("workflowReducer", () => {
     expect(updated.successMetric).toBe("ROAS");
   });
 
-  it("builds a creative mix from independently configurable content rows", () => {
-    let state = workflowReducer(initialWorkflowState, {
-      type: "add-creative-mix-item"
-    });
-    const added = state.creativeMix?.[1];
-    if (!added) throw new Error("Expected a second creative-mix item.");
+  it("defaults to the fixed Static, UGC, and Album monthly mix", () => {
+    expect(initialWorkflowState.creativeMix).toEqual([
+      { id: "creative-mix-1", service: "single-static", quantity: 3 },
+      { id: "creative-mix-2", service: "ugc-video", quantity: 2 },
+      { id: "creative-mix-3", service: "album-post", quantity: 1 }
+    ]);
+    expect(initialWorkflowState.quantity).toBe(6);
+    expect(initialWorkflowState.brief).toHaveLength(440);
 
-    state = workflowReducer(state, {
-      type: "set-creative-mix-service",
-      id: added.id,
-      service: "ugc-video"
-    });
-    state = workflowReducer(state, {
+    const updated = workflowReducer(initialWorkflowState, {
       type: "set-creative-mix-quantity",
-      id: added.id,
+      id: "creative-mix-3",
       quantity: 2
     });
-
-    expect(state.creativeMix).toEqual([
-      { id: "creative-mix-1", service: "single-static", quantity: 3 },
-      { id: added.id, service: "ugc-video", quantity: 2 }
-    ]);
-    expect(state.service).toBe("single-static");
-    expect(state.quantity).toBe(5);
-
-    state = workflowReducer(state, {
-      type: "remove-creative-mix-item",
-      id: added.id
-    });
-    expect(state.creativeMix).toHaveLength(1);
-    expect(state.quantity).toBe(3);
+    expect(updated.creativeMix?.[2]?.quantity).toBe(2);
+    expect(updated.quantity).toBe(7);
   });
 
-  it("keeps the creative mix unique and within the six-deliverable limit", () => {
-    let state = workflowReducer(initialWorkflowState, {
-      type: "add-creative-mix-item"
+  it("applies the prototype monthly quota without exceeding six deliverables", () => {
+    const state = workflowReducer(initialWorkflowState, {
+      type: "apply-monthly-quota"
     });
-    const added = state.creativeMix?.[1];
-    if (!added) throw new Error("Expected a second creative-mix item.");
 
-    const duplicate = workflowReducer(state, {
-      type: "set-creative-mix-service",
-      id: added.id,
-      service: "single-static"
-    });
-    expect(duplicate).toBe(state);
-
-    state = workflowReducer(state, {
-      type: "set-creative-mix-quantity",
-      id: added.id,
-      quantity: 6
-    });
+    expect(state.creativeMix?.map(({ service, quantity }) => ({
+      service,
+      quantity
+    }))).toEqual([
+      { service: "single-static", quantity: 3 },
+      { service: "ugc-video", quantity: 2 },
+      { service: "album-post", quantity: 1 }
+    ]);
     expect(state.quantity).toBe(6);
-    expect(state.creativeMix?.[1]?.quantity).toBe(3);
-    expect(
-      workflowReducer(state, { type: "add-creative-mix-item" })
-    ).toBe(state);
   });
 
   it("moves from brand selection to generated directions", () => {
@@ -186,16 +161,7 @@ describe("workflowReducer", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
 
-    let state = workflowReducer(initialWorkflowState, {
-      type: "add-creative-mix-item"
-    });
-    const secondItem = state.creativeMix?.[1];
-    if (!secondItem) throw new Error("Expected a second mix item.");
-    state = workflowReducer(state, {
-      type: "set-creative-mix-service",
-      id: secondItem.id,
-      service: "ugc-video"
-    });
+    let state = initialWorkflowState;
     state = workflowReducer(state, { type: "select-brand", brand });
     state = workflowReducer(state, {
       type: "generate-directions",
@@ -208,7 +174,9 @@ describe("workflowReducer", () => {
       "1:1 Static",
       "1:1 Static",
       "1:1 Static",
-      "9:16 UGC"
+      "9:16 UGC",
+      "9:16 UGC",
+      "Album post"
     ]);
   });
 
@@ -635,5 +603,40 @@ describe("workflowReducer", () => {
 
     expect(state.outputs[0]?.clientStatus).toBe("approved");
     expect(state.outputs[1]?.clientStatus).toBe("sent");
+  });
+
+  it("adds, annotates, and removes uploaded creative image materials", () => {
+    const material = {
+      id: "material-1",
+      name: "product.png",
+      mediaType: "image/png",
+      role: "main-object" as const,
+      description: "",
+      url: "https://example.com/product.png"
+    };
+    let state = workflowReducer(initialWorkflowState, {
+      type: "add-uploaded-materials",
+      items: [material]
+    });
+    expect(state.uploadedMaterials).toEqual([material]);
+
+    state = workflowReducer(state, {
+      type: "update-uploaded-material",
+      id: material.id,
+      changes: {
+        role: "supporting-component",
+        description: "Use beside the headline"
+      }
+    });
+    expect(state.uploadedMaterials[0]).toMatchObject({
+      role: "supporting-component",
+      description: "Use beside the headline"
+    });
+
+    state = workflowReducer(state, {
+      type: "remove-uploaded-material",
+      id: material.id
+    });
+    expect(state.uploadedMaterials).toEqual([]);
   });
 });

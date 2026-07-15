@@ -72,5 +72,5 @@ function buildAdCaptionText(row: Record<string, unknown>): string {
         typeof value === "string" && value.trim().length > 0
     )
     .map((value) => value.trim())
-    .join(" | ");
+    .join("\n");
 }

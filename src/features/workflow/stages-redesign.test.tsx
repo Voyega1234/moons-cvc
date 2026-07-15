@@ -3,13 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
+import { BrandProvider } from "../../app/providers/brand-provider";
+import { ClientIntakeProvider } from "../../app/providers/client-intake-provider";
 import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-brand-memory-repository";
+import { MockBrandRepository } from "../../repositories/brands/mock-brand-repository";
+import { MockClientIntakeRepository } from "../../repositories/client-intake/mock-client-intake-repository";
 import { createInitialWorkflowState, workflowReducer } from "./reducer";
 import {
   ApprovalStage,
   BriefStage,
   ClientStage,
   DirectionsStage,
+  StartStage,
   StudioStage
 } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
@@ -67,6 +72,78 @@ function buildMixedAngleState() {
 }
 
 describe("redesigned workflow stages", () => {
+  it("presents Signal with the reference workspace and memory composition", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    vi.spyOn(memoryRepository, "listBrandRules").mockResolvedValue([
+      { id: "colors", title: "Colors", description: "#1D1D1F, #FFFFFF" },
+      {
+        id: "secondary-colors",
+        title: "Secondary colors",
+        description: "#5664F5, #D8FF72"
+      },
+      {
+        id: "visual-guidance",
+        title: "Visual guidance",
+        description:
+          "Use bold editorial typography with spacious layouts. Keep product imagery clean and preserve clear visual hierarchy across every placement."
+      }
+    ]);
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage state={{ ...state, stage: "start" }} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    expect(view.container.querySelector(".neo-signal-stage")).toBeTruthy();
+    expect(stage.getByText("01 / Signal")).toBeTruthy();
+    expect(stage.getByText("Brand workspace")).toBeTruthy();
+    expect(stage.getByText("Brand materials")).toBeTruthy();
+    expect(stage.getByText(`${state.brand?.name} memory`)).toBeTruthy();
+    expect(stage.getByRole("navigation", { name: "Brand memory sections" })).toBeTruthy();
+    expect(stage.getByText("Signal before output")).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Continue to brief →" })).toBeTruthy();
+    expect(
+      view.container.querySelectorAll(".brand-colors-section .colors-card")
+    ).toHaveLength(2);
+
+    const memoryViewport = view.container.querySelector(
+      ".neo-signal-memory-viewport"
+    );
+    expect(memoryViewport?.classList.contains("collapsed")).toBe(true);
+    await user.click(
+      stage.getByRole("button", { name: "See more brand memory" })
+    );
+    expect(memoryViewport?.classList.contains("expanded")).toBe(true);
+
+    await user.click(await stage.findByRole("button", { name: "See more" }));
+    expect(stage.getByRole("button", { name: "See less" })).toBeTruthy();
+
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    expect(
+      stage.getByRole("dialog", { name: "Manage brand materials" })
+    ).toBeTruthy();
+    expect(
+      stage.getByRole("navigation", { name: "Brand library folders" })
+    ).toBeTruthy();
+    await user.click(
+      stage.getByRole("button", { name: "Close brand library" })
+    );
+    expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
+  });
+
   it("presents Brief with the prototype's creative and signal controls", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -78,34 +155,73 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
+    expect(stage.getByText("02 / Brief")).toBeTruthy();
+    expect(
+      stage.getByText(
+        "Set the mix, define the objective, and choose the one metric this creative set should move."
+      )
+    ).toBeTruthy();
     expect(stage.getByRole("heading", { name: "Creative mix" })).toBeTruthy();
+    expect(
+      stage.getByRole("heading", { name: "Creative brief" })
+    ).toBeTruthy();
     expect(stage.getByRole("heading", { name: "Signal stack" })).toBeTruthy();
     expect(
       stage.getByRole("heading", { name: "Primary success metric" })
     ).toBeTruthy();
-    expect(stage.getByRole("combobox", { name: "Content type 1" })).toBeTruthy();
     expect(
-      stage.getByRole("spinbutton", { name: "Single static quantity" })
+      stage.getByRole("button", { name: /CTR/i }).getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(
+      stage.getByRole("button", { name: /CVR/i }).getAttribute("aria-pressed")
+    ).toBe("false");
+    expect(stage.queryByRole("combobox", { name: /Content type/i })).toBeNull();
+    expect(stage.queryByRole("button", { name: "Add item" })).toBeNull();
+    expect(stage.getByText("Static")).toBeTruthy();
+    expect(stage.getByText("UGC")).toBeTruthy();
+    expect(stage.getByText("Album")).toBeTruthy();
+    expect(
+      stage.getByRole("spinbutton", { name: "Static quantity" })
     ).toBeTruthy();
-
-    await user.click(stage.getByRole("button", { name: "Add item" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "add-creative-mix-item" });
-
-    await user.selectOptions(
-      stage.getByRole("combobox", { name: "Content type 1" }),
-      "album-post"
+    expect(
+      stage.getByRole("spinbutton", { name: "UGC quantity" })
+    ).toBeTruthy();
+    expect(
+      stage.getByRole("spinbutton", { name: "Album quantity" })
+    ).toBeTruthy();
+    expect(
+      (stage.getByRole("textbox", {
+        name: /Working brief/i
+      }) as HTMLTextAreaElement).value
+    ).toContain(
+      "Objective: Create Meta performance creatives that make the product benefit instantly clear."
     );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-creative-mix-service",
-      id: "creative-mix-1",
-      service: "album-post"
-    });
+
+    await user.click(stage.getByRole("button", { name: "Use monthly quota" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "apply-monthly-quota" });
 
     await user.click(stage.getByRole("button", { name: /ROAS/i }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-success-metric",
       metric: "ROAS"
     });
+
+    await user.click(
+      stage.getByRole("button", { name: "Manage uploaded materials" })
+    );
+    expect(
+      stage.getByRole("dialog", { name: "Uploaded materials" })
+    ).toBeTruthy();
+    expect(
+      stage.getByRole("navigation", { name: "Uploaded material folders" })
+    ).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: /References/ }));
+    await user.click(
+      stage.getByRole("button", { name: "Close uploaded materials" })
+    );
+    expect(
+      stage.queryByRole("dialog", { name: "Uploaded materials" })
+    ).toBeNull();
   });
 
   it("presents Angles as the prototype-style hook selection workspace", async () => {
@@ -115,6 +231,7 @@ describe("redesigned workflow stages", () => {
       ...baseState,
       directions: baseState.directions.map((direction, index) => ({
         ...direction,
+        score: index === 0 ? 82 : direction.score,
         exportGroup:
           index === 0
             ? ("recommended" as const)
@@ -130,13 +247,35 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(view.container.querySelector(".neo-stage-angles")).toBeTruthy();
+    expect(
+      stage.getByRole("region", { name: "Artwork settings" })
+    ).toBeTruthy();
+    expect(view.container.querySelectorAll(".neo-angle-setting")).toHaveLength(3);
+    expect(view.container.querySelectorAll(".neo-angle-settings")).toHaveLength(1);
     expect(stage.getByRole("heading", { name: "Review recommended hooks" })).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Let Neo pick" })).toBeTruthy();
+    expect(stage.queryByRole("menuitem", { name: /Export PDF/ })).toBeNull();
+    expect(
+      stage.queryByPlaceholderText("Add direction for the next round (optional)")
+    ).toBeNull();
+    await user.click(stage.getByRole("button", { name: "More hook actions" }));
+    expect(stage.getByRole("menuitem", { name: /Export PDF/ })).toBeTruthy();
+    expect(stage.getByRole("menuitem", { name: /Regenerate all/ })).toBeTruthy();
+    await user.click(stage.getByRole("menuitem", { name: /Generate more/ }));
+    expect(
+      stage.getByPlaceholderText("Add direction for the next round (optional)")
+    ).toBeTruthy();
     const angleCards = view.container.querySelectorAll(".neo-angle-card");
     expect(angleCards).toHaveLength(state.directions.length);
     expect(angleCards[0]?.querySelector(".neo-angle-badge-row")).toBeTruthy();
+    expect(angleCards[0]?.querySelector(".neo-angle-meta-line")?.textContent).toContain(
+      "Creative concept · Awareness"
+    );
     expect(angleCards[0]?.querySelector(".neo-angle-hook-wrap")).toBeTruthy();
     expect(angleCards[0]?.querySelectorAll(".neo-angle-copy-block")).toHaveLength(3);
     expect(angleCards[0]?.querySelector(".neo-angle-card-foot")).toBeTruthy();
+    expect(within(angleCards[0] as HTMLElement).getByText("82")).toBeTruthy();
+    expect(within(angleCards[0] as HTMLElement).getByText("score")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("Subheadline 1")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("Concept 1")).toBeTruthy();
     expect(stage.getAllByRole("button", { name: "Edit" })).toHaveLength(
@@ -189,7 +328,8 @@ describe("redesigned workflow stages", () => {
     });
   });
 
-  it("groups the Angle export into recommended topics and other options", () => {
+  it("groups the Angle export into recommended topics and other options", async () => {
+    const user = userEvent.setup();
     const state = buildMixedAngleState();
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
@@ -201,7 +341,9 @@ describe("redesigned workflow stages", () => {
     expect(stage.getAllByText("STATIC AD")).toHaveLength(3);
     expect(stage.getAllByText("ALBUM AD")).toHaveLength(1);
     expect(stage.getAllByText("UGC VIDEO")).toHaveLength(2);
-    expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
+    expect(stage.queryByRole("menuitem", { name: /Export PDF/ })).toBeNull();
+    await user.click(stage.getByRole("button", { name: "More hook actions" }));
+    expect(stage.getByRole("menuitem", { name: /Export PDF/ })).toBeTruthy();
     expect(buildAngleExportReview(state).sections).toEqual([]);
 
     const classifiedDirections = state.directions.map((direction, index) => ({
@@ -297,6 +439,8 @@ describe("redesigned workflow stages", () => {
     );
     const firstCard = view.container.querySelector(".neo-qc-focus-card");
     const firstCardContent = firstCard?.querySelector(".neo-qc-focus-content");
+    expect(firstCard?.querySelector(".neo-caption-scroll")).toBeTruthy();
+    expect(firstCard?.querySelector(".fb-see-more")).toBeNull();
     expect(firstCardContent?.querySelector(".download-action")).toBeTruthy();
     expect(firstCardContent?.querySelector(".upload-inline")).toBeTruthy();
     expect(

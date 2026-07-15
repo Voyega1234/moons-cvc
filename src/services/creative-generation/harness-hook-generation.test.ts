@@ -44,6 +44,16 @@ const run: WorkflowState = {
   successMetric: "CTR",
   brief: "Generate hooks for AI SEO webinar.",
   attachments: ["brief.pdf"],
+  uploadedMaterials: [
+    {
+      id: "material-1",
+      name: "hero-bottle.png",
+      mediaType: "image/png",
+      role: "main-object",
+      description: "Keep the bottle as the hero object",
+      url: "https://example.com/hero-bottle.png"
+    }
+  ],
   referenceImages: [],
   directions: [],
   outputs: [],
@@ -64,12 +74,20 @@ describe("buildHookGenerationHarnessRequest", () => {
       title: "AI SEO Workshop"
     });
     expect(request.attachments).toEqual(["brief.pdf"]);
+    expect(request.uploadedMaterials).toEqual([
+      expect.objectContaining({
+        name: "hero-bottle.png",
+        role: "main-object",
+        description: "Keep the bottle as the hero object"
+      })
+    ]);
+    expect(request.quantity).toBe(5);
     expect(request.contentTypeQuotas).toEqual([
-      { service: "single-static", count: 3 }
+      { service: "single-static", count: 5 }
     ]);
   });
 
-  it("preserves every Creative mix type and quantity in the backend contract", () => {
+  it("adds two candidates to every active Creative mix type", () => {
     const request = buildHookGenerationHarnessRequest({
       run: {
         ...run,
@@ -82,11 +100,30 @@ describe("buildHookGenerationHarnessRequest", () => {
       }
     });
 
-    expect(request.quantity).toBe(6);
+    expect(request.quantity).toBe(12);
     expect(request.contentTypeQuotas).toEqual([
-      { service: "single-static", count: 3 },
-      { service: "album-post", count: 1 },
-      { service: "ugc-video", count: 2 }
+      { service: "single-static", count: 5 },
+      { service: "album-post", count: 3 },
+      { service: "ugc-video", count: 4 }
+    ]);
+  });
+
+  it("omits zero-count Creative mix types from the backend contract", () => {
+    const request = buildHookGenerationHarnessRequest({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "static", service: "single-static", quantity: 2 },
+          { id: "ugc", service: "ugc-video", quantity: 0 },
+          { id: "album", service: "album-post", quantity: 0 }
+        ],
+        quantity: 2
+      }
+    });
+
+    expect(request.quantity).toBe(4);
+    expect(request.contentTypeQuotas).toEqual([
+      { service: "single-static", count: 4 }
     ]);
   });
 
@@ -143,7 +180,8 @@ describe("buildHookGenerationHarnessRequest", () => {
               why: "Makes the technical issue concrete.",
               visual: "Search result beside a website structure diagram.",
               cta: "ปรึกษาทีม SEO",
-              caption: "เริ่มแก้จากโครงสร้างที่ Search อ่านได้"
+              caption: "เริ่มแก้จากโครงสร้างที่ Search อ่านได้",
+              score: 87
             }
           ]
         })
@@ -155,7 +193,8 @@ describe("buildHookGenerationHarnessRequest", () => {
     expect(direction).toMatchObject({
       subheadline: "ทำโครงสร้างเว็บไซต์ให้ Search เข้าใจธุรกิจได้ชัดขึ้น",
       concept: "ชวนเจ้าของแบรนด์มอง SEO ผ่านโครงสร้างเว็บไซต์",
-      subheadlineHighlight: "โครงสร้างเว็บไซต์"
+      subheadlineHighlight: "โครงสร้างเว็บไซต์",
+      score: 87
     });
     vi.stubGlobal("fetch", originalFetch);
   });

@@ -18,6 +18,16 @@ const requestBody = {
   ],
   brief: "ต้องการ creative เพื่อชวน B2B เข้าร่วม AI SEO webinar",
   attachments: [],
+  uploadedMaterials: [
+    {
+      id: "material-1",
+      name: "hero-bottle.png",
+      mediaType: "image/png",
+      role: "main-object",
+      description: "Keep the bottle as the hero object",
+      url: "https://example.com/hero-bottle.png"
+    }
+  ],
   brandMemory: {
     working: ["ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้"],
     avoid: ["หลีกเลี่ยงภาพ luxury หรือ warm vintage"]
@@ -191,6 +201,15 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(secondBody.input)).toContain(
       "one concise Thai sentence"
     );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "hero-bottle.png | role=main-object"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      '"type":"input_image"'
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "https://example.com/hero-bottle.png"
+    );
     expect(JSON.stringify(secondBody.input)).not.toContain("$('Webhook')");
     const highlightPrompt = thirdBody.input[0]?.content[0]?.text ?? "";
     expect(thirdBody.text.format.name).toBe("neo_subheadline_highlights");
@@ -317,6 +336,15 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(JSON.stringify(generationBody.input)).toContain(
       "copywriter ประจำเพจนี้"
+    );
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "หา pattern ที่เกิดซ้ำ"
+    );
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "ห้ามใช้ CTA กว้างๆ"
+    );
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "contactLine = recurring verified contact/footer"
     );
   });
 

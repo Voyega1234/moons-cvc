@@ -22,10 +22,11 @@ import {
 import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
-  serviceTypes,
+  creativeMaterialRoles,
   type AngleExportGroup,
   type ApprovalRole,
   type CreativeOutput,
+  type CreativeMaterialRole,
   type ServiceType
 } from "../../domain/creative-run";
 import {
@@ -42,6 +43,7 @@ import { useClientIntakeRepository } from "../../app/providers/client-intake-pro
 import { validateFacebookUrl } from "../../domain/client-ingestion";
 import { regenerateOutputImage } from "../../services/artwork-generation/openai-image-generation";
 import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
+import { uploadCreativeMaterial } from "../../services/creative-materials/upload-creative-material";
 import {
   suggestBrandLearning,
   type LearningSuggestion
@@ -80,6 +82,7 @@ interface StageProps {
 function DecisionCard({
   eyebrow,
   title,
+  helper,
   status,
   statusClass = "",
   className = "",
@@ -88,6 +91,7 @@ function DecisionCard({
 }: {
   eyebrow: string;
   title: string;
+  helper?: string;
   status: string;
   statusClass?: string;
   className?: string;
@@ -101,6 +105,7 @@ function DecisionCard({
           <div>
             <p className="eyebrow">{eyebrow}</p>
             <h2>{title}</h2>
+            {helper ? <p className="decision-helper">{helper}</p> : null}
           </div>
           <span className={`pill ${statusClass}`}>{status}</span>
         </div>
@@ -113,7 +118,10 @@ function DecisionCard({
 
 export function StartStage({ state, dispatch }: StageProps) {
   const { brands, loading, error, refresh } = useBrands();
-  const [profileOpen, setProfileOpen] = useState(true);
+  const [profileSection, setProfileSection] =
+    useState<BrandProfileSection>("brand");
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [memoryRevision, setMemoryRevision] = useState(0);
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [setupBrand, setSetupBrand] = useState<Brand | null>(null);
   const [mappingBrand, setMappingBrand] = useState<Brand | null>(null);
@@ -128,34 +136,34 @@ export function StartStage({ state, dispatch }: StageProps) {
 
   return (
     <DecisionCard
-      eyebrow="Signal"
+      eyebrow="01 / Signal"
       title="Start with what the brand already knows."
+      helper="Choose a brand to load its voice, visual rules, product truths, approved work, and creative learnings."
       status={state.brand ? "Memory loaded" : "Memory waiting"}
       statusClass={state.brand ? "green" : "blue"}
+      className="neo-signal-stage"
       actions={
         <>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={!state.brand}
-            onClick={() => setProfileOpen((current) => !current)}
-          >
-            {profileOpen ? "Hide brand profile" : "Open brand profile"}
-          </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled={Boolean(continueBlocked)}
-            title={continueBlocked ?? undefined}
-            onClick={() => dispatch(continueAction)}
-          >
-            Continue to brief
-          </button>
+          <span className="pill neo-signal-before-output">
+            Signal before output
+          </span>
+          <div className="neo-signal-footer-actions">
+            <button
+              className="btn primary"
+              type="button"
+              disabled={Boolean(continueBlocked)}
+              title={continueBlocked ?? undefined}
+              onClick={() => dispatch(continueAction)}
+            >
+              Continue to brief →
+            </button>
+          </div>
         </>
       }
     >
-      <div className="start-single">
-        <div>
+      <div className="neo-start-grid">
+        <section className="neo-brand-select-card">
+          <span className="neo-card-label">Brand workspace</span>
           <div className="dropdown">
             <button
               className="select-btn"
@@ -165,15 +173,15 @@ export function StartStage({ state, dispatch }: StageProps) {
               onClick={() => dispatch({ type: "toggle-brand-menu" })}
             >
               <span className="select-left">
-                <span className="avatar">
-                  {state.brand?.initials ?? "MO"}
+                <span className="avatar neo-brand-select-avatar">
+                  {state.brand?.initials ?? "NE"}
                 </span>
                 <span>
-                  <b>{state.brand?.name ?? "Select client"}</b>
+                  <b>{state.brand?.name ?? "Choose a brand"}</b>
                   <small>
                     {state.brand
                       ? clientSubtitle(state.brand)
-                      : "Search brands or category"}
+                      : "Search by brand or category"}
                   </small>
                 </span>
               </span>
@@ -308,20 +316,116 @@ export function StartStage({ state, dispatch }: StageProps) {
             />
           ) : null}
           {!state.brand ? (
-            <div className="empty start-hint">
-              <b>Start here.</b>
-              <p>Load memory once. Use it everywhere.</p>
+            <div className="neo-start-blank">
+              <b>Brand context is your unfair advantage.</b>
+              <p>
+                neo keeps approved references, uploaded brand materials, and
+                past performance close to every creative decision.
+              </p>
             </div>
-          ) : null}
-        </div>
-      </div>
-      {state.brand && profileOpen ? (
+          ) : (
+            <div className="neo-start-blank">
+              <b>{state.brand.name} context is ready.</b>
+              <p>
+                Voice, visual rules, products, references, and creative
+                learnings are connected to this run.
+              </p>
+            </div>
+          )}
+          <BrandMaterialsSummary
+            state={state}
+            onOpenLibrary={(section) => {
+              setProfileSection(section);
+              setLibraryOpen(true);
+            }}
+          />
+        </section>
         <BrandProfilePanel
+          key={`${state.brand?.id ?? "empty"}-${memoryRevision}`}
           state={state}
-          onClose={() => setProfileOpen(false)}
+          section={profileSection}
+          onSectionChange={setProfileSection}
+        />
+      </div>
+      {state.brand && libraryOpen ? (
+        <BrandLibraryModal
+          state={state}
+          section={profileSection}
+          onSectionChange={setProfileSection}
+          onClose={() => {
+            setLibraryOpen(false);
+            setMemoryRevision((current) => current + 1);
+          }}
         />
       ) : null}
     </DecisionCard>
+  );
+}
+
+function BrandMaterialsSummary({
+  state,
+  onOpenLibrary
+}: {
+  state: WorkflowState;
+  onOpenLibrary: (section: BrandProfileSection) => void;
+}) {
+  const brand = state.brand;
+  const rows: readonly [string, number, BrandProfileSection][] = [
+    ["CI", brand?.library.brand.length ?? 0, "brand"],
+    ["Guideline", brand?.library.docs.length ?? 0, "docs"],
+    ["Reference style", brand?.library.refs.length ?? 0, "refs"],
+    [
+      "Business context",
+      (brand?.memory.working.length ?? 0) + (brand?.memory.avoid.length ?? 0),
+      "learning"
+    ],
+    ["Product list & info", brand?.library.products.length ?? 0, "products"]
+  ];
+  const total = rows.reduce((sum, [, count]) => sum + count, 0);
+
+  return (
+    <section className="neo-material-uploader">
+      <div className="neo-materials-head">
+        <div>
+          <b>Brand materials</b>
+          <small>
+            Keep the source context close without taking over the welcome page.
+          </small>
+        </div>
+        <div className="neo-materials-head-actions">
+          <span className="pill blue">{total} files</span>
+          <button
+            className="btn small primary"
+            type="button"
+            disabled={!brand}
+            onClick={() => onOpenLibrary("brand")}
+          >
+            Manage library
+          </button>
+        </div>
+      </div>
+      <div className="neo-materials-compact-grid">
+        {rows.map(([label, count, section], index) => (
+          <div
+            className={`neo-material-compact-row ${index === rows.length - 1 ? "wide" : ""}`}
+            key={label}
+          >
+            <div>
+              <b>{label}</b>
+              <span>{count} files</span>
+            </div>
+            <button
+              className="btn small"
+              type="button"
+              disabled={!brand}
+              onClick={() => onOpenLibrary(section)}
+            >
+              Add
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -667,87 +771,243 @@ type BrandProfileSection =
   | "past"
   | "learning";
 
+const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
+  ["brand", "Brand kit", "Rules, voice, CI, claim guardrails"],
+  ["products", "Products", "Offers, benefits, audience, claim notes"],
+  ["docs", "Documents", "Guidelines, briefs, factsheets, extracted text"],
+  ["refs", "References", "Visual inspiration, avoid, competitors"],
+  ["past", "Past work", "Delivered runs and approved learnings"],
+  ["learning", "Brand learning", "What's working and what to avoid"]
+];
+
 function BrandProfilePanel({
   state,
-  onClose
+  section,
+  onSectionChange
 }: {
   state: WorkflowState;
-  onClose: () => void;
+  section: BrandProfileSection;
+  onSectionChange: (section: BrandProfileSection) => void;
 }) {
-  const [section, setSection] = useState<BrandProfileSection>("brand");
   const brand = state.brand;
-  if (!brand) return null;
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
 
-  const sections: readonly [BrandProfileSection, string, string][] = [
-    ["brand", "Brand kit", "Rules, voice, CI, claim guardrails"],
-    ["products", "Products", "Offers, benefits, audience, claim notes"],
-    ["docs", "Documents", "Guidelines, briefs, factsheets, extracted text"],
-    ["refs", "References", "Visual inspiration, avoid, competitors"],
-    ["past", "Past work", "Delivered runs and approved learnings"],
-    ["learning", "Brand learning", "What's working and what to avoid"]
-  ];
+  if (!brand) {
+    return (
+      <section className="neo-signal-memory-card">
+        <div className="neo-signal-memory-top">
+          <div>
+            <h3>Brand memory</h3>
+            <p>Nothing loaded yet.</p>
+          </div>
+        </div>
+        <div className="neo-signal-memory-content">
+          <div className="neo-signal-memory-empty">
+            <div>
+              <b>No memory loaded.</b>
+              <span>Choose a brand to reveal the signal stack.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <aside className="brand-profile" aria-label="Brand profile">
-      <div className="brand-profile-head">
+    <aside className="neo-signal-memory-card" aria-label="Brand profile">
+      <div className="neo-signal-memory-top">
         <div>
-          <p className="eyebrow">Brand profile</p>
-          <h3>{brand.name}</h3>
-          <p>
-            Manage the memory Neo can use later for hooks, artwork, captions,
-            QA, and learning.
-          </p>
+          <h3>{brand.name} memory</h3>
+          <p>{clientSubtitle(brand)}</p>
         </div>
-        <button className="btn ghost" type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      <div className="brand-profile-grid">
-        <nav className="brand-profile-tabs" aria-label="Brand memory sections">
-          {sections.map(([id, label, description]) => (
+        <nav className="neo-signal-memory-tabs" aria-label="Brand memory sections">
+          {brandProfileSections.map(([id, label, description]) => (
             <button
               key={id}
               className={section === id ? "active" : ""}
               type="button"
-              onClick={() => setSection(id)}
+              title={description}
+              onClick={() => {
+                onSectionChange(id);
+                setMemoryExpanded(false);
+              }}
             >
-              <b>{label}</b>
-              <span>{description}</span>
+              {label}
             </button>
           ))}
         </nav>
-        <div className="brand-profile-body">
-          {section === "brand" ? (
-            <BrandKitMemoryList
-              clientId={brand.id}
-              initialItems={brand.library.brand}
-            />
-          ) : null}
-          {section === "products" ? (
-            <BrandProductsMemoryList clientId={brand.id} />
-          ) : null}
-          {section === "docs" ? (
-            <BrandDocumentsMemoryList
-              clientId={brand.id}
-              libraryItems={brand.library.docs}
-            />
-          ) : null}
-          {section === "refs" ? (
-            <MemoryList
-              title="References"
-              description="Upload visuals or links, then mark them inspiration, avoid, competitor, or past winner."
-              action="Add reference"
-              upload="Upload reference"
-              items={brand.library.refs}
-            />
-          ) : null}
-          {section === "past" ? (
-            <PastWorkPreview state={state} clientId={brand.id} />
-          ) : null}
-          {section === "learning" ? <BrandLearning state={state} /> : null}
+      </div>
+      <div
+        className={`neo-signal-memory-viewport ${memoryExpanded ? "expanded" : "collapsed"}`}
+      >
+        <div className="neo-signal-memory-content">
+          <BrandProfileSectionContent state={state} section={section} />
         </div>
+        {!memoryExpanded ? (
+          <div className="neo-signal-memory-fade">
+            <button
+              type="button"
+              aria-label="See more brand memory"
+              onClick={() => setMemoryExpanded(true)}
+            >
+              See more
+            </button>
+          </div>
+        ) : (
+          <button
+            className="neo-signal-memory-collapse"
+            type="button"
+            aria-label="See less brand memory"
+            onClick={() => setMemoryExpanded(false)}
+          >
+            See less
+          </button>
+        )}
       </div>
     </aside>
+  );
+}
+
+function BrandLibraryModal({
+  state,
+  section,
+  onSectionChange,
+  onClose
+}: {
+  state: WorkflowState;
+  section: BrandProfileSection;
+  onSectionChange: (section: BrandProfileSection) => void;
+  onClose: () => void;
+}) {
+  const brand = state.brand;
+  if (!brand) return null;
+
+  const counts: Record<BrandProfileSection, number> = {
+    brand: brand.library.brand.length,
+    products: brand.library.products.length,
+    docs: brand.library.docs.length,
+    refs: brand.library.refs.length,
+    past: 0,
+    learning: brand.memory.working.length + brand.memory.avoid.length
+  };
+  const activeSection =
+    brandProfileSections.find(([id]) => id === section) ?? brandProfileSections[0];
+
+  return (
+    <div className="output-modal-backdrop neo-library-backdrop" onClick={onClose}>
+      <section
+        className="output-modal neo-material-manager-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="brand-library-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="neo-material-manager-head">
+          <div>
+            <p className="eyebrow">Brand Library</p>
+            <h3 id="brand-library-title">Manage brand materials</h3>
+            <p>
+              Search, organize, update, and remove the source memory used by neo.
+            </p>
+          </div>
+          <button
+            className="neo-material-close"
+            type="button"
+            aria-label="Close brand library"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+        <div className="neo-material-manager-toolbar">
+          <div>
+            <b>{brand.name}</b>
+            <span>Live Brand Memory</span>
+          </div>
+          <span className="pill green">Used in creative context</span>
+        </div>
+        <div className="neo-material-manager-window">
+          <nav className="neo-material-folder-nav" aria-label="Brand library folders">
+            {brandProfileSections.map(([id, label, description], index) => (
+              <button
+                className={`neo-material-folder-btn ${section === id ? "active" : ""}`}
+                type="button"
+                key={id}
+                onClick={() => onSectionChange(id)}
+              >
+                <span className="neo-material-folder-icon" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span>
+                  <b>{label}</b>
+                  <small>
+                    {counts[id]} item{counts[id] === 1 ? "" : "s"} · {description}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </nav>
+          <section className="neo-material-browser">
+            <div className="neo-material-browser-head">
+              <div>
+                <b>{activeSection?.[1]}</b>
+                <span>{activeSection?.[2]}</span>
+              </div>
+              <span>
+                {counts[section]} item{counts[section] === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="neo-material-browser-content">
+              <BrandProfileSectionContent state={state} section={section} />
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BrandProfileSectionContent({
+  state,
+  section
+}: {
+  state: WorkflowState;
+  section: BrandProfileSection;
+}) {
+  const brand = state.brand;
+  if (!brand) return null;
+
+  return (
+    <div className="brand-profile-body">
+      {section === "brand" ? (
+        <BrandKitMemoryList
+          clientId={brand.id}
+          initialItems={brand.library.brand}
+        />
+      ) : null}
+      {section === "products" ? (
+        <BrandProductsMemoryList clientId={brand.id} />
+      ) : null}
+      {section === "docs" ? (
+        <BrandDocumentsMemoryList
+          clientId={brand.id}
+          libraryItems={brand.library.docs}
+        />
+      ) : null}
+      {section === "refs" ? (
+        <MemoryList
+          title="References"
+          description="Upload visuals or links, then mark them inspiration, avoid, competitor, or past winner."
+          action="Add reference"
+          upload="Upload reference"
+          items={brand.library.refs}
+        />
+      ) : null}
+      {section === "past" ? (
+        <PastWorkPreview state={state} clientId={brand.id} />
+      ) : null}
+      {section === "learning" ? <BrandLearning state={state} /> : null}
+    </div>
   );
 }
 
@@ -1052,6 +1312,9 @@ function BrandKitMemoryList({
   const [guidelineError, setGuidelineError] = useState<string | null>(null);
   const [guidelineTextOpen, setGuidelineTextOpen] = useState(false);
   const [guidelineText, setGuidelineText] = useState("");
+  const [expandedMemoryItemIds, setExpandedMemoryItemIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const formOpen = editingId !== null;
 
   useEffect(() => {
@@ -1250,9 +1513,15 @@ function BrandKitMemoryList({
 
   function renderMemoryItem(item: LibraryItem) {
     const visibleDescription = presentBrandMemoryText(item.description).text;
-    const tags = splitBrandKitTags(visibleDescription);
+    const isVisualGuidance =
+      item.title.trim().toLowerCase() === "visual guidance";
+    const expanded = expandedMemoryItemIds.has(item.id);
+    const tags = isVisualGuidance ? null : splitBrandKitTags(visibleDescription);
     return (
-      <article className="memory-item" key={item.id}>
+      <article
+        className={`memory-item ${isVisualGuidance ? "visual-guidance-item" : ""}`}
+        key={item.id}
+      >
         <b>{item.title}</b>
         {tags ? (
           <div className="memory-tags">
@@ -1261,8 +1530,29 @@ function BrandKitMemoryList({
             ))}
           </div>
         ) : (
-          <p className="memory-item-desc">{visibleDescription}</p>
+          <p
+            className={`memory-item-desc ${isVisualGuidance && !expanded ? "collapsed" : ""}`}
+          >
+            {visibleDescription}
+          </p>
         )}
+        {isVisualGuidance ? (
+          <button
+            className="memory-expand-button"
+            type="button"
+            aria-expanded={expanded}
+            onClick={() =>
+              setExpandedMemoryItemIds((current) => {
+                const next = new Set(current);
+                if (expanded) next.delete(item.id);
+                else next.add(item.id);
+                return next;
+              })
+            }
+          >
+            {expanded ? "See less" : "See more"}
+          </button>
+        ) : null}
         <div className="memory-item-actions">
           <span>Usable for AI</span>
           <button
@@ -1378,38 +1668,40 @@ function BrandKitMemoryList({
           )
         }
       />
-      <ColorsCard
-        clientId={clientId}
-        ruleTitle="Colors"
-        label="Primary colors"
-        colorsItem={colorsItem}
-        onSaved={(saved) =>
-          setItems((current) =>
-            current.some((item) => item.id === saved.id)
-              ? current.map((item) => (item.id === saved.id ? saved : item))
-              : [...current, saved]
-          )
-        }
-        onDeleted={(id) =>
-          setItems((current) => current.filter((item) => item.id !== id))
-        }
-      />
-      <ColorsCard
-        clientId={clientId}
-        ruleTitle="Secondary colors"
-        label="Secondary colors"
-        colorsItem={secondaryColorsItem}
-        onSaved={(saved) =>
-          setItems((current) =>
-            current.some((item) => item.id === saved.id)
-              ? current.map((item) => (item.id === saved.id ? saved : item))
-              : [...current, saved]
-          )
-        }
-        onDeleted={(id) =>
-          setItems((current) => current.filter((item) => item.id !== id))
-        }
-      />
+      <section className="brand-colors-section" aria-label="Brand colors">
+        <ColorsCard
+          clientId={clientId}
+          ruleTitle="Colors"
+          label="Primary colors"
+          colorsItem={colorsItem}
+          onSaved={(saved) =>
+            setItems((current) =>
+              current.some((item) => item.id === saved.id)
+                ? current.map((item) => (item.id === saved.id ? saved : item))
+                : [...current, saved]
+            )
+          }
+          onDeleted={(id) =>
+            setItems((current) => current.filter((item) => item.id !== id))
+          }
+        />
+        <ColorsCard
+          clientId={clientId}
+          ruleTitle="Secondary colors"
+          label="Secondary colors"
+          colorsItem={secondaryColorsItem}
+          onSaved={(saved) =>
+            setItems((current) =>
+              current.some((item) => item.id === saved.id)
+                ? current.map((item) => (item.id === saved.id ? saved : item))
+                : [...current, saved]
+            )
+          }
+          onDeleted={(id) =>
+            setItems((current) => current.filter((item) => item.id !== id))
+          }
+        />
+      </section>
       {error ? <p className="memory-error">{error}</p> : null}
       {formOpen ? (
         <div className="memory-form">
@@ -2161,15 +2453,72 @@ const successMetricOptions = [
   { value: "ROAS", description: "Scale revenue" }
 ] as const;
 
+const successMetricObjectives: Record<
+  WorkflowState["successMetric"],
+  string
+> = {
+  CTR: "Awareness",
+  CVR: "Conversion",
+  CPA: "Efficiency",
+  ROAS: "Revenue"
+};
+
 const serviceDescriptions: Record<ServiceType, string> = {
-  "single-static": "One focused feed creative",
-  "album-post": "A swipeable multi-frame story",
+  "single-static": "1:1 or 4:5 performance artwork",
+  "album-post": "4:5 swipeable story",
   "motion-static": "A lightweight animated execution",
   resize: "Adapt approved work to another placement",
-  "ugc-video": "A creator-led vertical video"
+  "ugc-video": "9:16 creator-led video concept"
+};
+
+const briefServiceTypes: readonly ServiceType[] = [
+  "single-static",
+  "ugc-video",
+  "album-post"
+];
+
+const briefServiceLabels: Partial<Record<ServiceType, string>> = {
+  "single-static": "Static",
+  "ugc-video": "UGC",
+  "album-post": "Album"
+};
+
+function briefServiceLabel(service: ServiceType): string {
+  return briefServiceLabels[service] ?? serviceLabels[service];
+}
+
+const briefServiceIcons: Partial<Record<ServiceType, string>> = {
+  "single-static": "ST",
+  "ugc-video": "UG",
+  "album-post": "AL"
+};
+
+type BriefMaterialsSection = "uploads" | "references";
+
+const briefMaterialSections: readonly [
+  BriefMaterialsSection,
+  string,
+  string
+][] = [
+  ["uploads", "Working files", "Files attached specifically to this brief"],
+  ["references", "References", "Select visual context from the brand library"]
+];
+
+const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
+  "main-object": "Main object",
+  product: "Product",
+  "supporting-component": "Supporting component",
+  "client-context": "Client context"
 };
 
 export function BriefStage({ state, dispatch }: StageProps) {
+  const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [materialsSection, setMaterialsSection] =
+    useState<BriefMaterialsSection>("uploads");
+  const [materialUploadPending, setMaterialUploadPending] = useState(false);
+  const [materialUploadError, setMaterialUploadError] = useState<string | null>(
+    null
+  );
   const backAction: WorkflowAction = { type: "set-stage", stage: "start" };
   const generateBlocked = workflowActionBlockReason(state, {
     type: "generate-directions",
@@ -2201,34 +2550,94 @@ export function BriefStage({ state, dispatch }: StageProps) {
 
   const mixItems = creativeMixItems(state);
   const totalDeliverables = totalCreativeMixQuantity(state);
-  const canAddMixItem =
-    totalDeliverables < 6 && mixItems.length < serviceTypes.length;
+  const fixedMixItems = briefServiceTypes
+    .map((service) => mixItems.find((item) => item.service === service))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const fixedMixReady = fixedMixItems.length === briefServiceTypes.length;
+  const materialSummary = [
+    {
+      label: "Brand files",
+      detail: state.attachments.length + state.uploadedMaterials.length
+        ? `${state.attachments.length + state.uploadedMaterials.length} ${pluralize(state.attachments.length + state.uploadedMaterials.length, "file")} attached`
+        : "No files yet"
+    },
+    {
+      label: "Selected references",
+      detail: state.referenceImages.length
+        ? `${state.referenceImages.length} selected`
+        : "None selected"
+    },
+    {
+      label: "Library references",
+      detail: availableReferenceCount
+        ? `${availableReferenceCount} available`
+        : "No references yet"
+    }
+  ];
+
+  useEffect(() => {
+    if (!fixedMixReady) dispatch({ type: "apply-monthly-quota" });
+  }, [dispatch, fixedMixReady]);
+
+  async function handleCreativeMaterialUpload(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    if (state.uploadedMaterials.length + files.length > 8) {
+      setMaterialUploadError("Use up to 8 creative material images per brief.");
+      return;
+    }
+
+    setMaterialUploadPending(true);
+    setMaterialUploadError(null);
+    try {
+      const items = await Promise.all(
+        files.map((file) =>
+          uploadCreativeMaterial({
+            runId: state.id,
+            brandId: state.brand?.id,
+            file
+          })
+        )
+      );
+      dispatch({ type: "add-uploaded-materials", items });
+    } catch (caught) {
+      setMaterialUploadError(
+        caught instanceof Error ? caught.message : "Could not upload the image."
+      );
+    } finally {
+      setMaterialUploadPending(false);
+    }
+  }
 
   return (
     <DecisionCard
-      eyebrow="Brief"
+      eyebrow="02 / Brief"
       title="Shape the creative problem."
-      status={`${state.brand?.name ?? "Brand"} memory active`}
+      helper="Set the mix, define the objective, and choose the one metric this creative set should move."
+      status={state.brand ? `${state.brand.name} context ready` : "Context waiting"}
       statusClass="green"
       className="neo-stage-brief"
       actions={
         <>
           <button
-            className="btn secondary"
+            className="btn ghost"
             type="button"
             onClick={() => dispatch(backAction)}
           >
-            Back
+            ← Back to signal
           </button>
           <button
-            className="btn primary"
+            className="btn orange"
             type="button"
             disabled={Boolean(generateBlocked) || loading}
             title={generateBlocked ?? undefined}
             onClick={generate}
           >
             {loading ? <Spinner /> : null}
-            {loading ? "Generating angles…" : "Generate angles"}
+            {loading ? "Generating angles…" : "Generate angles →"}
           </button>
         </>
       }
@@ -2240,60 +2649,34 @@ export function BriefStage({ state, dispatch }: StageProps) {
             <div className="neo-module-head">
               <div>
                 <h3>Creative mix</h3>
-                <p>Set the deliverable and how many concepts the set needs.</p>
+                <p>{totalDeliverables} deliverables planned</p>
               </div>
-              <span>{totalDeliverables} deliverables</span>
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={() => dispatch({ type: "apply-monthly-quota" })}
+              >
+                Use monthly quota
+              </button>
             </div>
             <div className="neo-plan-rows">
-              {mixItems.map((item, index) => {
-                const label = serviceLabels[item.service];
+              {fixedMixItems.map((item) => {
+                const label = briefServiceLabel(item.service);
                 return (
                   <div className="neo-plan-row" key={item.id}>
                     <span className="neo-type-icon" aria-hidden="true">
-                      {label
-                        .split(" ")
-                        .map((word) => word[0])
-                        .join("")
-                        .slice(0, 2)}
+                      {briefServiceIcons[item.service]}
                     </span>
                     <div className="neo-plan-copy">
-                      <label htmlFor={`creative-mix-service-${item.id}`}>
-                        Content type {index + 1}
-                      </label>
+                      <b>{label}</b>
                       <p>{serviceDescriptions[item.service]}</p>
                     </div>
                     <div className="neo-mix-row-controls">
-                      <select
-                        id={`creative-mix-service-${item.id}`}
-                        aria-label={`Content type ${index + 1}`}
-                        value={item.service}
-                        onChange={(event) =>
-                          dispatch({
-                            type: "set-creative-mix-service",
-                            id: item.id,
-                            service: event.target.value as ServiceType
-                          })
-                        }
-                      >
-                        {serviceTypes.map((service) => (
-                          <option
-                            key={service}
-                            value={service}
-                            disabled={mixItems.some(
-                              (candidate) =>
-                                candidate.id !== item.id &&
-                                candidate.service === service
-                            )}
-                          >
-                            {serviceLabels[service]}
-                          </option>
-                        ))}
-                      </select>
                       <div className="qty">
                         <button
                           type="button"
                           aria-label={`Decrease ${label} quantity`}
-                          disabled={item.quantity <= 1}
+                          disabled={item.quantity <= 0}
                           onClick={() =>
                             dispatch({
                               type: "set-creative-mix-quantity",
@@ -2307,8 +2690,8 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         <input
                           aria-label={`${label} quantity`}
                           type="number"
-                          min={1}
-                          max={6}
+                          min={0}
+                          max={9}
                           value={item.quantity}
                           onChange={(event) =>
                             dispatch({
@@ -2321,7 +2704,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         <button
                           type="button"
                           aria-label={`Increase ${label} quantity`}
-                          disabled={totalDeliverables >= 6}
+                          disabled={totalDeliverables >= 9}
                           onClick={() =>
                             dispatch({
                               type: "set-creative-mix-quantity",
@@ -2333,40 +2716,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
                           +
                         </button>
                       </div>
-                      <button
-                        className="neo-remove-mix-item"
-                        type="button"
-                        aria-label={`Remove ${label}`}
-                        disabled={mixItems.length === 1}
-                        onClick={() =>
-                          dispatch({
-                            type: "remove-creative-mix-item",
-                            id: item.id
-                          })
-                        }
-                      >
-                        ×
-                      </button>
                     </div>
                   </div>
                 );
               })}
-              <div className="neo-add-mix-row">
-                <button
-                  className="btn secondary"
-                  type="button"
-                  aria-label="Add item"
-                  disabled={!canAddMixItem}
-                  onClick={() => dispatch({ type: "add-creative-mix-item" })}
-                >
-                  + Add item
-                </button>
-                <span>
-                  {totalDeliverables >= 6
-                    ? "Maximum 6 deliverables per creative set"
-                    : "Add another content type and set its quantity"}
-                </span>
-              </div>
             </div>
           </section>
           <section className="neo-workflow-module brief-editor-module">
@@ -2375,10 +2728,14 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 <h3>Creative brief</h3>
                 <p>One clear problem. One clear outcome.</p>
               </div>
-              <span>{state.brief.length} chars</span>
             </div>
             <div className="textarea-wrap">
-              <label htmlFor="brief">Working brief</label>
+              <label className="neo-brief-field-label" htmlFor="brief">
+                <span>Working brief</span>
+                <span className="neo-brief-char-count">
+                  {state.brief.length} chars
+                </span>
+              </label>
               <textarea
                 id="brief"
                 value={state.brief}
@@ -2433,43 +2790,225 @@ export function BriefStage({ state, dispatch }: StageProps) {
             <h3>Creative principle</h3>
             <p>
               Distinctive beats decorative. Each idea should be recognizable in
-              one second and clear in one sentence.
+              one second and arguable in one sentence.
             </p>
           </section>
           <section className="neo-context-card neo-material-card">
-            <div className="neo-context-card-head">
-              <div>
-                <h3>Uploaded materials</h3>
-                <p>{state.attachments.length} working files attached</p>
-              </div>
-              <label className="btn secondary small">
-                Add files
-                <input
-                  className="file-input"
-                  type="file"
-                  multiple
-                  onChange={(event) =>
-                    dispatch({
-                      type: "attach-files",
-                      names: getFileNames(event.target.files)
-                    })
-                  }
-                />
-              </label>
-            </div>
-            {state.attachments.length ? (
-              <div className="chips neo-attachment-chips">
-                {state.attachments.map((name) => (
-                  <span className="chip" key={name}>
-                    {name}
+            <h3>Uploaded materials</h3>
+            <button
+              className="neo-material-summary-open"
+              type="button"
+              aria-label="Manage uploaded materials"
+              onClick={() => setMaterialsOpen(true)}
+            >
+              <span className="neo-material-summary">
+                {materialSummary.map((item) => (
+                  <span className="neo-material-summary-line" key={item.label}>
+                    <b>{item.label}</b>
+                    <span>{item.detail}</span>
                   </span>
                 ))}
-              </div>
-            ) : null}
+              </span>
+            </button>
           </section>
-          <ReferenceLibraryPicker state={state} dispatch={dispatch} />
         </aside>
       </div>
+      {materialsOpen ? (
+        <div
+          className="output-modal-backdrop neo-library-backdrop"
+          onClick={() => setMaterialsOpen(false)}
+        >
+          <section
+            className="output-modal neo-material-manager-modal neo-brief-material-manager"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="brief-materials-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="neo-material-manager-head">
+              <div>
+                <p className="eyebrow">Brief materials</p>
+                <h3 id="brief-materials-title">Uploaded materials</h3>
+                <p>
+                  Manage working files and choose the visual references attached
+                  to this creative brief.
+                </p>
+              </div>
+              <button
+                className="neo-material-close"
+                type="button"
+                aria-label="Close uploaded materials"
+                onClick={() => setMaterialsOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="neo-material-manager-toolbar">
+              <div>
+                <b>{state.brand?.name ?? "Current brief"}</b>
+                <span>Creative input library</span>
+              </div>
+              <span className="pill green">Used in this generation</span>
+            </div>
+            <div className="neo-material-manager-window">
+              <nav
+                className="neo-material-folder-nav"
+                aria-label="Uploaded material folders"
+              >
+                {briefMaterialSections.map(([id, label, description], index) => {
+                  const count =
+                    id === "uploads"
+                      ? state.attachments.length + state.uploadedMaterials.length
+                      : state.referenceImages.length;
+                  return (
+                    <button
+                      className={`neo-material-folder-btn ${materialsSection === id ? "active" : ""}`}
+                      type="button"
+                      key={id}
+                      onClick={() => setMaterialsSection(id)}
+                    >
+                      <span className="neo-material-folder-icon" aria-hidden="true">
+                        {index + 1}
+                      </span>
+                      <span>
+                        <b>{label}</b>
+                        <small>
+                          {count} item{count === 1 ? "" : "s"} · {description}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+              <section className="neo-material-browser">
+                <div className="neo-material-browser-head">
+                  <div>
+                    <b>
+                      {materialsSection === "uploads"
+                        ? "Working files"
+                        : "References"}
+                    </b>
+                    <span>
+                      {materialsSection === "uploads"
+                        ? "Upload products or client materials and tell Neo how each image should be used."
+                        : "Choose the approved visual context for generation."}
+                    </span>
+                  </div>
+                  <span>
+                    {materialsSection === "uploads"
+                      ? state.attachments.length + state.uploadedMaterials.length
+                      : state.referenceImages.length}{" "}
+                    selected
+                  </span>
+                </div>
+                <div className="neo-material-browser-content">
+                  {materialsSection === "uploads" ? (
+                    <div className="neo-brief-material-modal-body">
+                      <div className="neo-creative-material-upload-row">
+                      <label className="btn secondary neo-brief-add-files">
+                        {materialUploadPending ? "Uploading…" : "Add product / client images"}
+                        <input
+                          className="file-input"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          multiple
+                          disabled={materialUploadPending}
+                          onChange={handleCreativeMaterialUpload}
+                        />
+                      </label>
+                      <label className="neo-brief-document-upload">
+                        Attach other files
+                        <input
+                          className="file-input"
+                          type="file"
+                          multiple
+                          onChange={(event) =>
+                            dispatch({
+                              type: "attach-files",
+                              names: getFileNames(event.target.files)
+                            })
+                          }
+                        />
+                      </label>
+                      </div>
+                      <p className="neo-creative-material-helper">
+                        The Hook agent will inspect these images before proposing ideas. The image agent will receive them as source references.
+                      </p>
+                      {materialUploadError ? (
+                        <p className="error-text" role="alert">{materialUploadError}</p>
+                      ) : null}
+                      {state.uploadedMaterials.length ? (
+                        <div className="neo-creative-material-grid">
+                          {state.uploadedMaterials.map((material) => (
+                            <article className="neo-creative-material-card" key={material.id}>
+                              <img src={material.url} alt={material.name} />
+                              <div className="neo-creative-material-fields">
+                                <div className="neo-creative-material-name">
+                                  <b>{material.name}</b>
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove ${material.name}`}
+                                    onClick={() => dispatch({ type: "remove-uploaded-material", id: material.id })}
+                                  >×</button>
+                                </div>
+                                <label>
+                                  Use as
+                                  <select
+                                    value={material.role}
+                                    onChange={(event) => dispatch({
+                                      type: "update-uploaded-material",
+                                      id: material.id,
+                                      changes: { role: event.target.value as CreativeMaterialRole }
+                                    })}
+                                  >
+                                    {creativeMaterialRoles.map((role) => (
+                                      <option value={role} key={role}>{creativeMaterialRoleLabels[role]}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  Usage note <span>(optional)</span>
+                                  <input
+                                    value={material.description}
+                                    placeholder="e.g. Keep this bottle as the hero object"
+                                    onChange={(event) => dispatch({
+                                      type: "update-uploaded-material",
+                                      id: material.id,
+                                      changes: { description: event.target.value }
+                                    })}
+                                  />
+                                </label>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : null}
+                      {state.attachments.length ? (
+                        <div className="chips neo-attachment-chips">
+                          {state.attachments.map((name) => (
+                            <span className="chip" key={name}>
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : !state.uploadedMaterials.length ? (
+                        <div className="neo-signal-memory-empty">
+                          <div>
+                            <b>No working files attached.</b>
+                            <span>Add only files that should influence this brief.</span>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <ReferenceLibraryPicker state={state} dispatch={dispatch} />
+                  )}
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </DecisionCard>
   );
 }
@@ -2932,6 +3471,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     string | null
   >(null);
   const [regeneratingAll, setRegeneratingAll] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [moreComposerOpen, setMoreComposerOpen] = useState(false);
   const [exportingAngles, setExportingAngles] = useState(false);
   const [exportAnglesError, setExportAnglesError] = useState<string | null>(null);
   const {
@@ -2958,6 +3499,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
   function handleGenerateMore() {
     generateMore(moreInstructions);
     setMoreInstructions("");
+    setMoreComposerOpen(false);
   }
 
   async function handleExportAngles() {
@@ -3030,95 +3572,80 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <div className="artwork-mode-picker neo-angle-mode-picker">
-        <div>
-          <h3>Artwork mode.</h3>
-          <p>
-            {state.artworkMode === "design-system"
-              ? "Full creative-direction workflow with reference forensics, concept selection, art direction, and preserve rules."
-              : "Current Neo artwork prompt and generation behavior."}
-          </p>
+      <section className="neo-angle-settings" aria-label="Artwork settings">
+        <div className="neo-angle-setting neo-angle-mode-setting">
+          <span className="neo-angle-setting-label">Artwork mode</span>
+          <div
+            className="neo-angle-mode-options"
+            role="group"
+            aria-label="Artwork generation mode"
+          >
+            <button
+              className={state.artworkMode === "standard" ? "active" : ""}
+              type="button"
+              disabled={creating}
+              aria-pressed={state.artworkMode === "standard"}
+              onClick={() =>
+                dispatch({ type: "set-artwork-mode", mode: "standard" })
+              }
+            >
+              Standard
+            </button>
+            <button
+              className={state.artworkMode === "design-system" ? "active" : ""}
+              type="button"
+              disabled={creating}
+              aria-pressed={state.artworkMode === "design-system"}
+              onClick={() =>
+                dispatch({ type: "set-artwork-mode", mode: "design-system" })
+              }
+            >
+              Design system
+            </button>
+          </div>
         </div>
-        <div
-          className="dir-tool-btns"
-          role="group"
-          aria-label="Artwork generation mode"
-        >
-          <button
-            className={`btn small ${state.artworkMode === "standard" ? "primary" : "secondary"}`}
-            type="button"
+        <label className="neo-angle-setting">
+          <span className="neo-angle-setting-label">Image prompt model</span>
+          <select
+            className="neo-angle-model-select"
+            aria-label="Image prompt model"
+            value={state.imagePromptModel}
             disabled={creating}
-            aria-pressed={state.artworkMode === "standard"}
-            onClick={() =>
-              dispatch({ type: "set-artwork-mode", mode: "standard" })
+            onChange={(event) =>
+              dispatch({
+                type: "set-image-prompt-model",
+                model: event.target.value as WorkflowState["imagePromptModel"]
+              })
             }
           >
-            Standard
-          </button>
-          <button
-            className={`btn small ${state.artworkMode === "design-system" ? "primary" : "secondary"}`}
-            type="button"
-            disabled={creating}
-            aria-pressed={state.artworkMode === "design-system"}
-            onClick={() =>
-              dispatch({ type: "set-artwork-mode", mode: "design-system" })
-            }
-          >
-            Design system
-          </button>
-        </div>
-      </div>
-      <div className="artwork-mode-picker neo-angle-model-picker">
-        <div>
-          <h3>Image prompt model.</h3>
-          <p>
-            {state.imagePromptModel === "anthropic/claude-sonnet-4.6"
-              ? "Claude Sonnet 4.6 writes the art direction through OpenRouter."
-              : "GPT 5.6 writes the art direction through OpenAI."}
-          </p>
-        </div>
-        <select
-          className="neo-angle-model-select"
-          aria-label="Image prompt model"
-          value={state.imagePromptModel}
-          disabled={creating}
-          onChange={(event) =>
-            dispatch({
-              type: "set-image-prompt-model",
-              model: event.target.value as WorkflowState["imagePromptModel"]
-            })
-          }
-        >
-          <option value="gpt-5.6-terra">GPT 5.6 (OpenAI)</option>
-          <option value="anthropic/claude-sonnet-4.6">
-            Claude Sonnet 4.6 (OpenRouter)
-          </option>
-        </select>
-      </div>
-      <div className="artwork-mode-picker neo-angle-size-picker">
-        <div>
-          <h3>Output size.</h3>
-          <p>Choose the canvas size Neo should send to image generation.</p>
-        </div>
-        <select
-          className="neo-angle-model-select"
-          aria-label="Output size"
-          value={state.outputSize}
-          disabled={creating}
-          onChange={(event) =>
-            dispatch({
-              type: "set-output-size",
-              size: event.target.value as WorkflowState["outputSize"]
-            })
-          }
-        >
-          {artworkOutputSizes.map((size) => (
-            <option key={size} value={size}>
-              {artworkOutputSizeLabel(size)}
+            <option value="gpt-5.6-terra">GPT 5.6 (OpenAI)</option>
+            <option value="anthropic/claude-sonnet-4.6">
+              Claude Sonnet 4.6 (OpenRouter)
             </option>
-          ))}
-        </select>
-      </div>
+          </select>
+        </label>
+        <label className="neo-angle-setting neo-angle-size-setting">
+          <span className="neo-angle-setting-label">Output size</span>
+          <select
+            className="neo-angle-model-select"
+            aria-label="Output size"
+            value={state.outputSize}
+            disabled={creating}
+            onChange={(event) =>
+              dispatch({
+                type: "set-output-size",
+                size: event.target.value as WorkflowState["outputSize"]
+              })
+            }
+          >
+            {artworkOutputSizes.map((size) => (
+              <option key={size} value={size}>
+                {artworkOutputSizeLabel(size)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       <div className="direction-tools neo-angle-toolbar">
         <div>
           <h3>Review recommended hooks</h3>
@@ -3127,51 +3654,97 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             for this mix.
           </p>
         </div>
-        <div className="dir-tool-btns">
+        <div className="neo-angle-toolbar-actions">
           <button
-            className="btn secondary"
-            type="button"
-            disabled={exportingAngles || state.directions.length === 0}
-            onClick={() => void handleExportAngles()}
-          >
-            {exportingAngles ? <Spinner /> : null}
-            {exportingAngles ? "Exporting…" : "Export PDF"}
-          </button>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={regeneratingAllHooks || Boolean(regeneratingHookId)}
-            onClick={() => setRegeneratingAll(true)}
-          >
-            {regeneratingAllHooks ? <Spinner /> : null}
-            {regeneratingAllHooks ? "Regenerating all…" : "Regenerate all"}
-          </button>
-          <button
-            className="btn secondary"
+            className="btn primary small"
             type="button"
             onClick={() => dispatch(autoSelectAction)}
           >
             Let Neo pick
           </button>
+          <div className="neo-angle-overflow">
+            <button
+              className="neo-angle-overflow-trigger"
+              type="button"
+              aria-label="More hook actions"
+              aria-haspopup="menu"
+              aria-expanded={actionsMenuOpen}
+              onClick={() => setActionsMenuOpen((open) => !open)}
+            >
+              <span aria-hidden="true">•••</span>
+            </button>
+            {actionsMenuOpen ? (
+              <div className="neo-angle-overflow-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={exportingAngles || state.directions.length === 0}
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    void handleExportAngles();
+                  }}
+                >
+                  <span>Export PDF</span>
+                  <small>Download the grouped review</small>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={regeneratingAllHooks || Boolean(regeneratingHookId)}
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    setRegeneratingAll(true);
+                  }}
+                >
+                  <span>Regenerate all</span>
+                  <small>Rewrite every hook with a new tone</small>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={generatingMore || regeneratingAllHooks}
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    setMoreComposerOpen(true);
+                  }}
+                >
+                  <span>Generate more</span>
+                  <small>Add another round of directions</small>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
-      <div className="direction-generate-more neo-angle-generate-more">
-        <input
-          value={moreInstructions}
-          disabled={generatingMore || regeneratingAllHooks}
-          placeholder="Add more direction for this round (optional)"
-          onChange={(event) => setMoreInstructions(event.target.value)}
-        />
-        <button
-          className="btn secondary"
-          type="button"
-          disabled={generatingMore || regeneratingAllHooks}
-          onClick={handleGenerateMore}
-        >
-          {generatingMore ? <Spinner /> : null}
-          {generatingMore ? "Generating more…" : "Generate more"}
-        </button>
-      </div>
+      {moreComposerOpen ? (
+        <div className="direction-generate-more neo-angle-generate-more">
+          <input
+            autoFocus
+            value={moreInstructions}
+            disabled={generatingMore || regeneratingAllHooks}
+            placeholder="Add direction for the next round (optional)"
+            onChange={(event) => setMoreInstructions(event.target.value)}
+          />
+          <button
+            className="btn primary small"
+            type="button"
+            disabled={generatingMore || regeneratingAllHooks}
+            onClick={handleGenerateMore}
+          >
+            {generatingMore ? <Spinner /> : null}
+            {generatingMore ? "Generating…" : "Generate"}
+          </button>
+          <button
+            className="neo-angle-composer-close"
+            type="button"
+            aria-label="Close generate more"
+            disabled={generatingMore}
+            onClick={() => setMoreComposerOpen(false)}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       {generateMoreError ? (
         <p className="repository-message error">{generateMoreError}</p>
       ) : null}
@@ -3232,7 +3805,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </span>
                 </div>
                 <p className="neo-angle-meta-line">
-                  Creative direction <b>· {state.successMetric}</b>
+                  Creative concept
+                  <b> · {successMetricObjectives[state.successMetric]}</b>
                 </p>
               </div>
               <div className="neo-angle-top-actions">
@@ -3277,8 +3851,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             </div>
             <div className="neo-angle-card-foot">
               <span className="neo-angle-number-pill">
-                <b>{String(originalIndex + 1).padStart(2, "0")}</b>
-                <small>angle</small>
+                <b>
+                  {typeof direction.score === "number"
+                    ? Math.round(direction.score)
+                    : String(originalIndex + 1).padStart(2, "0")}
+                </b>
+                <small>{typeof direction.score === "number" ? "score" : "angle"}</small>
               </span>
               <div className="direction-card-actions">
                 <button
@@ -3464,6 +4042,69 @@ function HookEditModal({
             <input
               value={draft.cta}
               onChange={(event) => update("cta", event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Supporting points (one per line)</span>
+            <textarea
+              rows={4}
+              value={(draft.supportingPoints ?? []).join("\n")}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  supportingPoints: event.target.value
+                    .split("\n")
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                    .slice(0, 3)
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>CTA action</span>
+            <select
+              value={draft.ctaActionType ?? "other"}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  ctaActionType: event.target.value as NonNullable<
+                    typeof current.ctaActionType
+                  >
+                }))
+              }
+            >
+              <option value="website">Website</option>
+              <option value="line">LINE</option>
+              <option value="phone">Phone</option>
+              <option value="form">Form</option>
+              <option value="inbox">Inbox</option>
+              <option value="store">Store</option>
+              <option value="other">Other / not verified</option>
+            </select>
+          </label>
+          <label>
+            <span>Verified CTA destination</span>
+            <input
+              value={draft.ctaDestination ?? ""}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  ctaDestination: event.target.value
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Verified contact / footer line</span>
+            <input
+              value={draft.contactLine ?? ""}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  contactLine: event.target.value
+                }))
+              }
             />
           </label>
           <label>
@@ -4037,9 +4678,23 @@ function OutputRegenerateModal({
   );
 }
 
-function OutputCaptionText({ caption }: { caption: string | undefined }) {
+function OutputCaptionText({
+  caption,
+  scrollable = false
+}: {
+  caption: string | undefined;
+  scrollable?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   if (!caption) return null;
+
+  if (scrollable) {
+    return (
+      <p className="neo-caption-scroll" tabIndex={0}>
+        {caption}
+      </p>
+    );
+  }
 
   return (
     <>
@@ -4532,7 +5187,7 @@ function QcSlide({
         {direction?.caption ? (
           <div className="neo-qc-focus-caption">
             <span>Caption</span>
-            <OutputCaptionText caption={direction.caption} />
+            <OutputCaptionText caption={direction.caption} scrollable />
           </div>
         ) : null}
       </div>

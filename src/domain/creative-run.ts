@@ -72,6 +72,16 @@ export function artworkOutputSizeLabel(size: ArtworkOutputSize): string {
 }
 export const angleExportGroups = ["recommended", "option"] as const;
 export type AngleExportGroup = (typeof angleExportGroups)[number];
+export const ctaActionTypes = [
+  "website",
+  "line",
+  "phone",
+  "form",
+  "inbox",
+  "store",
+  "other"
+] as const;
+export type CtaActionType = (typeof ctaActionTypes)[number];
 export type ReviewDecision = "approved" | "rejected" | null;
 export type ClientReviewStatus = "queued" | "sent" | "revision" | "approved";
 
@@ -95,6 +105,25 @@ export interface ReferenceImageSelection {
   label: string;
 }
 
+export const creativeMaterialRoles = [
+  "main-object",
+  "product",
+  "supporting-component",
+  "client-context"
+] as const;
+export type CreativeMaterialRole = (typeof creativeMaterialRoles)[number];
+
+export interface UploadedCreativeMaterial {
+  id: string;
+  name: string;
+  mediaType: string;
+  role: CreativeMaterialRole;
+  description: string;
+  url: string;
+  storagePath?: string;
+  storageBucket?: string;
+}
+
 export interface CreativeDirection {
   id: string;
   /** Deliverable this direction was written for. Optional for saved legacy runs. */
@@ -110,7 +139,16 @@ export interface CreativeDirection {
   why: string;
   visual: string;
   cta: string;
+  /** Short, verified facts that may support the caption or one artwork text block. */
+  supportingPoints?: readonly string[];
+  /** Intended conversion route for the CTA. Optional for saved legacy runs. */
+  ctaActionType?: CtaActionType;
+  /** Verified destination copied from brand context. Never generated from inference. */
+  ctaDestination?: string;
+  /** Reusable contact/footer line copied exactly from verified brand inputs or past posts. */
+  contactLine?: string;
   caption: string;
+  score?: number;
   selected: boolean;
 }
 

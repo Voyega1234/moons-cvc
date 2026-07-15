@@ -3,6 +3,6 @@ export const UI_TIMING = {
 } as const;
 
 export const QUANTITY_LIMITS = {
-  minimum: 1,
-  maximum: 6
+  minimum: 0,
+  maximum: 9
 } as const;

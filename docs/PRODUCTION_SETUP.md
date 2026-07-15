@@ -37,6 +37,18 @@ https://moons-cvc.vercel.app/
 Moons passes this URL as `emailRedirectTo` for every non-local sign-in. Local
 development sign-ins continue to return to their active localhost origin.
 
+In Supabase Auth → Providers → Email, keep the Email provider enabled. Neo now
+uses email/password accounts rather than magic-link-only login. New account
+creation in the UI is limited to `@convertcake.com`, matching the existing
+`moons.is_convert_cake_user()` RLS policy and server authorization checks.
+
+Keep **Confirm email** enabled in production. Confirmation and password-reset
+emails return to the configured URL above; password recovery adds the
+`?reset-password=1` query string. Configure production SMTP in Supabase before
+inviting the wider team so confirmation and reset messages are delivered from
+the approved sender. Existing magic-link users can choose **Forgot password?**
+to establish their first password.
+
 Do not expose the Supabase service role key in Vite/client env.
 
 Backend/worker-only secrets for client ingestion:

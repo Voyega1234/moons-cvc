@@ -2,7 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  ctaActionTypes,
   serviceTypes,
+  type CtaActionType,
   type ServiceType
 } from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
@@ -39,10 +41,16 @@ export interface HookGenerationHarnessEndpointOptions {
   loadAgentHookPrompt?: () => Promise<string>;
 }
 
-type ResponseContent = {
-  type: "input_text";
-  text: string;
-};
+type ResponseContent =
+  | {
+      type: "input_text";
+      text: string;
+    }
+  | {
+      type: "input_image";
+      image_url: string;
+      detail: "high";
+    };
 
 interface HookResearchReference {
   name: string;
@@ -74,6 +82,10 @@ interface GeneratedDirection extends RawDirection {
   why: string;
   visual: string;
   cta: string;
+  supportingPoints: readonly string[];
+  ctaActionType: CtaActionType;
+  ctaDestination: string;
+  contactLine: string;
   caption: string;
   score: number;
   reasoning: string;
@@ -259,7 +271,12 @@ async function runGenerationStep({
       {
         type: "input_text",
         text: buildGenerationPrompt(input, research, pastPosts, agentHookPrompt)
-      }
+      },
+      ...input.uploadedMaterials.map((material) => ({
+        type: "input_image" as const,
+        image_url: material.url,
+        detail: "high" as const
+      }))
     ],
     schemaName: "moons_hook_generation",
     schema: hookGenerationSchema
@@ -423,6 +440,12 @@ function buildGenerationPrompt(
     "",
     "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
     "",
+    ...(input.uploadedMaterials.length
+      ? [
+          "UPLOADED CREATIVE MATERIALS: inspect every attached image. Build ideas that can genuinely use the visible product/client material. Treat a main-object or product image as an available source object, not loose inspiration. Supporting components may shape the execution without becoming the hero. Never claim an object, feature, or detail that is not visible or stated in the input.",
+          ""
+        ]
+      : []),
     "CONCEPT STRATEGY: ทุก concept ต้องเชื่อมโยงชัดเจน User Brief → Audience Insight → Product Focus → Strategic Angle → Headline โดยเริ่มจาก audience moment/tension/desire/objection ที่จำเพาะ ไม่ใช่เริ่มจาก product feature ตรงๆ ใช้มุมที่หลากหลาย เช่น pain-led, insight-led, desire-led, trust-building, objection-handling, offer-led, contrast, proof-led, before-after — เลือกเฉพาะมุมที่เหมาะกับแบรนด์และ brief จริงๆ",
     "",
     "HEADLINE STANDARD: สื่อความคิดเดียวชัดเจน อ่านแล้วเข้าใจทันที ฟังดูเป็นธรรมชาติเมื่ออ่านออกเสียง จำเพาะกับแบรนด์และ audience มีเหตุผลจริงที่ทำให้คนหยุดเลื่อน กระชับแต่ไม่แห้งจนไร้อารมณ์ ปกติยาวประมาณ 6-13 คำภาษาไทย ห้ามใช้ ellipsis, วงเล็บ, ประโยคคำถามเชิงวาทศิลป์ยาวๆ, โครงสร้าง \"เพราะ...จึง...\", การเรียงคำแบบ keyword stacking, สัมผัสเสแสร้ง ห้ามใช้วลีสำเร็จรูปเช่น ตอบโจทย์ทุกความต้องการ / ครบจบในที่เดียว / คุ้มกว่าที่เคย / ดีที่สุดสำหรับคุณ / เพื่อคุณโดยเฉพาะ / ยกระดับประสบการณ์ / ห้ามพลาด / โปรสุดคุ้ม / ราคาโดนใจ / เหนือระดับ / พรีเมียมเหนือใคร",
@@ -439,12 +462,25 @@ function buildGenerationPrompt(
     "",
     "Caption ต้อง:",
     "- เขียนในฐานะที่คุณคือ copywriter ประจำเพจนี้ ไม่ใช่นักเขียนภายนอก",
-    "- ศึกษาตัวอย่างโพสต์/แคปชั่นเก่าของเพจด้านล่าง แล้วเลียนแบบ tone, โครงสร้างประโยค, การเว้นบรรทัด, footer/signature, hashtag, emoji และวิธีปิดท้ายด้วย CTA ให้เหมือนเพจนี้เขียนเอง",
+    "- วิเคราะห์ตัวอย่างโพสต์/แคปชั่นจริงด้านล่างเป็นชุด ไม่ใช่อ่านแค่โพสต์เดียว: หา pattern ที่เกิดซ้ำของ opening, paragraph length, line breaks, bullets, emoji, hashtag, footer/signature, contact details และวิธีปิดท้ายด้วย CTA",
+    "- เขียน caption ใหม่ด้วย format และจังหวะภาษาที่พบจริงในอดีตของเพจ โดยคง footer/contact ที่เกิดซ้ำในโพสต์ส่วนใหญ่ไว้ในตำแหน่งเดิมและสะกดเหมือนต้นฉบับทุกตัวอักษร",
+    "- ห้ามคัดลอกใจความ campaign เก่า แต่ให้เรียนรู้โครงสร้างการเขียนและองค์ประกอบประจำเพจ",
+    "- ถ้า contact/footer พบเพียงครั้งเดียวหรือหลักฐานไม่ตรงกัน ห้ามเดาและให้ contactLine เป็น string ว่าง",
+    "- นำ supportingPoints ที่เกี่ยวข้องมาร้อยเป็น caption อย่างเป็นธรรมชาติ โดยไม่ยัดทุกข้อถ้าไม่เข้ากับ format ประจำเพจ",
     "- ถ้าไม่มีตัวอย่างโพสต์เก่า ให้ยึดโทนจาก Brand Memory และ Brief แทน",
     "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' ใน caption แม้ตัวอย่างโพสต์เก่าจะใช้",
     "",
+    "Supporting points และ business details ต้อง:",
+    "- supportingPoints มี 0-3 ข้อ เป็น facts, proof, service details หรือ offer mechanics ที่สั้นและช่วยให้สร้าง caption/artwork ได้จริง",
+    "- ใช้เฉพาะข้อมูลที่มีหลักฐานตรงจาก Brief, Brand kit, Products, Documents หรือโพสต์จริง ห้ามสร้างราคา โปรโมชัน สถิติ ช่องทางติดต่อ หรือ claim ใหม่",
+    "- contactLine ต้องเป็นบรรทัด contact/footer ที่คัดลอกตรงจากข้อมูลจริงและเกิดซ้ำอย่างสม่ำเสมอ; ถ้าไม่แน่ใจให้คืน string ว่าง",
+    "",
     "CTA ต้อง:",
-    "- สั้น ตรงประเด็น เป็นคำสั่งให้ทำ action ชัดเจน ปกติ 2-5 คำ เช่น 'ลงทะเบียนฟรี', 'ดูรายละเอียด', 'รับข้อเสนอ'",
+    "- เป็น action + object ที่ชัดและเข้ากับ brand, offer และ conversion route ปกติ 2-7 คำ เช่น 'ดูแพ็กเกจ SEO', 'จองเวลาปรึกษา', 'ขอแผนแคมเปญ'",
+    "- ห้ามใช้ CTA กว้างๆ ที่ไม่บอกว่าจะได้อะไร เช่น 'ดูที่นี่', 'คลิกที่นี่', 'สนใจทัก', 'ดูเพิ่มเติม'",
+    "- เรียนรู้คำและรูปแบบ CTA จากโพสต์จริงของแบรนด์เมื่อมีหลักฐาน แต่ต้องสัมพันธ์กับ direction ใหม่",
+    "- ctaActionType ต้องเป็น website, line, phone, form, inbox, store หรือ other",
+    "- ctaDestination ใส่เฉพาะ URL, เบอร์, LINE ID, inbox หรือปลายทางที่ปรากฏตรงๆ ใน input/โพสต์จริงเท่านั้น ถ้าไม่มีให้คืน string ว่าง",
     "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' และห้ามเขียน CTA เป็นประโยคยาว",
     "",
     "Silent internal process (ห้าม output ขั้นตอนนี้ออกมา):",
@@ -452,7 +488,7 @@ function buildGenerationPrompt(
     "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
     "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
     `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
-    "5. ใส่ concept, why, visual, CTA, caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
+    "5. ใส่ concept, why, visual, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
     "",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
     "",
@@ -465,9 +501,9 @@ function buildGenerationPrompt(
     "",
     "## Neo output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; cta = copywriting.cta; caption = combine sub_headline_1, sub_headline_2 when present, and bullets into natural Thai caption copy.",
+    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; supportingPoints = only verified useful detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
-    "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a short, direct action phrase, not a complete sentence.",
+    "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
     "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response. The schema's service field is required."
   ].join("\n");
 }
@@ -510,7 +546,7 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
   }
 
   return [
-    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (ใช้ศึกษาสไตล์การเขียน caption เท่านั้น ห้ามคัดลอกเนื้อหา):",
+    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (วิเคราะห์ร่วมกันเพื่อหา format และรายละเอียดที่เกิดซ้ำ ห้ามคัดลอกใจความ campaign):",
     ...pastPosts.map(
       (post, index) =>
         `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
@@ -574,7 +610,13 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     ),
     "",
     "Attached file names:",
-    ...input.attachments.map((item) => `- ${item}`)
+    ...input.attachments.map((item) => `- ${item}`),
+    "",
+    "Uploaded creative image materials (the images follow this text in the same order):",
+    ...input.uploadedMaterials.map(
+      (item, index) =>
+        `${index + 1}. ${item.name} | role=${item.role} | usage note=${item.description || "No additional note"}`
+    )
   ].join("\n");
 }
 
@@ -668,6 +710,10 @@ const hookGenerationSchema = {
           why: { type: "string" },
           visual: { type: "string" },
           cta: { type: "string" },
+          supportingPoints: stringArraySchema,
+          ctaActionType: { type: "string", enum: ctaActionTypes },
+          ctaDestination: { type: "string" },
+          contactLine: { type: "string" },
           caption: { type: "string" },
           score: { type: "number" },
           reasoning: { type: "string" },
@@ -682,6 +728,10 @@ const hookGenerationSchema = {
           "why",
           "visual",
           "cta",
+          "supportingPoints",
+          "ctaActionType",
+          "ctaDestination",
+          "contactLine",
           "caption",
           "score",
           "reasoning",
@@ -725,6 +775,7 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   const quantity = readNumber(value.quantity, "quantity");
   const brief = readString(value.brief, "brief");
   const attachments = readStringArray(value.attachments, "attachments");
+  const uploadedMaterials = readUploadedMaterials(value.uploadedMaterials);
   const brandMemory = readRecord(value.brandMemory, "brandMemory");
   const brandLibrary = readRecord(value.brandLibrary, "brandLibrary");
 
@@ -747,6 +798,7 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
         : "",
     existingHooks: readExistingHooks(value.existingHooks),
     attachments,
+    uploadedMaterials,
     brandMemory: {
       working: readStringArray(brandMemory.working, "brandMemory.working"),
       avoid: readStringArray(brandMemory.avoid, "brandMemory.avoid")
@@ -761,6 +813,48 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readUploadedMaterials(
+  value: unknown
+): HookGenerationHarnessRequest["uploadedMaterials"] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("uploadedMaterials must be an array.");
+  }
+  if (value.length > 8) {
+    throw new Error("uploadedMaterials supports up to 8 images.");
+  }
+
+  const roles = new Set([
+    "main-object",
+    "product",
+    "supporting-component",
+    "client-context"
+  ]);
+  return value.map((candidate, index) => {
+    const item = readRecord(candidate, `uploadedMaterials[${index}]`);
+    const role = readString(item.role, `uploadedMaterials[${index}].role`);
+    const url = readString(item.url, `uploadedMaterials[${index}].url`);
+    if (!roles.has(role)) {
+      throw new Error(`uploadedMaterials[${index}].role is invalid.`);
+    }
+    if (!/^https?:\/\//i.test(url) && !/^data:image\//i.test(url)) {
+      throw new Error(`uploadedMaterials[${index}].url must be an image URL.`);
+    }
+    return {
+      id: readString(item.id, `uploadedMaterials[${index}].id`),
+      name: readString(item.name, `uploadedMaterials[${index}].name`),
+      mediaType: readString(
+        item.mediaType,
+        `uploadedMaterials[${index}].mediaType`
+      ),
+      role: role as HookGenerationHarnessRequest["uploadedMaterials"][number]["role"],
+      description:
+        typeof item.description === "string" ? item.description.trim() : "",
+      url
+    };
+  });
 }
 
 function readExistingHooks(
@@ -912,6 +1006,34 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         why: readString(direction.why, `directions[${index}].why`),
         visual: readString(direction.visual, `directions[${index}].visual`),
         cta: readString(direction.cta, `directions[${index}].cta`),
+        supportingPoints:
+          direction.supportingPoints === undefined
+            ? []
+            : readStringArray(
+                direction.supportingPoints,
+                `directions[${index}].supportingPoints`
+              ),
+        ctaActionType:
+          direction.ctaActionType === undefined
+            ? "other"
+            : readCtaActionType(
+                direction.ctaActionType,
+                `directions[${index}].ctaActionType`
+              ),
+        ctaDestination:
+          direction.ctaDestination === undefined
+            ? ""
+            : readString(
+                direction.ctaDestination,
+                `directions[${index}].ctaDestination`
+              ),
+        contactLine:
+          direction.contactLine === undefined
+            ? ""
+            : readString(
+                direction.contactLine,
+                `directions[${index}].contactLine`
+              ),
         caption: readString(direction.caption, `directions[${index}].caption`),
         score: readNumber(direction.score, `directions[${index}].score`),
         reasoning: readString(
@@ -1014,6 +1136,16 @@ function readServiceType(value: unknown, field: string): ServiceType {
     throw new Error(`${field} is invalid.`);
   }
   return value as ServiceType;
+}
+
+function readCtaActionType(value: unknown, field: string): CtaActionType {
+  if (
+    typeof value !== "string" ||
+    !ctaActionTypes.includes(value as CtaActionType)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as CtaActionType;
 }
 
 function readStringArray(value: unknown, field: string): readonly string[] {

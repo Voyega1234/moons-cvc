@@ -70,7 +70,8 @@ describe("DirectionsStage artwork mode", () => {
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
 
-    await user.click(stage.getByRole("button", { name: "Regenerate all" }));
+    await user.click(stage.getByRole("button", { name: "More hook actions" }));
+    await user.click(stage.getByRole("menuitem", { name: /Regenerate all/ }));
 
     expect(
       stage.getByRole("heading", {

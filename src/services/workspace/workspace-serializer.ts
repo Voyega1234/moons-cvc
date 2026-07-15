@@ -3,6 +3,7 @@ import {
   artworkModes,
   artworkOutputSizes,
   creativeStages,
+  ctaActionTypes,
   defaultArtworkOutputSize,
   emptyApprovalComments,
   imagePromptModels,
@@ -133,6 +134,7 @@ function parseRun(value: unknown): WorkflowState | null {
       : parseMember(value.successMetric, successMetrics);
   const brief = parseString(value.brief, true);
   const attachments = parseStringArray(value.attachments);
+  const uploadedMaterials = parseUploadedMaterials(value.uploadedMaterials);
 
   if (
     !id ||
@@ -147,6 +149,7 @@ function parseRun(value: unknown): WorkflowState | null {
     quantity === null ||
     brief === null ||
     !attachments ||
+    !uploadedMaterials ||
     typeof value.qaComplete !== "boolean" ||
     typeof value.approved !== "boolean" ||
     typeof value.clientSent !== "boolean" ||
@@ -197,6 +200,7 @@ function parseRun(value: unknown): WorkflowState | null {
     successMetric,
     brief,
     attachments,
+    uploadedMaterials,
     referenceImages,
     directions,
     outputs,
@@ -316,6 +320,60 @@ function parseReferenceImages(
   return items.every((item) => item !== null) ? items : null;
 }
 
+function parseUploadedMaterials(
+  value: unknown
+): WorkflowState["uploadedMaterials"] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+
+  const allowedRoles = new Set([
+    "main-object",
+    "product",
+    "supporting-component",
+    "client-context"
+  ]);
+  const items = value.map((item) => {
+    if (!isRecord(item)) return null;
+    const id = parseString(item.id);
+    const name = parseString(item.name, true);
+    const mediaType = parseString(item.mediaType);
+    const role = parseString(item.role);
+    const description = parseString(item.description, true);
+    const url = parseString(item.url);
+    const storagePath =
+      item.storagePath === undefined ? undefined : parseString(item.storagePath);
+    const storageBucket =
+      item.storageBucket === undefined
+        ? undefined
+        : parseString(item.storageBucket);
+    if (
+      !id ||
+      name === null ||
+      !mediaType ||
+      !role ||
+      !allowedRoles.has(role) ||
+      description === null ||
+      !url ||
+      storagePath === null ||
+      storageBucket === null
+    ) {
+      return null;
+    }
+    return {
+      id,
+      name,
+      mediaType,
+      role: role as WorkflowState["uploadedMaterials"][number]["role"],
+      description,
+      url,
+      ...(storagePath ? { storagePath } : {}),
+      ...(storageBucket ? { storageBucket } : {})
+    };
+  });
+
+  return items.every((item) => item !== null) ? items : null;
+}
+
 function parseDirections(
   value: unknown
 ): WorkflowState["directions"] | null {
@@ -349,6 +407,22 @@ function parseDirections(
     const visual = parseString(item.visual, true);
     const cta =
       item.cta === undefined ? "Learn more" : parseString(item.cta, true);
+    const supportingPoints =
+      item.supportingPoints === undefined
+        ? []
+        : parseStringArray(item.supportingPoints);
+    const ctaActionType =
+      item.ctaActionType === undefined
+        ? undefined
+        : parseMember(item.ctaActionType, ctaActionTypes);
+    const ctaDestination =
+      item.ctaDestination === undefined
+        ? undefined
+        : parseString(item.ctaDestination, true);
+    const contactLine =
+      item.contactLine === undefined
+        ? undefined
+        : parseString(item.contactLine, true);
     const caption = parseString(item.caption, true);
     if (
       !id ||
@@ -363,6 +437,10 @@ function parseDirections(
       why === null ||
       visual === null ||
       cta === null ||
+      supportingPoints === null ||
+      (item.ctaActionType !== undefined && !ctaActionType) ||
+      ctaDestination === null ||
+      contactLine === null ||
       caption === null ||
       typeof item.selected !== "boolean"
     ) {
@@ -382,6 +460,10 @@ function parseDirections(
       why,
       visual,
       cta,
+      supportingPoints,
+      ctaActionType: ctaActionType ?? undefined,
+      ctaDestination: ctaDestination ?? undefined,
+      contactLine: contactLine ?? undefined,
       caption,
       selected: item.selected
     };

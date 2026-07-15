@@ -6,8 +6,7 @@ const baseInput = {
     name: "Flora Daily",
     category: "Flowers / lifestyle",
     personality: ["fresh", "soft"],
-    colors: ["pastel pink", "white"],
-    mustAvoid: ["cheap sales graphics"]
+    colors: ["#F6B8C8", "#FFFFFF"]
   },
   service: "single-static",
   brief: "Launch a soft summer bouquet offer.",
@@ -67,12 +66,10 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(
       '"headline": "Flowers that make the room feel softer"'
     );
-    expect(promptText).toContain(
-      "You are a Senior Creative Director, Art Director, Commercial Advertising Designer, and Performance Marketing Visual Strategist at a top-tier agency."
-    );
     expect(promptText).toContain("AUTHORITATIVE COMPACT CAMPAIGN INPUT");
     expect(promptText).toContain('"personality": [');
     expect(promptText).toContain('"colors": [');
+    expect(promptText).not.toContain('"mustAvoid"');
     expect(promptText).toContain('"maximumTextBlocks": 2');
     expect(promptText).toContain('"copyDensity": "low"');
     expect(promptText).not.toContain('"mustShow"');
@@ -81,6 +78,45 @@ describe("generateImagePrompt", () => {
       "Create one production-ready English GPT Image 2 prompt from this compact creative input."
     );
     expect(promptText).not.toContain("Fresh flowers for calm homes.");
+  });
+
+  it("sends only the first verified supporting point as optional on-image copy", async () => {
+    const calls: { body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>
+      });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({ finalPrompt: "Prompt with support." })
+        }),
+        { status: 200 }
+      );
+    });
+
+    await generateImagePrompt({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input: {
+        ...baseInput,
+        hook: {
+          ...baseInput.hook,
+          supportingPoints: [
+            "Same-day delivery in Bangkok",
+            "Seasonal stems selected daily"
+          ]
+        }
+      }
+    });
+
+    const promptText = (
+      calls[0]?.body.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(promptText).toContain(
+      '"supportingText": "Same-day delivery in Bangkok"'
+    );
+    expect(promptText).toContain('"maximumTextBlocks": 3');
+    expect(promptText).not.toContain("Seasonal stems selected daily");
   });
 
   it("writes a sanitized trace with the exact agent input and returned prompt", async () => {

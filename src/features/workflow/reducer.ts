@@ -1,7 +1,6 @@
 import {
   defaultArtworkOutputSize,
-  emptyApprovalGate,
-  serviceTypes
+  emptyApprovalGate
 } from "../../domain/creative-run";
 import {
   directionSubheadline,
@@ -54,10 +53,13 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
   return outputs.length > 0 && outputs.every(isOutputFullyApproved);
 }
 
-export const defaultBrief = `Objective: Create Meta performance creatives for this month.
-Audience: Warm and cold prospects who need one clear reason to take action.
-Message: Keep it premium, clean, benefit-led, and direct.
-Need: Strong hooks first. Neo should create only after approval.`;
+export const defaultBrief = `Objective: Create Meta performance creatives that make the product benefit instantly clear.
+
+Audience: People who know the problem but have not found a solution they trust.
+
+Message priority: Lead with a recognizable tension, prove the product difference, and end with a low-friction action.
+
+Creative guardrails: Keep the first frame bold, reduce decorative copy, show the product early, and make every execution feel native to its format.`;
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
@@ -104,16 +106,19 @@ export function createInitialWorkflowState({
     brandSearch: "",
     librarySection: "brand",
     creativeMix: [
-      { id: "creative-mix-1", service: "single-static", quantity: 3 }
+      { id: "creative-mix-1", service: "single-static", quantity: 3 },
+      { id: "creative-mix-2", service: "ugc-video", quantity: 2 },
+      { id: "creative-mix-3", service: "album-post", quantity: 1 }
     ],
     service: "single-static",
     artworkMode: "standard",
     imagePromptModel: "gpt-5.6-terra",
     outputSize: defaultArtworkOutputSize,
-    quantity: 3,
+    quantity: 6,
     successMetric: "CTR",
     brief: defaultBrief,
     attachments: [],
+    uploadedMaterials: [],
     referenceImages: [],
     directions: [],
     outputs: [],
@@ -138,6 +143,12 @@ export function workflowActionToast(
       return `${action.brand.name} loaded`;
     case "attach-files":
       return `${action.names.length} ${pluralize(action.names.length, "file")} attached`;
+    case "add-uploaded-materials":
+      return `${action.items.length} creative ${pluralize(action.items.length, "image")} added`;
+    case "update-uploaded-material":
+      return null;
+    case "remove-uploaded-material":
+      return "Creative material removed";
     case "toggle-reference-image": {
       const nowSelected = state.referenceImages.some(
         (item) => item.id === action.item.id
@@ -234,32 +245,20 @@ export function workflowReducer(
           )
         }
       ]);
-    case "add-creative-mix-item": {
+    case "apply-monthly-quota": {
       const current = creativeMixItems(state);
-      if (totalCreativeMixQuantity(state) >= QUANTITY_LIMITS.maximum) return state;
-      const usedServices = new Set(current.map((item) => item.service));
-      const service = serviceTypes.find((item) => !usedServices.has(item));
-      if (!service) return state;
+      const idFor = (service: CreativeMixItem["service"]) =>
+        current.find((item) => item.service === service)?.id ??
+        createId("creative-mix");
       return withCreativeMix(state, [
-        ...current,
-        { id: createId("creative-mix"), service, quantity: 1 }
+        {
+          id: idFor("single-static"),
+          service: "single-static",
+          quantity: 3
+        },
+        { id: idFor("ugc-video"), service: "ugc-video", quantity: 2 },
+        { id: idFor("album-post"), service: "album-post", quantity: 1 }
       ]);
-    }
-    case "set-creative-mix-service": {
-      const current = creativeMixItems(state);
-      if (
-        current.some(
-          (item) => item.id !== action.id && item.service === action.service
-        )
-      ) {
-        return state;
-      }
-      return withCreativeMix(
-        state,
-        current.map((item) =>
-          item.id === action.id ? { ...item, service: action.service } : item
-        )
-      );
     }
     case "set-creative-mix-quantity": {
       const current = creativeMixItems(state);
@@ -283,20 +282,31 @@ export function workflowReducer(
         )
       );
     }
-    case "remove-creative-mix-item": {
-      const current = creativeMixItems(state);
-      if (current.length === 1) return state;
-      return withCreativeMix(
-        state,
-        current.filter((item) => item.id !== action.id)
-      );
-    }
     case "set-success-metric":
       return { ...state, successMetric: action.metric };
     case "set-brief":
       return { ...state, brief: action.brief };
     case "attach-files":
       return { ...state, attachments: action.names };
+    case "add-uploaded-materials":
+      return {
+        ...state,
+        uploadedMaterials: [...state.uploadedMaterials, ...action.items]
+      };
+    case "update-uploaded-material":
+      return {
+        ...state,
+        uploadedMaterials: state.uploadedMaterials.map((item) =>
+          item.id === action.id ? { ...item, ...action.changes } : item
+        )
+      };
+    case "remove-uploaded-material":
+      return {
+        ...state,
+        uploadedMaterials: state.uploadedMaterials.filter(
+          (item) => item.id !== action.id
+        )
+      };
     case "toggle-reference-image": {
       const exists = state.referenceImages.some(
         (item) => item.id === action.item.id

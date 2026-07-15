@@ -313,7 +313,23 @@ function parseResults(
   text: string,
   outputs: readonly QualityCheckOutputInput[]
 ): readonly QualityCheckResult[] {
-  const parsed = JSON.parse(text) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return outputs.map((output) => ({
+      outputId: output.id,
+      gdPassed: false,
+      gdReason:
+        "Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.",
+      csPassed: false,
+      csReason:
+        "Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.",
+      passed: false,
+      reason:
+        "GD ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.\nCS ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible."
+    }));
+  }
   const value = readRecord(parsed, "quality check payload");
   if (!Array.isArray(value.results)) {
     throw new Error("results must be an array.");

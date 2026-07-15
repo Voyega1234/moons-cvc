@@ -54,7 +54,7 @@ describe("fetchPastPostExamples", () => {
       { source: "organic_post", text: "จองคิวก่อนหมดสิทธิ์!" },
       {
         source: "ad_caption",
-        text: "โปรโมชั่นพิเศษ | แคปชั่นเดิม | สั่งเลย"
+        text: "โปรโมชั่นพิเศษ\nแคปชั่นเดิม\nสั่งเลย"
       }
     ]);
   });

@@ -47,12 +47,6 @@ describe("workspace serializer", () => {
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
       runId: workspace.activeRunId,
-      now: "2026-06-23T10:04:30.000Z",
-      action: { type: "add-creative-mix-item" }
-    });
-    workspace = workspaceReducer(workspace, {
-      type: "apply-run-action",
-      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:00.000Z",
       action: { type: "set-brief", brief: "Album persisted brief" }
     });
@@ -83,6 +77,26 @@ describe("workspace serializer", () => {
       now: "2026-06-23T10:05:50.000Z",
       action: { type: "set-success-metric", metric: "ROAS" }
     });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:55.000Z",
+      action: {
+        type: "add-uploaded-materials",
+        items: [
+          {
+            id: "material-1",
+            name: "product.png",
+            mediaType: "image/png",
+            role: "product",
+            description: "Use the real pack shot",
+            url: "https://example.com/product.png",
+            storagePath: "brand/creative-materials/product.png",
+            storageBucket: "brand-assets"
+          }
+        ]
+      }
+    });
 
     const restored = deserializeWorkspace(
       serializeWorkspace(workspace, "2026-06-23T10:06:00.000Z")
@@ -101,11 +115,15 @@ describe("workspace serializer", () => {
     );
     expect(restored?.runsById["album-run"]?.outputSize).toBe("2048x1152");
     expect(restored?.runsById["album-run"]?.successMetric).toBe("ROAS");
+    expect(restored?.runsById["album-run"]?.uploadedMaterials[0]).toMatchObject({
+      name: "product.png",
+      role: "product",
+      description: "Use the real pack shot"
+    });
     expect(restored?.runsById["album-run"]?.creativeMix).toEqual([
-      { id: "creative-mix-1", service: "album-post", quantity: 3 },
-      expect.objectContaining({ service: "single-static", quantity: 1 })
+      { id: "creative-mix-1", service: "album-post", quantity: 3 }
     ]);
-    expect(restored?.runsById["album-run"]?.quantity).toBe(4);
+    expect(restored?.runsById["album-run"]?.quantity).toBe(3);
     expect(restored?.runsById["single-run"]?.brand?.id).toBe(brand.id);
     expect(restored?.runsById["single-run"]?.brandMenuOpen).toBe(false);
     expect(restored?.toast).toBeNull();
@@ -124,6 +142,64 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.artworkMode).toBe("standard");
+  });
+
+  it("round-trips supporting details and verified CTA metadata", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    let workspace = createInitialWorkspaceState({
+      runId: "run-details",
+      now: "2026-07-15T10:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-15T10:00:20.000Z",
+      action: { type: "select-brand", brand }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-15T10:00:40.000Z",
+      action: { type: "set-brief", brief: "Generate qualified lead creative" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-15T10:01:00.000Z",
+      action: {
+        type: "generate-directions",
+        directions: [
+          {
+            id: "direction-details",
+            service: "single-static",
+            hook: "ฟอร์มเยอะ ไม่ได้แปลว่าได้ลูกค้ามากขึ้น",
+            subheadline: "โฟกัส Lead ที่มีโอกาสปิดการขายจริง",
+            concept: "เปรียบเทียบจำนวนฟอร์มกับคุณภาพ Lead",
+            why: "ทำให้ปัญหาของเจ้าของธุรกิจชัดเจน",
+            visual: "แสดงกระบวนการคัดกรองอย่างเรียบง่าย",
+            cta: "ปรึกษาทีม Convert Cake",
+            supportingPoints: ["วิเคราะห์ตั้งแต่ Targeting ถึง Funnel"],
+            ctaActionType: "inbox",
+            ctaDestination: "Facebook Inbox",
+            contactLine: "Inbox เพื่อปรึกษาทีม Convert Cake",
+            caption: "ฟอร์มเยอะอาจไม่ได้แปลว่า Lead มีคุณภาพ",
+            selected: false
+          }
+        ]
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-15T10:02:00.000Z")
+    );
+
+    expect(restored?.runsById["run-details"]?.directions[0]).toMatchObject({
+      supportingPoints: ["วิเคราะห์ตั้งแต่ Targeting ถึง Funnel"],
+      ctaActionType: "inbox",
+      ctaDestination: "Facebook Inbox",
+      contactLine: "Inbox เพื่อปรึกษาทีม Convert Cake"
+    });
   });
 
   it("loads older snapshots without a success metric as CTR", () => {
@@ -190,7 +266,7 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.creativeMix).toEqual([
-      { id: "creative-mix-1", service: "single-static", quantity: 3 }
+      { id: "creative-mix-1", service: "single-static", quantity: 6 }
     ]);
   });
 
