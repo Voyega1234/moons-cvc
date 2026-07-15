@@ -673,8 +673,12 @@ lime/orange semantic accents, soft borders, and medium information density.
     CS/PM change requests open the decision modal, require one actionable note,
     and route artwork to GD or copy/UGC to CS. CS can edit copy or UGC script and
     flow without clearing the generated output set. Verification passes all 45
-    test files / 201 tests, TypeScript, the production build, and `git diff
+    test files / 202 tests, TypeScript, the production build, and `git diff
     --check`; the existing non-blocking bundle-size warning remains.
+  - Download actions were corrected on 2026-07-15. QC, Client, and bulk download
+    controls now fetch each signed storage URL as a Blob, create a temporary
+    object URL, and trigger a named local-file download. They no longer use a
+    cross-origin anchor that can open the asset URL in a browser tab.
 
 ### In progress
 

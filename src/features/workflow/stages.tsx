@@ -5452,6 +5452,7 @@ function QcSlide({
   dispatch: Dispatch<WorkflowAction>;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [editingCopy, setEditingCopy] = useState(false);
   const roleConfig =
@@ -5482,6 +5483,20 @@ function QcSlide({
       );
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setUploadError(null);
+    try {
+      await downloadOutputAsset(output, index);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not download artwork."
+      );
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -5568,18 +5583,14 @@ function QcSlide({
         <div className="neo-qc-card-actions">
           <div className="neo-qc-card-utilities">
             <div className="neo-qc-asset-actions">
-              {role === "graphicDesign" ? <><a
-                className={`btn secondary small download-action ${output.assetUrl ? "" : "disabled"}`}
-                href={output.assetUrl}
-                download
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => {
-                  if (!output.assetUrl) event.preventDefault();
-                }}
+              {role === "graphicDesign" ? <><button
+                className="btn secondary small download-action"
+                type="button"
+                disabled={!output.assetUrl || downloading}
+                onClick={() => void handleDownload()}
               >
-                Download
-              </a>
+                {downloading ? "Downloading…" : "Download"}
+              </button>
               <label
                 className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
               >
@@ -5661,17 +5672,42 @@ function qcDecisionLabel(decision: CreativeOutput["approval"][ApprovalRole]): st
   return "Pending";
 }
 
-function downloadAllOutputs(outputs: WorkflowState["outputs"]) {
-  for (const output of outputs) {
+function downloadFileName(output: CreativeOutput, index: number, blob: Blob): string {
+  const storedName = output.assetStoragePath?.split("/").pop()?.split("?")[0];
+  if (storedName && /\.[a-z0-9]{2,5}$/i.test(storedName)) return storedName;
+  const extension =
+    blob.type === "image/jpeg"
+      ? "jpg"
+      : blob.type === "image/webp"
+        ? "webp"
+        : "png";
+  return `neo-creative-${index + 1}.${extension}`;
+}
+
+export async function downloadOutputAsset(
+  output: CreativeOutput,
+  index = 0
+): Promise<void> {
+  if (!output.assetUrl) throw new Error("This creative has no downloadable artwork.");
+  const response = await fetch(output.assetUrl);
+  if (!response.ok) {
+    throw new Error(`Could not download artwork (${response.status}).`);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = downloadFileName(output, index, blob);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function downloadAllOutputs(outputs: WorkflowState["outputs"]) {
+  for (const [index, output] of outputs.entries()) {
     if (!output.assetUrl) continue;
-    const link = document.createElement("a");
-    link.href = output.assetUrl;
-    link.download = "";
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    await downloadOutputAsset(output, index);
   }
 }
 
@@ -5736,7 +5772,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
             className="btn secondary download-action"
             type="button"
             disabled={!state.outputs.some((output) => output.assetUrl)}
-            onClick={() => downloadAllOutputs(state.outputs)}
+            onClick={() => void downloadAllOutputs(state.outputs)}
           >
             Download all
           </button>
@@ -5820,18 +5856,14 @@ export function ClientStage({ state, dispatch }: StageProps) {
                   <p>{direction ? directionSubheadline(direction) : ""}</p>
                 </div>
                 <div className="neo-client-card-actions">
-                  <a
-                    className={`btn secondary small download-action ${output.assetUrl ? "" : "disabled"}`}
-                    href={output.assetUrl}
-                    download
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => {
-                      if (!output.assetUrl) event.preventDefault();
-                    }}
+                  <button
+                    className="btn secondary small download-action"
+                    type="button"
+                    disabled={!output.assetUrl}
+                    onClick={() => void downloadOutputAsset(output, index)}
                   >
                     Download
-                  </a>
+                  </button>
                   <button
                     className="btn secondary small"
                     type="button"
@@ -5975,7 +6007,7 @@ export function SummaryStage({
             className="btn secondary download-action"
             type="button"
             disabled={!state.outputs.some((output) => output.assetUrl)}
-            onClick={() => downloadAllOutputs(state.outputs)}
+            onClick={() => void downloadAllOutputs(state.outputs)}
           >
             Download all
           </button>

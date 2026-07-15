@@ -1,6 +1,6 @@
 import { render, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
 import { BrandProvider } from "../../app/providers/brand-provider";
@@ -13,12 +13,18 @@ import {
   ApprovalStage,
   BriefStage,
   ClientStage,
+  downloadOutputAsset,
   DirectionsStage,
   StartStage,
   StudioStage
 } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
 import { buildAngleExportReview } from "./angle-content-types";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function buildCreativeState() {
   const brand = brands[0];
@@ -84,6 +90,37 @@ function buildMixedAngleState() {
 }
 
 describe("redesigned workflow stages", () => {
+  it("downloads artwork as a local file instead of opening its storage URL", async () => {
+    const output = {
+      ...buildCreativeState().outputs[0]!,
+      assetUrl: "https://storage.example.com/creative.png",
+      assetStoragePath: "run/outputs/creative-01.png"
+    };
+    const blob = new Blob(["image"], { type: "image/png" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, blob: vi.fn().mockResolvedValue(blob) })
+    );
+    const createObjectUrl = vi.fn().mockReturnValue("blob:creative-download");
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrl
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    await downloadOutputAsset(output, 0);
+
+    expect(fetch).toHaveBeenCalledWith(output.assetUrl);
+    expect(createObjectUrl).toHaveBeenCalledWith(blob);
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:creative-download");
+  });
+
   it("presents Signal with the reference workspace and memory composition", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
