@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GENERATION_SUCCESS_SOUND_PATH,
-  playGenerationSuccessSound
+  MAILBOX_NOTIFICATION_SOUND_PATH,
+  playGenerationSuccessSound,
+  playMailboxNotificationSound
 } from "./notification-sound";
 
 const originalAudio = globalThis.Audio;
@@ -33,5 +35,20 @@ describe("playGenerationSuccessSound", () => {
 
     expect(() => playGenerationSuccessSound()).not.toThrow();
     await Promise.resolve();
+  });
+});
+
+describe("playMailboxNotificationSound", () => {
+  it("plays the configured mailbox notification asset", () => {
+    const play = vi.fn().mockResolvedValue(undefined);
+    const AudioMock = vi.fn(function (this: { play: typeof play }) {
+      this.play = play;
+    });
+    globalThis.Audio = AudioMock as unknown as typeof Audio;
+
+    playMailboxNotificationSound();
+
+    expect(AudioMock).toHaveBeenCalledWith(MAILBOX_NOTIFICATION_SOUND_PATH);
+    expect(play).toHaveBeenCalledOnce();
   });
 });

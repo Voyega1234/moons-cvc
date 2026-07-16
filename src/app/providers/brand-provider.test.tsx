@@ -6,9 +6,17 @@ import { brands } from "../../data/mock-brands";
 import type { Brand, ClientIngestionStatus } from "../../domain/brand";
 import type { BrandRepository } from "../../ports/brand-repository";
 import type { MappingClientRepository } from "../../ports/mapping-client-repository";
+import { playMailboxNotificationSound } from "../../shared/utils/notification-sound";
 import { BrandProvider, useBrands } from "./brand-provider";
 
-afterEach(cleanup);
+vi.mock("../../shared/utils/notification-sound", () => ({
+  playMailboxNotificationSound: vi.fn()
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 class MutableBrandRepository implements BrandRepository {
   constructor(private brand: Brand) {}
@@ -78,6 +86,7 @@ describe("brand ingestion notifications", () => {
     const unreadButton = await screen.findByRole("button", {
       name: "Notifications, 1 unread"
     });
+    expect(playMailboxNotificationSound).toHaveBeenCalledOnce();
     await user.click(unreadButton);
 
     expect(screen.getByRole("dialog", { name: "Notifications" })).toBeTruthy();

@@ -11,6 +11,7 @@ import type { Brand, ClientIngestionStatus } from "../../domain/brand";
 import type { BrandRepository } from "../../ports/brand-repository";
 import type { MappingClientRepository } from "../../ports/mapping-client-repository";
 import { mergeMappingClients } from "../../services/clients/merge-mapping-clients";
+import { playMailboxNotificationSound } from "../../shared/utils/notification-sound";
 
 interface BrandContextValue {
   brands: readonly Brand[];
@@ -86,6 +87,7 @@ export function BrandProvider({
                 setNotifications((current) =>
                   [notification, ...current].slice(0, 20)
                 );
+                playMailboxNotificationSound();
               }
             }
           } else {
@@ -102,6 +104,7 @@ export function BrandProvider({
             const notification = createBrandNotification(brand, status);
             notifiedStatuses.current.set(brand.id, status);
             setNotifications((current) => [notification, ...current].slice(0, 20));
+            playMailboxNotificationSound();
           }
         }
 
