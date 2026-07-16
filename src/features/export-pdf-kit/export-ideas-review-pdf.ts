@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 
+import { contentTypeSortRank } from "./content-type-sort"
 import type { IdeaRecommendation } from "./types"
 
 const MAX_IDEAS = 10
@@ -46,6 +47,16 @@ export type ReviewIdeaSection = {
   ideas: IdeaRecommendation[]
 }
 export type ReviewHighlightMap = Record<string, string[]>
+export type NeoReviewPdfItem = {
+  group: ReviewIdeaGroup
+  idea: IdeaRecommendation
+  highlightTerms: string[] | undefined
+}
+export type NeoReviewPdfPage = {
+  contentType: string
+  pageIndex: number
+  items: NeoReviewPdfItem[]
+}
 
 async function loadFontAsBase64(url: string) {
   const response = await fetch(url)
@@ -317,6 +328,48 @@ function getCardData(idea: IdeaRecommendation) {
   }
 }
 
+export function buildNeoReviewPdfPages(
+  sections: ReviewIdeaSection[],
+  highlightMap: ReviewHighlightMap = {},
+) {
+  const itemsByContentType = new Map<string, NeoReviewPdfItem[]>()
+
+  sections.forEach((section) => {
+    section.ideas.forEach((idea, index) => {
+      const contentType = getContentTypeLabel(idea.content_type) || "CREATIVE"
+      const items = itemsByContentType.get(contentType) || []
+      items.push({
+        group: section.group,
+        idea,
+        highlightTerms: highlightMap[getReviewHighlightKey(section.group, index)],
+      })
+      itemsByContentType.set(contentType, items)
+    })
+  })
+
+  const pages: NeoReviewPdfPage[] = []
+  const contentTypeEntries = [...itemsByContentType.entries()].sort(
+    ([left], [right]) =>
+      contentTypeSortRank(left) - contentTypeSortRank(right) ||
+      left.localeCompare(right),
+  )
+
+  contentTypeEntries.forEach(([contentType, items]) => {
+    const orderedItems = [...items].sort(
+      (a, b) => Number(a.group === "option") - Number(b.group === "option"),
+    )
+    for (let index = 0; index < orderedItems.length; index += COLUMNS) {
+      pages.push({
+        contentType,
+        pageIndex: index / COLUMNS,
+        items: orderedItems.slice(index, index + COLUMNS),
+      })
+    }
+  })
+
+  return pages
+}
+
 function drawIdeaCard(
   pdf: jsPDF,
   idea: IdeaRecommendation,
@@ -416,6 +469,181 @@ function drawPageBackground(pdf: jsPDF) {
   pdf.rect(0, 0, PAGE_WIDTH_MM, PAGE_HEIGHT_MM, "F")
 }
 
+function drawNeoReviewHeader(
+  pdf: jsPDF,
+  contentType: string,
+  brandName: string,
+  pageNumber: number,
+  pageCount: number,
+  hasThaiFont: boolean,
+) {
+  const centerX = PAGE_WIDTH_MM / 2
+
+  pdf.setTextColor(23, 29, 45)
+  setFont(pdf, "semibold", 21, hasThaiFont)
+  pdf.text(`${contentType} topics`, centerX, 12, {
+    align: "center",
+    baseline: "top",
+  })
+
+  pdf.setTextColor(108, 116, 133)
+  setFont(pdf, "normal", 9.5, hasThaiFont)
+  pdf.text(
+    `${brandName} · Recommended first, followed by options`,
+    centerX,
+    21.5,
+    { align: "center", baseline: "top" },
+  )
+
+  pdf.setTextColor(124, 131, 146)
+  setFont(pdf, "medium", 9, hasThaiFont)
+  pdf.text(`${pageNumber} / ${pageCount}`, PAGE_WIDTH_MM - 11, 12.6, {
+    align: "right",
+    baseline: "top",
+  })
+
+  pdf.setDrawColor(226, 230, 239)
+  pdf.setLineWidth(0.28)
+  pdf.line(11, 32, PAGE_WIDTH_MM - 11, 32)
+}
+
+function drawNeoIdeaCard(
+  pdf: jsPDF,
+  item: NeoReviewPdfItem,
+  ideaNumber: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  hasThaiFont: boolean,
+) {
+  const data = getCardData(item.idea)
+  const recommended = item.group === "recommended"
+  const contentX = x + 7
+  const contentWidth = width - 14
+  const centerX = x + width / 2
+
+  pdf.setFillColor(recommended ? 251 : 255, recommended ? 252 : 255, 255)
+  pdf.setDrawColor(
+    recommended ? 189 : 221,
+    recommended ? 201 : 226,
+    recommended ? 242 : 236,
+  )
+  pdf.setLineWidth(recommended ? 0.42 : 0.32)
+  pdf.roundedRect(x, y, width, height, 4.5, 4.5, "FD")
+
+  pdf.setFillColor(
+    recommended ? 234 : 244,
+    recommended ? 240 : 245,
+    recommended ? 255 : 248,
+  )
+  pdf.roundedRect(x + 0.18, y + 0.18, width - 0.36, 7.2, 4.1, 4.1, "F")
+  pdf.rect(x + 0.18, y + 3.7, width - 0.36, 3.7, "F")
+  pdf.setTextColor(recommended ? 39 : 107, recommended ? 88 : 114, recommended ? 217 : 128)
+  setFont(pdf, "semibold", 7.4, hasThaiFont)
+  pdf.text(recommended ? "RECOMMENDED" : "OPTION", centerX, y + 4, {
+    align: "center",
+    baseline: "middle",
+  })
+
+  setFont(pdf, "semibold", 9, hasThaiFont)
+  const ideaLabel = `Idea ${ideaNumber}`
+  const ideaWidth = Math.max(22, pdf.getTextWidth(ideaLabel) + 8)
+  const formatWidth = data.contentType
+    ? Math.max(24, Math.min(34, pdf.getTextWidth(data.contentType) + 8))
+    : 0
+  const badgeGap = formatWidth ? 2.5 : 0
+  const badgeStartX = centerX - (ideaWidth + badgeGap + formatWidth) / 2
+
+  pdf.setFillColor(234, 240, 255)
+  pdf.roundedRect(badgeStartX, y + 11.2, ideaWidth, 8, 2.5, 2.5, "F")
+  pdf.setTextColor(39, 88, 217)
+  pdf.text(ideaLabel, badgeStartX + ideaWidth / 2, y + 15.2, {
+    align: "center",
+    baseline: "middle",
+  })
+
+  if (formatWidth) {
+    const formatX = badgeStartX + ideaWidth + badgeGap
+    pdf.setFillColor(243, 245, 251)
+    pdf.roundedRect(formatX, y + 11.2, formatWidth, 8, 2.5, 2.5, "F")
+    pdf.text(data.contentType, formatX + formatWidth / 2, y + 15.2, {
+      align: "center",
+      baseline: "middle",
+    })
+  }
+
+  if (data.metaTags.length > 0) {
+    pdf.setTextColor(91, 99, 116)
+    setFont(pdf, "medium", 9, hasThaiFont)
+    const metaLines = wrapText(pdf, data.metaTags.join(" · "), contentWidth, 1)
+    pdf.text(metaLines[0] || "", centerX, y + 22.5, {
+      align: "center",
+      baseline: "top",
+    })
+  }
+
+  pdf.setTextColor(128, 135, 151)
+  setFont(pdf, "semibold", 8.1, hasThaiFont)
+  const hookLabelY = y + 48
+  const hookTextY = y + 55
+  pdf.text("HOOK", centerX, hookLabelY, { align: "center", baseline: "top" })
+
+  const hookFontSize = data.hook.length > 78 ? 16.5 : data.hook.length > 48 ? 18.5 : 21
+  const hookLineHeight = hookFontSize * PT_TO_MM * 1.08
+  pdf.setTextColor(23, 29, 45)
+  setFont(pdf, "bold", hookFontSize, hasThaiFont)
+  const hookLines = wrapText(pdf, data.hook, contentWidth, 4)
+  drawCenteredTextBlock(pdf, hookLines, centerX, hookTextY, hookLineHeight)
+
+  const subheadlineLabelY = Math.max(
+    y + 78,
+    hookTextY + hookLines.length * hookLineHeight + 8,
+  )
+  const subheadlineTextY = subheadlineLabelY + 7
+
+  pdf.setTextColor(128, 135, 151)
+  setFont(pdf, "semibold", 8.1, hasThaiFont)
+  pdf.text("SUB-HEADLINE", centerX, subheadlineLabelY, {
+    align: "center",
+    baseline: "top",
+  })
+
+  if (data.subheadline) {
+    const bodyFontSize = 10
+    drawHighlightedText(
+      pdf,
+      makeHighlightedRuns(data.subheadline, item.highlightTerms),
+      contentX,
+      subheadlineTextY,
+      contentWidth,
+      4,
+      bodyFontSize * PT_TO_MM * 1.36,
+      bodyFontSize,
+      hasThaiFont,
+      "center",
+    )
+  }
+
+  pdf.setTextColor(128, 135, 151)
+  setFont(pdf, "semibold", 8.1, hasThaiFont)
+  pdf.text("CTA", centerX, y + 142, { align: "center", baseline: "top" })
+
+  if (data.cta) {
+    pdf.setTextColor(36, 42, 56)
+    const ctaFontSize = 10
+    setFont(pdf, "medium", ctaFontSize, hasThaiFont)
+    const ctaLines = wrapText(pdf, data.cta, contentWidth, 2)
+    drawCenteredTextBlock(
+      pdf,
+      ctaLines,
+      centerX,
+      y + 149,
+      ctaFontSize * PT_TO_MM * 1.36,
+    )
+  }
+}
+
 function savePdf(pdf: jsPDF, filename: string) {
   const bytes = new Uint8Array(pdf.output("arraybuffer"))
   const blob = new Blob([bytes], { type: "application/pdf" })
@@ -469,6 +697,52 @@ export async function exportIdeasReviewPdf(
         hasThaiFont,
       )
       ideaNumber += 1
+    })
+  })
+
+  savePdf(pdf, filename)
+}
+
+export async function exportNeoIdeasReviewPdf(
+  sections: ReviewIdeaSection[],
+  filename: string,
+  highlightMap: ReviewHighlightMap = {},
+  brandName = "Creative topics",
+) {
+  const pages = buildNeoReviewPdfPages(sections, highlightMap)
+  if (pages.length === 0) return
+
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" })
+  const hasThaiFont = await ensureFonts(pdf)
+  const horizontalPadding = 11
+  const gap = 7
+  const cardY = 37
+  const cardHeight = PAGE_HEIGHT_MM - cardY - 9
+  const cardWidth = (PAGE_WIDTH_MM - horizontalPadding * 2 - gap * 2) / COLUMNS
+
+  pages.forEach((page, pageIndex) => {
+    if (pageIndex > 0) pdf.addPage("a4", "landscape")
+    drawPageBackground(pdf)
+    drawNeoReviewHeader(
+      pdf,
+      page.contentType,
+      brandName,
+      pageIndex + 1,
+      pages.length,
+      hasThaiFont,
+    )
+
+    page.items.forEach((item, index) => {
+      drawNeoIdeaCard(
+        pdf,
+        item,
+        page.pageIndex * COLUMNS + index + 1,
+        horizontalPadding + index * (cardWidth + gap),
+        cardY,
+        cardWidth,
+        cardHeight,
+        hasThaiFont,
+      )
     })
   })
 

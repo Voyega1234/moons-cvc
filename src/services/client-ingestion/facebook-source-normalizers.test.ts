@@ -112,4 +112,26 @@ describe("facebook source normalizers", () => {
     );
     expect(getBestPostImageUrl({ thumbnail: "fallback" })).toBe("fallback");
   });
+
+  it("does not normalize Apify access errors as Facebook content", () => {
+    expect(
+      normalizeFacebookPosts([
+        {
+          url: "https://www.facebook.com/unavailable-page",
+          error: "not_available",
+          errorDescription: "This content is not available."
+        }
+      ])
+    ).toEqual([]);
+
+    expect(
+      normalizeFacebookAdsLibraryItems([
+        {
+          url: "https://www.facebook.com/private-page",
+          error: "Page is private",
+          errorCode: "PAGE_PRIVATE"
+        }
+      ])
+    ).toEqual([]);
+  });
 });

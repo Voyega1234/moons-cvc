@@ -24,6 +24,12 @@ import {
   type ImagePromptAgentTrace
 } from "./image-prompt-agent.js";
 import {
+  ARTWORK_REFERENCE_BUCKET,
+  buildArtworkReferenceLabel,
+  isArtworkPatternReference,
+  selectArtworkReferencePattern
+} from "./artwork-reference-library.js";
+import {
   editImage,
   generateImage,
   type ReferenceImageInput
@@ -32,6 +38,11 @@ import {
 type FetchLike = typeof fetch;
 type SelectedHook = ArtworkGenerationRequest["selectedHooks"][number];
 type ArtworkOutput = ArtworkGenerationResponse["outputs"][number];
+
+interface StoredArtworkReference {
+  image: ReferenceImageInput;
+  signedUrl: string;
+}
 
 export interface ArtworkGenerationEndpointEnv {
   OPENAI_API_KEY?: string;
@@ -86,6 +97,7 @@ const ARTWORK_GENERATION_CONCURRENCY = 2;
 interface ImageRequestDebugLog {
   createdAt: string;
   model: string;
+  runId: string;
   directionId: string;
   request:
     | {
@@ -104,7 +116,12 @@ interface ImageRequestDebugLog {
           model: string;
           prompt: string;
           size: ArtworkOutputSize;
-          images: readonly { label?: string; mimeType: string; bytes: number }[];
+          images: readonly {
+            label?: string;
+            mimeType: string;
+            bytes: number;
+            localFile: string;
+          }[];
         };
       };
 }
@@ -114,6 +131,7 @@ interface ImagePromptAgentDebugLog {
   createdAt: string;
   provider: ImagePromptProvider;
   model: string;
+  runId: string;
   directionId: string;
   mode: ArtworkGenerationRequest["artworkMode"];
   status: "succeeded" | "failed";
@@ -137,13 +155,35 @@ interface ImagePromptAgentDebugLog {
   error?: string;
 }
 
+interface ImageOutputDebugLog {
+  kind: "image-output";
+  createdAt: string;
+  model: string;
+  runId: string;
+  directionId: string;
+  response: {
+    mimeType: string;
+    bytes: number;
+    localFile: string;
+    assetBucket: typeof ARTWORK_BUCKET;
+    assetStoragePath: string;
+  };
+}
+
+interface ArtworkGenerationDebugAsset {
+  filename: string;
+  bytes: Buffer;
+}
+
 type ArtworkGenerationDebugLog =
   | ImageRequestDebugLog
-  | ImagePromptAgentDebugLog;
+  | ImagePromptAgentDebugLog
+  | ImageOutputDebugLog;
 
 type ArtworkGenerationDebugLogger = (
   directory: string | undefined,
-  entry: ArtworkGenerationDebugLog
+  entry: ArtworkGenerationDebugLog,
+  assets?: readonly ArtworkGenerationDebugAsset[]
 ) => Promise<void>;
 
 export async function handleArtworkGenerationRequest({
@@ -332,6 +372,13 @@ async function generateOutputForHook({
   storage: ArtworkStorageClient;
   fetchImpl: FetchLike;
 }): Promise<ArtworkOutput> {
+  const artworkReference =
+    input.artworkMode === "reference-library"
+      ? await resolveStoredArtworkReference({ input, hook, storage })
+      : null;
+  const effectiveReferences = artworkReference
+    ? [...references, artworkReference.image]
+    : references;
   const prompt = await resolveImagePrompt({
     input,
     hook,
@@ -340,47 +387,57 @@ async function generateOutputForHook({
     promptApiKey,
     debugLogDirectory,
     writeDebugLog,
-    references,
+    references: effectiveReferences,
+    artworkReference,
     fetchImpl
   });
   const imagePrompt = (input.artworkMode === "design-system"
     ? [
         prompt,
-        buildReferenceFidelityInstruction(references, "design-system"),
+        buildReferenceFidelityInstruction(
+          effectiveReferences,
+          "design-system"
+        ),
         buildConceptAlignmentInstruction(hook),
         buildDesignSystemFinalArtworkInstruction(hook)
       ]
     : input.artworkMode === "reference-library"
       ? [
           prompt,
-          buildReferenceFidelityInstruction(references, "reference-library"),
+          buildReferenceFidelityInstruction(
+            effectiveReferences,
+            "reference-library"
+          ),
           buildConceptAlignmentInstruction(hook)
         ]
       : [
-          buildReferenceFidelityInstruction(references, "standard"),
+          buildReferenceFidelityInstruction(effectiveReferences, "standard"),
           buildConceptAlignmentInstruction(hook),
           prompt
         ])
     .filter(Boolean)
     .join("\n\n");
+  const imageRequestDebug = buildImageRequestDebugBundle({
+    model,
+    runId: input.runId,
+    hook,
+    prompt: imagePrompt,
+    size: input.output.size,
+    references: effectiveReferences
+  });
   await writeDebugLog(
     debugLogDirectory,
-    buildImageRequestDebugLog({
-      model,
-      hook,
-      prompt: imagePrompt,
-      size: input.output.size,
-      references
-    })
+    imageRequestDebug.entry,
+    imageRequestDebug.assets
   );
   const image =
-    references.length > 0
+    effectiveReferences.length > 0
       ? await editImage({
           apiKey,
           model,
           prompt: imagePrompt,
           size: input.output.size,
-          referenceImages: references,
+          referenceImages: effectiveReferences,
           fetchImpl
         })
       : await generateImage({
@@ -397,9 +454,10 @@ async function generateOutputForHook({
     directionId: hook.id
   });
 
+  const imageBytes = Buffer.from(image.base64, "base64");
   const uploadResult = await storage.storage
     .from(ARTWORK_BUCKET)
-    .upload(assetStoragePath, Buffer.from(image.base64, "base64"), {
+    .upload(assetStoragePath, imageBytes, {
       contentType: image.mimeType,
       upsert: true
     });
@@ -412,6 +470,20 @@ async function generateOutputForHook({
   if (!signedUrlResult.data) {
     throw new Error("Could not create a signed URL for the generated asset.");
   }
+
+  const imageOutputDebug = buildImageOutputDebugBundle({
+    model,
+    runId: input.runId,
+    hook,
+    imageBytes,
+    mimeType: image.mimeType,
+    assetStoragePath
+  });
+  await writeDebugLog(
+    debugLogDirectory,
+    imageOutputDebug.entry,
+    imageOutputDebug.assets
+  );
 
   return {
     id: `${hook.id}-v1`,
@@ -430,24 +502,83 @@ async function generateOutputForHook({
   };
 }
 
+async function resolveStoredArtworkReference({
+  input,
+  hook,
+  storage
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  storage: ArtworkStorageClient;
+}): Promise<StoredArtworkReference> {
+  const pattern = selectArtworkReferencePattern({
+    brandName: input.brand?.name,
+    brandCategory: input.brand?.category,
+    service: input.service,
+    canvasRatio: referenceCanvasRatioFromSize(input.output.size),
+    brief: input.brief,
+    hook
+  });
+  const bucket = storage.storage.from(ARTWORK_REFERENCE_BUCKET);
+  const [signedUrlResult, downloadResult] = await Promise.all([
+    bucket.createSignedUrl(pattern.storagePath, SIGNED_URL_EXPIRES_IN_SECONDS),
+    bucket.download(pattern.storagePath)
+  ]);
+
+  if (signedUrlResult.error) throw new Error(signedUrlResult.error.message);
+  if (!signedUrlResult.data) {
+    throw new Error(
+      `Could not create a signed URL for artwork reference "${pattern.label}".`
+    );
+  }
+  if (downloadResult.error) throw new Error(downloadResult.error.message);
+  if (!downloadResult.data) {
+    throw new Error(`Artwork reference "${pattern.label}" was not found.`);
+  }
+
+  return {
+    signedUrl: signedUrlResult.data.signedUrl,
+    image: {
+      bytes: Buffer.from(await downloadResult.data.arrayBuffer()),
+      mimeType: downloadResult.data.type || pattern.mimeType,
+      label: buildArtworkReferenceLabel(pattern)
+    }
+  };
+}
+
 function buildReferenceFidelityInstruction(
   references: readonly ReferenceImageInput[],
   mode: ArtworkGenerationRequest["artworkMode"]
 ): string | null {
   if (!references.length) return null;
 
+  const artworkPatternReferences = references.filter(
+    isArtworkPatternReference
+  );
+  const clientReferences = references.filter(
+    (reference) => !isArtworkPatternReference(reference)
+  );
   const referenceMap = references.map(
     (reference, index) =>
       `Image ${index + 1} — ${reference.label ?? "Reference image"}`
   );
-  const hasUploadedSourceMaterials = references.some((reference) =>
+  const hasUploadedSourceMaterials = clientReferences.some((reference) =>
     reference.label?.startsWith("Uploaded ")
   );
 
   return [
     "REFERENCE-INFORMED DESIGN — highest priority:",
     ...referenceMap,
-    "When the attached references are from the same client account, use them as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish.",
+    ...(clientReferences.length
+      ? [
+          "Use supplied client references as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish."
+        ]
+      : []),
+    ...(artworkPatternReferences.length
+      ? [
+          "The image labeled as a Moons artwork reference is the selected internal structural example from the complete 72-artwork catalog. Study and carry forward its layout engine, hierarchy, visual medium, crop energy, lighting logic, density, texture, and finish. Treat its typography as conditional: borrow font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects only when compatible with the runtime brand and approved mood; otherwise retain a brand-appropriate typeface while preserving compatible hierarchy and rhythm. Replace the reference brand, product, people, copy, offer, scene details, and recognisable campaign identity with the approved runtime brief."
+        ]
+      : []),
     mode !== "standard"
       ? "The dominant visual medium shown by the references is authoritative. If they are photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family. A new execution means a new message-specific idea and composition—not replacing the reference medium with simplified isometric 3D, toy-like objects, miniature SaaS scenes, generic UI cards, or sterile product renders."
       : hasUploadedSourceMaterials
@@ -480,61 +611,145 @@ function buildDesignSystemFinalArtworkInstruction(hook: SelectedHook): string {
   ].join("\n");
 }
 
-function buildImageRequestDebugLog({
+function buildImageRequestDebugBundle({
   model,
+  runId,
   hook,
   prompt,
   size,
   references
 }: {
   model: string;
+  runId: string;
   hook: SelectedHook;
   prompt: string;
   size: ArtworkOutputSize;
   references: readonly ReferenceImageInput[];
-}): ImageRequestDebugLog {
+}): {
+  entry: ImageRequestDebugLog;
+  assets: readonly ArtworkGenerationDebugAsset[];
+} {
+  const createdAt = new Date().toISOString();
+  const fileStem = debugFileStem(createdAt, runId, hook.id);
+  const assets = references.map((reference, index) => ({
+    filename: `${fileStem}-input-${String(index + 1).padStart(2, "0")}.${extensionFromMimeType(reference.mimeType)}`,
+    bytes: reference.bytes
+  }));
+
   return {
-    createdAt: new Date().toISOString(),
-    model,
-    directionId: hook.id,
-    request:
-      references.length
-        ? {
-            endpoint: "/v1/images/edits",
-            multipartFields: {
-              model,
-              prompt,
-              size,
-              images: references.map((reference) => ({
-                ...(reference.label ? { label: reference.label } : {}),
-                mimeType: reference.mimeType,
-                bytes: reference.bytes.length
-              }))
+    entry: {
+      createdAt,
+      model,
+      runId,
+      directionId: hook.id,
+      request:
+        references.length
+          ? {
+              endpoint: "/v1/images/edits",
+              multipartFields: {
+                model,
+                prompt,
+                size,
+                images: references.map((reference, index) => ({
+                  ...(reference.label ? { label: reference.label } : {}),
+                  mimeType: reference.mimeType,
+                  bytes: reference.bytes.length,
+                  localFile: assets[index]!.filename
+                }))
+              }
             }
-          }
-        : {
-            endpoint: "/v1/images/generations",
-            body: { model, prompt, n: 1, size, quality: "medium" }
-          }
+          : {
+              endpoint: "/v1/images/generations",
+              body: { model, prompt, n: 1, size, quality: "medium" }
+            }
+    },
+    assets
   };
+}
+
+function buildImageOutputDebugBundle({
+  model,
+  runId,
+  hook,
+  imageBytes,
+  mimeType,
+  assetStoragePath
+}: {
+  model: string;
+  runId: string;
+  hook: SelectedHook;
+  imageBytes: Buffer;
+  mimeType: string;
+  assetStoragePath: string;
+}): {
+  entry: ImageOutputDebugLog;
+  assets: readonly ArtworkGenerationDebugAsset[];
+} {
+  const createdAt = new Date().toISOString();
+  const filename = `${debugFileStem(createdAt, runId, hook.id)}-output.${extensionFromMimeType(mimeType)}`;
+  return {
+    entry: {
+      kind: "image-output",
+      createdAt,
+      model,
+      runId,
+      directionId: hook.id,
+      response: {
+        mimeType,
+        bytes: imageBytes.length,
+        localFile: filename,
+        assetBucket: ARTWORK_BUCKET,
+        assetStoragePath
+      }
+    },
+    assets: [{ filename, bytes: imageBytes }]
+  };
+}
+
+function debugFileStem(
+  createdAt: string,
+  runId: string,
+  directionId: string
+): string {
+  return [
+    createdAt.replaceAll(/[:.]/g, "-"),
+    safePathSegment(runId),
+    safePathSegment(directionId)
+  ].join("-");
+}
+
+function extensionFromMimeType(mimeType: string): "jpg" | "webp" | "png" {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/webp") return "webp";
+  return "png";
+}
+
+function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
+  if (!("kind" in entry)) return "";
+  return entry.kind === "image-prompt-agent" ? "-image-agent" : "-image-output";
 }
 
 async function writeImageRequestDebugLog(
   directory: string | undefined,
-  entry: ArtworkGenerationDebugLog
+  entry: ArtworkGenerationDebugLog,
+  assets: readonly ArtworkGenerationDebugAsset[] = []
 ): Promise<void> {
   if (!directory) return;
 
   try {
     const logDirectory = join(process.cwd(), directory);
     await mkdir(logDirectory, { recursive: true });
-    const suffix = "kind" in entry ? "-image-agent" : "";
-    const filename = `${entry.createdAt.replaceAll(/[:.]/g, "-")}-${safePathSegment(entry.directionId)}${suffix}.json`;
-    await writeFile(
-      join(logDirectory, filename),
-      `${JSON.stringify(entry, null, 2)}\n`,
-      "utf8"
-    );
+    const filename = `${debugFileStem(entry.createdAt, entry.runId, entry.directionId)}${debugLogSuffix(entry)}.json`;
+    await Promise.all([
+      writeFile(
+        join(logDirectory, filename),
+        `${JSON.stringify(entry, null, 2)}\n`,
+        "utf8"
+      ),
+      ...assets.map((asset) =>
+        writeFile(join(logDirectory, asset.filename), asset.bytes)
+      )
+    ]);
   } catch (error) {
     console.warn("Could not write artwork-generation debug log.", error);
   }
@@ -667,6 +882,7 @@ async function resolveImagePrompt({
   debugLogDirectory,
   writeDebugLog,
   references,
+  artworkReference,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
@@ -677,6 +893,7 @@ async function resolveImagePrompt({
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
+  artworkReference: StoredArtworkReference | null;
   fetchImpl: FetchLike;
 }): Promise<string> {
   return generateImagePrompt({
@@ -688,7 +905,12 @@ async function resolveImagePrompt({
     writeTrace: async (trace) => {
       await writeDebugLog(
         debugLogDirectory,
-        buildImagePromptAgentDebugLog(trace, hook.id, references)
+        buildImagePromptAgentDebugLog(
+          trace,
+          input.runId,
+          hook.id,
+          references
+        )
       );
     },
     input: {
@@ -697,12 +919,18 @@ async function resolveImagePrompt({
       brief: input.brief,
       hook,
       textInputs: input.textInputs,
-      referenceImageLabels: input.referenceImages.map(
+      referenceImageLabels: references.map(
         (reference) => reference.label ?? "Reference image"
       ),
       referenceImages: references.map((reference, index) => ({
-        dataUrl: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
-        label: input.referenceImages[index]?.label ?? "Reference image"
+        imageUrl:
+          artworkReference?.image === reference
+            ? artworkReference.signedUrl
+            : `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+        label:
+          reference.label ??
+          input.referenceImages[index]?.label ??
+          "Reference image"
       })),
       canvasRatio: canvasRatioFromSize(input.output.size),
       brandLibrary: {
@@ -715,6 +943,7 @@ async function resolveImagePrompt({
 
 function buildImagePromptAgentDebugLog(
   trace: ImagePromptAgentTrace,
+  runId: string,
   directionId: string,
   references: readonly ReferenceImageInput[]
 ): ImagePromptAgentDebugLog {
@@ -723,6 +952,7 @@ function buildImagePromptAgentDebugLog(
     createdAt: trace.createdAt,
     provider: trace.provider,
     model: trace.model,
+    runId,
     directionId,
     mode: trace.mode,
     status: trace.status,
@@ -854,6 +1084,13 @@ function canvasRatioFromSize(size: ArtworkOutputSize): string {
   const height = Number(heightText);
   const divisor = greatestCommonDivisor(width, height);
   return `${width / divisor}:${height / divisor}`;
+}
+
+function referenceCanvasRatioFromSize(
+  size: ArtworkOutputSize
+): "1:1" | "4:5" | "16:9" {
+  if (size === "1024x1024") return "1:1";
+  return size === "1024x1536" ? "4:5" : "16:9";
 }
 
 function greatestCommonDivisor(a: number, b: number): number {

@@ -158,6 +158,7 @@ function mapBrand(
     ...(brand.facebook_url ? { facebookUrl: brand.facebook_url } : {}),
     ingestionStatus: brand.ingestion_status,
     ...(brand.ingestion_error ? { ingestionError: brand.ingestion_error } : {}),
+    ingestionUpdatedAt: brand.updated_at,
     library,
     memory: {
       working: learningRows

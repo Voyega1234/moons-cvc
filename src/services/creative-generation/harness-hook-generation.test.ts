@@ -55,6 +55,8 @@ const run: WorkflowState = {
     }
   ],
   referenceImages: [],
+  ideaGenerationStatus: "idle",
+  ideaGenerationError: null,
   directions: [],
   outputs: [],
   qaComplete: false,

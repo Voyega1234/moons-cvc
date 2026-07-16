@@ -118,6 +118,30 @@ export class SupabaseClientIngestionStore implements ClientIngestionStore {
     return { id: data.id };
   }
 
+  async listManualBrandInputs({
+    clientId,
+    jobId
+  }: Parameters<ClientIngestionStore["listManualBrandInputs"]>[0]) {
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("brand_sources")
+      .select("id, source_url, raw_payload")
+      .eq("client_id", clientId)
+      .eq("job_id", jobId)
+      .eq("source_type", "manual_input")
+      .eq("status", "succeeded");
+
+    if (error) throw error;
+
+    return (data ?? [])
+      .map((row) => ({
+        sourceId: row.id,
+        sourceUrl: row.source_url,
+        text: manualInputText(row.raw_payload)
+      }))
+      .filter((input) => input.text);
+  }
+
   async saveSocialPosts({
     clientId,
     sourceId,
@@ -244,4 +268,12 @@ export class SupabaseClientIngestionStore implements ClientIngestionStore {
 export function toJson(value: unknown): Json {
   if (value === undefined) return null;
   return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function manualInputText(payload: Json): string {
+  if (!payload || Array.isArray(payload) || typeof payload !== "object") {
+    return "";
+  }
+  const text = payload.text;
+  return typeof text === "string" ? text.trim() : "";
 }

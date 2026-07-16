@@ -33,7 +33,7 @@ export interface ImagePromptAgentInput {
   textInputs: readonly string[];
   referenceImageLabels: readonly string[];
   referenceImages: readonly {
-    dataUrl: string;
+    imageUrl: string;
     label: string;
   }[];
   canvasRatio: string;
@@ -124,7 +124,7 @@ export async function generateImagePrompt({
               { type: "input_text", text: inputText },
               ...input.referenceImages.map((image) => ({
                 type: "input_image" as const,
-                image_url: image.dataUrl,
+                image_url: image.imageUrl,
                 detail: "high" as const
               }))
             ]
@@ -340,8 +340,11 @@ function renderReferenceLibraryPrompt(
     source.trim(),
     "",
     "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE",
-    "Use the verified structural pattern library above to choose one relevant composition system. Transfer its design reasoning only; create a new execution for the approved campaign angle.",
+    "Inspect the attached image labeled as a Moons artwork reference. It is the selected result from the complete 72-artwork verified catalog. Transfer its design reasoning only; create a new execution for the approved campaign angle.",
     "Attached client references and labeled source assets override the internal library for brand identity, product fidelity, and visual-medium consistency.",
+    "Study the reference typography as a conditional style recipe: font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, dimensionality, outline, and shadow. Use those traits only when they fit the runtime brand identity and approved mood. If they conflict, keep the brand-appropriate typeface and borrow only compatible hierarchy and rhythm; state the chosen typography treatment explicitly in the final prompt.",
+    "Before writing finalPrompt, silently complete the 12-principle design blueprint: hierarchy, balance, contrast, alignment, proximity, repetition, emphasis, white space, scale and proportion, rhythm and movement, unity and consistency, and grid and composition. Commit to one dominant focal point, one reading order, one balance strategy, shared alignment lines, grouped information, controlled repetition, protected white space, explicit scale relationships, one eye path, one visual language, and measurable margins/zones. Translate these into concrete generation instructions; never merely name the principles.",
+    "Reject any proposed composition in which the headline, hero, offer, and CTA all compete equally, unrelated information floats without alignment or proximity, or the reference style overrides message clarity and brand fit.",
     "The selected hook and strategic concept are approved. Do not replace them with a library example's message, objects, brand, or scene.",
     "Return only one final English GPT Image 2 prompt in the required finalPrompt JSON field.",
     buildRuntimeInputBlock(input)

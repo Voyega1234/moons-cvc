@@ -7,7 +7,7 @@ import {
 
 export const DEFAULT_WORKSPACE_STORAGE_KEY = "moons.workspace";
 
-interface StorageLike {
+export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;

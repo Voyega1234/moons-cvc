@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Brand } from "../../domain/brand";
-import { mergeMappingClients } from "./merge-mapping-clients";
+import {
+  mergeMappingClients,
+  normalizeClientKey
+} from "./merge-mapping-clients";
 
 const systemClient: Brand = {
   id: "bonefit",
@@ -24,7 +27,12 @@ describe("mergeMappingClients", () => {
         {
           clientId: "New Client",
           status: "Active",
-          serviceStatus: "Pitching"
+          serviceStatus: "Pitching",
+          questionnaire: {
+            text: "Brand Name: New Client",
+            preview: "Brand Name: New Client",
+            facebookUrls: ["https://www.facebook.com/new-client"]
+          }
         }
       ]
     );
@@ -36,6 +44,9 @@ describe("mergeMappingClients", () => {
     expect(bonefit?.mappingStatus).toBe("Active");
     expect(newClient?.existsInSystem).toBe(false);
     expect(newClient?.source).toBe("mapping");
+    expect(newClient?.mappingQuestionnaire?.facebookUrls).toEqual([
+      "https://www.facebook.com/new-client"
+    ]);
   });
 
   it("sorts database clients before sheet-only clients", () => {
@@ -60,5 +71,29 @@ describe("mergeMappingClients", () => {
       "Z System",
       "A Sheet Only"
     ]);
+  });
+
+  it("matches punctuation variants without creating a sheet-only duplicate", () => {
+    const merged = mergeMappingClients(
+      [{ ...systemClient, id: "aklass", name: "A Klass Auto" }],
+      [
+        {
+          clientId: "A-Klass Auto",
+          status: "Inactive",
+          serviceStatus: "Inactive"
+        }
+      ]
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "aklass",
+      name: "A Klass Auto",
+      existsInSystem: true,
+      mappingStatus: "Inactive"
+    });
+    expect(normalizeClientKey("A-Klass Auto")).toBe(
+      normalizeClientKey("A Klass Auto")
+    );
   });
 });

@@ -4,6 +4,7 @@ import type { ClientIntakeRepository } from "../ports/client-intake-repository";
 import type { MappingClientRepository } from "../ports/mapping-client-repository";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
 import { env } from "../config/env";
+import { getSupabaseClient } from "../lib/supabase/client";
 import { mockBrandRepository } from "../repositories/brands/mock-brand-repository";
 import { MockBrandMemoryRepository } from "../repositories/brand-memory/mock-brand-memory-repository";
 import { MockClientIntakeRepository } from "../repositories/client-intake/mock-client-intake-repository";
@@ -12,7 +13,24 @@ import { SupabaseBrandMemoryRepository } from "../repositories/brand-memory/supa
 import { GoogleSheetMappingClientRepository } from "../repositories/mapping-clients/google-sheet-mapping-client-repository";
 import { SupabaseBrandRepository } from "../repositories/brands/supabase-brand-repository";
 import { LocalWorkspaceRepository } from "../repositories/workspace/local-workspace-repository";
+import { LocalFirstWorkspaceRepository } from "../repositories/workspace/local-first-workspace-repository";
+import { ScopedLocalWorkspaceRepository } from "../repositories/workspace/scoped-local-workspace-repository";
 import { SupabaseWorkspaceRepository } from "../repositories/workspace/supabase-workspace-repository";
+
+const localWorkspaceRepository = new LocalWorkspaceRepository(
+  window.localStorage
+);
+const signedInUserWorkspaceRepository = new ScopedLocalWorkspaceRepository(
+  window.localStorage,
+  async () => {
+    const { data, error } = await getSupabaseClient().auth.getSession();
+    if (error) throw error;
+    if (!data.session?.user) {
+      throw new Error("Sign in before loading the workspace.");
+    }
+    return data.session.user.id;
+  }
+);
 
 export interface AppDependencies {
   brandRepository: BrandRepository;
@@ -42,6 +60,9 @@ export const dependencies: AppDependencies = {
   mappingClientRepository: new GoogleSheetMappingClientRepository(),
   workspaceRepository:
     env.dataSource === "supabase"
-      ? new SupabaseWorkspaceRepository()
-      : new LocalWorkspaceRepository(window.localStorage)
+      ? new LocalFirstWorkspaceRepository(
+          signedInUserWorkspaceRepository,
+          new SupabaseWorkspaceRepository()
+        )
+      : localWorkspaceRepository
 };

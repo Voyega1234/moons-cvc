@@ -10,6 +10,7 @@ import {
   Books,
   Brain,
   ChartLineUp,
+  Check,
   CheckCircle,
   Kanban,
   Lightbulb,
@@ -22,6 +23,7 @@ import {
   Tray,
   Users,
   UserCircle,
+  WarningCircle,
   SignOut,
   X
 } from "@phosphor-icons/react";
@@ -73,6 +75,13 @@ export function App() {
     persistenceError
   } = useWorkspace();
   const state = getActiveRun(workspace);
+  const visibleToast = persistenceError
+    ? {
+        title: "Workspace could not be saved",
+        message: persistenceError.message,
+        tone: "error" as const
+      }
+    : workspace.toast;
 
   // Bound to state.id (not "whichever run is active") so that an async
   // action started against this run — hook generation, artwork generation,
@@ -102,7 +111,7 @@ export function App() {
   }, []);
 
   useAutoDismiss(
-    Boolean(workspace.toast),
+    workspace.toast,
     workspaceDispatch,
     CLEAR_TOAST_ACTION
   );
@@ -245,10 +254,24 @@ export function App() {
           </div>
         </main>
       </div>
-      {persistenceError ? (
-        <div className="toast-wrap" role="alert" aria-live="assertive">
-          <div className="toast show persistence-toast">
-            {persistenceError.message}
+      {visibleToast ? (
+        <div
+          className="toast-wrap"
+          role={visibleToast.tone === "success" ? "status" : "alert"}
+          aria-live={visibleToast.tone === "success" ? "polite" : "assertive"}
+        >
+          <div className={`toast show neo-action-toast ${visibleToast.tone}`}>
+            <span className="neo-action-toast-icon" aria-hidden="true">
+              {visibleToast.tone === "success" ? (
+                <Check size={15} weight="bold" />
+              ) : (
+                <WarningCircle size={15} weight="fill" />
+              )}
+            </span>
+            <span className="neo-action-toast-copy">
+              <b>{visibleToast.title}</b>
+              <span>{visibleToast.message}</span>
+            </span>
           </div>
         </div>
       ) : null}
@@ -367,7 +390,10 @@ function Header({
               onOpenNotification={(notification, brand) => {
                 workspaceDispatch({ type: "set-view", view: "studio" });
                 dispatch({ type: "set-stage", stage: "start" });
-                if (brand && notification.status !== "failed") {
+                if (
+                  brand &&
+                  ["ready", "needs_review"].includes(notification.status)
+                ) {
                   dispatch({ type: "select-brand", brand });
                 }
               }}
@@ -541,7 +567,7 @@ export function NotificationMailbox({
                       <b>{notification.title}</b>
                       <span>{notification.message}</span>
                       <small>
-                        {notification.status === "failed"
+                        {["failed", "stalled"].includes(notification.status)
                           ? "Open Signal"
                           : "Open brand"}
                       </small>

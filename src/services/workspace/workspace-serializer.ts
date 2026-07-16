@@ -136,6 +136,18 @@ function parseRun(value: unknown): WorkflowState | null {
   const brief = parseString(value.brief, true);
   const attachments = parseStringArray(value.attachments);
   const uploadedMaterials = parseUploadedMaterials(value.uploadedMaterials);
+  const persistedIdeaGenerationStatus =
+    value.ideaGenerationStatus === undefined
+      ? "idle"
+      : parseMember(value.ideaGenerationStatus, [
+          "idle",
+          "running",
+          "failed"
+        ] as const);
+  const persistedIdeaGenerationError =
+    value.ideaGenerationError === undefined || value.ideaGenerationError === null
+      ? null
+      : parseString(value.ideaGenerationError, true);
 
   if (
     !id ||
@@ -151,6 +163,10 @@ function parseRun(value: unknown): WorkflowState | null {
     brief === null ||
     !attachments ||
     !uploadedMaterials ||
+    !persistedIdeaGenerationStatus ||
+    (persistedIdeaGenerationError === null &&
+      value.ideaGenerationError !== undefined &&
+      value.ideaGenerationError !== null) ||
     typeof value.qaComplete !== "boolean" ||
     typeof value.approved !== "boolean" ||
     typeof value.clientSent !== "boolean" ||
@@ -183,6 +199,17 @@ function parseRun(value: unknown): WorkflowState | null {
     return null;
   }
 
+  const ideaGenerationStatus =
+    persistedIdeaGenerationStatus === "running"
+      ? "failed"
+      : persistedIdeaGenerationStatus;
+  const ideaGenerationError =
+    persistedIdeaGenerationStatus === "running"
+      ? "Idea generation was interrupted by refresh. Generate again."
+      : ideaGenerationStatus === "failed"
+        ? persistedIdeaGenerationError ?? "Could not generate hooks."
+        : null;
+
   return {
     id,
     createdAt,
@@ -203,6 +230,8 @@ function parseRun(value: unknown): WorkflowState | null {
     attachments,
     uploadedMaterials,
     referenceImages,
+    ideaGenerationStatus,
+    ideaGenerationError,
     directions,
     outputs,
     qaComplete: value.qaComplete,
@@ -387,6 +416,18 @@ function parseDirections(
       item.service === undefined
         ? undefined
         : parseMember(item.service, serviceTypes);
+    const manual =
+      item.manual === undefined
+        ? undefined
+        : typeof item.manual === "boolean"
+          ? item.manual
+          : null;
+    const pillar =
+      item.pillar === undefined ? undefined : parseString(item.pillar, true);
+    const objective =
+      item.objective === undefined
+        ? undefined
+        : parseString(item.objective, true);
     const hook = parseString(item.hook, true);
     const concept = parseString(item.concept, true);
     const subheadline =
@@ -430,6 +471,9 @@ function parseDirections(
     if (
       !id ||
       (item.service !== undefined && !service) ||
+      manual === null ||
+      pillar === null ||
+      objective === null ||
       hook === null ||
       concept === null ||
       subheadline === null ||
@@ -453,6 +497,9 @@ function parseDirections(
     return {
       id,
       service: service ?? undefined,
+      manual: manual ?? undefined,
+      pillar: pillar ?? undefined,
+      objective: objective ?? undefined,
       hook,
       subheadline,
       concept,
@@ -514,6 +561,12 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
     const provider =
       item.provider === undefined ? undefined : parseString(item.provider);
     const model = item.model === undefined ? undefined : parseString(item.model);
+    const savedToReferences =
+      item.savedToReferences === undefined
+        ? undefined
+        : typeof item.savedToReferences === "boolean"
+          ? item.savedToReferences
+          : null;
 
     if (
       !id ||
@@ -528,7 +581,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       assetStoragePath === null ||
       assetBucket === null ||
       provider === null ||
-      model === null
+      model === null ||
+      savedToReferences === null
     ) {
       return null;
     }
@@ -546,7 +600,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       ...(assetStoragePath ? { assetStoragePath } : {}),
       ...(assetBucket ? { assetBucket } : {}),
       ...(provider ? { provider } : {}),
-      ...(model ? { model } : {})
+      ...(model ? { model } : {}),
+      ...(savedToReferences !== undefined ? { savedToReferences } : {})
     };
   });
 

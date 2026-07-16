@@ -8,3 +8,4 @@ dist
 .vercel
 logs/
 agent_prompt/images
+tmp

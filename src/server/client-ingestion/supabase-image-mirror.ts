@@ -1,3 +1,4 @@
+import { get as httpsGet } from "node:https";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type {
@@ -8,27 +9,34 @@ import type {
 export interface SupabaseImageMirrorOptions {
   client: SupabaseClient<Database>;
   bucket?: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: ImageFetch;
+  facebookCdnFetchImpl?: ImageFetch;
   signedUrlExpiresInSeconds?: number;
 }
 
+type ImageFetch = (imageUrl: string) => Promise<Response>;
+
 const DEFAULT_BUCKET = "brand-source-assets";
 const DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 20_000;
 
 export class SupabaseImageMirror implements ImageMirror {
   private readonly bucket: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: ImageFetch;
+  private readonly facebookCdnFetchImpl: ImageFetch;
   private readonly signedUrlExpiresInSeconds: number;
 
   constructor({
     client,
     bucket = DEFAULT_BUCKET,
     fetchImpl = fetch,
+    facebookCdnFetchImpl = fetchFacebookImageOverIpv4,
     signedUrlExpiresInSeconds = DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS
   }: SupabaseImageMirrorOptions) {
     this.client = client;
     this.bucket = bucket;
     this.fetchImpl = fetchImpl;
+    this.facebookCdnFetchImpl = facebookCdnFetchImpl;
     this.signedUrlExpiresInSeconds = signedUrlExpiresInSeconds;
   }
 
@@ -42,7 +50,14 @@ export class SupabaseImageMirror implements ImageMirror {
     index,
     imageUrl
   }: Parameters<ImageMirror["mirror"]>[0]): Promise<MirroredVisualAsset> {
-    const response = await this.fetchImpl(imageUrl);
+    const download = isFacebookCdnUrl(imageUrl)
+      ? this.facebookCdnFetchImpl
+      : this.fetchImpl;
+    const response = await withTimeout(
+      download(imageUrl),
+      IMAGE_DOWNLOAD_TIMEOUT_MS,
+      "Source image download timed out."
+    );
     if (!response.ok) {
       throw new Error(`Could not download source image: ${response.status}`);
     }
@@ -86,6 +101,55 @@ export class SupabaseImageMirror implements ImageMirror {
       originalUrlHash
     };
   }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(resolve, reject).finally(() => clearTimeout(timeout));
+  });
+}
+
+export function isFacebookCdnUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "fbcdn.net" || hostname.endsWith(".fbcdn.net");
+  } catch {
+    return false;
+  }
+}
+
+function fetchFacebookImageOverIpv4(imageUrl: string): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = httpsGet(
+      imageUrl,
+      { family: 4 },
+      (response) => {
+        const chunks: Buffer[] = [];
+
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => {
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: response.statusCode ?? 500,
+              headers: {
+                "content-type": response.headers["content-type"] ?? ""
+              }
+            })
+          );
+        });
+      }
+    );
+
+    request.setTimeout(IMAGE_DOWNLOAD_TIMEOUT_MS, () => {
+      request.destroy(new Error("Facebook CDN image download timed out."));
+    });
+    request.on("error", reject);
+  });
 }
 
 export function buildStoragePath({

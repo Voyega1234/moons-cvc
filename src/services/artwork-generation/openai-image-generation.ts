@@ -185,11 +185,14 @@ export async function regenerateOutputImage({
     selectedHooks: [direction],
     textInputs: trimmedInstructions ? [trimmedInstructions] : [],
     referenceImages: [
-      ...run.referenceImages.map((item) => ({
-        kind: "url" as const,
-        url: item.url,
-        label: item.label
-      })),
+      ...referencesForActiveBrand(
+        run,
+        run.referenceImages.map((item) => ({
+          kind: "url" as const,
+          url: item.url,
+          label: item.label
+        }))
+      ),
       ...creativeMaterialReferences(run)
     ],
     ...buildBrandContext(run.brand),
@@ -355,13 +358,44 @@ function buildArtworkRequest({
     brief: run.brief,
     selectedHooks,
     textInputs,
-    referenceImages: [...referenceImages, ...creativeMaterialReferences(run)],
+    referenceImages: [
+      ...referencesForActiveBrand(run, referenceImages),
+      ...creativeMaterialReferences(run)
+    ],
     ...buildBrandContext(run.brand),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
     }
   };
+}
+
+function referencesForActiveBrand(
+  run: WorkflowState,
+  referenceImages: readonly ArtworkReferenceImage[]
+): readonly ArtworkReferenceImage[] {
+  const selectedLogo = referenceImages.some(
+    (image) => image.label?.trim().toLowerCase() === "logo"
+  );
+  if (!selectedLogo) return referenceImages;
+
+  const nonLogoReferences = referenceImages.filter(
+    (image) => image.label?.trim().toLowerCase() !== "logo"
+  );
+  const activeLogo = run.brand?.library.brand.find(
+    (item) => item.title.trim().toLowerCase() === "logo" && item.assetUrl
+  );
+
+  return activeLogo?.assetUrl
+    ? [
+        {
+          kind: "url" as const,
+          url: activeLogo.assetUrl,
+          label: "Logo"
+        },
+        ...nonLogoReferences
+      ]
+    : nonLogoReferences;
 }
 
 function creativeMaterialReferences(

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasUsablePastWorkPost,
+  resolvePastWorkSignedUrls,
   selectLatestUniqueAdAssets,
   selectLatestUniquePastWorkAssets
 } from "./supabase-brand-memory-repository";
@@ -51,5 +53,26 @@ describe("selectLatestUniqueAdAssets", () => {
       assets[0],
       assets[2]
     ]);
+  });
+
+  it("keeps loading past work when one stored image cannot be signed", async () => {
+    const assets = [{ id: "good" }, { id: "missing" }];
+    const urls = await resolvePastWorkSignedUrls(assets, async (asset) => {
+      if (asset.id === "missing") throw new Error("Object not found");
+      return "https://example.com/good.jpg";
+    });
+
+    expect(urls).toEqual(
+      new Map([
+        ["good", "https://example.com/good.jpg"],
+        ["missing", null]
+      ])
+    );
+  });
+
+  it("hides historical empty Facebook error rows unless they have an image", () => {
+    expect(hasUsablePastWorkPost({ text: "" }, false)).toBe(false);
+    expect(hasUsablePastWorkPost({ text: "A real post" }, false)).toBe(true);
+    expect(hasUsablePastWorkPost({ text: "" }, true)).toBe(true);
   });
 });

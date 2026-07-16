@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   emailSignInRedirectUrl,
-  passwordResetRedirectUrl,
-  validateAccountPassword,
   validateConvertCakeEmail
 } from "./auth-provider";
 
@@ -25,27 +23,11 @@ describe("emailSignInRedirectUrl", () => {
     ).toBe("https://moons-cvc.vercel.app/");
   });
 
-  it("builds a dedicated password recovery return URL", () => {
-    expect(
-      passwordResetRedirectUrl({
-        hostname: "localhost",
-        origin: "http://localhost:4173"
-      })
-    ).toBe("http://localhost:4173/?reset-password=1");
-  });
-
-  it("limits new accounts to Convert Cake email addresses", () => {
+  it("limits passwordless accounts to Convert Cake email addresses", () => {
     expect(validateConvertCakeEmail("designer@convertcake.com")).toBeNull();
     expect(validateConvertCakeEmail("designer@example.com")).toBe(
-      "Create accounts with a @convertcake.com email."
+      "Use your @convertcake.com email."
     );
-  });
-
-  it("requires an eight-character account password", () => {
-    expect(validateAccountPassword("short")).toBe(
-      "Password must be at least 8 characters."
-    );
-    expect(validateAccountPassword("long-enough")).toBeNull();
   });
 
 });

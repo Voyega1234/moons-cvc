@@ -33,6 +33,8 @@ const run: WorkflowState = {
   attachments: [],
   uploadedMaterials: [],
   referenceImages: [],
+  ideaGenerationStatus: "idle",
+  ideaGenerationError: null,
   directions: [
     {
       id: "hook-1",
@@ -110,6 +112,53 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.output.size).toBe("2160x3840");
+  });
+
+  it("replaces a stale selected logo with the active client's Brand Kit logo", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        brand: {
+          ...run.brand!,
+          library: {
+            ...run.brand!.library,
+            brand: [
+              {
+                id: "flora-logo",
+                title: "Logo",
+                description: "Flora Daily logo",
+                assetUrl: "https://example.com/flora-logo.png"
+              }
+            ]
+          }
+        }
+      },
+      referenceImages: [
+        {
+          kind: "url",
+          url: "https://example.com/sleep-happy-logo.png",
+          label: "Logo"
+        },
+        {
+          kind: "url",
+          url: "https://example.com/flora-past-work.png",
+          label: "Past work"
+        }
+      ]
+    });
+
+    expect(request.referenceImages).toEqual([
+      {
+        kind: "url",
+        url: "https://example.com/flora-logo.png",
+        label: "Logo"
+      },
+      {
+        kind: "url",
+        url: "https://example.com/flora-past-work.png",
+        label: "Past work"
+      }
+    ]);
   });
 
   it("passes uploaded creative materials to artwork generation with their intended role", () => {

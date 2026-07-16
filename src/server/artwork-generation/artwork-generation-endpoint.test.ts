@@ -133,6 +133,7 @@ describe("handleArtworkGenerationRequest", () => {
 
     const { client, uploads } = fakeStorage();
     const debugLogs: unknown[] = [];
+    const debugAssets: { filename: string; bytes: Buffer }[] = [];
 
     const response = await handleArtworkGenerationRequest({
       request: buildRequest({ authorization: "Bearer user-token" }),
@@ -143,8 +144,9 @@ describe("handleArtworkGenerationRequest", () => {
         SUPABASE_ANON_KEY: "anon-key"
       },
       fetchImpl: fetchMock as unknown as typeof fetch,
-      writeDebugLog: async (_directory, entry) => {
+      writeDebugLog: async (_directory, entry, assets) => {
         debugLogs.push(entry);
+        debugAssets.push(...(assets ?? []));
       },
       createStorageClient: () => client
     });
@@ -193,6 +195,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       expect.objectContaining({
         model: "gpt-image-2",
+        runId: "run-1",
         directionId: "hook-1",
         request: expect.objectContaining({
           endpoint: "/v1/images/generations",
@@ -202,6 +205,25 @@ describe("handleArtworkGenerationRequest", () => {
             size: "1024x1024"
           })
         })
+      }),
+      expect.objectContaining({
+        kind: "image-output",
+        model: "gpt-image-2",
+        runId: "run-1",
+        directionId: "hook-1",
+        response: expect.objectContaining({
+          mimeType: "image/png",
+          bytes: Buffer.from("fake-png-bytes").length,
+          localFile: expect.stringMatching(/-output\.png$/),
+          assetBucket: "creative-assets",
+          assetStoragePath: "flora/run-1/outputs/hook-1-v1.png"
+        })
+      })
+    ]);
+    expect(debugAssets).toEqual([
+      expect.objectContaining({
+        filename: expect.stringMatching(/-output\.png$/),
+        bytes: Buffer.from("fake-png-bytes")
       })
     ]);
     expect(JSON.stringify(debugLogs)).not.toContain("test-key");
@@ -435,6 +457,136 @@ describe("handleArtworkGenerationRequest", () => {
       "Image 1 — Convert Cake campaign reference"
     );
     expect(uploads).toHaveLength(1);
+  });
+
+  it("uses a private Supabase artwork reference URL in reference-library mode", async () => {
+    const promptAgentBodies: Record<string, unknown>[] = [];
+    const editCalls: FormData[] = [];
+    const debugLogs: unknown[] = [];
+    const debugAssets: { filename: string; bytes: Buffer }[] = [];
+    const referenceUrl =
+      "https://supabase.example.com/storage/v1/object/sign/artwork-reference-library/artworks/aw_elida_jun25_-2.jpg?token=signed";
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
+      }
+      if (href.includes("/v1/responses")) {
+        promptAgentBodies.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        return promptAgentResponse("Reference-informed beauty artwork.");
+      }
+      if (href.includes("/v1/images/edits")) {
+        editCalls.push(init?.body as FormData);
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const { client } = fakeStorage();
+    const defaultFrom = client.storage.from.bind(client.storage);
+    client.storage.from = (bucket: string) => {
+      if (bucket !== "artwork-reference-library") return defaultFrom(bucket);
+      return {
+        upload: async () => ({ error: null }),
+        createSignedUrl: async () => ({
+          data: { signedUrl: referenceUrl },
+          error: null
+        }),
+        download: async () => ({
+          data: {
+            type: "image/jpeg",
+            arrayBuffer: async () => Buffer.from("stored-reference")
+          } as unknown as Blob,
+          error: null
+        })
+      };
+    };
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "reference-library",
+          brand: { ...requestBody.brand, category: "Beauty clinic" },
+          brief: "Launch a soft skin clinic promotion."
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      writeDebugLog: async (_directory, entry, assets) => {
+        debugLogs.push(entry);
+        debugAssets.push(...(assets ?? []));
+      },
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    const content = (promptAgentBodies[0]?.input as {
+      content: { type: string; image_url?: string }[];
+    }[])[0]?.content;
+    expect(content).toContainEqual({
+      type: "input_image",
+      image_url: referenceUrl,
+      detail: "high"
+    });
+    expect(editCalls).toHaveLength(1);
+    expect((editCalls[0]?.get("image[]") as File).type).toBe("image/jpeg");
+    expect(editCalls[0]?.get("prompt")).toContain(
+      "Image 1 — Moons artwork reference — Elida"
+    );
+    expect(debugLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: "run-1",
+          directionId: "hook-1",
+          request: expect.objectContaining({
+            endpoint: "/v1/images/edits",
+            multipartFields: expect.objectContaining({
+              images: [
+                expect.objectContaining({
+                  mimeType: "image/jpeg",
+                  bytes: Buffer.from("stored-reference").length,
+                  localFile: expect.stringMatching(/-input-01\.jpg$/)
+                })
+              ]
+            })
+          })
+        }),
+        expect.objectContaining({
+          kind: "image-output",
+          response: expect.objectContaining({
+            localFile: expect.stringMatching(/-output\.png$/)
+          })
+        })
+      ])
+    );
+    expect(debugAssets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: expect.stringMatching(/-input-01\.jpg$/),
+          bytes: Buffer.from("stored-reference")
+        }),
+        expect.objectContaining({
+          filename: expect.stringMatching(/-output\.png$/),
+          bytes: Buffer.from("fake-png-bytes")
+        })
+      ])
+    );
   });
 
   it("recovers an expired Supabase signed reference URL through storage", async () => {

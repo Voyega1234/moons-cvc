@@ -34,6 +34,9 @@ function createStore(): ClientIngestionStore & {
       this.sources.push(source);
       return source;
     },
+    async listManualBrandInputs() {
+      return [];
+    },
     async saveSocialPosts(input) {
       this.posts.push(...input.posts);
       return input.posts.map((post, index) => ({
@@ -156,7 +159,64 @@ describe("runClientIngestionJob", () => {
     expect(store.clientStatuses.at(-1)).toMatchObject({
       clientId: "client-1",
       status: "failed",
-      errorMessage: "เข้าถึงลิงก์ Facebook นี้ไม่ได้"
+      errorMessage: "Please check Facebook page URL."
+    });
+  });
+
+  it("notifies about the Facebook URL instead of using fallback for actor access errors", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/unavailable-page",
+          error: "not_available",
+          errorDescription: "This content is not available."
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/unavailable-page",
+          error: "Page is private",
+          errorCode: "PAGE_PRIVATE"
+        }
+      ])
+    };
+    const store = createStore();
+    const searchFallback = {
+      search: vi.fn(async () => ({ results: [] }))
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/unavailable-page"
+      },
+      {
+        apify,
+        store,
+        imageMirror: { mirror: vi.fn() },
+        searchFallback
+      }
+    );
+
+    expect(result).toEqual({
+      postsSaved: 0,
+      adsSaved: 0,
+      visualAssetsMirrored: 0,
+      usedFallbackSearch: false,
+      completed: false
+    });
+    expect(searchFallback.search).not.toHaveBeenCalled();
+    expect(store.posts).toEqual([]);
+    expect(store.ads).toEqual([]);
+    expect(store.sources).toEqual([
+      expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({ status: "failed" })
+    ]);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "failed",
+      errorMessage: "Please check Facebook page URL."
     });
   });
 
@@ -176,6 +236,13 @@ describe("runClientIngestionJob", () => {
       scrapeFacebookAdsLibrary: vi.fn(async () => [])
     };
     const store = createStore();
+    store.listManualBrandInputs = vi.fn(async () => [
+      {
+        sourceId: "questionnaire-1",
+        sourceUrl: "https://portal.example.com",
+        text: "Brand Name: Client One. Brand description: First-party detail."
+      }
+    ]);
     const imageMirror: ImageMirror = {
       async mirror(input) {
         return {
@@ -252,6 +319,13 @@ describe("runClientIngestionJob", () => {
     expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
       expect.objectContaining({
         client: expect.objectContaining({ id: "client-1" }),
+        textEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1"
+          })
+        ]),
+        sourceSummary: expect.objectContaining({ manualInputsSaved: 1 }),
         visualAssets: [
           expect.objectContaining({
             assetStoragePath: "client-1/job-1/0.jpg",
@@ -331,6 +405,98 @@ describe("runClientIngestionJob", () => {
       clientId: "client-1",
       status: "failed",
       errorMessage: "Vision model unavailable"
+    });
+  });
+
+  it("skips an unavailable image and continues mirroring the remaining evidence", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Post with two images",
+          media: [
+            { image: { uri: "https://cdn.example.com/broken.jpg" } },
+            { image: { uri: "https://cdn.example.com/working.jpg" } }
+          ]
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      async mirror(input) {
+        if (input.imageUrl.includes("broken")) {
+          throw new Error("Image unavailable");
+        }
+        return {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: `${input.clientId}/${input.index}.jpg`,
+          assetUrl: `https://storage.example.com/${input.index}.jpg`,
+          originalUrlHash: `hash-${input.index}`
+        };
+      }
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror }
+    );
+
+    expect(result.visualAssetsMirrored).toBe(1);
+    expect(store.visualAssets).toHaveLength(1);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "needs_review"
+    });
+  });
+
+  it("marks the job failed when mirrored asset persistence fails", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Post with image",
+          media: [{ image: { uri: "https://cdn.example.com/image.jpg" } }]
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+    store.saveVisualAsset = vi.fn(async () => {
+      throw new Error("Could not save mirrored image");
+    });
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      {
+        apify,
+        store,
+        imageMirror: {
+          async mirror(input) {
+            return {
+              assetBucket: "brand-source-assets",
+              assetStoragePath: `${input.clientId}/image.jpg`,
+              assetUrl: "https://storage.example.com/image.jpg",
+              originalUrlHash: "hash"
+            };
+          }
+        }
+      }
+    );
+
+    expect(result.visualAssetsMirrored).toBe(0);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "failed",
+      errorMessage: "Could not save mirrored image"
     });
   });
 });

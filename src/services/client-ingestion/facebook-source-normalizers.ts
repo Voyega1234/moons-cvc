@@ -49,6 +49,7 @@ export function normalizeFacebookPosts(
 
   return payload.flatMap((item) => {
     if (!isRecord(item)) return [];
+    if (readFacebookSourceError(item)) return [];
 
     const postUrl = readString(item.url);
     if (!postUrl) return [];
@@ -96,6 +97,7 @@ export function normalizeFacebookAdsLibraryItems(
 
   return payload.flatMap((item) => {
     if (!isRecord(item)) return [];
+    if (readFacebookSourceError(item)) return [];
 
     const adArchiveId = readString(item.ad_archive_id);
     if (!adArchiveId) return [];
@@ -139,6 +141,29 @@ export function normalizeFacebookAdsLibraryItems(
       }
     ];
   });
+}
+
+export function getFacebookSourceError(payload: unknown): string | null {
+  if (!Array.isArray(payload)) return null;
+
+  for (const item of payload) {
+    if (!isRecord(item)) continue;
+    const error = readFacebookSourceError(item);
+    if (error) return error;
+  }
+
+  return null;
+}
+
+function readFacebookSourceError(item: Record<string, unknown>): string | null {
+  const code = readString(item.errorCode);
+  const message =
+    readString(item.errorDescription) ??
+    readString(item.errorMessage) ??
+    readString(item.error);
+
+  if (!code && !message) return null;
+  return [code, message].filter(Boolean).join(": ");
 }
 
 export function getBestPostImageUrl(media: unknown): string | null {

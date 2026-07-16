@@ -37,6 +37,7 @@ export function mergeMappingClients(
     if (existingClient) {
       existingClient.mappingStatus = mappingClient.status;
       existingClient.serviceStatus = mappingClient.serviceStatus;
+      existingClient.mappingQuestionnaire = mappingClient.questionnaire;
       continue;
     }
 
@@ -50,6 +51,7 @@ export function mergeMappingClients(
       existsInSystem: false,
       mappingStatus: mappingClient.status,
       serviceStatus: mappingClient.serviceStatus,
+      mappingQuestionnaire: mappingClient.questionnaire,
       source: "mapping"
     });
   }
@@ -64,7 +66,11 @@ export function mergeMappingClients(
 }
 
 export function normalizeClientKey(clientName: string): string {
-  return clientName.trim().toLowerCase();
+  return clientName
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("en")
+    .replaceAll(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function initialsFromName(clientName: string): string {

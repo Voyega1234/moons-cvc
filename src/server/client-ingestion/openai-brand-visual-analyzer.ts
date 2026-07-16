@@ -141,15 +141,28 @@ function buildPrompt(
   input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
   visualAssets: readonly MirroredBrandVisualAsset[]
 ): string {
-  const textEvidence = selectBalancedBySource(
-    input.textEvidence.filter((evidence) => evidence.text.trim()),
-    60
+  const manualEvidence = input.textEvidence
+    .filter(
+      (evidence) =>
+        evidence.sourceType === "manual_input" && evidence.text.trim()
+    )
+    .slice(0, 2);
+  const socialEvidence = selectBalancedBySource(
+    input.textEvidence.filter(
+      (evidence): evidence is typeof evidence & {
+        sourceType: "facebook_post" | "facebook_ad";
+      } =>
+        evidence.sourceType !== "manual_input" && Boolean(evidence.text.trim())
+    ),
+    60 - manualEvidence.length
   );
+  const textEvidence = [...manualEvidence, ...socialEvidence];
 
   return [
     `วิเคราะห์และทำความรู้จักแบรนด์ ${input.client.name} สำหรับใช้สร้างครีเอทีฟโฆษณา`,
     "",
-    "ใช้เฉพาะข้อมูลโพสต์ โฆษณา และรูปภาพที่ให้มา ห้ามแต่งข้อมูลที่ไม่มีหลักฐาน",
+    "ใช้เฉพาะข้อมูล Questionnaire โพสต์ โฆษณา และรูปภาพที่ให้มา ห้ามแต่งข้อมูลที่ไม่มีหลักฐาน",
+    "Questionnaire เป็นข้อมูล first-party สำหรับ Brand Kit ให้ใช้รายละเอียดแบรนด์และช่องทาง แต่ห้ามนำข้อมูลผู้ติดต่อส่วนบุคคลไปสร้างครีเอทีฟ",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
     "ห้ามสรุปว่าคอนเทนต์ทำงานดีจาก engagement เพียงอย่างเดียว และห้ามวิเคราะห์วิดีโอ",
     "ต้องวิเคราะห์ทั้ง Organic Facebook Posts และ Facebook Ads Library เมื่อมีข้อมูลจากทั้งสองแหล่ง",
@@ -177,7 +190,7 @@ function buildPrompt(
     "Brand learning ในขั้นนี้เป็นเพียง observed signals ไม่ใช่ผลการทดสอบ performance",
     "ทุกข้อสรุปสำคัญต้องตรวจสอบย้อนกลับไปยังหลักฐานที่ให้มาได้",
     "",
-    `Source summary: ${input.sourceSummary.postsSaved} posts, ${input.sourceSummary.adsSaved} ads, fallback search used: ${input.sourceSummary.usedFallbackSearch}.`,
+    `Source summary: ${input.sourceSummary.manualInputsSaved} questionnaire, ${input.sourceSummary.postsSaved} posts, ${input.sourceSummary.adsSaved} ads, fallback search used: ${input.sourceSummary.usedFallbackSearch}.`,
     `Mirrored image count: ${visualAssets.length}.`,
     "",
     "Text evidence:",

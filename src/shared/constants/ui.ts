@@ -1,5 +1,5 @@
 export const UI_TIMING = {
-  toastDurationMs: 2200
+  toastDurationMs: 3200
 } as const;
 
 export const QUANTITY_LIMITS = {

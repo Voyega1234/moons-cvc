@@ -85,9 +85,15 @@ describe("OpenAiBrandVisualAnalyzer", () => {
       sourceSummary: {
         postsSaved: 1,
         adsSaved: 0,
+        manualInputsSaved: 1,
         usedFallbackSearch: false
       },
       textEvidence: [
+        {
+          sourceType: "manual_input",
+          sourceId: "questionnaire-1",
+          text: "Brand Name: Flora Daily. Website: flora.example.com"
+        },
         {
           sourceType: "facebook_post",
           sourceId: "post-1",
@@ -146,6 +152,8 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(JSON.stringify(body.input)).not.toContain("scontent");
     expect(JSON.stringify(body.input)).toContain("ตอบทุก field เป็นภาษาไทย");
     expect(JSON.stringify(body.input)).toContain("ช่อดอกไม้สดสำหรับของขวัญ");
+    expect(JSON.stringify(body.input)).toContain("Brand Name: Flora Daily");
+    expect(JSON.stringify(body.input)).toContain("first-party");
   });
 
   it("extracts output text from Responses API output content", () => {
@@ -182,6 +190,7 @@ describe("OpenAiBrandVisualAnalyzer", () => {
         sourceSummary: {
           postsSaved: 0,
           adsSaved: 0,
+          manualInputsSaved: 0,
           usedFallbackSearch: false
         },
         textEvidence: [],

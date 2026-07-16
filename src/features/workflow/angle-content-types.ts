@@ -74,6 +74,7 @@ export function buildAngleGroups(state: WorkflowState) {
     );
 
   return creativeMixItems(state)
+    .filter((mixItem) => mixItem.quantity > 0)
     .map((mixItem) => {
       const details = groupDetailsByService[mixItem.service];
       const directions = entries.filter(
@@ -105,7 +106,10 @@ function directionToExportIdea(
     title: direction.hook,
     content_type: serviceContentTypeLabel(service),
     concept_idea: direction.concept,
-    tags: ["Creative direction", successMetric],
+    tags: [
+      direction.pillar || "Creative direction",
+      direction.objective || successMetric
+    ],
     copywriting: {
       headline: direction.hook,
       sub_headline_1: directionSubheadline(direction),
@@ -131,14 +135,13 @@ export function buildAngleExportReview(state: WorkflowState): {
   highlightMap: ReviewHighlightMap;
 } {
   const exportItems = state.directions.flatMap((direction, index) => {
-    if (!direction.exportGroup) return [];
     const idea = directionToExportIdea(
       direction,
       directionServiceAt(state, direction, index),
       state.successMetric
     );
     return [{
-      group: direction.exportGroup,
+      group: direction.selected ? "recommended" : "option",
       idea,
       highlight: resolveSubheadlineHighlight(
         directionSubheadline(direction),

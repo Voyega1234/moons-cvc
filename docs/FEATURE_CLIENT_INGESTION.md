@@ -50,7 +50,9 @@ Current backend harness core:
 - `src/server/client-ingestion/gemini-grounding-search-fallback.ts`
 - `src/server/client-ingestion/client-ingestion-worker.ts`
 - `src/server/client-ingestion/client-ingestion-worker-endpoint.ts`
+- `src/server/client-ingestion/client-ingestion-trigger-endpoint.ts`
 - `api/client-ingestion-worker.ts`
+- `api/trigger-client-ingestion.ts`
 - `src/server/client-ingestion/supabase-brand-memory-writer.ts`
 - `src/server/client-ingestion/supabase-client-ingestion-store.ts`
 - `src/server/client-ingestion/supabase-image-mirror.ts`
@@ -132,6 +134,7 @@ Server-only env:
 ```text
 APIFY_TOKEN=
 SUPABASE_URL=
+SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 OPENAI_API_KEY=
 OPENAI_BRAND_ANALYSIS_MODEL=gpt-5.6-terra
@@ -243,6 +246,9 @@ The current harness already:
 - exposes a POST-only worker endpoint handler through
   `client-ingestion-worker-endpoint.ts`;
 - provides a Vercel-style serverless wrapper at `api/client-ingestion-worker.ts`;
+- exposes an authenticated immediate trigger through
+  `client-ingestion-trigger-endpoint.ts` and
+  `api/trigger-client-ingestion.ts`;
 - claims one queued job through `SupabaseClientIngestionJobQueue`;
 - runs the claimed job through `runNextClientIngestionJob()`;
 - runs posts and Ads Library Apify tools through injected `ApifyClient`;
@@ -318,9 +324,28 @@ as durable source references.
 provided, inaccessible Facebook sources still fail with
 `เข้าถึงลิงก์ Facebook นี้ไม่ได้`.
 
-## Worker endpoint
+## Immediate Vercel trigger and recovery endpoint
 
-The serverless endpoint wrapper lives at:
+After either client-intake route queues a job, the browser automatically calls:
+
+```http
+POST /api/trigger-client-ingestion
+Authorization: Bearer <signed-in-supabase-access-token>
+```
+
+The endpoint requires `SUPABASE_URL` and `SUPABASE_ANON_KEY`, verifies that the
+access token belongs to Convert Cake, validates the worker secrets, and uses
+Vercel `waitUntil` to start one worker cycle before returning `202 Accepted`.
+This is the short-term no-external-hosting path. The UI can show its queued
+confirmation immediately while the existing polling/mailbox flow observes the
+database result.
+
+Both Vercel functions currently declare `maxDuration: 300`. `waitUntil` does
+not make work outlive that function limit; a single analysis that takes longer
+than 300 seconds can still be terminated and will need manual recovery or a
+future resumable queue consumer.
+
+The manual recovery serverless wrapper lives at:
 
 ```text
 api/client-ingestion-worker.ts
@@ -334,9 +359,8 @@ Authorization: Bearer <CLIENT_INGESTION_WORKER_TOKEN>
 ```
 
 The bearer token is enforced only when `CLIENT_INGESTION_WORKER_TOKEN` is set.
-Use that token for manual triggers, Vercel Cron, GitHub Actions, or n8n. Each
-request claims at most one queued `brand_analysis_jobs` row, so it is safe to run
-on a short interval.
+Use that token for manual recovery or an optional future scheduler. Each
+request claims at most one queued `brand_analysis_jobs` row.
 
 The worker uses a Supabase `service_role` client. Custom-schema tables still
 need explicit PostgreSQL grants, so apply

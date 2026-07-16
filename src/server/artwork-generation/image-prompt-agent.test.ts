@@ -144,7 +144,7 @@ describe("generateImagePrompt", () => {
         referenceImages: [
           {
             label: "Brand campaign",
-            dataUrl: "data:image/png;base64,c2Vuc2l0aXZlLWltYWdl"
+            imageUrl: "data:image/png;base64,c2Vuc2l0aXZlLWltYWdl"
           }
         ]
       },
@@ -187,7 +187,7 @@ describe("generateImagePrompt", () => {
         referenceImages: [
           {
             label: "Brand campaign",
-            dataUrl: "data:image/png;base64,cmVmZXJlbmNl"
+            imageUrl: "data:image/png;base64,cmVmZXJlbmNl"
           }
         ]
       }
@@ -227,7 +227,7 @@ describe("generateImagePrompt", () => {
         referenceImages: [
           {
             label: "Product packshot",
-            dataUrl: "data:image/png;base64,cHJvZHVjdA=="
+            imageUrl: "data:image/png;base64,cHJvZHVjdA=="
           }
         ]
       },
@@ -252,7 +252,7 @@ describe("generateImagePrompt", () => {
     );
   });
 
-  it("loads the verified artwork pattern catalog in reference-library mode", async () => {
+  it("loads the 72-artwork contract and conditional typography rule in reference-library mode", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
@@ -272,14 +272,15 @@ describe("generateImagePrompt", () => {
       fetchImpl: fetchMock as unknown as typeof fetch,
       input: baseInput,
       loadReferenceLibraryPrompt: async () =>
-        "MOONS VERIFIED PATTERNS\nPattern C — Premium environmental irony"
+        "72-ARTWORK VERIFIED LIBRARY\nTYPOGRAPHY COMPATIBILITY GATE\nDESIGN PRINCIPLES GATE"
     });
 
     expect(result).toBe("Reference-informed production prompt.");
     const promptText = (
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
-    expect(promptText).toContain("MOONS VERIFIED PATTERNS");
+    expect(promptText).toContain("72-ARTWORK VERIFIED LIBRARY");
+    expect(promptText).toContain("DESIGN PRINCIPLES GATE");
     expect(promptText).toContain(
       "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE"
     );
@@ -289,6 +290,13 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(
       "Approved visual direction: Photographic editorial bouquet scene with tactile grain."
     );
+    expect(promptText).toContain(
+      "Study the reference typography as a conditional style recipe"
+    );
+    expect(promptText).toContain(
+      "silently complete the 12-principle design blueprint"
+    );
+    expect(promptText).toContain("one dominant focal point");
     expect(calls[0]?.body.text).toMatchObject({
       format: {
         schema: {

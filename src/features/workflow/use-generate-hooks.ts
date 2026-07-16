@@ -1,11 +1,13 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { env } from "../../config/env";
+import type { ServiceType } from "../../domain/creative-run";
 import { generateDirectionsWithHarness } from "../../services/creative-generation/harness-hook-generation";
 import { generateDirectionsFromWebhook } from "../../services/creative-generation/n8n-hook-generation";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import { serviceLabels } from "./config";
 import {
   creativeMixContentTypeQuotas,
+  EXTRA_HOOK_CANDIDATES_PER_TYPE,
   hookGenerationContentTypeQuotas,
   totalHookGenerationQuantity,
   type WorkflowAction,
@@ -41,16 +43,14 @@ function withCreativeMixInstructions(
     .join("\n");
 }
 
+const GENERATE_MORE_IDEA_COUNT = 3;
+
 export function useGenerateHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const generate = useCallback(() => {
-    setLoading(true);
-    setError(null);
+    dispatch({ type: "start-idea-generation" });
 
     const extraInstructions = withCreativeMixInstructions(
       state,
@@ -58,7 +58,7 @@ export function useGenerateHooks(
     );
 
     const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
-    const generation =
+    const generation = Promise.resolve().then(() =>
       env.hookGenerationMode === "harness"
         ? generateDirectionsWithHarness({ run: state, extraInstructions })
         : generateDirectionsFromWebhook({
@@ -69,7 +69,8 @@ export function useGenerateHooks(
             brief: state.brief,
             uploadedMaterials: state.uploadedMaterials,
             extraInstructions
-          });
+          })
+    );
 
     void generation
       .then((directions) => {
@@ -77,30 +78,36 @@ export function useGenerateHooks(
         playGenerationSuccessSound();
       })
       .catch((caught: unknown) => {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "Could not generate hooks."
-        );
-      })
-      .finally(() => {
-        setLoading(false);
+        dispatch({
+          type: "fail-idea-generation",
+          message:
+            caught instanceof Error
+              ? caught.message
+              : "Could not generate hooks."
+        });
       });
   }, [state, dispatch]);
 
-  return { generate, loading, error };
+  return {
+    generate,
+    loading: state.ideaGenerationStatus === "running",
+    error:
+      state.ideaGenerationStatus === "failed"
+        ? state.ideaGenerationError
+        : null
+  };
 }
 
 export function useGenerateMoreHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
-  const [loading, setLoading] = useState(false);
+  const [loadingService, setLoadingService] = useState<ServiceType | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const generateMore = useCallback(
-    (extraInstructions: string) => {
-      setLoading(true);
+    (service: ServiceType) => {
+      setLoadingService(service);
       setError(null);
 
       const existingHooks = state.directions.map((direction) => ({
@@ -108,31 +115,58 @@ export function useGenerateMoreHooks(
         concept: direction.concept
       }));
 
-      const combinedInstructions = withCreativeMixInstructions(
-        state,
-        extraInstructions
+      const requestedQuantity = Math.max(
+        1,
+        GENERATE_MORE_IDEA_COUNT - EXTRA_HOOK_CANDIDATES_PER_TYPE
       );
-      const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
+      const targetedState: WorkflowState = {
+        ...state,
+        service,
+        quantity: requestedQuantity,
+        creativeMix: [
+          {
+            id: `generate-more-${service}`,
+            service,
+            quantity: requestedQuantity
+          }
+        ]
+      };
+      const contentTypeLabel = serviceLabels[service];
+      const combinedInstructions = withCreativeMixInstructions(
+        targetedState,
+        [
+          `Generate additional ${contentTypeLabel} hook ideas only.`,
+          `Every returned direction must use the ${contentTypeLabel} content type.`,
+          "Make each new idea meaningfully different from the existing hooks."
+        ].join("\n")
+      );
+      const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
       const generation =
         env.hookGenerationMode === "harness"
           ? generateDirectionsWithHarness({
-              run: state,
+              run: targetedState,
               extraInstructions: combinedInstructions
             })
           : generateDirectionsFromWebhook({
-              brand: state.brand,
-              service: contentTypeQuotas[0]?.service ?? state.service,
-              quantity: totalHookGenerationQuantity(state),
+              brand: targetedState.brand,
+              service,
+              quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
-              brief: state.brief,
-              uploadedMaterials: state.uploadedMaterials,
+              brief: targetedState.brief,
+              uploadedMaterials: targetedState.uploadedMaterials,
               extraInstructions: combinedInstructions,
               existingHooks
             });
 
       void generation
         .then((directions) => {
-          dispatch({ type: "generate-more-directions", directions });
+          dispatch({
+            type: "generate-more-directions",
+            directions: directions.map((direction) => ({
+              ...direction,
+              service
+            }))
+          });
           playGenerationSuccessSound();
         })
         .catch((caught: unknown) => {
@@ -143,13 +177,18 @@ export function useGenerateMoreHooks(
           );
         })
         .finally(() => {
-          setLoading(false);
+          setLoadingService(null);
         });
     },
     [state, dispatch]
   );
 
-  return { generateMore, loading, error };
+  return {
+    generateMore,
+    loading: loadingService !== null,
+    loadingService,
+    error
+  };
 }
 
 export function useRegenerateHook(
@@ -160,10 +199,10 @@ export function useRegenerateHook(
   const [error, setError] = useState<string | null>(null);
 
   const regenerate = useCallback(
-    async (direction: WorkflowState["directions"][number], tone: string) => {
-      const normalizedTone = tone.trim();
-      if (!normalizedTone) {
-        setError("Add the new writing tone first.");
+    async (direction: WorkflowState["directions"][number], feedback: string) => {
+      const normalizedFeedback = feedback.trim();
+      if (!normalizedFeedback) {
+        setError("Add clear rewrite feedback first.");
         return false;
       }
 
@@ -174,9 +213,9 @@ export function useRegenerateHook(
         "Regenerate one existing hook instead of creating an unrelated idea.",
         `Original hook: ${direction.hook}`,
         `Original concept: ${direction.concept}`,
-        `New writing tone: ${normalizedTone}`,
+        `Rewrite feedback: ${normalizedFeedback}`,
         "Keep the same strategic idea, audience tension, product truth, and CTA intent.",
-        "Rewrite the hook and supporting copy in the new tone. Return the replacement as the first direction."
+        "Apply the feedback to the hook and supporting copy. Return the replacement as the first direction."
       ].join("\n"));
 
       const existingHooks = state.directions.map((item) => ({

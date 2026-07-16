@@ -35,6 +35,7 @@ export type ClientIngestionRunnerResult =
 
 export async function runNextClientIngestionJob({
   queue,
+  store,
   ...harnessDependencies
 }: ClientIngestionRunnerDependencies): Promise<ClientIngestionRunnerResult> {
   const claimed = await queue.claimNextQueuedJob();
@@ -43,11 +44,35 @@ export async function runNextClientIngestionJob({
     return { claimed: false };
   }
 
-  const result = await runClientIngestionJob(
-    claimed.job,
-    claimed.client,
-    harnessDependencies
-  );
+  let result: ClientIngestionHarnessResult;
+  try {
+    result = await runClientIngestionJob(claimed.job, claimed.client, {
+      store,
+      ...harnessDependencies
+    });
+  } catch (error) {
+    const errorMessage = readableError(error);
+    await Promise.all([
+      store.updateJobStatus({
+        jobId: claimed.job.id,
+        status: "failed",
+        currentStep: "failed",
+        errorMessage
+      }),
+      store.updateClientStatus({
+        clientId: claimed.client.id,
+        status: "failed",
+        errorMessage
+      })
+    ]);
+    result = {
+      postsSaved: 0,
+      adsSaved: 0,
+      visualAssetsMirrored: 0,
+      usedFallbackSearch: false,
+      completed: false
+    };
+  }
 
   return {
     claimed: true,
@@ -55,6 +80,10 @@ export async function runNextClientIngestionJob({
     clientId: claimed.client.id,
     result
   };
+}
+
+function readableError(error: unknown): string {
+  return error instanceof Error ? error.message : "Brand setup failed.";
 }
 
 export class SupabaseClientIngestionJobQueue

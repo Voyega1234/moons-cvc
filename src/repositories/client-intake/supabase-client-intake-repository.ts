@@ -8,8 +8,9 @@ import {
   type QueueClientIngestionResult
 } from "../../domain/client-ingestion";
 import { getSupabaseClient } from "../../lib/supabase/client";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database, Json } from "../../lib/supabase/database.types";
 import type { ClientIntakeRepository } from "../../ports/client-intake-repository";
+import { triggerClientIngestion } from "../../services/client-ingestion/trigger-client-ingestion";
 import { slugify } from "../../shared/utils/text";
 
 type ClientRow = Database["moons"]["Tables"]["clients"]["Row"];
@@ -18,7 +19,8 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
   async createDraftClient({
     name,
     facebookUrl,
-    category
+    category,
+    questionnaire
   }: CreateClientDraftInput): Promise<CreateClientDraftResult> {
     const trimmedName = name.trim();
     if (!trimmedName) throw new Error("Client name is required.");
@@ -62,6 +64,13 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
 
     if (jobError) throw jobError;
 
+    await saveQuestionnaireSource({
+      client,
+      clientId: clientRow.id,
+      jobId: job.id,
+      questionnaire
+    });
+
     const { data: updatedClient, error: updateError } = await client
       .schema("moons")
       .from("clients")
@@ -72,6 +81,11 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
 
     if (updateError) throw updateError;
 
+    const { data: sessionData } = await client.auth.getSession();
+    await triggerClientIngestion({
+      accessToken: sessionData.session?.access_token
+    });
+
     return {
       brand: mapBrand(updatedClient),
       jobId: job.id
@@ -80,7 +94,8 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
 
   async queueExistingClient({
     clientId,
-    facebookUrl
+    facebookUrl,
+    questionnaire
   }: QueueClientIngestionInput): Promise<QueueClientIngestionResult> {
     const urlError = validateFacebookUrl(facebookUrl);
     if (urlError) throw new Error(urlError);
@@ -94,8 +109,50 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
       });
 
     if (error) throw error;
+    await saveQuestionnaireSource({
+      client,
+      clientId,
+      jobId,
+      questionnaire
+    });
+    const { data: sessionData } = await client.auth.getSession();
+    await triggerClientIngestion({
+      accessToken: sessionData.session?.access_token
+    });
     return { jobId };
   }
+}
+
+async function saveQuestionnaireSource({
+  client,
+  clientId,
+  jobId,
+  questionnaire
+}: {
+  client: ReturnType<typeof getSupabaseClient>;
+  clientId: string;
+  jobId: string;
+  questionnaire: CreateClientDraftInput["questionnaire"];
+}): Promise<void> {
+  const text = questionnaire?.text.trim();
+  if (!text) return;
+
+  const { error } = await client
+    .schema("moons")
+    .from("brand_sources")
+    .insert({
+      client_id: clientId,
+      job_id: jobId,
+      source_type: "manual_input",
+      source_url: questionnaire?.sourceUrl?.trim() || null,
+      status: "succeeded",
+      raw_payload: {
+        kind: "mapping_questionnaire",
+        text
+      } satisfies Json
+    });
+
+  if (error) throw error;
 }
 
 function mapBrand(row: ClientRow): Brand {
@@ -107,6 +164,7 @@ function mapBrand(row: ClientRow): Brand {
     facebookUrl: row.facebook_url ?? undefined,
     ingestionStatus: row.ingestion_status,
     ingestionError: row.ingestion_error ?? undefined,
+    ingestionUpdatedAt: row.updated_at,
     library: { brand: [], products: [], docs: [], refs: [] },
     memory: { working: [], avoid: [] },
     existsInSystem: true,

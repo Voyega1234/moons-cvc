@@ -65,7 +65,7 @@ describe("DirectionsStage artwork mode", () => {
     });
   });
 
-  it("opens Regenerate all with one tone field for the full Hook set", async () => {
+  it("opens Regenerate hooks with one tone field for the full Hook set", async () => {
     const user = userEvent.setup();
     const state = {
       ...createInitialWorkflowState({
@@ -79,17 +79,22 @@ describe("DirectionsStage artwork mode", () => {
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
 
-    await user.click(stage.getByRole("button", { name: "More hook actions" }));
-    await user.click(stage.getByRole("menuitem", { name: /Regenerate all/ }));
+    await user.click(
+      stage.getByRole("button", { name: "↻ Regenerate hooks" })
+    );
+
+    const dialog = stage.getByRole("dialog", {
+      name: `Change the tone across all ${state.directions.length} hooks`
+    });
 
     expect(
-      stage.getByRole("heading", {
+      within(dialog).getByRole("heading", {
         name: `Change the tone across all ${state.directions.length} hooks`
       })
     ).toBeTruthy();
-    expect(stage.getByLabelText("New writing tone")).toBeTruthy();
+    expect(within(dialog).getByLabelText("New writing tone")).toBeTruthy();
     expect(
-      stage.getByRole("button", { name: "Regenerate all hooks" })
+      within(dialog).getByRole("button", { name: "↻ Regenerate hooks" })
     ).toHaveProperty("disabled", true);
   });
 });

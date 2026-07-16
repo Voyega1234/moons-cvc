@@ -26,7 +26,9 @@ export interface BrandNotification {
   id: string;
   brandId: string;
   brandName: string;
-  status: Extract<ClientIngestionStatus, "ready" | "needs_review" | "failed">;
+  status:
+    | Extract<ClientIngestionStatus, "ready" | "needs_review" | "failed">
+    | "stalled";
   title: string;
   message: string;
   createdAt: string;
@@ -36,6 +38,7 @@ export interface BrandNotification {
 type BrandLoadState = Pick<BrandContextValue, "brands" | "loading" | "error">;
 
 export const BRAND_INGESTION_POLL_INTERVAL_MS = 8_000;
+export const BRAND_INGESTION_STALL_THRESHOLD_MS = 10 * 60 * 1_000;
 
 const BrandContext = createContext<BrandContextValue | null>(null);
 
@@ -56,6 +59,7 @@ export function BrandProvider({
   const [notifications, setNotifications] = useState<BrandNotification[]>([]);
   const previousStatuses = useRef(new Map<string, ClientIngestionStatus>());
   const notifiedStatuses = useRef(new Map<string, ClientIngestionStatus>());
+  const notifiedStalls = useRef(new Map<string, string>());
   const statusesInitialized = useRef(false);
 
   const loadBrands = useCallback(async (showLoading: boolean) => {
@@ -74,6 +78,18 @@ export function BrandProvider({
 
           if (isActiveIngestionStatus(status)) {
             notifiedStatuses.current.delete(brand.id);
+            if (isBrandIngestionStalled(brand)) {
+              const stallKey = `${status}:${brand.ingestionUpdatedAt}`;
+              if (notifiedStalls.current.get(brand.id) !== stallKey) {
+                notifiedStalls.current.set(brand.id, stallKey);
+                const notification = createBrandNotification(brand, "stalled");
+                setNotifications((current) =>
+                  [notification, ...current].slice(0, 20)
+                );
+              }
+            }
+          } else {
+            notifiedStalls.current.delete(brand.id);
           }
 
           const previousStatus = previousStatuses.current.get(brand.id);
@@ -169,8 +185,27 @@ function isActiveIngestionStatus(status: ClientIngestionStatus): boolean {
 
 function isNotificationStatus(
   status: ClientIngestionStatus
-): status is BrandNotification["status"] {
+): status is Extract<BrandNotification["status"], ClientIngestionStatus> {
   return ["ready", "needs_review", "failed"].includes(status);
+}
+
+export function isBrandIngestionStalled(
+  brand: Brand,
+  now = Date.now()
+): boolean {
+  if (
+    !brand.ingestionStatus ||
+    !isActiveIngestionStatus(brand.ingestionStatus) ||
+    !brand.ingestionUpdatedAt
+  ) {
+    return false;
+  }
+
+  const updatedAt = Date.parse(brand.ingestionUpdatedAt);
+  return (
+    Number.isFinite(updatedAt) &&
+    now - updatedAt >= BRAND_INGESTION_STALL_THRESHOLD_MS
+  );
 }
 
 function createBrandNotification(
@@ -178,7 +213,12 @@ function createBrandNotification(
   status: BrandNotification["status"]
 ): BrandNotification {
   const content =
-    status === "ready"
+    status === "stalled"
+      ? {
+          title: "Brand setup is taking longer than expected",
+          message: `${brand.name} has made no progress for 10 minutes. Open Signal to check its current stage.`
+        }
+      : status === "ready"
       ? {
           title: "Brand setup complete",
           message: `${brand.name} is ready to use in a creative run.`
@@ -190,7 +230,9 @@ function createBrandNotification(
           }
         : {
             title: "Brand setup failed",
-            message: `${brand.name} could not finish ingestion. Open Signal to try again.`
+            message:
+              brand.ingestionError?.trim() ||
+              `${brand.name} could not finish ingestion. Open Signal to try again.`
           };
 
   return {

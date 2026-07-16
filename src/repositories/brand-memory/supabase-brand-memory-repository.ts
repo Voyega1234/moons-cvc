@@ -272,18 +272,16 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       }
     }
     const assets = selectLatestUniquePastWorkAssets(assetsResult.data);
-    const signedUrls = await Promise.all(
-      assets.map(async (asset) => {
+    const imageUrlByAssetId = await resolvePastWorkSignedUrls(
+      assets,
+      async (asset) => {
         const { data, error } = await client.storage
           .from(asset.asset_bucket)
           .createSignedUrl(asset.asset_storage_path, 60 * 60);
 
         if (error) throw error;
         return data.signedUrl;
-      })
-    );
-    const imageUrlByAssetId = new Map(
-      assets.map((asset, index) => [asset.id, signedUrls[index] ?? null])
+      }
     );
     const postAssetByUrl = new Map(
       assets
@@ -297,7 +295,10 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .filter((post) => {
         if (seenPostUrls.has(post.post_url)) return false;
         seenPostUrls.add(post.post_url);
-        return true;
+        return hasUsablePastWorkPost(
+          post,
+          postAssetByUrl.has(post.post_url)
+        );
       })
       .slice(0, 12)
       .map((post, index) => {
@@ -600,6 +601,34 @@ export function selectLatestUniquePastWorkAssets<
     counts[asset.source_type] += 1;
     return true;
   });
+}
+
+export async function resolvePastWorkSignedUrls<
+  T extends { id: string }
+>(
+  assets: readonly T[],
+  signAsset: (asset: T) => Promise<string>
+): Promise<Map<string, string | null>> {
+  const resolved = await Promise.all(
+    assets.map(async (asset) => {
+      try {
+        return await signAsset(asset);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return new Map(
+    assets.map((asset, index) => [asset.id, resolved[index] ?? null])
+  );
+}
+
+export function hasUsablePastWorkPost(
+  post: { text: string | null },
+  hasVisualAsset: boolean
+): boolean {
+  return Boolean(post.text?.trim()) || hasVisualAsset;
 }
 
 function mapLibraryItem(row: BrandLibraryRow): LibraryItem {

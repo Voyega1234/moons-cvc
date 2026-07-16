@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import {
+  ARTWORK_REFERENCE_BUCKET,
+  artworkReferencePatterns,
+  selectArtworkReferencePattern
+} from "./artwork-reference-library";
+
+const hook = {
+  hook: "A clear campaign headline",
+  concept: "A focused commercial idea",
+  visual: "One production-ready key visual"
+};
+
+describe("artwork reference library", () => {
+  it("uses all 72 inspected artworks as stable private objects", () => {
+    expect(ARTWORK_REFERENCE_BUCKET).toBe("artwork-reference-library");
+    expect(artworkReferencePatterns).toHaveLength(72);
+    expect(
+      artworkReferencePatterns.every((pattern) =>
+        pattern.storagePath.startsWith("artworks/")
+      )
+    ).toBe(true);
+    expect(new Set(artworkReferencePatterns.map((pattern) => pattern.id)).size).toBe(
+      72
+    );
+    expect(
+      new Set(artworkReferencePatterns.map((pattern) => pattern.sourceFile)).size
+    ).toBe(72);
+  });
+
+  it("selects a compatible beauty artwork from the full catalog", () => {
+    const selected = selectArtworkReferencePattern({
+      brandCategory: "Beauty clinic",
+      service: "single-static",
+      canvasRatio: "1:1",
+      brief: "Promote a radiant skin treatment offer.",
+      hook
+    });
+
+    expect(selected.canvasRatio).toBe("1:1");
+    expect(selected.mode).toBe("standard_commercial");
+    expect(selected.searchText).toMatch(/beauty|clinic|skin/i);
+  });
+
+  it("prioritizes an album or multi-panel artwork for album posts", () => {
+    const selected = selectArtworkReferencePattern({
+      service: "album-post",
+      canvasRatio: "1:1",
+      brief: "Explain several customer use cases in multiple panels.",
+      hook
+    });
+
+    expect(`${selected.sourceFile} ${selected.searchText}`).toMatch(
+      /album|multi-panel/i
+    );
+  });
+
+  it("matches short AI only as a complete term", () => {
+    const selected = selectArtworkReferencePattern({
+      brandCategory: "Retail",
+      service: "single-static",
+      canvasRatio: "1:1",
+      brief: "A warm retail campaign for a neighborhood store.",
+      hook
+    });
+
+    expect(selected.mode).not.toBe("tech_b2b");
+  });
+
+  it("prioritizes same-client history when the runtime brand is known", () => {
+    const selected = selectArtworkReferencePattern({
+      brandName: "CVC",
+      brandCategory: "Marketing agency",
+      service: "single-static",
+      canvasRatio: "4:5",
+      brief: "Explain a performance marketing strategy.",
+      hook
+    });
+
+    expect(selected.client).toBe("CVC");
+  });
+});

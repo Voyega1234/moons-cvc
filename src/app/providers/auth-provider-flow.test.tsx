@@ -4,10 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  signInWithPassword: vi.fn(),
-  signUp: vi.fn(),
-  resetPasswordForEmail: vi.fn(),
-  updateUser: vi.fn(),
+  signInWithOtp: vi.fn(),
   signOut: vi.fn(),
   authStateCallback: null as null | ((event: string, session: unknown) => void)
 }));
@@ -21,10 +18,7 @@ vi.mock("../../lib/supabase/client", () => ({
   getSupabaseClient: () => ({
     auth: {
       getSession: authMocks.getSession,
-      signInWithPassword: authMocks.signInWithPassword,
-      signUp: authMocks.signUp,
-      resetPasswordForEmail: authMocks.resetPasswordForEmail,
-      updateUser: authMocks.updateUser,
+      signInWithOtp: authMocks.signInWithOtp,
       signOut: authMocks.signOut,
       onAuthStateChange: (callback: (event: string, session: unknown) => void) => {
         authMocks.authStateCallback = callback;
@@ -46,44 +40,42 @@ describe("Supabase account flow", () => {
       data: { session: null },
       error: null
     });
-    authMocks.signInWithPassword.mockResolvedValue({ error: null });
-    authMocks.signUp.mockResolvedValue({ data: { session: null }, error: null });
-    authMocks.resetPasswordForEmail.mockResolvedValue({ error: null });
-    authMocks.updateUser.mockResolvedValue({ error: null });
+    authMocks.signInWithOtp.mockResolvedValue({ data: {}, error: null });
     authMocks.signOut.mockResolvedValue({ error: null });
   });
 
-  it("signs in with an email and password", async () => {
+  it("emails a passwordless login link to a Convert Cake account", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
     await user.type(await screen.findByLabelText("Email"), "TEAM@convertcake.com");
-    await user.type(screen.getByLabelText("Password"), "secure-pass");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Email me a login link" }));
 
-    expect(authMocks.signInWithPassword).toHaveBeenCalledWith({
+    expect(authMocks.signInWithOtp).toHaveBeenCalledWith({
       email: "team@convertcake.com",
-      password: "secure-pass"
+      options: {
+        emailRedirectTo: "http://localhost:3000",
+        shouldCreateUser: true
+      }
     });
+    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
+    expect(screen.getByText("team@convertcake.com")).toBeTruthy();
   });
 
-  it("creates a confirmed-email account contract for Convert Cake", async () => {
+  it("can resend the link or return to edit the email", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
-    await user.click(await screen.findByRole("button", { name: "Create account" }));
-    await user.type(screen.getByLabelText("Email"), "designer@convertcake.com");
-    await user.type(screen.getByLabelText("Password"), "secure-pass");
-    await user.type(screen.getByLabelText("Confirm password"), "secure-pass");
-    await user.click(screen.getByRole("button", { name: "Create account" }));
+    await user.type(await screen.findByLabelText("Email"), "designer@convertcake.com");
+    await user.click(screen.getByRole("button", { name: "Email me a login link" }));
+    await user.click(await screen.findByRole("button", { name: "Resend login link" }));
 
-    expect(authMocks.signUp).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: "designer@convertcake.com",
-        password: "secure-pass"
-      })
-    );
-    expect(await screen.findByText("Account created. Check your email to confirm it.")).toBeTruthy();
+    expect(authMocks.signInWithOtp).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("A new login link is on its way.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Use a different email" }));
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
   });
 
   it("restores a session and exposes sign out to the account UI", async () => {

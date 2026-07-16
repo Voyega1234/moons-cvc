@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { brands } from "../../data/mock-brands";
 import {
   canNavigateToStage,
+  currentApprovalRole,
   highestUnlockedStageIndex,
   isStageComplete,
   workflowActionBlockReason
@@ -120,6 +121,17 @@ describe("workflow rules", () => {
 
     const output = run.outputs[0];
     if (!output) throw new Error("Expected a generated output.");
+
+    expect(currentApprovalRole(output)).toBe("graphicDesign");
+    expect(
+      workflowActionBlockReason(run, {
+        type: "review-output",
+        id: output.id,
+        role: "clientService",
+        decision: "approved",
+        comment: ""
+      })
+    ).toBe("This creative is waiting for Graphic Design review.");
 
     expect(
       workflowActionBlockReason(run, {

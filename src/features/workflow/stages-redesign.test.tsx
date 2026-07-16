@@ -15,6 +15,7 @@ import {
   ClientStage,
   downloadOutputAsset,
   DirectionsStage,
+  repositoryErrorMessage,
   StartStage,
   StudioStage
 } from "./stages";
@@ -90,6 +91,15 @@ function buildMixedAngleState() {
 }
 
 describe("redesigned workflow stages", () => {
+  it("preserves structured Supabase queue errors", () => {
+    expect(
+      repositoryErrorMessage(
+        { message: "Client ingestion is already queued or completed." },
+        "Could not queue brand setup."
+      )
+    ).toBe("Client ingestion is already queued or completed.");
+  });
+
   it("downloads artwork as a local file instead of opening its storage URL", async () => {
     const output = {
       ...buildCreativeState().outputs[0]!,
@@ -193,6 +203,215 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
   });
 
+  it("preselects a Questionnaire Facebook page and includes its Brand Kit evidence", async () => {
+    const user = userEvent.setup();
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-questionnaire-intake",
+        now: "2026-07-15T00:00:00.000Z"
+      }),
+      brandMenuOpen: true
+    };
+    const brandRepository = new MockBrandRepository();
+    const intakeRepository = new MockClientIntakeRepository(brandRepository);
+    const createDraftClient = vi.spyOn(
+      intakeRepository,
+      "createDraftClient"
+    );
+    const questionnaire = {
+      sourceUrl: "https://docs.google.com/client-portal",
+      text: "Brand Name: Centre Point Hotels Group. Website: www.centrepoint.com",
+      preview: "Brand Name: Centre Point Hotels Group.",
+      facebookUrls: [
+        "https://www.facebook.com/centrepointhotels"
+      ]
+    };
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{
+          list: async () => [
+            {
+              clientId: "Centre Point Group",
+              status: "Active",
+              serviceStatus: "Active",
+              questionnaire
+            }
+          ]
+        }}
+      >
+        <ClientIntakeProvider repository={intakeRepository}>
+          <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+            <StartStage state={state} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(await stage.findByRole("button", { name: "Add to Neo" }));
+    expect(
+      (
+        stage.getByRole("radio", {
+        name: /Found in Questionnaire.*centrepointhotels/i
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(true);
+    expect(
+      (
+        stage.getByRole("checkbox", {
+          name: /Use Questionnaire as Brand Kit evidence/i
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(true);
+
+    await user.click(stage.getByRole("button", { name: "Add and analyze" }));
+
+    await waitFor(() =>
+      expect(createDraftClient).toHaveBeenCalledWith({
+        name: "Centre Point Group",
+        facebookUrl: "https://www.facebook.com/centrepointhotels",
+        questionnaire: {
+          sourceUrl: "https://docs.google.com/client-portal",
+          text: questionnaire.text
+        }
+      })
+    );
+    expect(
+      await stage.findByRole("dialog", {
+        name: "Centre Point Group is in the queue."
+      })
+    ).toBeTruthy();
+    expect(stage.getByText(/5-10 minutes to analyze the brand/i)).toBeTruthy();
+    expect(
+      stage.getByText("We will notify you in Notifications")
+    ).toBeTruthy();
+    expect(
+      stage.getByText(/mailbox at the top right when Brand Kit is ready/i)
+    ).toBeTruthy();
+
+    await user.click(stage.getByRole("button", { name: "Got it" }));
+    expect(
+      stage.queryByRole("dialog", {
+        name: "Centre Point Group is in the queue."
+      })
+    ).toBeNull();
+  });
+
+  it("shows setup progress before confirming an existing brand was queued", async () => {
+    const user = userEvent.setup();
+    const draftBrand = {
+      ...brands[0]!,
+      id: "draft-brand",
+      name: "Draft Brand",
+      facebookUrl: "https://www.facebook.com/draftbrand",
+      ingestionStatus: "draft" as const,
+      existsInSystem: true
+    };
+    const brandRepository = {
+      list: async () => [draftBrand],
+      getById: async (id: string) => (id === draftBrand.id ? draftBrand : null)
+    };
+    let resolveQueue: ((value: { jobId: string }) => void) | undefined;
+    const queueExistingClient = vi.fn(
+      () =>
+        new Promise<{ jobId: string }>((resolve) => {
+          resolveQueue = resolve;
+        })
+    );
+    const intakeRepository = {
+      createDraftClient: vi.fn(),
+      queueExistingClient
+    };
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-existing-brand-intake",
+        now: "2026-07-15T00:00:00.000Z"
+      }),
+      brandMenuOpen: true
+    };
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider repository={intakeRepository}>
+          <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+            <StartStage state={state} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(await stage.findByRole("button", { name: "Set up brand" }));
+    await user.click(stage.getByRole("button", { name: "Analyze brand" }));
+
+    expect(
+      stage
+        .getByRole("button", { name: "Starting analysis..." })
+        .hasAttribute("disabled")
+    ).toBe(true);
+    expect(queueExistingClient).toHaveBeenCalledWith({
+      clientId: draftBrand.id,
+      facebookUrl: draftBrand.facebookUrl,
+      questionnaire: undefined
+    });
+
+    resolveQueue?.({ jobId: "job-draft-brand" });
+
+    expect(
+      await stage.findByRole("dialog", {
+        name: "Draft Brand is in the queue."
+      })
+    ).toBeTruthy();
+  });
+
+  it("confirms a manually added client without exposing backend job details", async () => {
+    const user = userEvent.setup();
+    const brandRepository = new MockBrandRepository();
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-manual-brand-intake",
+        now: "2026-07-15T00:00:00.000Z"
+      }),
+      brandMenuOpen: true
+    };
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+            <StartStage state={state} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(
+      stage.getByRole("button", { name: /^Add new client/i })
+    );
+    await user.type(stage.getByLabelText("Client name"), "New Client");
+    await user.type(
+      stage.getByLabelText("Facebook URL"),
+      "https://www.facebook.com/newclient"
+    );
+    await user.click(stage.getByRole("button", { name: "Create client draft" }));
+
+    const dialog = await stage.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", {
+        name: "New Client is in the queue."
+      })
+    ).toBeTruthy();
+    expect(stage.queryByText(/Ingestion job/i)).toBeNull();
+  });
+
   it("presents Brief with the prototype's creative and signal controls", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -294,7 +513,7 @@ describe("redesigned workflow stages", () => {
 
     await waitFor(() =>
       expect(dispatch).toHaveBeenCalledWith({
-        type: "select-reference-image",
+        type: "sync-brand-logo-reference",
         item: {
           id: "library-logo-1",
           url: "https://example.com/logo.png",
@@ -317,13 +536,7 @@ describe("redesigned workflow stages", () => {
             : direction.service === "ugc-video"
               ? ["เปิดด้วยสถานการณ์จริง", "สาธิตให้เห็นผล", "ปิดด้วยทางเลือกของแบรนด์"]
               : [],
-        score: index === 0 ? 82 : direction.score,
-        exportGroup:
-          index === 0
-            ? ("recommended" as const)
-            : index === 1
-              ? ("option" as const)
-              : null
+        score: index === 0 ? 82 : direction.score
       }))
     };
     const dispatch = vi.fn();
@@ -338,19 +551,46 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
     expect(view.container.querySelectorAll(".neo-angle-setting")).toHaveLength(3);
     expect(view.container.querySelectorAll(".neo-angle-settings")).toHaveLength(1);
-    expect(stage.getByRole("heading", { name: "Review recommended hooks" })).toBeTruthy();
-    expect(stage.getByRole("button", { name: "Let Neo pick" })).toBeTruthy();
+    expect(stage.getByRole("heading", { name: "Review hooks" })).toBeTruthy();
+    expect(stage.queryByRole("button", { name: "Let Neo pick" })).toBeNull();
+    expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
+    expect(stage.queryByRole("combobox", { name: "PDF design" })).toBeNull();
+    expect(
+      stage.getAllByRole("button", { name: "+ Add hook manually" })
+    ).toHaveLength(3);
+    const generateMoreButtons = stage.getAllByRole("button", {
+      name: "Generate more ideas"
+    });
+    expect(generateMoreButtons).toHaveLength(3);
+    expect(
+      generateMoreButtons.every(
+        (button) =>
+          button.classList.contains("secondary") &&
+          !button.classList.contains("primary")
+      )
+    ).toBe(true);
+    expect(view.container.querySelectorAll(".neo-angle-group-buttons")).toHaveLength(
+      3
+    );
     expect(stage.queryByRole("menuitem", { name: /Export PDF/ })).toBeNull();
     expect(
       stage.queryByPlaceholderText("Add direction for the next round (optional)")
     ).toBeNull();
-    await user.click(stage.getByRole("button", { name: "More hook actions" }));
-    expect(stage.getByRole("menuitem", { name: /Export PDF/ })).toBeTruthy();
-    expect(stage.getByRole("menuitem", { name: /Regenerate all/ })).toBeTruthy();
-    await user.click(stage.getByRole("menuitem", { name: /Generate more/ }));
+    expect(stage.queryByRole("button", { name: "More hook actions" })).toBeNull();
+    expect(stage.queryByRole("menu")).toBeNull();
+    const regenerateAllButton = stage.getByRole("button", {
+      name: "↻ Regenerate hooks"
+    });
+    expect(regenerateAllButton).toBeTruthy();
+    expect(regenerateAllButton.classList.contains("secondary")).toBe(true);
+    expect(stage.queryByRole("menuitem", { name: /Generate more/ })).toBeNull();
+    await user.click(regenerateAllButton);
     expect(
-      stage.getByPlaceholderText("Add direction for the next round (optional)")
+      stage.getByRole("dialog", {
+        name: `Change the tone across all ${state.directions.length} hooks`
+      })
     ).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Cancel" }));
     const angleCards = view.container.querySelectorAll(".neo-angle-card");
     expect(angleCards).toHaveLength(state.directions.length);
     expect(angleCards[0]?.querySelector(".neo-angle-badge-row")).toBeTruthy();
@@ -380,40 +620,70 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       within(angleCards[0] as HTMLElement)
-        .getByRole("combobox", { name: "Export group for Idea 1" })
+        .getByRole("button", { name: "Edit" })
         .closest(".neo-angle-top-actions")
     ).toBeTruthy();
     expect(
       Array.from(
         angleCards[0]?.querySelectorAll(".neo-angle-card-foot .btn") ?? []
       ).map((button) => button.textContent)
-    ).toEqual(["Edit", "Regenerate"]);
-    expect(stage.getAllByRole("button", { name: "Regenerate" })).toHaveLength(
+    ).toEqual(["Rewrite hook", "Delete"]);
+    expect(stage.getAllByRole("button", { name: "Rewrite hook" })).toHaveLength(
+      state.directions.length
+    );
+    expect(stage.getAllByRole("button", { name: "Delete" })).toHaveLength(
       state.directions.length
     );
     expect(stage.queryByRole("button", { name: "Adjust bold" })).toBeNull();
-    expect(
-      stage.getAllByRole("combobox", { name: /Export group for Idea/ })
-    ).toHaveLength(state.directions.length);
-    expect(
-      stage
-        .getByRole("combobox", { name: "Export group for Idea 1" })
-        .classList.contains("is-recommended")
-    ).toBe(true);
-    expect(
-      stage
-        .getByRole("combobox", { name: "Export group for Idea 2" })
-        .classList.contains("is-option")
-    ).toBe(true);
+    expect(stage.queryByRole("combobox", { name: /Export group/ })).toBeNull();
 
-    await user.selectOptions(
-      stage.getByRole("combobox", { name: "Export group for Idea 1" }),
-      "recommended"
+    await user.click(
+      within(angleCards[0] as HTMLElement).getByRole("button", {
+        name: "Rewrite hook"
+      })
+    );
+    const rewriteDialog = stage.getByRole("dialog", {
+      name: "Rewrite this hook"
+    });
+    expect(rewriteDialog).toBeTruthy();
+    expect(within(rewriteDialog).getByText(state.directions[0]!.hook)).toBeTruthy();
+    expect(stage.getByLabelText("What should change?")).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Cancel" }));
+
+    await user.click(
+      stage.getAllByRole("button", { name: "+ Add hook manually" })[0]!
+    );
+    const manualDialog = stage.getByRole("dialog", {
+      name: "Add a STATIC AD topic"
+    });
+    const manual = within(manualDialog);
+    await user.type(manual.getByLabelText("Pillar"), "Product proof");
+    await user.type(manual.getByLabelText("Hook"), "A manual proof hook");
+    await user.type(
+      manual.getByLabelText("Sub-headline"),
+      "Show the difference clearly"
+    );
+    await user.type(manual.getByLabelText("CTA"), "See the proof");
+    await user.click(manual.getByRole("button", { name: "Add hook" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "add-manual-direction",
+      service: "single-static",
+      pillar: "Product proof",
+      objective: "Awareness",
+      hook: "A manual proof hook",
+      subheadline: "Show the difference clearly",
+      cta: "See the proof"
+    });
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(
+      within(angleCards[0] as HTMLElement).getByRole("button", {
+        name: "Delete"
+      })
     );
     expect(dispatch).toHaveBeenCalledWith({
-      type: "set-direction-export-group",
-      id: state.directions[0]?.id,
-      group: "recommended"
+      type: "delete-direction",
+      id: state.directions[0]?.id
     });
 
     await user.click(
@@ -425,8 +695,33 @@ describe("redesigned workflow stages", () => {
     });
   });
 
-  it("groups the Angle export into recommended topics and other options", async () => {
-    const user = userEvent.setup();
+  it("hides hook groups for content types with zero required ideas", () => {
+    const baseState = buildMixedAngleState();
+    const state = {
+      ...baseState,
+      creativeMix: baseState.creativeMix!.map((item) => ({
+        ...item,
+        quantity: item.service === "single-static" ? item.quantity : 0
+      })),
+      directions: baseState.directions.filter(
+        (direction) => direction.service === "single-static"
+      )
+    };
+    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+    const headings = Array.from(
+      view.container.querySelectorAll(".neo-angle-group-title h3")
+    ).map((node) => node.textContent);
+
+    expect(headings).toEqual(["Static hooks"]);
+    expect(stage.queryByRole("heading", { name: "Album hooks" })).toBeNull();
+    expect(stage.queryByRole("heading", { name: "UGC video hooks" })).toBeNull();
+    expect(
+      stage.getAllByRole("button", { name: "Generate more ideas" })
+    ).toHaveLength(1);
+  });
+
+  it("derives Recommended and Option PDF groups from selection and deletion", async () => {
     const state = buildMixedAngleState();
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
@@ -438,19 +733,15 @@ describe("redesigned workflow stages", () => {
     expect(stage.getAllByText("STATIC AD")).toHaveLength(3);
     expect(stage.getAllByText("ALBUM AD")).toHaveLength(1);
     expect(stage.getAllByText("UGC VIDEO")).toHaveLength(2);
-    expect(stage.queryByRole("menuitem", { name: /Export PDF/ })).toBeNull();
-    await user.click(stage.getByRole("button", { name: "More hook actions" }));
-    expect(stage.getByRole("menuitem", { name: /Export PDF/ })).toBeTruthy();
-    expect(buildAngleExportReview(state).sections).toEqual([]);
+    expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
+    expect(stage.queryByRole("combobox", { name: "PDF design" })).toBeNull();
+    expect(buildAngleExportReview(state).sections.map((section) => section.heading)).toEqual([
+      "Recommended topics"
+    ]);
 
     const classifiedDirections = state.directions.map((direction, index) => ({
       ...direction,
-      exportGroup:
-        index === 0 || index === 3
-          ? ("recommended" as const)
-          : index === 1 || index === 4
-            ? ("option" as const)
-            : null
+      selected: index === 0 || index === 3
     }));
     const reorderedState = {
       ...state,
@@ -458,9 +749,7 @@ describe("redesigned workflow stages", () => {
         classifiedDirections[4]!,
         classifiedDirections[3]!,
         classifiedDirections[0]!,
-        classifiedDirections[5]!,
-        classifiedDirections[1]!,
-        classifiedDirections[2]!
+        classifiedDirections[1]!
       ]
     };
     const review = buildAngleExportReview(reorderedState);
@@ -500,16 +789,89 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(view.container.querySelector(".neo-stage-build")).toBeTruthy();
-    expect(stage.getByText("Creative set")).toBeTruthy();
+    expect(
+      stage.getByRole("heading", { name: `Creative set · ${state.brand?.name}` })
+    ).toBeTruthy();
     expect(
       stage.getByRole("heading", { name: "1:1 Static creatives" })
     ).toBeTruthy();
     expect(stage.getAllByText(/Creative \d/)).toHaveLength(state.outputs.length);
-    const createCards = view.container.querySelectorAll(".neo-create-card");
-    expect(createCards).toHaveLength(state.outputs.length);
-    expect(createCards[0]?.querySelector(".neo-create-card-badges")).toBeTruthy();
-    expect(createCards[0]?.querySelector(".neo-create-hook-wrap")).toBeTruthy();
-    expect(createCards[0]?.querySelector(".neo-create-card-foot")).toBeTruthy();
+    const reviewCards = view.container.querySelectorAll(
+      ".neo-build-review-card"
+    );
+    expect(reviewCards).toHaveLength(state.outputs.length);
+    expect(reviewCards[0]?.querySelector(".neo-build-card-head")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".neo-build-asset-pair")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".neo-build-caption")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".neo-build-qa")).toBeNull();
+    expect(stage.queryByText("Not checked yet")).toBeNull();
+    expect(reviewCards[0]?.querySelector(".neo-build-output-foot")).toBeTruthy();
+  });
+
+  it("saves a Build execution to references through the workflow", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const firstOutput = state.outputs[0];
+    if (!firstOutput) throw new Error("Expected a creative output fixture.");
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    await user.click(stage.getAllByRole("button", { name: "Save reference" })[0]!);
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "save-output-reference",
+      id: firstOutput.id
+    });
+  });
+
+  it("opens Build artwork in a view-only image popup", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+
+    await user.click(
+      stage.getByRole("button", { name: "Open Creative 1 preview" })
+    );
+
+    const dialog = stage.getByRole("dialog", { name: "Creative 1 preview" });
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).queryByText("Regeneration instructions (optional)")).toBeNull();
+
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(stage.queryByRole("dialog", { name: "Creative 1 preview" })).toBeNull();
+  });
+
+  it("saves an edited Build caption through the workflow action", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const firstOutput = state.outputs[0];
+    const firstDirection = state.directions.find(
+      (direction) => direction.id === firstOutput?.directionId
+    );
+    if (!firstOutput || !firstDirection) {
+      throw new Error("Expected a creative output and direction fixture.");
+    }
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+    const captionEditor = stage.getAllByRole("textbox", {
+      name: "Edit caption"
+    })[0];
+    if (!captionEditor) throw new Error("Expected a Build caption editor.");
+
+    await user.clear(captionEditor);
+    await user.type(captionEditor, "Updated caption for Build review.");
+    await user.click(stage.getAllByRole("button", { name: "Save" })[0]!);
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "edit-output-direction",
+      id: firstOutput.id,
+      hook: firstDirection.hook,
+      caption: "Updated caption for Build review.",
+      formatBeats: firstDirection.formatBeats ?? []
+    });
   });
 
   it("renders UGC as a 9:16 editable phone template instead of generated artwork", () => {
@@ -551,8 +913,14 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
     const firstOutput = state.outputs[0];
     if (!firstOutput) throw new Error("Expected a creative output fixture.");
+    const firstDirection = state.directions.find(
+      (direction) => direction.id === firstOutput.directionId
+    );
     const gdOutputCount = state.outputs.filter(
       (output) => !output.format.toUpperCase().includes("UGC")
+    ).length;
+    const ugcOutputCount = state.outputs.filter((output) =>
+      output.format.toUpperCase().includes("UGC")
     ).length;
     const standardGdOutputCount = state.outputs.filter(
       (output) =>
@@ -587,7 +955,9 @@ describe("redesigned workflow stages", () => {
       "GD→CS→PM→Client"
     );
     expect(firstCard?.querySelector(".fb-see-more")).toBeNull();
-    expect(firstCardContent?.querySelector(".download-action")).toBeTruthy();
+    expect(
+      firstCardContent?.querySelector(".download-action")?.textContent
+    ).toContain("Download Image");
     expect(firstCardContent?.querySelector(".upload-inline")).toBeTruthy();
     expect(
       firstCard?.querySelector(".neo-qc-focus-asset .neo-qc-asset-actions")
@@ -609,13 +979,30 @@ describe("redesigned workflow stages", () => {
     });
     expect(stage.queryByRole("dialog")).toBeNull();
 
+    const approvedState = workflowReducer(state, {
+      type: "review-output",
+      id: firstOutput.id,
+      role: "graphicDesign",
+      decision: "approved",
+      comment: ""
+    });
+    view.rerender(
+      <ApprovalStage state={approvedState} dispatch={dispatch} />
+    );
+
+    expect(view.container.querySelectorAll(".neo-qc-focus-card")).toHaveLength(
+      gdOutputCount - 1
+    );
+    if (firstDirection) {
+      expect(stage.queryByRole("heading", { name: firstDirection.hook })).toBeNull();
+    }
+
     await user.click(stage.getByRole("tab", { name: /CS Review/i }));
 
     expect(stage.getByRole("heading", { name: "Assets in CS review" })).toBeTruthy();
     expect(stage.queryByText("9:16 UGC")).toBeNull();
     expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
-    expect(stage.queryByText("Album post")).toBeNull();
-    expect(stage.getAllByText("ALBUM").length).toBeGreaterThan(0);
+    expect(stage.queryByText("ALBUM")).toBeNull();
     const ugcCard = view.container
       .querySelector(".neo-qc-ugc-ownership")
       ?.closest(".neo-qc-focus-card");
@@ -627,14 +1014,14 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
-    ).toHaveLength(gdOutputCount);
+    ).toHaveLength(1);
     expect(
       stage.getAllByText(
         "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"
       )
-    ).toHaveLength(gdOutputCount);
+    ).toHaveLength(1);
     expect(stage.getAllByRole("button", { name: "Approve → PM" })).toHaveLength(
-      state.outputs.length
+      ugcOutputCount + 1
     );
     await user.click(
       stage.getAllByRole("button", { name: "Request design changes" })[0]!
@@ -665,7 +1052,7 @@ describe("redesigned workflow stages", () => {
 
     expect(view.container.querySelector(".neo-stage-client")).toBeTruthy();
     expect(
-      stage.getByRole("button", { name: "Back to Internal QC" })
+      stage.getByRole("button", { name: "← Back to Internal QC" })
     ).toBeTruthy();
     expect(stage.getAllByRole("button", { name: "Request change" })).toHaveLength(
       state.outputs.length

@@ -144,6 +144,63 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["run-1"]?.artworkMode).toBe("standard");
   });
 
+  it("restores an interrupted generation as retryable after refresh", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T08:00:00.000Z"
+    });
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "run-1",
+      now: "2026-07-16T08:00:30.000Z",
+      action: { type: "select-brand", brand }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "run-1",
+      now: "2026-07-16T08:01:00.000Z",
+      action: { type: "start-idea-generation" }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-16T08:01:01.000Z")
+    );
+
+    expect(restored?.runsById["run-1"]?.ideaGenerationStatus).toBe("failed");
+    expect(restored?.runsById["run-1"]?.ideaGenerationError).toBe(
+      "Idea generation was interrupted by refresh. Generate again."
+    );
+  });
+
+  it("loads older snapshots without generation state as idle", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T08:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-07-16T08:01:00.000Z")
+    ) as {
+      data: {
+        runsById: Record<
+          string,
+          {
+            ideaGenerationStatus?: string;
+            ideaGenerationError?: string | null;
+          }
+        >;
+      };
+    };
+    delete parsed.data.runsById["run-1"]?.ideaGenerationStatus;
+    delete parsed.data.runsById["run-1"]?.ideaGenerationError;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.ideaGenerationStatus).toBe("idle");
+    expect(restored?.runsById["run-1"]?.ideaGenerationError).toBeNull();
+  });
+
   it("round-trips supporting details and verified CTA metadata", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -350,6 +407,15 @@ describe("workspace serializer", () => {
         comment: "Please revise the hierarchy."
       }
     });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:03:10.000Z",
+      action: {
+        type: "save-output-reference",
+        id: firstOutput.id
+      }
+    });
 
     const restored = deserializeWorkspace(
       serializeWorkspace(workspace, "2026-06-23T10:04:00.000Z")
@@ -367,6 +433,7 @@ describe("workspace serializer", () => {
       "Please revise the hierarchy."
     );
     expect(restoredOutput?.status).toBe("needs-revision");
+    expect(restoredOutput?.savedToReferences).toBe(true);
     expect(restored?.runsById["run-1"]?.directions[0]).toMatchObject({
       service: "single-static",
       subheadline: "Subheadline 1",

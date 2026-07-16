@@ -8,8 +8,12 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:full": "vercel dev --listen 3000",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "references:build": "node ./node_modules/vite-node/vite-node.mjs scripts/build-artwork-reference-catalog.ts",
+    "references:upload": "npm run references:build && node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/upload-artwork-reference-library.ts",
+    "clients:import-mapping": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/import-active-mapping-clients.ts",
     "worker:client-ingestion": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/run-client-ingestion-worker.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -31,6 +35,7 @@
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/functions": "^3.7.5",
     "jspdf": "^4.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

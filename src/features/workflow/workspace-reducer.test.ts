@@ -30,6 +30,7 @@ describe("workspaceReducer", () => {
 
     let workspace = createInitialWorkspaceState({ runId: "run-a", now });
     workspace = update(workspace, { type: "select-brand", brand });
+    workspace = update(workspace, { type: "start-idea-generation" });
 
     // Simulate a hook-generation request kicked off while "run-a" is
     // active: the async caller captured "run-a" as the target.
@@ -45,6 +46,7 @@ describe("workspaceReducer", () => {
       keepBrand: false
     });
     expect(workspace.activeRunId).toBe("run-b");
+    expect(workspace.runsById["run-a"]?.ideaGenerationStatus).toBe("running");
 
     // The async request now resolves. It must still land on "run-a", not
     // on whichever run happens to be active at this point.
@@ -59,6 +61,7 @@ describe("workspaceReducer", () => {
     });
 
     expect(workspace.runsById["run-a"]?.directions).toHaveLength(6);
+    expect(workspace.runsById["run-a"]?.ideaGenerationStatus).toBe("idle");
     expect(workspace.runsById["run-b"]?.directions).toEqual([]);
     // Switching away and the async result landing elsewhere must not move
     // the user's current view out from under them.
@@ -163,7 +166,11 @@ describe("workspaceReducer", () => {
     });
 
     expect(result.runOrder).toEqual(["run-1"]);
-    expect(result.toast).toBe("This is your only run");
+    expect(result.toast).toEqual({
+      title: "Keep one run open",
+      message: "Create another run before closing this one.",
+      tone: "warning"
+    });
   });
 
   it("blocks workflow actions that skip required steps", () => {
@@ -175,7 +182,22 @@ describe("workspaceReducer", () => {
 
     expect(getActiveRun(result).directions).toEqual([]);
     expect(getActiveRun(result).updatedAt).toBe(getActiveRun(workspace).updatedAt);
-    expect(result.toast).toBe("Choose a brand first.");
+    expect(result.toast).toEqual({
+      title: "Action needed",
+      message: "Choose a brand first.",
+      tone: "warning"
+    });
+  });
+
+  it("shows detailed feedback after applying the monthly quota", () => {
+    const workspace = createInitialWorkspaceState({ runId: "run-1", now });
+    const result = update(workspace, { type: "apply-monthly-quota" });
+
+    expect(result.toast).toEqual({
+      title: "Monthly quota applied",
+      message: "3 Static, 2 UGC, and 1 Album are planned.",
+      tone: "success"
+    });
   });
 
   it("blocks selecting clients that have no brand memory", () => {
@@ -195,7 +217,11 @@ describe("workspaceReducer", () => {
     });
 
     expect(getActiveRun(result).brand).toBeNull();
-    expect(result.toast).toBe("This client has no Neo brand memory yet.");
+    expect(result.toast).toEqual({
+      title: "Action needed",
+      message: "This client has no Neo brand memory yet.",
+      tone: "warning"
+    });
   });
 
   it("prevents internal review before QA completes", () => {
@@ -214,7 +240,11 @@ describe("workspaceReducer", () => {
     const result = update(workspace, { type: "approve-all" });
 
     expect(getActiveRun(result).approved).toBe(false);
-    expect(result.toast).toBe("Run QA before internal approval.");
+    expect(result.toast).toEqual({
+      title: "Action needed",
+      message: "Run QA before internal approval.",
+      tone: "warning"
+    });
   });
 
   it("allows the guarded happy path through delivery", () => {

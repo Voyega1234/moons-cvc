@@ -5,7 +5,7 @@
       "includeFiles": "agent_prompt/agent_hook.md"
     },
     "api/artwork-generation.ts": {
-      "includeFiles": "{agent_prompt/agent_image.md,graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md}"
+      "includeFiles": "{agent_prompt/agent_image.md,agent_prompt/agent_artwork_reference.md,graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md}"
     }
   }
 }

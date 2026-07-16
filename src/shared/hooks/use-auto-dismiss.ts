@@ -2,7 +2,7 @@ import { useEffect, type Dispatch } from "react";
 import { UI_TIMING } from "../constants/ui";
 
 export function useAutoDismiss<Action>(
-  active: boolean,
+  active: unknown,
   dispatch: Dispatch<Action>,
   action: Action,
   durationMs = UI_TIMING.toastDurationMs

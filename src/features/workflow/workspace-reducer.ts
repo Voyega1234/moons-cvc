@@ -1,6 +1,7 @@
 import type {
   WorkspaceAction,
   WorkspaceState,
+  WorkspaceToast,
   WorkflowState
 } from "./model";
 import {
@@ -56,7 +57,12 @@ export function workspaceReducer(
         activeRunId: run.id,
         runOrder: [...state.runOrder, run.id],
         runsById: { ...state.runsById, [run.id]: run },
-        toast: "New run opened"
+        toast: successToast(
+          "New run opened",
+          action.keepBrand
+            ? "Brand context was copied into a fresh creative run."
+            : "Choose a brand to begin the new creative run."
+        )
       };
     }
     case "switch-run":
@@ -70,7 +76,13 @@ export function workspaceReducer(
         : state;
     case "close-run": {
       if (state.runOrder.length === 1 || !state.runsById[action.id]) {
-        return { ...state, toast: "This is your only run" };
+        return {
+          ...state,
+          toast: warningToast(
+            "Keep one run open",
+            "Create another run before closing this one."
+          )
+        };
       }
 
       const closedIndex = state.runOrder.indexOf(action.id);
@@ -90,7 +102,10 @@ export function workspaceReducer(
         activeRunId: nextActiveId,
         runOrder,
         runsById,
-        toast: "Run closed"
+        toast: successToast(
+          "Run closed",
+          "Your remaining creative runs are unchanged."
+        )
       };
     }
     case "apply-run-action": {
@@ -104,7 +119,10 @@ export function workspaceReducer(
         action.action
       );
       if (blockedReason) {
-        return { ...state, toast: blockedReason };
+        return {
+          ...state,
+          toast: warningToast("Action needed", blockedReason)
+        };
       }
 
       const nextRun = {
@@ -123,4 +141,12 @@ export function workspaceReducer(
     case "clear-toast":
       return { ...state, toast: null };
   }
+}
+
+function successToast(title: string, message: string): WorkspaceToast {
+  return { title, message, tone: "success" };
+}
+
+function warningToast(title: string, message: string): WorkspaceToast {
+  return { title, message, tone: "warning" };
 }

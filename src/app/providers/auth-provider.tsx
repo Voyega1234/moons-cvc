@@ -17,8 +17,6 @@ import {
 const PRODUCTION_AUTH_REDIRECT_URL = "https://moons-cvc.vercel.app/";
 const CONVERT_CAKE_EMAIL_DOMAIN = "@convertcake.com";
 
-type AuthMode = "sign-in" | "sign-up" | "forgot-password" | "reset-password";
-
 interface AuthContextValue {
   enabled: boolean;
   session: Session | null;
@@ -36,25 +34,12 @@ export function emailSignInRedirectUrl(
     : PRODUCTION_AUTH_REDIRECT_URL;
 }
 
-export function passwordResetRedirectUrl(
-  location: Pick<Location, "hostname" | "origin"> = window.location
-): string {
-  const redirect = new URL(emailSignInRedirectUrl(location));
-  redirect.searchParams.set("reset-password", "1");
-  return redirect.toString();
-}
-
 export function validateConvertCakeEmail(email: string): string | null {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return "Enter your email address.";
   if (!normalized.endsWith(CONVERT_CAKE_EMAIL_DOMAIN)) {
-    return "Create accounts with a @convertcake.com email.";
+    return "Use your @convertcake.com email.";
   }
-  return null;
-}
-
-export function validateAccountPassword(password: string): string | null {
-  if (password.length < 8) return "Password must be at least 8 characters.";
   return null;
 }
 
@@ -90,26 +75,19 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
   const client = getSupabaseClient();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [pending, setPending] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     const {
       data: { subscription }
-    } = client.auth.onAuthStateChange((event, nextSession) => {
+    } = client.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
-      if (event === "PASSWORD_RECOVERY") {
-        setPasswordRecovery(true);
-        setMode("reset-password");
-      }
       setSession(nextSession);
       setLoading(false);
     });
@@ -127,10 +105,8 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  function changeMode(nextMode: AuthMode) {
-    setMode(nextMode);
-    setPassword("");
-    setConfirmPassword("");
+  function changeEmail() {
+    setLinkSent(false);
     setMessage(null);
     setError(null);
   }
@@ -143,61 +119,25 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     setPending(true);
 
     try {
-      if (mode === "forgot-password") {
-        const normalizedEmail = email.trim().toLowerCase();
-        const emailError = validateConvertCakeEmail(normalizedEmail);
-        if (emailError) throw new Error(emailError);
-        const { error: resetError } = await client.auth.resetPasswordForEmail(
-          normalizedEmail,
-          { redirectTo: passwordResetRedirectUrl() }
-        );
-        if (resetError) throw resetError;
-        setMessage("Check your email for the password reset link.");
-        return;
-      }
-
-      if (mode === "reset-password") {
-        const passwordError = validateAccountPassword(password);
-        if (passwordError) throw new Error(passwordError);
-        if (password !== confirmPassword) {
-          throw new Error("Passwords do not match.");
-        }
-        const { error: updateError } = await client.auth.updateUser({ password });
-        if (updateError) throw updateError;
-        setPasswordRecovery(false);
-        setMode("sign-in");
-        setPassword("");
-        setConfirmPassword("");
-        return;
-      }
-
       const normalizedEmail = email.trim().toLowerCase();
       const emailError = validateConvertCakeEmail(normalizedEmail);
       if (emailError) throw new Error(emailError);
-      const passwordError = validateAccountPassword(password);
-      if (passwordError) throw new Error(passwordError);
-
-      if (mode === "sign-up") {
-        if (password !== confirmPassword) {
-          throw new Error("Passwords do not match.");
-        }
-        const { data, error: signUpError } = await client.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: { emailRedirectTo: emailSignInRedirectUrl() }
-        });
-        if (signUpError) throw signUpError;
-        if (!data.session) {
-          setMessage("Account created. Check your email to confirm it.");
-        }
-        return;
-      }
-
-      const { error: signInError } = await client.auth.signInWithPassword({
+      const wasResend = linkSent;
+      const { error: signInError } = await client.auth.signInWithOtp({
         email: normalizedEmail,
-        password
+        options: {
+          emailRedirectTo: emailSignInRedirectUrl(),
+          shouldCreateUser: true
+        }
       });
       if (signInError) throw signInError;
+      setEmail(normalizedEmail);
+      setLinkSent(true);
+      setMessage(
+        wasResend
+          ? "A new login link is on its way."
+          : "Open the secure link in your email to continue."
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed.");
     } finally {
@@ -225,26 +165,9 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (session && !passwordRecovery) {
+  if (session) {
     return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
   }
-
-  const title =
-    mode === "sign-up"
-      ? "Create your Neo account"
-      : mode === "forgot-password"
-        ? "Reset your password"
-        : mode === "reset-password"
-          ? "Choose a new password"
-          : "Sign in to Neo";
-  const description =
-    mode === "sign-up"
-      ? "Use your Convert Cake email to create an account."
-      : mode === "forgot-password"
-        ? "We’ll email you a secure password reset link."
-        : mode === "reset-password"
-          ? "Use at least 8 characters for your new password."
-          : "Enter your email and password to access production data.";
 
   return (
     <main className="boot-auth">
@@ -256,10 +179,16 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
         </div>
         <form className="auth-card" onSubmit={submit}>
           <p className="eyebrow">Convert Cake account</p>
-          <h1>{title}</h1>
-          <p>{description}</p>
+          <h1>{linkSent ? "Check your email" : "Sign in to Neo"}</h1>
+          <p>
+            {linkSent
+              ? "We sent a secure login link to:"
+              : "Enter your Convert Cake email. No password required."}
+          </p>
 
-          {mode !== "reset-password" ? (
+          {linkSent ? (
+            <div className="auth-email-target">{email}</div>
+          ) : (
             <label>
               Email
               <input
@@ -272,78 +201,29 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
-          ) : null}
-
-          {mode === "sign-in" || mode === "sign-up" || mode === "reset-password" ? (
-            <label>
-              Password
-              <input
-                type="password"
-                autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-                required
-                minLength={8}
-                disabled={pending}
-                value={password}
-                placeholder="At least 8 characters"
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-          ) : null}
-
-          {mode === "sign-up" || mode === "reset-password" ? (
-            <label>
-              Confirm password
-              <input
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={8}
-                disabled={pending}
-                value={confirmPassword}
-                placeholder="Enter it again"
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </label>
-          ) : null}
+          )}
 
           <button className="btn primary" type="submit" disabled={pending}>
             {pending
-              ? "Please wait…"
-              : mode === "sign-up"
-                ? "Create account"
-                : mode === "forgot-password"
-                  ? "Send reset link"
-                  : mode === "reset-password"
-                    ? "Save new password"
-                    : "Sign in"}
+              ? "Sending…"
+              : linkSent
+                ? "Resend login link"
+                : "Email me a login link"}
           </button>
 
-          {mode === "sign-in" ? (
+          {linkSent ? (
             <button
               className="auth-text-button"
               type="button"
               disabled={pending}
-              onClick={() => changeMode("forgot-password")}
+              onClick={changeEmail}
             >
-              Forgot password?
+              Use a different email
             </button>
           ) : null}
 
           {message ? <p className="auth-message" role="status">{message}</p> : null}
           {error ? <p className="auth-error" role="alert">{error}</p> : null}
-
-          {mode !== "reset-password" ? (
-            <div className="auth-mode-switch">
-              <span>{mode === "sign-up" ? "Already have an account?" : "New to Neo?"}</span>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => changeMode(mode === "sign-up" ? "sign-in" : "sign-up")}
-              >
-                {mode === "sign-up" ? "Sign in" : "Create account"}
-              </button>
-            </div>
-          ) : null}
         </form>
       </section>
     </main>

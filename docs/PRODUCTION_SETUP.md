@@ -24,6 +24,11 @@ VITE_SUPABASE_URL=<project-url>
 VITE_SUPABASE_ANON_KEY=<anon-key>
 ```
 
+For local full-stack development, run `npm run dev:full`. It uses `vercel dev`
+on port `3000` so same-origin `/api/*` requests execute the local Vercel
+Functions. The regular `npm run dev` command is frontend-only; API-backed
+actions such as brand ingestion will not work under the standalone Vite server.
+
 The local desktop setup also accepts `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 Only those two public Supabase values are mapped into the Vite client build.
 
@@ -55,6 +60,7 @@ Backend/worker-only secrets for client ingestion:
 
 ```bash
 SUPABASE_URL=<project-url>
+SUPABASE_ANON_KEY=<anon-key>
 APIFY_TOKEN=<apify-token>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 OPENAI_API_KEY=<openai-api-key>
@@ -65,8 +71,10 @@ CLIENT_INGESTION_WORKER_TOKEN=<long-random-secret>
 ```
 
 These must stay outside `VITE_*` env and must not be imported by browser code.
-`CLIENT_INGESTION_WORKER_TOKEN` protects the worker HTTP endpoint. It may be
-left empty only during isolated local development; set it before deployment.
+`SUPABASE_ANON_KEY` is required server-side by the authenticated immediate
+trigger. `CLIENT_INGESTION_WORKER_TOKEN` protects the separate manual recovery
+endpoint. It may be left empty only during isolated local development; set it
+before deployment.
 
 The server-side ingestion adapters live under `src/server/client-ingestion`.
 They expect a backend-created Supabase client that uses
@@ -83,7 +91,22 @@ the backend runtime; do not call Gemini from the frontend.
 
 ## Client ingestion worker
 
-The deployable serverless entrypoint is:
+The normal short-term Vercel-only flow is:
+
+1. The browser queues the Supabase ingestion job.
+2. The signed-in Convert Cake user's access token is sent to
+   `POST /api/trigger-client-ingestion`.
+3. The trigger verifies that user with Supabase, validates all worker secrets,
+   schedules one worker cycle with Vercel `waitUntil`, and returns `202`.
+4. The existing polling/mailbox flow reports completion, review, or failure.
+
+No external worker host or scheduler is required for this path. Both
+`api/trigger-client-ingestion.ts` and the worker use `maxDuration: 300`. The
+background task still shares that Vercel Function duration, so one brand
+analysis must finish within 300 seconds. Larger or resumable runs still need a
+later queue-consumer architecture.
+
+The manual recovery entrypoint remains:
 
 ```text
 api/client-ingestion-worker.ts
@@ -97,9 +120,9 @@ Authorization: Bearer <CLIENT_INGESTION_WORKER_TOKEN>
 ```
 
 One request atomically claims and processes at most one queued ingestion job.
-After deployment, call this endpoint from a scheduler or n8n until no queued
-jobs remain. Never send the service-role, Apify, OpenAI, or Gemini secrets to
-the browser.
+Call this endpoint manually when a queued job needs recovery, or connect a
+scheduler later if the immediate 300-second Vercel path is no longer enough.
+Never send the service-role, Apify, OpenAI, or Gemini secrets to the browser.
 
 The worker uses a Supabase `service_role` client. Apply the service-role
 migration below before running it because custom-schema tables require explicit
@@ -113,6 +136,20 @@ VITE_MAPPING_CLIENTS_CSV_URL=<published-google-sheet-csv-url>
 ```
 
 Local desktop setup also accepts `MAPPING_CLIENTS_CSV_URL`.
+
+To dry-run an idempotent sync of Sheet rows whose `Status` is exactly `Active`
+into missing `moons.clients` records:
+
+```bash
+npm run clients:import-mapping
+```
+
+Apply the reviewed import with `npm run clients:import-mapping -- --apply`.
+Imported clients use `source = 'mapping_import'` and
+`ingestion_status = 'not_started'`; this makes them available for **Set up
+brand** without automatically creating ingestion jobs. Client-name matching is
+case-, spacing-, and punctuation-insensitive, so names such as `A-Klass Auto`
+and `A Klass Auto` do not create duplicate clients.
 
 Artwork generation is routed through a backend endpoint so `OPENAI_API_KEY`
 stays server-side:
@@ -183,6 +220,7 @@ supabase/migrations/202607090010_claim_client_ingestion_job.sql
 supabase/migrations/202607090011_queue_brand_ingestion.sql
 supabase/migrations/202607090012_client_ingestion_service_role.sql
 supabase/migrations/202607090013_brand_products_worker_access.sql
+supabase/migrations/202607160001_artwork_reference_library.sql
 ```
 
 The migration creates:
@@ -206,6 +244,7 @@ The migration creates:
 - `moons.brand_references`
 - private Supabase Storage bucket `brand-assets`
 - private Supabase Storage bucket `brand-source-assets`
+- private Supabase Storage bucket `artwork-reference-library`
 - service-role RPC `moons.claim_next_brand_analysis_job()`
 - authenticated RPC `moons.queue_brand_analysis(client_id, facebook_url)`
 - service-role access to ingestion and Brand Memory tables used by the worker

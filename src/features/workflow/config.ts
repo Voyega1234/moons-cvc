@@ -23,13 +23,13 @@ export const stages: readonly {
   },
   {
     id: "directions",
-    name: "Hook",
+    name: "Angles",
     hero: "Angles.",
     sub: "Choose the creative direction before production."
   },
   {
     id: "studio",
-    name: "Create",
+    name: "Build",
     hero: "Build.",
     sub: "Generate artwork and captions, then quality-check."
   },

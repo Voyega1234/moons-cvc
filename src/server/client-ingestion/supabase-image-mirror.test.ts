@@ -80,6 +80,52 @@ describe("SupabaseImageMirror", () => {
     expect(JSON.stringify(uploads)).toContain("brand-source-assets");
   });
 
+  it("uses the IPv4 downloader for Facebook CDN images", async () => {
+    const client = {
+      storage: {
+        from() {
+          return {
+            async upload() {
+              return { data: { path: "asset.jpg" }, error: null };
+            },
+            async createSignedUrl() {
+              return {
+                data: { signedUrl: "https://storage.example.com/asset.jpg" },
+                error: null
+              };
+            }
+          };
+        }
+      }
+    } as unknown as SupabaseClient<Database>;
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("Default fetch should not be used");
+    });
+    const facebookCdnFetchImpl = vi.fn(async () =>
+      new Response(new Blob(["image-bytes"]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" }
+      })
+    );
+    const mirror = new SupabaseImageMirror({
+      client,
+      fetchImpl,
+      facebookCdnFetchImpl
+    });
+
+    await mirror.mirror({
+      clientId: "client-1",
+      jobId: "job-1",
+      sourceType: "facebook_post",
+      sourceItemId: "post-1",
+      index: 0,
+      imageUrl: "https://scontent.example.fbcdn.net/image.jpg"
+    });
+
+    expect(facebookCdnFetchImpl).toHaveBeenCalledOnce();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("rejects non-image source assets", async () => {
     const client = {
       storage: {

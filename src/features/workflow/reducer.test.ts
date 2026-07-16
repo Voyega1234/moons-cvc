@@ -109,12 +109,19 @@ describe("workflowReducer", () => {
       type: "select-brand",
       brand
     });
-    const generated = workflowReducer(selected, {
+    const generating = workflowReducer(selected, {
+      type: "start-idea-generation"
+    });
+    expect(generating.ideaGenerationStatus).toBe("running");
+
+    const generated = workflowReducer(generating, {
       type: "generate-directions",
       directions: buildDirectionFixtures(brand.name)
     });
 
     expect(generated.stage).toBe("directions");
+    expect(generated.ideaGenerationStatus).toBe("idle");
+    expect(generated.ideaGenerationError).toBeNull();
     expect(generated.directions).toHaveLength(6);
     expect(generated.directions[0]?.hook).toContain(brand.name);
   });
@@ -212,6 +219,95 @@ describe("workflowReducer", () => {
 
     expect(state.stage).toBe("studio");
     expect(state.outputs).toHaveLength(initialWorkflowState.quantity);
+  });
+
+  it("keeps a saved Build reference on the creative output", () => {
+    const output = {
+      id: "output-reference",
+      directionId: "direction-reference",
+      format: "Static",
+      status: "ready" as const,
+      clientStatus: "queued" as const,
+      revisionCount: 0,
+      approval: {
+        graphicDesign: null,
+        clientService: null,
+        projectManager: null
+      },
+      approvalComments: {
+        graphicDesign: "",
+        clientService: "",
+        projectManager: ""
+      }
+    };
+    const state = workflowReducer(
+      { ...initialWorkflowState, outputs: [output] },
+      { type: "save-output-reference", id: output.id }
+    );
+
+    expect(state.outputs[0]?.savedToReferences).toBe(true);
+  });
+
+  it("limits manual selection to each content-type quota", () => {
+    const directions = buildDirectionFixtures("Quota").slice(0, 3).map(
+      (direction) => ({
+        ...direction,
+        service: "single-static" as const
+      })
+    );
+    let state: WorkflowState = {
+      ...initialWorkflowState,
+      creativeMix: [
+        { id: "static", service: "single-static", quantity: 1 }
+      ],
+      service: "single-static",
+      quantity: 1,
+      directions
+    };
+
+    state = workflowReducer(state, {
+      type: "toggle-direction",
+      id: directions[0]!.id
+    });
+    state = workflowReducer(state, {
+      type: "toggle-direction",
+      id: directions[1]!.id
+    });
+
+    expect(state.directions.map((direction) => direction.selected)).toEqual([
+      true,
+      false,
+      false
+    ]);
+  });
+
+  it("adds and deletes a manual hook without changing the quota", () => {
+    let state = workflowReducer(initialWorkflowState, {
+      type: "add-manual-direction",
+      service: "ugc-video",
+      pillar: "Product proof",
+      objective: "Conversion",
+      hook: "A manually written hook",
+      subheadline: "A supporting line",
+      cta: "See how it works"
+    });
+
+    const manual = state.directions[0];
+    expect(manual).toMatchObject({
+      service: "ugc-video",
+      manual: true,
+      pillar: "Product proof",
+      objective: "Conversion",
+      hook: "A manually written hook",
+      selected: false
+    });
+    expect(state.quantity).toBe(initialWorkflowState.quantity);
+
+    state = workflowReducer(state, {
+      type: "delete-direction",
+      id: manual!.id
+    });
+    expect(state.directions).toEqual([]);
   });
 
   it("creates outputs in the quantities and formats requested by the mix", () => {
@@ -575,6 +671,50 @@ describe("workflowReducer", () => {
     expect(state.qaComplete).toBe(false);
   });
 
+  it("resets Build quality status after a caption edit", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    state = workflowReducer(state, {
+      type: "run-qa",
+      results: passingQaResults(state)
+    });
+
+    const output = state.outputs[0];
+    const direction = state.directions.find(
+      (candidate) => candidate.id === output?.directionId
+    );
+    if (!output || !direction) {
+      throw new Error("Expected a creative output and direction.");
+    }
+
+    state = workflowReducer(state, {
+      type: "edit-output-direction",
+      id: output.id,
+      hook: direction.hook,
+      caption: "Updated caption for Build review.",
+      formatBeats: direction.formatBeats ?? []
+    });
+
+    expect(state.qaComplete).toBe(false);
+    expect(state.outputs[0]?.status).toBe("draft");
+    expect(state.outputs[0]?.qaNote).toBeUndefined();
+    expect(
+      state.directions.find((candidate) => candidate.id === direction.id)
+        ?.caption
+    ).toBe("Updated caption for Build review.");
+  });
+
   it("toggles reference images on and off by id", () => {
     const item = { id: "logo-1", url: "https://example.com/logo.png", label: "Logo" };
 
@@ -609,6 +749,75 @@ describe("workflowReducer", () => {
       item
     });
     expect(selectedAgain).toBe(selected);
+  });
+
+  it("separates selected references when the client changes", () => {
+    const baseBrand = brands[0];
+    if (!baseBrand) throw new Error("Mock brand fixture is missing.");
+    const sleepHappy = {
+      ...baseBrand,
+      id: "sleep-happy",
+      name: "SleepHappy"
+    };
+    const convertCake = {
+      ...baseBrand,
+      id: "convert-cake",
+      name: "Convert Cake"
+    };
+    const state = {
+      ...initialWorkflowState,
+      brand: sleepHappy,
+      referenceImages: [
+        {
+          id: "sleep-happy-logo",
+          url: "https://example.com/sleep-happy.png",
+          label: "Logo"
+        }
+      ]
+    };
+
+    const selected = workflowReducer(state, {
+      type: "select-brand",
+      brand: convertCake
+    });
+
+    expect(selected.referenceImages).toEqual([]);
+  });
+
+  it("replaces a stale client logo while preserving other references", () => {
+    const state = {
+      ...initialWorkflowState,
+      referenceImages: [
+        {
+          id: "sleep-happy-logo",
+          url: "https://example.com/sleep-happy.png",
+          label: "Logo"
+        },
+        {
+          id: "convert-cake-past-work",
+          url: "https://example.com/convert-cake-post.png",
+          label: "Past work"
+        }
+      ]
+    };
+
+    const synced = workflowReducer(state, {
+      type: "sync-brand-logo-reference",
+      item: {
+        id: "convert-cake-logo",
+        url: "https://example.com/convert-cake-logo.png",
+        label: "Logo"
+      }
+    });
+
+    expect(synced.referenceImages).toEqual([
+      state.referenceImages[1],
+      {
+        id: "convert-cake-logo",
+        url: "https://example.com/convert-cake-logo.png",
+        label: "Logo"
+      }
+    ]);
   });
 
   it("routes a commented client change request back to Internal QC", () => {

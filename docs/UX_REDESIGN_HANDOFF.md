@@ -1,6 +1,6 @@
 # Neo UX/UI redesign handoff
 
-Last updated: 2026-07-14 (Asia/Bangkok)
+Last updated: 2026-07-16 (Asia/Bangkok)
 
 ## Objective
 
@@ -190,9 +190,72 @@ lime/orange semantic accents, soft borders, and medium information density.
   saving 30 posts, 60 ads, and 27 mirrored visual assets. Brand Memory was
   written and the client finished as `needs_review` because source ads contain
   conflicting product dimensions, starting prices, promotion terms, and
-  health-related claims. The missing automatic worker trigger remains a
-  separate production issue; future queued jobs still require a scheduler or
-  secure immediate worker trigger.
+  health-related claims. The automatic-trigger gap described at the time was
+  closed by the 2026-07-16 Vercel-only trigger below.
+- Short-term automatic brand ingestion was added on 2026-07-16 without an
+  external worker deployment. Both manual client creation and existing-client
+  setup still queue through the existing Supabase contracts, then call the new
+  authenticated `POST /api/trigger-client-ingestion` endpoint. It verifies the
+  signed-in Convert Cake user through Supabase, validates server-only worker
+  secrets, and schedules one worker cycle through Vercel `waitUntil` while
+  returning `202` promptly to the queued confirmation UI. The original
+  token-protected `/api/client-ingestion-worker` remains as a manual recovery
+  endpoint. Both entrypoints declare a 300-second maximum; no cron or outside
+  host is required short-term, but an individual analysis that exceeds that
+  Vercel window still needs manual recovery or a later resumable worker. Full
+  verification passes all 47 test files / 221 tests, TypeScript, prototype
+  verification, the production Vite build, and `vercel build`; the generated
+  Vercel output confirms both functions use Node.js 22 with a 300-second
+  maximum.
+- Active mapping clients were synchronized into production Supabase on
+  2026-07-16. The first dry-run exposed 1,105 inactive Sheet rows, so the
+  interrupted inactive import was fully rolled back before changing scope.
+  The final importer targets only Sheet rows whose `Status` is `Active`, uses
+  punctuation-insensitive name matching to treat `A-Klass Auto` and existing
+  `A Klass Auto` as one client, and creates missing records as
+  `source = 'mapping_import'` with `ingestion_status = 'not_started'`. It does
+  not queue ingestion. Production received 157 missing Active clients; final
+  verification reports 162 Active Sheet clients, 170 total Supabase clients,
+  and zero Active clients remaining to import.
+- Local API routing was corrected on 2026-07-16. `npm run dev:full` starts
+  `vercel dev --listen 3000`, so the React app and Vercel Functions share the
+  same localhost origin and `/api/trigger-client-ingestion` is available during
+  brand setup. The regular `npm run dev` remains frontend-only; API-backed
+  workflow actions are intentionally unsupported in that mode.
+- The browser ingestion trigger now converts a native `Failed to fetch` into an
+  actionable message that tells local developers to start Neo with
+  `npm run dev:full`.
+- Authentication was simplified to passwordless email magic links on
+  2026-07-16. The Supabase gate now asks for only a `@convertcake.com` email and
+  uses `signInWithOtp` for both existing users and first-time account creation.
+  Password, confirmation, signup-mode, forgot-password, and reset-password UI
+  were removed. The confirmation state shows the normalized destination and
+  supports resend or changing the email while the existing Supabase session and
+  sign-out behavior remain unchanged.
+- Two duplicate `Power Art Material` Supabase client records and their queued
+  ingestion jobs were removed on 2026-07-16 before either job started. A
+  post-delete query confirmed that no client or job rows remain for those IDs,
+  so the client can be added again as one clean ingestion run.
+- A repeated local Power Art ingestion stall was diagnosed on 2026-07-16. The
+  Apify Facebook-post run had succeeded in 28 seconds, but local `vercel dev`
+  released the `waitUntil` background invocation before it persisted the
+  result, leaving the job at `scraping_facebook_posts`. The same job was safely
+  reset and completed synchronously: 1 post, 51 ads, 15 mirrored images, and
+  Brand Memory were saved, with the final status `needs_review`. The trigger now
+  awaits the worker only for localhost requests; deployed Vercel requests keep
+  their asynchronous `waitUntil` behavior.
+- The Notifications mailbox now warns when an active brand ingestion stage has
+  not updated for 10 minutes. Supabase client `updated_at` is exposed as the
+  optional Brand `ingestionUpdatedAt` field, the existing eight-second polling
+  detects stale active stages, and one deduplicated unread warning directs the
+  user back to Signal. Normal ready, needs-review, and failure notifications are
+  unchanged.
+- The generic `Could not queue brand setup` case was traced on 2026-07-16 to a
+  stale existing-client setup panel attempting to queue a client whose database
+  status had already advanced to `needs_review`. Signal now resolves an open
+  setup panel against each refreshed Brand record and closes it when ingestion
+  is no longer startable. Structured Supabase errors also retain their real
+  `message` instead of being replaced by the generic fallback.
 - Audited `neo-creative-compass.html`, the React application shell, workflow
   model/reducers, stage components, persistence architecture, and test suite.
 - Confirmed the backend can remain unchanged because the reference and current
@@ -710,10 +773,112 @@ lime/orange semantic accents, soft borders, and medium information density.
     and shows `CS → PM → Client`. Trail pills derive completed/current/future
     styling from each output's real approval state and switch the final Client
     pill to `Client ready` after all applicable internal gates pass.
+  - Google Sheet Questionnaire intake was connected to Signal on 2026-07-15.
+    Mapping rows are now read by header name, including `Questionnaire` and
+    `Client Portal`, and invalid Google HTML responses are retried instead of
+    being cached as an empty client list. Facebook pages found in a client's
+    Questionnaire appear as preselected source choices in both `Add to Neo`
+    and `Set up brand`; users can still choose the current Neo page or reveal a
+    manual fallback. Questionnaire content is preselected as optional,
+    first-party Brand Kit evidence, sanitized before storage to exclude contact
+    sections, persisted as a successful `manual_input` source, and prioritized
+    by the brand analyzer alongside social posts, ads, and images. The compact
+    source picker includes a collapsed evidence preview and follows the existing
+    Signal card styling. Full verification passes all 45 test files / 209 tests,
+    TypeScript, and the production build; the existing bundle-size warning
+    remains non-blocking.
+  - A Google client-list regression was fixed on 2026-07-15. The injectable
+    native `fetch` function had been stored and invoked as a repository method,
+    causing Chrome to throw `Illegal invocation` before the Sheet request was
+    sent; the repository retry then hid the failure as an empty mapping list.
+    The default fetch dependency is now a wrapper that preserves browser call
+    semantics, with a regression test for this exact binding failure. Browser
+    verification confirms `Centre Point Group` is searchable again with its
+    `Active · Active` mapping status and `Add to Neo` action. Full verification
+    passes all 45 test files / 211 tests, TypeScript, and the production build.
+  - Brand setup queue feedback was added on 2026-07-15. Manual client creation,
+    `Add to Neo`, and `Set up brand` now lock their submit action with
+    `Starting analysis...` while the backend accepts the request. Once queued,
+    Signal shows one accessible confirmation popup with a 5-10 minute estimate
+    and tells the user that completion, review, or failure will appear in the
+    top-right Notifications mailbox. Raw ingestion job IDs are no longer shown
+    in the client form. The existing brand-provider polling remains responsible
+    for the final mailbox notification. Full verification passes all 45 test
+    files / 213 tests, TypeScript, prototype verification, and the production
+  build; the existing bundle-size warning remains non-blocking.
+  - Tempur job `340d668e-9a66-4911-9762-c7b1f3e6dc72` exposed a second
+    ingestion reliability issue on 2026-07-16. Facebook collection succeeded
+    with 30 posts and 30 ads, but the pipeline then attempted up to 27 remote
+    image mirrors sequentially. A mirror exception escaped outside the harness
+    failure handler, the background promise only logged it, and the database
+    remained falsely active at `mirroring_images` with zero assets. The worker
+    now caps evidence at 6 post plus 6 ad images, mirrors in batches of four,
+    applies a hard 20-second total download timeout, skips individual bad image
+    URLs, and turns storage/persistence failures into terminal job/client
+    failures. The runner also has a final error boundary that persists any
+    otherwise-uncaught worker error as `failed`, so future clients cannot
+    require manual database intervention after an exception. Focused
+    verification passes 5 files / 25 tests, TypeScript, and the production
+    build. Tempur was returned to a normal retryable `failed` state without
+    manually running its analysis. Deployment
+    `dpl_7g79X6S2gd3NPSJCRMusqTGwdawy` reached Ready on Vercel at
+    `https://moons-creative-jb89a3sc7-wave-convertcakes-projects.vercel.app`;
+    the deployment is protected by the project's Vercel SSO.
 
 ### In progress
 
-- Nothing. The implementation and verification pass is complete.
+- The live `queue_brand_analysis` migration was applied by the user on
+  2026-07-16, and Jim Thompson job
+  `f3c986e2-cb94-446e-b338-7a4fb9241597` successfully entered the worker.
+  Diagnosis of that job found a source-validation bug: the Facebook
+  posts actor returned one error row (`error: not_available`) and the Ads
+  Library actor returned `PAGE_PRIVATE`. The post normalizer accepted the error
+  row as one empty post because it had a `url`; this made the harness label
+  posts `succeeded` and bypassed invalid-page handling. This was fixed on
+  2026-07-16: normalizers now reject Apify error rows, both source rows retain
+  accurate failed/partial status, and an explicitly unavailable/private page
+  fails before search fallback with `Please check Facebook page URL.` The
+  existing failed-ingestion mailbox notification now displays that exact
+  backend error instead of replacing it with generic copy. Focused verification
+  passes 3 files / 13 tests plus TypeScript. The configured OpenAI API key was
+  probed again later on 2026-07-16 and successfully completed a minimal request;
+  the earlier `429 insufficient_quota` condition is no longer active. At the
+  user's request, the
+  live `jim` client was deleted on 2026-07-16 so database
+  cascades could remove every Jim Thompson Brand Kit/learning/source artifact,
+  including tables not directly exposed to the service-role REST client.
+  Verification reports zero remaining Jim client rows, jobs, sources, posts,
+  ads, visual assets, Brand Kit rows, learning rows, and products. The Google
+  Sheet mapping record remains and should reappear as `Add to Neo`; set up that
+  record again with a manually verified Facebook URL.
+- Power Art Material Past work was audited and repaired on 2026-07-16. The
+  verified-empty queued duplicate `power-art-materials-f8255e0a` was deleted,
+  leaving only completed client `power-art-material-0c825703`. That client has
+  51 Ads Library items and 15 healthy mirrored ad assets; all 15 storage objects
+  were verified to create signed URLs. Its sole historical social-post row was
+  an empty, zero-media Apify `no_items` error payload and was deleted rather
+  than presented as real past work, so the accurate organic-post count is zero.
+  Past Work URL signing is now failure-tolerant per asset, a missing storage
+  object cannot blank the full posts/ads section, and the UI uses the correct
+  Ads Library placeholder when an individual ad preview is unavailable. The
+  repair passed 19 focused tests, TypeScript, and the production build, then
+  deployed Ready as Vercel deployment `dpl_GUWXxkuT4x41Btfik2j31TCEdNzS`
+  with production alias `https://moons-creative-os.vercel.app`.
+- Brand-logo reference selection was isolated by client on 2026-07-16 after a
+  Convert Cake run retained SleepHappy's previously selected logo. The root
+  cause was `select-brand` changing only the active Brand while preserving the
+  run-level `referenceImages` array; Brief then appended the next logo instead
+  of replacing the stale one. Switching to a different client now clears the
+  selected reference set, and Brand Kit loading synchronizes exactly one Logo
+  reference for the active client while preserving its non-logo references.
+  This also repairs stale persisted runs when Brief opens. As a second safety
+  boundary, artwork creation and regeneration replace any selected `Logo`
+  reference with the active client's Brand Kit logo immediately before sending
+  the image-agent request; if that client has no logo, the stale logo is
+  omitted. Focused verification passes 36 reducer/generation tests plus the
+  Brief logo-selection test, TypeScript, and the production build. Vercel
+  deployment `dpl_4WgNhxz2m57R5PnK1s6WAbxTKToA` is Ready on production alias
+  `https://moons-creative-os.vercel.app`.
 
 ### Not started
 
@@ -729,6 +894,9 @@ lime/orange semantic accents, soft borders, and medium information density.
 - `src/features/workflow/config.ts` - visible workflow labels and hero copy,
   including Angles and Build over stable internal IDs.
 - `src/features/workflow/stages.tsx` - visible stage headings and Workboard title.
+- `src/features/workflow/stages-redesign.test.tsx` - interaction coverage for
+  the setup progress state and queued confirmation across all client entry
+  routes.
 - `src/features/workflow/use-generate-hooks.ts` - tone-based regeneration of a
   single existing Hook through the existing generation services.
 - `src/features/workflow/model.ts`, `reducer.ts`, and `rules.ts` - in-place Hook
@@ -753,7 +921,30 @@ lime/orange semantic accents, soft borders, and medium information density.
 - `src/services/workspace/workspace-serializer.ts` and its tests - persist the
   success metric and prove backward compatibility plus review-comment storage.
 - `src/services/clients/merge-mapping-clients.ts` - replaces a visible em dash
-  fallback with a regular hyphen; mapping behavior is unchanged.
+  fallback with a regular hyphen and carries Questionnaire evidence from the
+  mapping sheet into both existing and sheet-only brand records; client-name
+  matching now ignores punctuation and spacing to prevent duplicate Sheet and
+  Supabase rows.
+- `src/services/clients/plan-mapping-client-import.ts` and
+  `scripts/import-active-mapping-clients.ts` - provide the tested, dry-run-first
+  Active mapping-client sync used for the 2026-07-16 Supabase import.
+- `src/repositories/mapping-clients/google-sheet-mapping-client-repository.ts` -
+  validates and retries the published CSV, maps columns by header, extracts
+  Questionnaire Facebook pages, and creates sanitized Brand Kit evidence.
+- `src/repositories/client-intake/supabase-client-intake-repository.ts` and
+  `src/server/client-ingestion/` - persist selected Questionnaire evidence and
+  prioritize it as first-party input during brand analysis; the repository now
+  also starts the authenticated Vercel ingestion trigger immediately after a
+  successful queue operation.
+- `api/trigger-client-ingestion.ts` and
+  `src/services/client-ingestion/trigger-client-ingestion.ts` - bridge the
+  signed-in browser request to the Vercel `waitUntil` background worker without
+  exposing service-role, Apify, or model secrets.
+- `src/domain/brand.ts`, `src/domain/client-ingestion.ts`, and
+  `src/ports/mapping-client-repository.ts` - type the Questionnaire source from
+  mapping through queued ingestion.
+- `src/styles/app.css` - compact Signal source-selection and Questionnaire
+  preview styling.
 - `src/styles/neo-redesign.css` - scoped creative-tech visual layer.
 - `src/main.tsx` - loads the redesign stylesheet after the legacy stylesheet.
 - `src/config/app.ts` - approved reference metadata.

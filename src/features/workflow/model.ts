@@ -18,6 +18,13 @@ export type AppView = "overview" | "studio";
 
 export const successMetrics = ["CTR", "CVR", "CPA", "ROAS"] as const;
 export type SuccessMetric = (typeof successMetrics)[number];
+export type IdeaGenerationStatus = "idle" | "running" | "failed";
+
+export interface WorkspaceToast {
+  title: string;
+  message: string;
+  tone: "success" | "warning" | "error";
+}
 
 export interface CreativeMixItem {
   id: string;
@@ -54,6 +61,8 @@ export interface WorkflowState {
   attachments: readonly string[];
   uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
+  ideaGenerationStatus: IdeaGenerationStatus;
+  ideaGenerationError: string | null;
   directions: readonly CreativeDirection[];
   outputs: readonly CreativeOutput[];
   qaComplete: boolean;
@@ -87,7 +96,13 @@ export type WorkflowAction =
     }
   | { type: "remove-uploaded-material"; id: string }
   | { type: "select-reference-image"; item: ReferenceImageSelection }
+  | {
+      type: "sync-brand-logo-reference";
+      item: ReferenceImageSelection | null;
+    }
   | { type: "toggle-reference-image"; item: ReferenceImageSelection }
+  | { type: "start-idea-generation" }
+  | { type: "fail-idea-generation"; message: string }
   | { type: "generate-directions"; directions: readonly CreativeDirection[] }
   | {
       type: "generate-more-directions";
@@ -100,6 +115,16 @@ export type WorkflowAction =
       id: string;
       group: AngleExportGroup | null;
     }
+  | {
+      type: "add-manual-direction";
+      service: ServiceType;
+      pillar: string;
+      objective: string;
+      hook: string;
+      subheadline: string;
+      cta: string;
+    }
+  | { type: "delete-direction"; id: string }
   | { type: "toggle-direction"; id: string }
   | { type: "auto-select-directions" }
   | { type: "create-outputs"; outputs?: readonly CreativeOutput[] }
@@ -112,6 +137,7 @@ export type WorkflowAction =
       }[];
     }
   | { type: "resolve-qa-output"; id: string }
+  | { type: "save-output-reference"; id: string }
   | {
       type: "edit-output-direction";
       id: string;
@@ -152,7 +178,7 @@ export interface WorkspaceState {
   activeRunId: string;
   runOrder: readonly string[];
   runsById: Readonly<Record<string, WorkflowState>>;
-  toast: string | null;
+  toast: WorkspaceToast | null;
 }
 
 export type WorkspaceAction =

@@ -20,6 +20,7 @@ import {
   hookGenerationContentTypeQuotas,
   totalCreativeMixQuantity,
   type CreativeMixItem,
+  type WorkspaceToast,
   type WorkflowAction,
   type WorkflowState
 } from "./model";
@@ -80,6 +81,8 @@ Creative guardrails: Keep the first frame bold, reduce decorative copy, show the
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
     ...state,
+    ideaGenerationStatus: "idle",
+    ideaGenerationError: null,
     directions: [],
     outputs: [],
     qaComplete: false,
@@ -136,6 +139,8 @@ export function createInitialWorkflowState({
     attachments: [],
     uploadedMaterials: [],
     referenceImages: [],
+    ideaGenerationStatus: "idle",
+    ideaGenerationError: null,
     directions: [],
     outputs: [],
     qaComplete: false,
@@ -153,71 +158,195 @@ export const initialWorkflowState = createInitialWorkflowState({
 export function workflowActionToast(
   action: WorkflowAction,
   state: WorkflowState
-): string | null {
+): WorkspaceToast | null {
   switch (action.type) {
     case "select-brand":
-      return `${action.brand.name} loaded`;
+      return successToast(
+        "Brand memory loaded",
+        `${action.brand.name} context is ready for the brief.`
+      );
+    case "apply-monthly-quota":
+      return successToast(
+        "Monthly quota applied",
+        "3 Static, 2 UGC, and 1 Album are planned."
+      );
     case "attach-files":
-      return `${action.names.length} ${pluralize(action.names.length, "file")} attached`;
+      return successToast(
+        "Brief files attached",
+        `${action.names.length} ${pluralize(action.names.length, "file")} added to this run.`
+      );
     case "add-uploaded-materials":
-      return `${action.items.length} creative ${pluralize(action.items.length, "image")} added`;
+      return successToast(
+        "Creative materials added",
+        `${action.items.length} ${pluralize(action.items.length, "image")} will travel with the brief.`
+      );
     case "update-uploaded-material":
       return null;
     case "remove-uploaded-material":
-      return "Creative material removed";
+      return successToast(
+        "Creative material removed",
+        "The file is no longer attached to this run."
+      );
     case "select-reference-image":
-      return null;
+      return successToast(
+        "Reference selected",
+        `${action.item.label} will guide idea and artwork generation.`
+      );
     case "toggle-reference-image": {
       const nowSelected = state.referenceImages.some(
         (item) => item.id === action.item.id
       );
       return nowSelected
-        ? `${action.item.label} added as reference`
-        : `${action.item.label} removed from references`;
+        ? successToast(
+            "Reference selected",
+            `${action.item.label} will guide idea and artwork generation.`
+          )
+        : successToast(
+            "Reference removed",
+            `${action.item.label} is no longer attached to this run.`
+          );
     }
     case "generate-directions":
-      return "Hooks generated";
+      return successToast(
+        "Fresh ideas generated",
+        `${action.directions.length} hook ${pluralize(action.directions.length, "option")} ready to review.`
+      );
+    case "start-idea-generation":
+      return null;
+    case "fail-idea-generation":
+      return errorToast("Idea generation failed", action.message);
     case "generate-more-directions":
-      return `${action.directions.length} more ${pluralize(action.directions.length, "hook")} added`;
+      return successToast(
+        "More ideas generated",
+        `${action.directions.length} new ${pluralize(action.directions.length, "hook")} added to this run.`
+      );
     case "replace-direction":
-      return "Hook updated";
+      return successToast(
+        "Hook updated",
+        "Your feedback was applied to this hook only."
+      );
     case "replace-directions":
-      return "All hooks regenerated";
+      return successToast(
+        "All hooks regenerated",
+        "The new writing direction is ready to review."
+      );
     case "set-direction-export-group":
-      return "PDF group updated";
+      return successToast(
+        "PDF group updated",
+        "The idea will appear in the selected review section."
+      );
+    case "add-manual-direction":
+      return successToast(
+        "Manual hook added",
+        "The new option is available in this creative type."
+      );
+    case "delete-direction":
+      return successToast(
+        "Hook deleted",
+        "The option was removed from this run."
+      );
+    case "auto-select-directions":
+      return successToast(
+        "Recommended ideas selected",
+        "Neo filled each creative type using the planned quota."
+      );
     case "create-outputs":
-      return "Creative set created";
+      return successToast(
+        "Creative set created",
+        `${state.outputs.length} ${pluralize(state.outputs.length, "draft")} ready in Build.`
+      );
     case "run-qa": {
       const failed = action.results.filter((result) => !result.passed).length;
       return failed
-        ? `Quality check flagged ${failed} ${pluralize(failed, "creative")}`
-        : "Quality check passed";
+        ? warningToast(
+            "Quality check complete",
+            `${failed} ${pluralize(failed, "creative")} ${failed === 1 ? "needs" : "need"} review before Internal QC.`
+          )
+        : successToast(
+            "Quality check passed",
+            "Every draft is ready for Internal QC."
+          );
     }
     case "resolve-qa-output":
-      return "Current version kept";
+      return successToast(
+        "Current version kept",
+        "Your decision is recorded and the draft can move forward."
+      );
+    case "save-output-reference":
+      return successToast(
+        "Saved to references",
+        "This execution is now available in the brand memory."
+      );
     case "edit-output-direction":
-      return "Creative copy updated";
+      return successToast(
+        "Creative copy updated",
+        "Quality Check reset for the updated copy."
+      );
     case "approve-all":
-      return "Packet approved";
+      return successToast(
+        "All approvals complete",
+        "Every asset is approved for Client Review."
+      );
     case "review-output":
-      return action.decision === "approved" ? "Creative approved" : "Creative rejected";
+      return action.decision === "approved"
+        ? successToast(
+            "Creative approved",
+            "The next reviewer can continue with this asset."
+          )
+        : warningToast(
+            "Changes requested",
+            "The feedback is attached to the correct review owner."
+          );
     case "route-output-changes":
-      return "Changes routed to the fix owner";
+      return warningToast(
+        "Changes routed",
+        "The fix owner can update the asset inside Internal QC."
+      );
     case "replace-output-asset":
-      return "Replacement image uploaded";
+      return successToast(
+        "Artwork replaced",
+        "The updated asset is ready for review."
+      );
     case "send-client":
-      return "Sent to client";
+      return successToast(
+        "Sent to client",
+        "The approved creative set is ready for client decisions."
+      );
     case "approve-output":
-      return "Client approved";
+      return successToast(
+        "Creative approved",
+        "This asset is ready for delivery."
+      );
     case "request-client-change":
-      return "Client changes routed to Internal QC";
+      return warningToast(
+        "Client feedback recorded",
+        "The request was routed to Internal QC with its context."
+      );
     case "mark-delivered":
-      return "Marked delivered";
+      return successToast(
+        "Marked delivered",
+        "The completed creative set is ready for Learn."
+      );
     case "mark-done":
-      return state.brand ? "Saved to Past work" : "Marked sent";
+      return successToast(
+        state.brand ? "Saved to Past work" : "Run completed",
+        "This run is complete and remains available in your workspace."
+      );
     default:
       return null;
   }
+}
+
+function successToast(title: string, message: string): WorkspaceToast {
+  return { title, message, tone: "success" };
+}
+
+function warningToast(title: string, message: string): WorkspaceToast {
+  return { title, message, tone: "warning" };
+}
+
+function errorToast(title: string, message: string): WorkspaceToast {
+  return { title, message, tone: "error" };
 }
 
 export function workflowReducer(
@@ -238,7 +367,9 @@ export function workflowReducer(
         ...state,
         brand: action.brand,
         brandMenuOpen: false,
-        brandSearch: ""
+        brandSearch: "",
+        referenceImages:
+          state.brand?.id === action.brand.id ? state.referenceImages : []
       };
     case "set-library-section":
       return { ...state, librarySection: action.section };
@@ -338,6 +469,17 @@ export function workflowReducer(
             ...state,
             referenceImages: [...state.referenceImages, action.item]
           };
+    case "sync-brand-logo-reference": {
+      const nonLogoReferences = state.referenceImages.filter(
+        (item) => item.label.trim().toLowerCase() !== "logo"
+      );
+      return {
+        ...state,
+        referenceImages: action.item
+          ? [...nonLogoReferences, action.item]
+          : nonLogoReferences
+      };
+    }
     case "toggle-reference-image": {
       const exists = state.referenceImages.some(
         (item) => item.id === action.item.id
@@ -349,9 +491,23 @@ export function workflowReducer(
           : [...state.referenceImages, action.item]
       };
     }
+    case "start-idea-generation":
+      return {
+        ...state,
+        ideaGenerationStatus: "running",
+        ideaGenerationError: null
+      };
+    case "fail-idea-generation":
+      return {
+        ...state,
+        ideaGenerationStatus: "failed",
+        ideaGenerationError: action.message
+      };
     case "generate-directions":
       return {
         ...state,
+        ideaGenerationStatus: "idle",
+        ideaGenerationError: null,
         directions: assignDirectionsToMix(state, action.directions),
         stage: "directions"
       };
@@ -379,6 +535,9 @@ export function workflowReducer(
                   ...action.direction,
                   id: direction.id,
                   service: directionServiceAt(state, direction, index),
+                  manual: direction.manual,
+                  pillar: direction.pillar,
+                  objective: direction.objective,
                   formatBeats: normalizeFormatBeatsForService(
                     directionServiceAt(state, direction, index),
                     action.direction.formatBeats
@@ -411,6 +570,9 @@ export function workflowReducer(
             id: state.directions[index]?.id ?? direction.id,
             service:
               state.directions[index]?.service ?? creativeMixServiceAt(state, index),
+            manual: state.directions[index]?.manual,
+            pillar: state.directions[index]?.pillar,
+            objective: state.directions[index]?.objective,
             formatBeats: normalizeFormatBeatsForService(
               state.directions[index]?.service ?? creativeMixServiceAt(state, index),
               direction.formatBeats
@@ -439,6 +601,65 @@ export function workflowReducer(
             : direction
         )
       };
+    case "add-manual-direction": {
+      const hook = action.hook.trim();
+      const subheadline = action.subheadline.trim();
+      const pillar = action.pillar.trim();
+      const objective = action.objective.trim();
+      const cta = action.cta.trim();
+      if (!hook || !subheadline || !pillar || !objective || !cta) return state;
+
+      return {
+        ...state,
+        directions: [
+          ...state.directions,
+          {
+            id: createId("manual-direction"),
+            service: action.service,
+            manual: true,
+            pillar,
+            objective,
+            hook,
+            subheadline,
+            subheadlineHighlight: resolveSubheadlineHighlight(
+              subheadline,
+              undefined
+            ),
+            concept: pillar,
+            why: `Created manually for the ${objective.toLowerCase()} objective.`,
+            visual: "Use the hook and sub-headline as the primary copy hierarchy.",
+            cta,
+            supportingPoints: [],
+            formatBeats: [],
+            ctaActionType: "other" as const,
+            caption: [hook, subheadline, cta].join("\n\n"),
+            selected: false,
+            exportGroup: null
+          }
+        ],
+        outputs: [],
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
+      };
+    }
+    case "delete-direction": {
+      if (!state.directions.some((direction) => direction.id === action.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        directions: state.directions.filter(
+          (direction) => direction.id !== action.id
+        ),
+        outputs: [],
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
+      };
+    }
     case "toggle-direction": {
       const directionIndex = state.directions.findIndex(
         (direction) => direction.id === action.id
@@ -528,11 +749,21 @@ export function workflowReducer(
             : output
         )
       };
+    case "save-output-reference":
+      return {
+        ...state,
+        outputs: state.outputs.map((output) =>
+          output.id === action.id
+            ? { ...output, savedToReferences: true }
+            : output
+        )
+      };
     case "edit-output-direction": {
       const output = state.outputs.find((item) => item.id === action.id);
       if (!output) return state;
       return {
         ...state,
+        qaComplete: false,
         directions: state.directions.map((direction) =>
           direction.id === output.directionId
             ? {
@@ -544,6 +775,15 @@ export function workflowReducer(
                   .filter(Boolean)
               }
             : direction
+        ),
+        outputs: state.outputs.map((currentOutput) =>
+          currentOutput.id === action.id
+            ? {
+                ...currentOutput,
+                status: "draft" as const,
+                qaNote: undefined
+              }
+            : currentOutput
         )
       };
     }

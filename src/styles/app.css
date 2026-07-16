@@ -82,7 +82,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -276,6 +276,18 @@ body {
 
 .auth-card .auth-error {
   color: var(--red);
+}
+
+.auth-email-target {
+  margin: 4px 0 18px;
+  padding: 13px 14px;
+  border: 1px solid #d9ddf5;
+  border-radius: 14px;
+  background: #f7f8ff;
+  color: #343b69;
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .auth-text-button {
@@ -1159,7 +1171,127 @@ main {
   text-transform: uppercase;
 }
 
-.client-intake-form input {
+.client-source-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.client-source-picker legend {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.client-source-picker > p {
+  margin: -3px 0 1px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.client-source-options {
+  display: grid;
+  gap: 7px;
+}
+
+.client-source-option {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: flex-start;
+  gap: 9px !important;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.client-source-option.selected {
+  border-color: #aeb8ff;
+  background: #f5f6ff;
+  box-shadow: inset 0 0 0 1px #dbe0ff;
+}
+
+.client-source-option input,
+.client-questionnaire-source input {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--blue);
+}
+
+.client-source-option > span,
+.client-questionnaire-source label > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--ink);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.client-source-option b,
+.client-questionnaire-source b {
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.client-source-option small,
+.client-questionnaire-source small {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.client-source-manual {
+  margin-top: 1px;
+}
+
+.client-questionnaire-source {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dbe0ff;
+  border-radius: 12px;
+  background: #f7f8ff;
+}
+
+.client-questionnaire-source > label {
+  display: flex;
+  grid-template-columns: none;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.client-questionnaire-source details {
+  padding-top: 7px;
+  border-top: 1px solid #e4e7f7;
+}
+
+.client-questionnaire-source summary {
+  color: var(--blue);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-questionnaire-source details p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.client-intake-form input:not([type="radio"]):not([type="checkbox"]) {
   height: 38px;
   border: 1px solid var(--line);
   border-radius: 12px;

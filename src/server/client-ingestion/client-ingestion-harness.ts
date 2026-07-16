@@ -4,6 +4,7 @@ import type {
   VisualAssetCandidate
 } from "../../services/client-ingestion/facebook-source-normalizers.js";
 import {
+  getFacebookSourceError,
   normalizeFacebookAdsLibraryItems,
   normalizeFacebookPosts
 } from "../../services/client-ingestion/facebook-source-normalizers.js";
@@ -48,6 +49,12 @@ export interface SavedAdLibraryItem {
   adArchiveId: string;
 }
 
+export interface ManualBrandInput {
+  sourceId: string;
+  sourceUrl: string | null;
+  text: string;
+}
+
 export interface MirroredVisualAsset {
   assetBucket: string;
   assetStoragePath: string;
@@ -87,6 +94,11 @@ export interface ClientIngestionStore {
     rawPayload: unknown;
     errorMessage?: string | null;
   }): Promise<SavedBrandSource>;
+
+  listManualBrandInputs(input: {
+    clientId: string;
+    jobId: string;
+  }): Promise<readonly ManualBrandInput[]>;
 
   saveSocialPosts(input: {
     clientId: string;
@@ -170,13 +182,14 @@ export interface BrandVisualAnalyzer {
     client: ClientIngestionClient;
     visualAssets: readonly MirroredBrandVisualAsset[];
     textEvidence: readonly {
-      sourceType: "facebook_post" | "facebook_ad";
+      sourceType: "facebook_post" | "facebook_ad" | "manual_input";
       sourceId: string;
       text: string;
     }[];
     sourceSummary: {
       postsSaved: number;
       adsSaved: number;
+      manualInputsSaved: number;
       usedFallbackSearch: boolean;
     };
   }): Promise<BrandSignalAnalysis>;
@@ -209,7 +222,7 @@ export interface ClientIngestionHarnessResult {
   completed: boolean;
 }
 
-const FACEBOOK_ACCESS_ERROR = "เข้าถึงลิงก์ Facebook นี้ไม่ได้";
+const FACEBOOK_ACCESS_ERROR = "Please check Facebook page URL.";
 
 export async function runClientIngestionJob(
   job: ClientIngestionJob,
@@ -221,8 +234,8 @@ export async function runClientIngestionJob(
   searchFallback,
   visualAnalyzer,
   brandMemoryWriter,
-  maxPostImages = 12,
-  maxAdImages = 15
+  maxPostImages = 6,
+  maxAdImages = 6
 }: ClientIngestionHarnessDependencies
 ): Promise<ClientIngestionHarnessResult> {
   await setStatus(store, job, client, "validating_source");
@@ -237,20 +250,28 @@ export async function runClientIngestionJob(
   let ads: readonly NormalizedFacebookAdLibraryItem[] = [];
   let postSource: SavedBrandSource | null = null;
   let adSource: SavedBrandSource | null = null;
+  let facebookSourceErrorDetected = false;
 
   await setStatus(store, job, client, "scraping_facebook_posts");
   try {
     const postsPayload = await apify.scrapeFacebookPosts(client.facebookUrl);
-    posts = normalizeFacebookPosts(postsPayload);
+    const sourceError = getFacebookSourceError(postsPayload);
+    facebookSourceErrorDetected ||= Boolean(sourceError);
+    posts = sourceError ? [] : normalizeFacebookPosts(postsPayload);
     postSource = await store.saveBrandSource({
       clientId: client.id,
       jobId: job.id,
       sourceType: "facebook_posts",
       sourceUrl: client.facebookUrl,
-      status: posts.length ? "succeeded" : "partial",
-      rawPayload: postsPayload
+      status: sourceError ? "failed" : posts.length ? "succeeded" : "partial",
+      rawPayload: postsPayload,
+      errorMessage: sourceError
     });
-    sourceStatus.facebook_posts = "succeeded";
+    sourceStatus.facebook_posts = sourceError
+      ? "failed"
+      : posts.length
+        ? "succeeded"
+        : "partial";
   } catch (error) {
     sourceStatus.facebook_posts = "failed";
     await store.saveBrandSource({
@@ -267,16 +288,23 @@ export async function runClientIngestionJob(
   await setStatus(store, job, client, "scraping_facebook_ads", sourceStatus);
   try {
     const adsPayload = await apify.scrapeFacebookAdsLibrary(client.facebookUrl);
-    ads = normalizeFacebookAdsLibraryItems(adsPayload);
+    const sourceError = getFacebookSourceError(adsPayload);
+    facebookSourceErrorDetected ||= Boolean(sourceError);
+    ads = sourceError ? [] : normalizeFacebookAdsLibraryItems(adsPayload);
     adSource = await store.saveBrandSource({
       clientId: client.id,
       jobId: job.id,
       sourceType: "facebook_ads_library",
       sourceUrl: client.facebookUrl,
-      status: ads.length ? "succeeded" : "partial",
-      rawPayload: adsPayload
+      status: sourceError ? "failed" : ads.length ? "succeeded" : "partial",
+      rawPayload: adsPayload,
+      errorMessage: sourceError
     });
-    sourceStatus.facebook_ads_library = "succeeded";
+    sourceStatus.facebook_ads_library = sourceError
+      ? "failed"
+      : ads.length
+        ? "succeeded"
+        : "partial";
   } catch (error) {
     sourceStatus.facebook_ads_library = "failed";
     await store.saveBrandSource({
@@ -292,6 +320,11 @@ export async function runClientIngestionJob(
 
   let usedFallbackSearch = false;
   if (!posts.length && !ads.length) {
+    if (facebookSourceErrorDetected) {
+      await failJob(store, job, client, FACEBOOK_ACCESS_ERROR, sourceStatus);
+      return emptyResult(false);
+    }
+
     if (!searchFallback) {
       await failJob(store, job, client, FACEBOOK_ACCESS_ERROR, sourceStatus);
       return emptyResult(false);
@@ -330,20 +363,47 @@ export async function runClientIngestionJob(
     : [];
 
   await setStatus(store, job, client, "mirroring_images", sourceStatus);
-  const mirroredVisualAssets = await mirrorVisualAssets({
-    job,
-    client,
-    store,
-    imageMirror,
-    postSource,
-    adSource,
-    posts,
-    ads,
-    maxPostImages,
-    maxAdImages
-  });
+  let mirroredVisualAssets: readonly MirroredBrandVisualAsset[];
+  try {
+    mirroredVisualAssets = await mirrorVisualAssets({
+      job,
+      client,
+      store,
+      imageMirror,
+      postSource,
+      adSource,
+      posts,
+      ads,
+      maxPostImages,
+      maxAdImages
+    });
+  } catch (error) {
+    await failJob(store, job, client, readableError(error), {
+      ...sourceStatus,
+      visual_assets_mirrored: 0,
+      brand_memory_written: false
+    });
+    return {
+      postsSaved: savedPosts.length,
+      adsSaved: savedAds.length,
+      visualAssetsMirrored: 0,
+      usedFallbackSearch,
+      completed: false
+    };
+  }
   const visualAssetsMirrored = mirroredVisualAssets.length;
-  const textEvidence = buildTextEvidence(posts, ads);
+  const manualInputs = await store.listManualBrandInputs({
+    clientId: client.id,
+    jobId: job.id
+  });
+  const textEvidence = [
+    ...manualInputs.map((input) => ({
+      sourceType: "manual_input" as const,
+      sourceId: input.sourceId,
+      text: input.text
+    })),
+    ...buildTextEvidence(posts, ads)
+  ];
 
   if (
     visualAnalyzer &&
@@ -362,6 +422,7 @@ export async function runClientIngestionJob(
         sourceSummary: {
           postsSaved: savedPosts.length,
           adsSaved: savedAds.length,
+          manualInputsSaved: manualInputs.length,
           usedFallbackSearch
         }
       });
@@ -473,40 +534,61 @@ async function mirrorVisualAssets({
   const mirroredAssets: MirroredBrandVisualAsset[] = [];
   const postAssets = posts.flatMap((post) => post.visualAssets).slice(0, maxPostImages);
   const adAssets = ads.flatMap((ad) => ad.visualAssets).slice(0, maxAdImages);
+  const candidates = [...postAssets, ...adAssets].map((asset, index) => ({
+    asset,
+    index
+  }));
 
-  for (const [index, asset] of [...postAssets, ...adAssets].entries()) {
-    const sourceId =
-      asset.sourceType === "facebook_post" ? postSource?.id : adSource?.id;
-    if (!sourceId) continue;
+  for (let offset = 0; offset < candidates.length; offset += 4) {
+    const batch = candidates.slice(offset, offset + 4);
+    const results = await Promise.all(
+      batch.map(async ({ asset, index }) => {
+        const sourceId =
+          asset.sourceType === "facebook_post" ? postSource?.id : adSource?.id;
+        if (!sourceId) return null;
 
-    const mirrored = await imageMirror.mirror({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: asset.sourceType,
-      sourceItemId: asset.sourceItemId,
-      index,
-      imageUrl: asset.originalImageUrl
-    });
+        let mirrored: MirroredVisualAsset;
+        try {
+          mirrored = await imageMirror.mirror({
+            clientId: client.id,
+            jobId: job.id,
+            sourceType: asset.sourceType,
+            sourceItemId: asset.sourceItemId,
+            index,
+            imageUrl: asset.originalImageUrl
+          });
+        } catch {
+          return null;
+        }
 
-    await store.saveVisualAsset({
-      clientId: client.id,
-      sourceId,
-      sourceType: asset.sourceType,
-      sourceUrl: asset.sourceUrl,
-      sourceItemId: asset.sourceItemId,
-      mirrored,
-      captionContext: asset.captionContext,
-      ...(asset.ocrText ? { ocrText: asset.ocrText } : {})
-    });
+        await store.saveVisualAsset({
+          clientId: client.id,
+          sourceId,
+          sourceType: asset.sourceType,
+          sourceUrl: asset.sourceUrl,
+          sourceItemId: asset.sourceItemId,
+          mirrored,
+          captionContext: asset.captionContext,
+          ...(asset.ocrText ? { ocrText: asset.ocrText } : {})
+        });
 
-    mirroredAssets.push({
-      ...mirrored,
-      sourceId,
-      sourceType: asset.sourceType,
-      sourceUrl: asset.sourceUrl,
-      sourceItemId: asset.sourceItemId,
-      captionContext: asset.captionContext
-    });
+        return {
+          ...mirrored,
+          sourceId,
+          sourceType: asset.sourceType,
+          sourceUrl: asset.sourceUrl,
+          sourceItemId: asset.sourceItemId,
+          captionContext: asset.captionContext
+        } satisfies MirroredBrandVisualAsset;
+      })
+    );
+
+    mirroredAssets.push(
+      ...results.filter(
+        (asset): asset is MirroredBrandVisualAsset => asset !== null
+      )
+    );
+    await setStatus(store, job, client, "mirroring_images");
   }
 
   return mirroredAssets;

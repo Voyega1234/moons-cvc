@@ -1,6 +1,10 @@
 export {
+  buildNeoReviewPdfPages,
   exportIdeasReviewPdf,
+  exportNeoIdeasReviewPdf,
   getReviewHighlightKey,
+  type NeoReviewPdfItem,
+  type NeoReviewPdfPage,
   type ReviewHighlightMap,
   type ReviewIdeaGroup,
   type ReviewIdeaSection,

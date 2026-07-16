@@ -19,6 +19,13 @@ export interface BrandMemory {
   avoid: readonly string[];
 }
 
+export interface QuestionnaireBrandSource {
+  sourceUrl?: string;
+  text: string;
+  preview: string;
+  facebookUrls: readonly string[];
+}
+
 export interface Brand {
   id: string;
   name: string;
@@ -27,11 +34,13 @@ export interface Brand {
   facebookUrl?: string;
   ingestionStatus?: ClientIngestionStatus;
   ingestionError?: string;
+  ingestionUpdatedAt?: string;
   library: BrandLibrary;
   memory: BrandMemory;
   existsInSystem?: boolean;
   mappingStatus?: string;
   serviceStatus?: string;
+  mappingQuestionnaire?: QuestionnaireBrandSource;
   source?: "system" | "mapping";
 }
 

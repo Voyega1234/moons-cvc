@@ -1,11 +1,13 @@
 import {
   Fragment,
   useEffect,
+  useId,
   useState,
   type ChangeEvent,
   type Dispatch,
   type ReactNode
 } from "react";
+import { Bell, CheckCircle, Sparkle } from "@phosphor-icons/react";
 import {
   canSelectBrand,
   canStartBrandIngestion,
@@ -24,7 +26,6 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   creativeMaterialRoles,
-  type AngleExportGroup,
   type ApprovalRole,
   type ArtworkMode,
   type CreativeOutput,
@@ -65,7 +66,12 @@ import type {
   WorkspaceState
 } from "./model";
 import { creativeMixItems, totalCreativeMixQuantity } from "./model";
-import { selectedDirectionCount, workflowActionBlockReason } from "./rules";
+import {
+  approvalRolesForOutput,
+  currentApprovalRole,
+  selectedDirectionCount,
+  workflowActionBlockReason
+} from "./rules";
 import { presentBrandMemoryText } from "./brand-memory-presentation";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 import {
@@ -138,6 +144,7 @@ export function StartStage({ state, dispatch }: StageProps) {
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [setupBrand, setSetupBrand] = useState<Brand | null>(null);
   const [mappingBrand, setMappingBrand] = useState<Brand | null>(null);
+  const [queuedBrandName, setQueuedBrandName] = useState<string | null>(null);
   const continueAction: WorkflowAction = { type: "set-stage", stage: "brief" };
   const continueBlocked = workflowActionBlockReason(state, continueAction);
   const search = state.brandSearch.trim().toLowerCase();
@@ -146,6 +153,15 @@ export function StartStage({ state, dispatch }: StageProps) {
       .toLowerCase()
       .includes(search)
   );
+  const currentSetupBrand = setupBrand
+    ? (brands.find((brand) => brand.id === setupBrand.id) ?? setupBrand)
+    : null;
+
+  useEffect(() => {
+    if (currentSetupBrand && !canStartBrandIngestion(currentSetupBrand)) {
+      setSetupBrand(null);
+    }
+  }, [currentSetupBrand]);
 
   return (
     <DecisionCard
@@ -226,7 +242,11 @@ export function StartStage({ state, dispatch }: StageProps) {
                   setSetupBrand(null);
                   setMappingBrand(null);
                 }}
-                onCreated={refresh}
+                onCreated={async (brandName) => {
+                  setAddClientOpen(false);
+                  setQueuedBrandName(brandName);
+                  await refresh();
+                }}
               />
               {loading ? (
                 <p className="repository-message">Loading brands...</p>
@@ -306,14 +326,15 @@ export function StartStage({ state, dispatch }: StageProps) {
               })}
             </div>
           </div>
-          {setupBrand ? (
+          {currentSetupBrand ? (
             <ExistingBrandSetupPanel
-              key={setupBrand.id}
-              brand={setupBrand}
+              key={currentSetupBrand.id}
+              brand={currentSetupBrand}
               onCancel={() => setSetupBrand(null)}
-              onQueued={async () => {
-                await refresh();
+              onQueued={async (brandName) => {
                 setSetupBrand(null);
+                setQueuedBrandName(brandName);
+                await refresh();
               }}
             />
           ) : null}
@@ -322,9 +343,10 @@ export function StartStage({ state, dispatch }: StageProps) {
               key={mappingBrand.id}
               brand={mappingBrand}
               onCancel={() => setMappingBrand(null)}
-              onCreated={async () => {
-                await refresh();
+              onCreated={async (brandName) => {
                 setMappingBrand(null);
+                setQueuedBrandName(brandName);
+                await refresh();
               }}
             />
           ) : null}
@@ -371,7 +393,64 @@ export function StartStage({ state, dispatch }: StageProps) {
           }}
         />
       ) : null}
+      {queuedBrandName ? (
+        <BrandAnalysisQueuedDialog
+          brandName={queuedBrandName}
+          onClose={() => setQueuedBrandName(null)}
+        />
+      ) : null}
     </DecisionCard>
+  );
+}
+
+function BrandAnalysisQueuedDialog({
+  brandName,
+  onClose
+}: {
+  brandName: string;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+
+  return (
+    <div className="output-modal-backdrop neo-setup-queued-backdrop">
+      <section
+        className="output-modal neo-setup-queued-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div className="neo-setup-queued-status">
+          <CheckCircle aria-hidden="true" size={22} weight="fill" />
+          <span>Brand analysis started</span>
+        </div>
+        <h3 id={titleId}>{brandName} is in the queue.</h3>
+        <p>
+          Neo usually needs 5-10 minutes to analyze the brand. You can close
+          this message and continue working.
+        </p>
+        <div className="neo-setup-queued-mailbox">
+          <Bell aria-hidden="true" size={22} />
+          <div>
+            <b>We will notify you in Notifications</b>
+            <span>
+              Check the mailbox at the top right when Brand Kit is ready or
+              needs your attention.
+            </span>
+          </div>
+        </div>
+        <div className="neo-setup-queued-actions">
+          <button
+            autoFocus
+            className="btn primary"
+            type="button"
+            onClick={onClose}
+          >
+            Got it
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -449,12 +528,21 @@ function MappingBrandSetupPanel({
 }: {
   brand: Brand;
   onCancel: () => void;
-  onCreated: () => Promise<void>;
+  onCreated: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
-  const [facebookUrl, setFacebookUrl] = useState("");
+  const sourceOptions = brandFacebookSourceOptions(brand);
+  const [facebookSource, setFacebookSource] = useState(
+    sourceOptions[0]?.url ?? "manual"
+  );
+  const [manualFacebookUrl, setManualFacebookUrl] = useState("");
+  const [includeQuestionnaire, setIncludeQuestionnaire] = useState(
+    Boolean(brand.mappingQuestionnaire?.text)
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const facebookUrl =
+    facebookSource === "manual" ? manualFacebookUrl : facebookSource;
 
   async function createAndQueue() {
     const urlError = validateFacebookUrl(facebookUrl);
@@ -469,9 +557,13 @@ function MappingBrandSetupPanel({
     try {
       await repository.createDraftClient({
         name: brand.name,
-        facebookUrl: facebookUrl.trim()
+        facebookUrl: facebookUrl.trim(),
+        questionnaire: selectedQuestionnaire(
+          brand,
+          includeQuestionnaire
+        )
       });
-      await onCreated();
+      await onCreated(brand.name);
     } catch (error) {
       setError(
         error instanceof Error
@@ -492,15 +584,17 @@ function MappingBrandSetupPanel({
         </small>
       </div>
       <div className="client-intake-form">
-        <label>
-          <span>Facebook URL</span>
-          <input
-            value={facebookUrl}
-            disabled={saving}
-            placeholder="https://www.facebook.com/brand.page"
-            onChange={(event) => setFacebookUrl(event.target.value)}
-          />
-        </label>
+        <BrandSetupSources
+          brand={brand}
+          sourceOptions={sourceOptions}
+          facebookSource={facebookSource}
+          manualFacebookUrl={manualFacebookUrl}
+          includeQuestionnaire={includeQuestionnaire}
+          disabled={saving}
+          onFacebookSourceChange={setFacebookSource}
+          onManualFacebookUrlChange={setManualFacebookUrl}
+          onIncludeQuestionnaireChange={setIncludeQuestionnaire}
+        />
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="client-intake-actions">
           <button
@@ -517,7 +611,7 @@ function MappingBrandSetupPanel({
             disabled={saving}
             onClick={() => void createAndQueue()}
           >
-            {saving ? "Adding..." : "Add and analyze"}
+            {saving ? "Starting analysis..." : "Add and analyze"}
           </button>
         </div>
       </div>
@@ -532,12 +626,23 @@ function ExistingBrandSetupPanel({
 }: {
   brand: Brand;
   onCancel: () => void;
-  onQueued: () => Promise<void>;
+  onQueued: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
-  const [facebookUrl, setFacebookUrl] = useState(brand.facebookUrl ?? "");
+  const sourceOptions = brandFacebookSourceOptions(brand);
+  const [facebookSource, setFacebookSource] = useState(
+    sourceOptions[0]?.url ?? "manual"
+  );
+  const [manualFacebookUrl, setManualFacebookUrl] = useState(
+    sourceOptions.length ? "" : (brand.facebookUrl ?? "")
+  );
+  const [includeQuestionnaire, setIncludeQuestionnaire] = useState(
+    Boolean(brand.mappingQuestionnaire?.text)
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const facebookUrl =
+    facebookSource === "manual" ? manualFacebookUrl : facebookSource;
 
   async function queueIngestion() {
     const urlError = validateFacebookUrl(facebookUrl);
@@ -552,13 +657,15 @@ function ExistingBrandSetupPanel({
     try {
       await repository.queueExistingClient({
         clientId: brand.id,
-        facebookUrl: facebookUrl.trim()
+        facebookUrl: facebookUrl.trim(),
+        questionnaire: selectedQuestionnaire(
+          brand,
+          includeQuestionnaire
+        )
       });
-      await onQueued();
+      await onQueued(brand.name);
     } catch (error) {
-      setError(
-        error instanceof Error ? error.message : "Could not queue brand setup."
-      );
+      setError(repositoryErrorMessage(error, "Could not queue brand setup."));
     } finally {
       setSaving(false);
     }
@@ -573,15 +680,17 @@ function ExistingBrandSetupPanel({
         </small>
       </div>
       <div className="client-intake-form">
-        <label>
-          <span>Facebook URL</span>
-          <input
-            value={facebookUrl}
-            disabled={saving}
-            placeholder="https://www.facebook.com/brand.page"
-            onChange={(event) => setFacebookUrl(event.target.value)}
-          />
-        </label>
+        <BrandSetupSources
+          brand={brand}
+          sourceOptions={sourceOptions}
+          facebookSource={facebookSource}
+          manualFacebookUrl={manualFacebookUrl}
+          includeQuestionnaire={includeQuestionnaire}
+          disabled={saving}
+          onFacebookSourceChange={setFacebookSource}
+          onManualFacebookUrlChange={setManualFacebookUrl}
+          onIncludeQuestionnaireChange={setIncludeQuestionnaire}
+        />
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="client-intake-actions">
           <button
@@ -598,12 +707,178 @@ function ExistingBrandSetupPanel({
             disabled={saving}
             onClick={() => void queueIngestion()}
           >
-            {saving ? "Queuing..." : "Analyze brand"}
+            {saving ? "Starting analysis..." : "Analyze brand"}
           </button>
         </div>
       </div>
     </section>
   );
+}
+
+export function repositoryErrorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
+
+interface FacebookSourceOption {
+  url: string;
+  label: string;
+}
+
+function BrandSetupSources({
+  brand,
+  sourceOptions,
+  facebookSource,
+  manualFacebookUrl,
+  includeQuestionnaire,
+  disabled,
+  onFacebookSourceChange,
+  onManualFacebookUrlChange,
+  onIncludeQuestionnaireChange
+}: {
+  brand: Brand;
+  sourceOptions: readonly FacebookSourceOption[];
+  facebookSource: string;
+  manualFacebookUrl: string;
+  includeQuestionnaire: boolean;
+  disabled: boolean;
+  onFacebookSourceChange: (value: string) => void;
+  onManualFacebookUrlChange: (value: string) => void;
+  onIncludeQuestionnaireChange: (value: boolean) => void;
+}) {
+  const questionnaire = brand.mappingQuestionnaire;
+
+  return (
+    <>
+      <fieldset className="client-source-picker">
+        <legend>Facebook page</legend>
+        <p>
+          {sourceOptions.length
+            ? "Select the page Neo should analyze. These were found in the client data."
+            : "No Facebook page was found in the client data. Add one manually."}
+        </p>
+        <div className="client-source-options">
+          {sourceOptions.map((option) => (
+            <label
+              className={`client-source-option ${facebookSource === option.url ? "selected" : ""}`}
+              key={option.url}
+            >
+              <input
+                type="radio"
+                name={`facebook-source-${brand.id}`}
+                value={option.url}
+                checked={facebookSource === option.url}
+                disabled={disabled}
+                onChange={() => onFacebookSourceChange(option.url)}
+              />
+              <span>
+                <b>{option.label}</b>
+                <small>{option.url}</small>
+              </span>
+            </label>
+          ))}
+          <label
+            className={`client-source-option ${facebookSource === "manual" ? "selected" : ""}`}
+          >
+            <input
+              type="radio"
+              name={`facebook-source-${brand.id}`}
+              value="manual"
+              checked={facebookSource === "manual"}
+              disabled={disabled}
+              onChange={() => onFacebookSourceChange("manual")}
+            />
+            <span>
+              <b>Use another page</b>
+              <small>Enter a Facebook page manually</small>
+            </span>
+          </label>
+        </div>
+        {facebookSource === "manual" ? (
+          <label className="client-source-manual">
+            <span>Facebook URL</span>
+            <input
+              value={manualFacebookUrl}
+              disabled={disabled}
+              placeholder="https://www.facebook.com/brand.page"
+              onChange={(event) =>
+                onManualFacebookUrlChange(event.target.value)
+              }
+            />
+          </label>
+        ) : null}
+      </fieldset>
+
+      {questionnaire?.text ? (
+        <section className="client-questionnaire-source">
+          <label>
+            <input
+              type="checkbox"
+              checked={includeQuestionnaire}
+              disabled={disabled}
+              onChange={(event) =>
+                onIncludeQuestionnaireChange(event.target.checked)
+              }
+            />
+            <span>
+              <b>Use Questionnaire as Brand Kit evidence</b>
+              <small>
+                First-party brand details and channel information will guide
+                Brand Memory.
+              </small>
+            </span>
+          </label>
+          <details>
+            <summary>Preview Questionnaire evidence</summary>
+            <p>{questionnaire.preview}</p>
+          </details>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function brandFacebookSourceOptions(
+  brand: Brand
+): readonly FacebookSourceOption[] {
+  const questionnaireUrls = brand.mappingQuestionnaire?.facebookUrls ?? [];
+  const urls = [
+    ...questionnaireUrls,
+    ...(brand.facebookUrl ? [brand.facebookUrl] : [])
+  ].filter((url, index, values) => values.indexOf(url) === index);
+
+  return urls.map((url) => ({
+    url,
+    label: questionnaireUrls.includes(url)
+      ? "Found in Questionnaire"
+      : "Current Neo page"
+  }));
+}
+
+function selectedQuestionnaire(
+  brand: Brand,
+  include: boolean
+): { sourceUrl?: string; text: string } | undefined {
+  const questionnaire = brand.mappingQuestionnaire;
+  if (!include || !questionnaire?.text) return undefined;
+  return {
+    ...(questionnaire.sourceUrl
+      ? { sourceUrl: questionnaire.sourceUrl }
+      : {}),
+    text: questionnaire.text
+  };
 }
 
 function AddClientPanel({
@@ -613,14 +888,13 @@ function AddClientPanel({
 }: {
   open: boolean;
   onToggle: () => void;
-  onCreated: () => Promise<void>;
+  onCreated: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
   const [name, setName] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
   const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function createClient() {
@@ -638,7 +912,6 @@ function AddClientPanel({
 
     setSaving(true);
     setError(null);
-    setMessage(null);
 
     try {
       const result = await repository.createDraftClient({
@@ -646,13 +919,10 @@ function AddClientPanel({
         facebookUrl: facebookUrl.trim(),
         ...(category.trim() ? { category: category.trim() } : {})
       });
-      await onCreated();
+      await onCreated(result.brand.name);
       setName("");
       setFacebookUrl("");
       setCategory("");
-      setMessage(
-        `${result.brand.name} draft created. Ingestion job ${result.jobId} queued.`
-      );
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Could not create client."
@@ -698,14 +968,13 @@ function AddClientPanel({
             />
           </label>
           {error ? <p className="repository-message error">{error}</p> : null}
-          {message ? <p className="repository-message">{message}</p> : null}
           <button
             className="btn secondary"
             type="button"
             disabled={saving}
             onClick={() => void createClient()}
           >
-            {saving ? "Creating draft..." : "Create client draft"}
+            {saving ? "Starting analysis..." : "Create client draft"}
           </button>
         </div>
       ) : null}
@@ -2316,7 +2585,11 @@ function PastWorkPreview({
             {item.imageUrl ? (
               <img src={item.imageUrl} alt={item.title} />
             ) : (
-              <div className="past-work-media-placeholder">Facebook post</div>
+              <div className="past-work-media-placeholder">
+                {item.sourceType === "facebook_post"
+                  ? "Facebook post"
+                  : "Ads Library creative"}
+              </div>
             )}
             <div>
               <b>{item.title}</b>
@@ -2606,12 +2879,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
         const [logoCandidate] = logoRule
           ? libraryItemsWithImages([logoRule])
           : [];
-        if (logoCandidate) {
-          dispatch({
-            type: "select-reference-image",
-            item: logoCandidate
-          });
-        }
+        dispatch({
+          type: "sync-brand-logo-reference",
+          item: logoCandidate ?? null
+        });
       })
       .catch(() => undefined);
 
@@ -3503,8 +3774,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     state,
     createOutputsAction
   );
-  const autoSelectAction: WorkflowAction = { type: "auto-select-directions" };
-  const [moreInstructions, setMoreInstructions] = useState("");
   const [editingDirectionId, setEditingDirectionId] = useState<string | null>(
     null
   );
@@ -3512,13 +3781,16 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     string | null
   >(null);
   const [regeneratingAll, setRegeneratingAll] = useState(false);
-  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
-  const [moreComposerOpen, setMoreComposerOpen] = useState(false);
+  const [manualHookGroup, setManualHookGroup] = useState<{
+    service: ServiceType;
+    title: string;
+  } | null>(null);
   const [exportingAngles, setExportingAngles] = useState(false);
   const [exportAnglesError, setExportAnglesError] = useState<string | null>(null);
   const {
     generateMore,
     loading: generatingMore,
+    loadingService: generatingMoreService,
     error: generateMoreError
   } = useGenerateMoreHooks(state, dispatch);
   const {
@@ -3537,23 +3809,15 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     error: createError
   } = useCreateSelectedHooks(state, dispatch);
 
-  function handleGenerateMore() {
-    generateMore(moreInstructions);
-    setMoreInstructions("");
-    setMoreComposerOpen(false);
-  }
-
   async function handleExportAngles() {
     setExportingAngles(true);
     setExportAnglesError(null);
     try {
       const review = buildAngleExportReview(state);
       if (review.sections.length === 0) {
-        throw new Error(
-          "Choose at least one Angle as Recommended or Option before exporting."
-        );
+        throw new Error("Generate or add at least one hook before exporting.");
       }
-      const { exportIdeasReviewPdf } = await import(
+      const { exportNeoIdeasReviewPdf } = await import(
         "../export-pdf-kit/export-ideas-review-pdf"
       );
       const brandSlug = (state.brand?.name ?? "neo")
@@ -3561,10 +3825,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      await exportIdeasReviewPdf(
+      const filename = `${brandSlug || "neo"}-angles.pdf`;
+      await exportNeoIdeasReviewPdf(
         review.sections,
-        `${brandSlug || "neo"}-angles.pdf`,
-        review.highlightMap
+        filename,
+        review.highlightMap,
+        state.brand?.name ?? "Creative topics"
       );
     } catch (caught) {
       setExportAnglesError(
@@ -3584,12 +3850,18 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     (direction) => direction.id === regeneratingDirectionId
   );
 
+  function handleDeleteDirection(directionId: string) {
+    if (!window.confirm("Delete this hook option?")) return;
+    dispatch({ type: "delete-direction", id: directionId });
+  }
+
   return (
     <DecisionCard
-      eyebrow="Angles"
+      eyebrow="03 / Angles"
       title="Pick the hooks for this creative mix."
-      status={`${selected}/${requiredCount} selected`}
-      statusClass="blue"
+      helper="neo preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
+      status={`neo picked ${selected} / ${requiredCount}`}
+      statusClass={selected === requiredCount ? "green" : "blue"}
       className="neo-stage-angles"
       actions={
         <>
@@ -3598,7 +3870,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             type="button"
             onClick={() => dispatch(editBriefAction)}
           >
-            Edit brief
+            ← Edit brief
           </button>
           <button
             className="btn primary"
@@ -3608,7 +3880,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             onClick={createSelectedHooks}
           >
             {creating ? <Spinner /> : null}
-            {creating ? "Generating artwork…" : "Confirm hooks and create"}
+            {creating ? "Generating artwork…" : "Confirm hooks & create →"}
           </button>
         </>
       }
@@ -3705,103 +3977,36 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       </section>
       <div className="direction-tools neo-angle-toolbar">
         <div>
-          <h3>Review recommended hooks</h3>
+          <h3>Review hooks</h3>
           <p>
-            Select {requiredCount} hooks, or let Neo pick the strongest set
-            for this mix.
+            Select up to {requiredCount} hooks. Selected hooks export as
+            Recommended; the rest stay as Options until deleted.
           </p>
         </div>
         <div className="neo-angle-toolbar-actions">
           <button
-            className="btn primary small"
+            className="btn secondary small neo-angle-export-pdf"
             type="button"
-            onClick={() => dispatch(autoSelectAction)}
+            disabled={exportingAngles || state.directions.length === 0}
+            onClick={() => void handleExportAngles()}
           >
-            Let Neo pick
+            {exportingAngles ? <Spinner /> : null}
+            {exportingAngles ? "Exporting…" : "Export PDF"}
           </button>
-          <div className="neo-angle-overflow">
-            <button
-              className="neo-angle-overflow-trigger"
-              type="button"
-              aria-label="More hook actions"
-              aria-haspopup="menu"
-              aria-expanded={actionsMenuOpen}
-              onClick={() => setActionsMenuOpen((open) => !open)}
-            >
-              <span aria-hidden="true">•••</span>
-            </button>
-            {actionsMenuOpen ? (
-              <div className="neo-angle-overflow-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={exportingAngles || state.directions.length === 0}
-                  onClick={() => {
-                    setActionsMenuOpen(false);
-                    void handleExportAngles();
-                  }}
-                >
-                  <span>Export PDF</span>
-                  <small>Download the grouped review</small>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={regeneratingAllHooks || Boolean(regeneratingHookId)}
-                  onClick={() => {
-                    setActionsMenuOpen(false);
-                    setRegeneratingAll(true);
-                  }}
-                >
-                  <span>Regenerate all</span>
-                  <small>Rewrite every hook with a new tone</small>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={generatingMore || regeneratingAllHooks}
-                  onClick={() => {
-                    setActionsMenuOpen(false);
-                    setMoreComposerOpen(true);
-                  }}
-                >
-                  <span>Generate more</span>
-                  <small>Add another round of directions</small>
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <button
+            className="btn secondary small neo-angle-regenerate-all"
+            type="button"
+            disabled={
+              generatingMore ||
+              regeneratingAllHooks ||
+              Boolean(regeneratingHookId)
+            }
+            onClick={() => setRegeneratingAll(true)}
+          >
+            ↻ Regenerate hooks
+          </button>
         </div>
       </div>
-      {moreComposerOpen ? (
-        <div className="direction-generate-more neo-angle-generate-more">
-          <input
-            autoFocus
-            value={moreInstructions}
-            disabled={generatingMore || regeneratingAllHooks}
-            placeholder="Add direction for the next round (optional)"
-            onChange={(event) => setMoreInstructions(event.target.value)}
-          />
-          <button
-            className="btn primary small"
-            type="button"
-            disabled={generatingMore || regeneratingAllHooks}
-            onClick={handleGenerateMore}
-          >
-            {generatingMore ? <Spinner /> : null}
-            {generatingMore ? "Generating…" : "Generate"}
-          </button>
-          <button
-            className="neo-angle-composer-close"
-            type="button"
-            aria-label="Close generate more"
-            disabled={generatingMore}
-            onClick={() => setMoreComposerOpen(false)}
-          >
-            ×
-          </button>
-        </div>
-      ) : null}
       {generateMoreError ? (
         <p className="repository-message error">{generateMoreError}</p>
       ) : null}
@@ -3832,11 +4037,39 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </p>
                 </div>
               </div>
-              <span
-                className={`neo-angle-group-progress ${group.selected === group.required ? "complete" : ""}`}
-              >
-                {group.selected}/{group.required} selected
-              </span>
+              <div className="neo-angle-group-head-actions">
+                <div className="neo-angle-group-buttons">
+                  <button
+                    className="btn secondary small neo-angle-generate-ideas"
+                    type="button"
+                    disabled={generatingMore || regeneratingAllHooks}
+                    onClick={() => generateMore(group.service)}
+                  >
+                    {generatingMoreService === group.service ? <Spinner /> : null}
+                    {generatingMoreService === group.service
+                      ? "Generating…"
+                      : "Generate more ideas"}
+                  </button>
+                  <button
+                    className="btn secondary small neo-angle-add-hook"
+                    type="button"
+                    disabled={generatingMore || regeneratingAllHooks}
+                    onClick={() =>
+                      setManualHookGroup({
+                        service: group.service,
+                        title: group.contentType
+                      })
+                    }
+                  >
+                    + Add hook manually
+                  </button>
+                </div>
+                <span
+                  className={`neo-angle-group-progress ${group.selected === group.required ? "complete" : ""}`}
+                >
+                  {group.selected}/{group.required} selected
+                </span>
+              </div>
             </header>
             <div className="direction-grid neo-angle-grid">
               {group.directions.map(({ direction, originalIndex }, groupIndex) => (
@@ -3862,31 +4095,28 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </span>
                 </div>
                 <p className="neo-angle-meta-line">
-                  Creative concept
-                  <b> · {successMetricObjectives[state.successMetric]}</b>
+                  {direction.pillar || "Creative concept"}
+                  <b>
+                    {" · "}
+                    {direction.objective ||
+                      successMetricObjectives[state.successMetric]}
+                  </b>
                 </p>
               </div>
               <div className="neo-angle-top-actions">
-                <select
-                  className={`neo-angle-export-select is-${direction.exportGroup ?? "unselected"}`}
-                  aria-label={`Export group for Idea ${originalIndex + 1}`}
-                  value={direction.exportGroup ?? ""}
-                  onChange={(event) =>
-                    dispatch({
-                      type: "set-direction-export-group",
-                      id: direction.id,
-                      group: event.target.value
-                        ? (event.target.value as AngleExportGroup)
-                        : null
-                    })
-                  }
+                <button
+                  className="btn secondary small neo-angle-edit"
+                  type="button"
+                  disabled={regeneratingAllHooks}
+                  onClick={() => setEditingDirectionId(direction.id)}
                 >
-                  <option value="recommended">Recommended</option>
-                  <option value="option">Option</option>
-                  <option value="">Not selected</option>
-                </select>
+                  Edit
+                </button>
               </div>
             </div>
+            {direction.manual ? (
+              <span className="neo-angle-manual-note">Manually added</span>
+            ) : null}
             <div className="neo-angle-hook-wrap">
               <span className="neo-angle-card-kicker">
                 {angleHookLabel(group.service)}
@@ -3942,14 +4172,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                 <button
                   className="btn secondary small"
                   type="button"
-                  disabled={regeneratingAllHooks}
-                  onClick={() => setEditingDirectionId(direction.id)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn secondary small"
-                  type="button"
                   disabled={
                     regeneratingAllHooks || Boolean(regeneratingHookId)
                   }
@@ -3958,7 +4180,19 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   {regeneratingHookId === direction.id ? <Spinner /> : null}
                   {regeneratingHookId === direction.id
                     ? "Regenerating…"
-                    : "Regenerate"}
+                    : "Rewrite hook"}
+                </button>
+                <button
+                  className="btn secondary small neo-angle-delete"
+                  type="button"
+                  disabled={
+                    regeneratingAllHooks ||
+                    Boolean(regeneratingHookId) ||
+                    creating
+                  }
+                  onClick={() => handleDeleteDirection(direction.id)}
+                >
+                  Delete
                 </button>
               </div>
             </div>
@@ -3979,6 +4213,21 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               direction
             });
             setEditingDirectionId(null);
+          }}
+        />
+      ) : null}
+      {manualHookGroup ? (
+        <ManualHookModal
+          contentType={manualHookGroup.title}
+          defaultObjective={successMetricObjectives[state.successMetric]}
+          onClose={() => setManualHookGroup(null)}
+          onAdd={(values) => {
+            dispatch({
+              type: "add-manual-direction",
+              service: manualHookGroup.service,
+              ...values
+            });
+            setManualHookGroup(null);
           }}
         />
       ) : null}
@@ -4266,6 +4515,129 @@ function HookEditModal({
   );
 }
 
+function ManualHookModal({
+  contentType,
+  defaultObjective,
+  onClose,
+  onAdd
+}: {
+  contentType: string;
+  defaultObjective: string;
+  onClose: () => void;
+  onAdd: (values: {
+    pillar: string;
+    objective: string;
+    hook: string;
+    subheadline: string;
+    cta: string;
+  }) => void;
+}) {
+  const [pillar, setPillar] = useState("");
+  const [objective, setObjective] = useState(defaultObjective);
+  const [hook, setHook] = useState("");
+  const [subheadline, setSubheadline] = useState("");
+  const [cta, setCta] = useState("");
+  const complete = Boolean(
+    pillar.trim() && hook.trim() && subheadline.trim() && cta.trim()
+  );
+
+  return (
+    <div className="output-modal-backdrop" onClick={onClose}>
+      <div
+        className="output-modal neo-manual-hook-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-hook-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="output-modal-head">
+          <div>
+            <p className="eyebrow">Manual hook</p>
+            <h3 id="manual-hook-title">Add a {contentType} topic</h3>
+          </div>
+          <button className="btn ghost" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="neo-manual-hook-form">
+          <label className="neo-manual-hook-field">
+            <span>Pillar</span>
+            <input
+              autoFocus
+              value={pillar}
+              placeholder="Example: Educational, pain point, product proof"
+              onChange={(event) => setPillar(event.target.value)}
+            />
+          </label>
+          <label className="neo-manual-hook-field">
+            <span>Objective</span>
+            <select
+              value={objective}
+              onChange={(event) => setObjective(event.target.value)}
+            >
+              {[
+                "Conversion",
+                "Awareness",
+                "Engagement",
+                "Education",
+                "Traffic",
+                "Lead Generation",
+                "Revenue",
+                "Efficiency"
+              ].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="neo-manual-hook-field full">
+            <span>Hook</span>
+            <textarea
+              rows={3}
+              value={hook}
+              placeholder="Write the main hook. Keep it clear in one glance."
+              onChange={(event) => setHook(event.target.value)}
+            />
+          </label>
+          <label className="neo-manual-hook-field full">
+            <span>Sub-headline</span>
+            <textarea
+              rows={3}
+              value={subheadline}
+              placeholder="Add the supporting message."
+              onChange={(event) => setSubheadline(event.target.value)}
+            />
+          </label>
+          <label className="neo-manual-hook-field full">
+            <span>CTA</span>
+            <input
+              value={cta}
+              placeholder="Example: Talk to our team for a free consultation"
+              onChange={(event) => setCta(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="output-modal-actions">
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            type="button"
+            disabled={!complete}
+            onClick={() =>
+              onAdd({ pillar, objective, hook, subheadline, cta })
+            }
+          >
+            Add hook
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HookRegenerateModal({
   direction,
   loading,
@@ -4277,9 +4649,9 @@ function HookRegenerateModal({
   loading: boolean;
   error: string | null;
   onClose: () => void;
-  onRegenerate: (tone: string) => Promise<void>;
+  onRegenerate: (feedback: string) => Promise<void>;
 }) {
-  const [tone, setTone] = useState("");
+  const [feedback, setFeedback] = useState("");
 
   return (
     <div className="output-modal-backdrop" onClick={onClose}>
@@ -4292,8 +4664,8 @@ function HookRegenerateModal({
       >
         <div className="output-modal-head">
           <div>
-            <p className="eyebrow">Regenerate hook</p>
-            <h3 id="hook-regenerate-title">Keep the idea, change the tone</h3>
+            <p className="eyebrow">Rewrite hook</p>
+            <h3 id="hook-regenerate-title">Rewrite this hook</h3>
           </div>
           <button
             className="btn ghost"
@@ -4305,22 +4677,22 @@ function HookRegenerateModal({
           </button>
         </div>
         <div className="hook-regenerate-original">
-          <span>Original hook</span>
+          <span>Current hook</span>
           <b>{direction.hook}</b>
-          <p>{directionSubheadline(direction)}</p>
         </div>
         <label className="output-modal-prompt-label">
-          <span>New writing tone</span>
-          <input
-            value={tone}
+          <span>What should change?</span>
+          <textarea
+            rows={4}
+            value={feedback}
             disabled={loading}
-            placeholder="Example: sharper, playful, premium, more direct"
-            onChange={(event) => setTone(event.target.value)}
+            placeholder="Example: Make it shorter, more product-led, clearer, more emotional, or turn it into a curiosity question."
+            onChange={(event) => setFeedback(event.target.value)}
           />
         </label>
         <p className="hook-regenerate-note">
-          Neo will preserve the original strategic idea and rewrite its hook
-          and supporting copy in this tone.
+          Only this hook will regenerate. The rest of the angle set will stay
+          untouched.
         </p>
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="output-modal-actions">
@@ -4335,8 +4707,8 @@ function HookRegenerateModal({
           <button
             className="btn primary"
             type="button"
-            disabled={loading || !tone.trim()}
-            onClick={() => void onRegenerate(tone)}
+            disabled={loading || !feedback.trim()}
+            onClick={() => void onRegenerate(feedback)}
           >
             {loading ? <Spinner /> : null}
             {loading ? "Regenerating…" : "Regenerate hook"}
@@ -4373,7 +4745,7 @@ function HookRegenerateAllModal({
       >
         <div className="output-modal-head">
           <div>
-            <p className="eyebrow">Regenerate all hooks</p>
+            <p className="eyebrow">Regenerate hooks</p>
             <h3 id="hook-regenerate-all-title">
               Change the tone across all {count} hooks
             </h3>
@@ -4417,7 +4789,7 @@ function HookRegenerateAllModal({
             onClick={() => void onRegenerate(tone)}
           >
             {loading ? <Spinner /> : null}
-            {loading ? "Regenerating all…" : "Regenerate all hooks"}
+            {loading ? "Regenerating hooks…" : "↻ Regenerate hooks"}
           </button>
         </div>
       </div>
@@ -4443,19 +4815,23 @@ export function StudioStage({ state, dispatch }: StageProps) {
   const failedCount = state.outputs.filter(
     (output) => output.status === "needs-revision"
   ).length;
+  const readyCount = state.outputs.filter(
+    (output) => output.status === "ready" || output.status === "fixed"
+  ).length;
 
   return (
     <DecisionCard
-      eyebrow="Build"
+      eyebrow="04 / Build"
       title="Review the creative set."
+      helper="Refine each draft, run a quality check, and resolve any guided improvements before sending the work to Internal QC."
       status={
         checking
           ? "Checking quality…"
           : !state.qaComplete
-            ? "Quality waiting"
+            ? "Not checked"
             : failedCount
-              ? `${failedCount} flagged`
-              : "Quality passed"
+              ? `${readyCount} ready · ${failedCount} suggestion${failedCount === 1 ? "" : "s"}`
+              : `${readyCount} / ${state.outputs.length} ready`
       }
       statusClass={state.qaComplete && !failedCount ? "green" : ""}
       className="neo-stage-build"
@@ -4466,7 +4842,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
             type="button"
             onClick={() => dispatch(backAction)}
           >
-            Back to Angles
+            ← Back to angles
           </button>
           <button
             className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
@@ -4479,8 +4855,8 @@ export function StudioStage({ state, dispatch }: StageProps) {
             {checking
               ? "Checking…"
               : state.qaComplete
-                ? "Recheck quality"
-                : "Check quality"}
+                ? "Recheck drafts"
+                : "Run quality check"}
           </button>
           <button
             className={`btn ${state.qaComplete ? "primary" : "secondary"}`}
@@ -4489,7 +4865,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
             title={approvalBlocked ?? undefined}
             onClick={() => dispatch(approvalAction)}
           >
-            Send to internal QC
+            Send to Internal QC →
           </button>
         </>
       }
@@ -4497,28 +4873,40 @@ export function StudioStage({ state, dispatch }: StageProps) {
       <div className="create-stage-stack neo-build-stage-stack">
         <section className="neo-create-intro neo-build-intro">
           <div>
-            <span className="neo-context-label">Creative set</span>
-            <h3>
-              {state.outputs.length} creative
-              {state.outputs.length === 1 ? "" : "s"} ready for review
-            </h3>
+            <h3>Creative set · {state.brand?.name ?? "Selected brand"}</h3>
             <p>
-              Review the artwork and caption together, then run the quality
-              check before Internal QC.
+              {!state.qaComplete
+                ? "Review the hook, visual direction, and caption for every draft."
+                : failedCount
+                  ? `Quality check found ${failedCount} guided improvement${failedCount === 1 ? "" : "s"}.`
+                  : "Every draft passed the automated quality check and is ready for Internal QC."}
             </p>
           </div>
-          <span
-            className={`pill ${state.qaComplete && !failedCount ? "green" : failedCount ? "red" : ""}`}
-          >
-            {!state.qaComplete
-              ? "Quality check waiting"
-              : failedCount
-                ? `${failedCount} to review`
-                : "Ready for Internal QC"}
+          <span className="pill">
+            {state.outputs.length} draft{state.outputs.length === 1 ? "" : "s"}
           </span>
         </section>
         {qaError ? <p className="repository-message error">{qaError}</p> : null}
         <OutputGrid state={state} dispatch={dispatch} />
+        {state.qaComplete ? (
+          <section className={`neo-build-qa-strip ${failedCount ? "needs" : "ready"}`}>
+            <div>
+              <b>
+                {failedCount
+                  ? `${failedCount} guided improvement${failedCount === 1 ? "" : "s"} to review.`
+                  : "Quality check complete."}
+              </b>
+              <p>
+                {failedCount
+                  ? "You stay in control: use the suggestion, edit the copy, or keep the current version."
+                  : "Hooks are clear, first frames are scannable, and each creative has a distinct testable hypothesis."}
+              </p>
+            </div>
+            <span className={`pill ${failedCount ? "amber" : "green"}`}>
+              {failedCount ? "Review suggestion" : "Ready for Internal QC"}
+            </span>
+          </section>
+        ) : null}
       </div>
     </DecisionCard>
   );
@@ -4574,6 +4962,9 @@ function OutputGrid({
   dispatch: Dispatch<WorkflowAction>;
 }) {
   const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
+  const [regenerateOutputId, setRegenerateOutputId] = useState<string | null>(
+    null
+  );
   const [qaPrompt, setQaPrompt] = useState<string | undefined>();
   const [editOutputId, setEditOutputId] = useState<string | null>(null);
   const previewOutput =
@@ -4581,6 +4972,13 @@ function OutputGrid({
   const previewDirection = previewOutput
     ? state.directions.find(
         (candidate) => candidate.id === previewOutput.directionId
+      )
+    : undefined;
+  const regenerateOutput =
+    state.outputs.find((output) => output.id === regenerateOutputId) ?? null;
+  const regenerateDirection = regenerateOutput
+    ? state.directions.find(
+        (candidate) => candidate.id === regenerateOutput.directionId
       )
     : undefined;
   const editOutput = state.outputs.find((output) => output.id === editOutputId);
@@ -4628,70 +5026,96 @@ function OutputGrid({
                 );
                 return (
                   <article
-                    className={`output-card neo-create-card ${output.status === "ready" || output.status === "fixed" ? "ready" : ""} ${output.status === "needs-revision" ? "attn" : ""}`}
+                    className={`output-card neo-build-review-card ${output.status === "ready" || output.status === "fixed" ? "ready qa-passed" : ""} ${output.status === "needs-revision" ? "attn qa-attention" : ""}`}
                     key={output.id}
                   >
-                    <div className="output-title neo-create-card-head">
-                      <div className="neo-create-card-badges">
-                        <span className="neo-create-idea-pill">
-                          Creative {index + 1}
-                        </span>
-                        <span className="neo-create-format-pill">
-                          {output.format}
-                        </span>
+                    <header className="neo-build-card-head">
+                      <div>
+                        <b>Creative {index + 1}</b>
+                        <small>{output.format} execution</small>
                       </div>
                       <span
-                        className={`pill ${output.status === "ready" || output.status === "fixed" ? "green" : output.status === "needs-revision" ? "red" : ""}`}
+                        className={`pill ${output.status === "ready" || output.status === "fixed" ? "green" : output.status === "needs-revision" ? "amber" : ""}`}
                       >
                         {output.status === "needs-revision"
-                          ? "Needs revision"
+                          ? "1 suggestion"
                           : output.status === "ready" ||
                               output.status === "fixed"
                             ? "Ready"
-                            : "Draft"}
+                            : "AI draft"}
                       </span>
-                    </div>
-                    <div className="neo-create-hook-wrap">
-                      <span className="neo-create-card-kicker">Hook</span>
-                      <h3>{direction?.hook ?? `Creative ${index + 1}`}</h3>
+                    </header>
+                    <div className="neo-build-asset-pair">
+                      <button
+                        className="preview-area neo-build-preview"
+                        type="button"
+                        aria-label={`Open Creative ${index + 1} preview`}
+                        onClick={() => setPreviewOutputId(output.id)}
+                      >
+                        {isUgcOutput(output) ? (
+                          <UgcTemplatePreview direction={direction} />
+                        ) : output.assetUrl ? (
+                          <img
+                            className="generated-preview"
+                            src={output.assetUrl}
+                            alt={direction?.hook ?? `Creative ${index + 1}`}
+                          />
+                        ) : (
+                          <div className="static-preview">
+                            <span className="static-mark" />
+                            <div className="static-copy">
+                              <h3>{direction?.hook}</h3>
+                              <p>
+                                {direction
+                                  ? directionSubheadline(direction)
+                                  : null}
+                              </p>
+                              <span>Learn more</span>
+                            </div>
+                          </div>
+                        )}
+                      </button>
                       {direction ? (
-                        <p>{directionSubheadline(direction)}</p>
+                        <BuildCaptionEditor
+                          output={output}
+                          direction={direction}
+                          dispatch={dispatch}
+                        />
                       ) : null}
                     </div>
-                    <button
-                      className="preview-area"
-                      type="button"
-                      aria-label={`Open Creative ${index + 1} preview`}
-                      onClick={() => setPreviewOutputId(output.id)}
-                    >
-                      {isUgcOutput(output) ? (
-                        <UgcTemplatePreview direction={direction} />
-                      ) : output.assetUrl ? (
-                        <img
-                          className="generated-preview"
-                          src={output.assetUrl}
-                          alt={direction?.hook ?? `Creative ${index + 1}`}
-                        />
-                      ) : (
-                        <div className="static-preview">
-                          <span className="static-mark" />
-                          <div className="static-copy">
-                            <h3>{direction?.hook}</h3>
-                            <p>
-                              {direction
-                                ? directionSubheadline(direction)
-                                : null}
-                            </p>
-                            <span>Learn more</span>
-                          </div>
-                        </div>
-                      )}
-                    </button>
                     {output.status === "needs-revision" && output.qaNote ? (
-                      <div className="neo-output-qa-callout">
-                        <span>Suggested improvement</span>
-                        <p title={output.qaNote}>{output.qaNote}</p>
+                      <div className="neo-build-qa needs">
+                        <div className="neo-build-qa-head">
+                          <span aria-hidden="true">
+                            <Sparkle size={17} weight="fill" />
+                          </span>
+                          <div>
+                            <small>Suggested improvement</small>
+                            <b>Refine this draft</b>
+                          </div>
+                          <strong>78</strong>
+                        </div>
+                        <p>{output.qaNote}</p>
+                        <div className="neo-build-qa-suggestion">
+                          <small>Next step</small>
+                          <b>
+                            Apply this guidance to the draft, or keep the current
+                            version.
+                          </b>
+                        </div>
+                      </div>
+                    ) : output.status === "ready" || output.status === "fixed" ? (
+                      <div className="neo-build-qa passed">
                         <div>
+                          <small>Quality check</small>
+                          <b>Clear, distinct, and ready for human review.</b>
+                        </div>
+                        <strong>88</strong>
+                      </div>
+                    ) : null}
+                    <footer className="neo-build-output-foot">
+                      {output.status === "needs-revision" ? (
+                        <>
                           <button
                             className="btn primary small"
                             type="button"
@@ -4700,7 +5124,7 @@ function OutputGrid({
                                 setEditOutputId(output.id);
                               } else {
                                 setQaPrompt(output.qaNote);
-                                setPreviewOutputId(output.id);
+                                setRegenerateOutputId(output.id);
                               }
                             }}
                           >
@@ -4715,26 +5139,34 @@ function OutputGrid({
                           >
                             Keep current
                           </button>
-                        </div>
-                      </div>
-                    ) : null}
-                    <div className="output-caption">
-                      <span className="neo-create-card-kicker">Caption</span>
-                      <OutputCaptionText caption={direction?.caption} />
-                    </div>
-                    <div className="neo-output-card-action neo-create-card-foot">
-                      <div className="neo-create-cta-block">
-                        <span className="neo-create-card-kicker">CTA</span>
-                        <b>{direction?.cta ?? "Review creative"}</b>
-                      </div>
-                      <button
-                        className="btn secondary small"
-                        type="button"
-                        onClick={() => setPreviewOutputId(output.id)}
-                      >
-                        Open creative
-                      </button>
-                    </div>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="btn secondary small"
+                            type="button"
+                            onClick={() => setRegenerateOutputId(output.id)}
+                          >
+                            Regenerate draft
+                          </button>
+                          <button
+                            className="btn ghost small"
+                            type="button"
+                            disabled={output.savedToReferences}
+                            onClick={() =>
+                              dispatch({
+                                type: "save-output-reference",
+                                id: output.id
+                              })
+                            }
+                          >
+                            {output.savedToReferences
+                              ? "Reference saved"
+                              : "Save reference"}
+                          </button>
+                        </>
+                      )}
+                    </footer>
                   </article>
                 );
               })}
@@ -4743,14 +5175,22 @@ function OutputGrid({
         ))}
       </div>
       {previewOutput ? (
-        <OutputRegenerateModal
-          run={state}
+        <CreativePreviewModal
           output={previewOutput}
           direction={previewDirection}
+          index={state.outputs.indexOf(previewOutput)}
+          onClose={() => setPreviewOutputId(null)}
+        />
+      ) : null}
+      {regenerateOutput ? (
+        <OutputRegenerateModal
+          run={state}
+          output={regenerateOutput}
+          direction={regenerateDirection}
           dispatch={dispatch}
           initialPrompt={qaPrompt}
           onClose={() => {
-            setPreviewOutputId(null);
+            setRegenerateOutputId(null);
             setQaPrompt(undefined);
           }}
         />
@@ -4765,6 +5205,124 @@ function OutputGrid({
         />
       ) : null}
     </>
+  );
+}
+
+function BuildCaptionEditor({
+  output,
+  direction,
+  dispatch
+}: {
+  output: CreativeOutput;
+  direction: WorkflowState["directions"][number];
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  const [caption, setCaption] = useState(direction.caption);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setCaption(direction.caption);
+  }, [direction.caption]);
+
+  function saveCaption() {
+    const nextCaption = caption.trim();
+    if (!nextCaption) return;
+    dispatch({
+      type: "edit-output-direction",
+      id: output.id,
+      hook: direction.hook,
+      caption: nextCaption,
+      formatBeats: direction.formatBeats ?? []
+    });
+    setSaved(true);
+  }
+
+  return (
+    <div className="neo-build-caption">
+      <label htmlFor={`build-caption-${output.id}`}>
+        {isUgcOutput(output) ? "Script direction" : "Caption"}
+      </label>
+      <textarea
+        id={`build-caption-${output.id}`}
+        aria-label={isUgcOutput(output) ? "Edit script direction" : "Edit caption"}
+        value={caption}
+        onChange={(event) => {
+          setCaption(event.target.value);
+          setSaved(false);
+        }}
+      />
+      <div className="neo-build-caption-actions">
+        <span aria-live="polite">{saved ? "Saved" : ""}</span>
+        <button
+          className="btn primary small"
+          type="button"
+          disabled={!caption.trim() || saved}
+          onClick={saveCaption}
+        >
+          {saved ? "Saved" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CreativePreviewModal({
+  output,
+  direction,
+  index,
+  onClose
+}: {
+  output: CreativeOutput;
+  direction: WorkflowState["directions"][number] | undefined;
+  index: number;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const title = `Creative ${index + 1} preview`;
+
+  return (
+    <div className="output-modal-backdrop" onClick={onClose}>
+      <div
+        aria-labelledby="build-image-preview-title"
+        aria-modal="true"
+        className="output-modal neo-build-image-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="output-modal-head">
+          <div>
+            <p className="eyebrow">Creative preview</p>
+            <h3 id="build-image-preview-title">{title}</h3>
+          </div>
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="output-modal-image">
+          {isUgcOutput(output) ? (
+            <UgcTemplatePreview direction={direction} />
+          ) : output.assetUrl ? (
+            <img src={output.assetUrl} alt={direction?.hook ?? title} />
+          ) : (
+            <div className="static-preview">
+              <span className="static-mark" />
+              <div className="static-copy">
+                <h3>{direction?.hook}</h3>
+                <p>{direction ? directionSubheadline(direction) : null}</p>
+                <span>Learn more</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -5064,12 +5622,6 @@ function reviewRoleGuide(role: ApprovalRole): string {
   return "Confirm the brief, requested scope, approval history, and client readiness.";
 }
 
-function approvalRolesForOutput(output: CreativeOutput): readonly ApprovalRole[] {
-  return isUgcOutput(output)
-    ? ["clientService", "projectManager"]
-    : ["graphicDesign", "clientService", "projectManager"];
-}
-
 function outputIsEligibleForRole(
   output: CreativeOutput,
   role: ApprovalRole
@@ -5111,18 +5663,21 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
   const activeRoleConfig =
     REVIEW_ROLES.find(({ key }) => key === activeRole) ?? REVIEW_ROLES[0]!;
   const activeRoleOutputs = state.outputs.filter((output) =>
-    outputIsEligibleForRole(output, activeRole)
+    currentApprovalRole(output) === activeRole
   );
-  const activeRoleApproved = activeRoleOutputs.filter(
-    (output) => output.approval[activeRole] === "approved"
+  const activeRoleApproved = state.outputs.filter(
+    (output) =>
+      outputIsEligibleForRole(output, activeRole) &&
+      output.approval[activeRole] === "approved"
   ).length;
-  const activeRoleWaiting = activeRoleOutputs.length - activeRoleApproved;
+  const activeRoleWaiting = activeRoleOutputs.length;
 
   return (
     <DecisionCard
-      eyebrow="Internal QC"
+      eyebrow="05 / Internal QC"
       title="Pass it through the team."
-      status={state.approved ? "Approved" : "Pending"}
+      helper="GD, CS, and PM each pick up only the work they own. Revisions stay inside Internal QC, with the full context attached to the asset."
+      status={state.approved ? "Approved" : "Waiting"}
       statusClass={state.approved ? "green" : "blue"}
       className="neo-stage-qc"
       actions={
@@ -5132,7 +5687,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
             type="button"
             onClick={() => dispatch(backAction)}
           >
-            Back to Build
+            ← Back to Build
           </button>
           <button
             className="btn secondary"
@@ -5141,7 +5696,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
             title={approveAllBlocked ?? undefined}
             onClick={() => dispatch(approveAllAction)}
           >
-            Approve all
+            Approve all demo checks
           </button>
           <button
             className="btn primary"
@@ -5150,7 +5705,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
             title={clientBlocked ?? undefined}
             onClick={() => dispatch(clientAction)}
           >
-            Open client review
+            Open Client Review
           </button>
         </>
       }
@@ -5196,6 +5751,9 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   const approvedForRole = eligible.filter(
                     (output) => output.approval[key] === "approved"
                   ).length;
+                  const waitingForRole = state.outputs.filter(
+                    (output) => currentApprovalRole(output) === key
+                  ).length;
                   return (
                     <div className="neo-qc-role-progress" key={key}>
                       <span className={reviewRoleShort(key).toLowerCase()}>
@@ -5204,9 +5762,9 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                       <div>
                         <b>{label}</b>
                         <small>
-                          {approvedForRole === eligible.length
-                            ? "Queue clear"
-                            : `${eligible.length - approvedForRole} waiting`}
+                          {waitingForRole
+                            ? `${waitingForRole} waiting`
+                            : "Queue clear"}
                         </small>
                       </div>
                       <strong>
@@ -5234,13 +5792,16 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                     const eligible = state.outputs.filter((output) =>
                       outputIsEligibleForRole(output, key)
                     );
-                    const rejected = eligible.filter(
+                    const roleQueue = state.outputs.filter(
+                      (output) => currentApprovalRole(output) === key
+                    );
+                    const rejected = roleQueue.filter(
                       (output) => output.approval[key] === "rejected"
                     ).length;
                     const approvedForRole = eligible.filter(
                       (output) => output.approval[key] === "approved"
                     ).length;
-                    const waiting = eligible.length - approvedForRole;
+                    const waiting = roleQueue.length;
                     return (
                       <button
                         className={`neo-qc-role-tab ${key === activeRole ? "active" : ""} ${rejected ? "attention" : approvedForRole === eligible.length ? "complete" : ""}`}
@@ -5283,23 +5844,44 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   <span className="neo-context-label">Creative review queue</span>
                   <h3>Assets in {reviewRoleShort(activeRole)} review</h3>
                 </div>
-                <span>{activeRoleOutputs.length} creatives</span>
+                <span>
+                  {activeRoleOutputs.length} {pluralize(activeRoleOutputs.length, "creative")}
+                </span>
               </div>
-              <div className="neo-qc-focus-grid">
-                {activeRoleOutputs.map((output) => (
-                  <QcSlide
-                    index={state.outputs.indexOf(output)}
-                    output={output}
-                    direction={state.directions.find(
-                      (candidate) => candidate.id === output.directionId
-                    )}
-                    run={state}
-                    role={activeRole}
-                    dispatch={dispatch}
-                    key={output.id}
-                  />
-                ))}
-              </div>
+              {activeRoleOutputs.length ? (
+                <div className="neo-qc-focus-grid">
+                  {activeRoleOutputs.map((output) => (
+                    <QcSlide
+                      index={state.outputs.indexOf(output)}
+                      output={output}
+                      direction={state.directions.find(
+                        (candidate) => candidate.id === output.directionId
+                      )}
+                      run={state}
+                      role={activeRole}
+                      dispatch={dispatch}
+                      key={output.id}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="neo-qc-queue-clear">
+                  <span
+                    className={`neo-qc-role-character ${reviewRoleShort(activeRole).toLowerCase()}`}
+                    aria-hidden="true"
+                  >
+                    {reviewRoleShort(activeRole)}
+                  </span>
+                  <div>
+                    <b>{reviewRoleShort(activeRole)} queue is clear.</b>
+                    <p>
+                      {activeRole === "graphicDesign"
+                        ? "UGC goes directly to CS, so it does not appear in this queue."
+                        : "Nothing is waiting for this role right now."}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
         </div>
       ) : (
@@ -5654,7 +6236,7 @@ function QcSlide({
                 disabled={!output.assetUrl || downloading}
                 onClick={() => void handleDownload()}
               >
-                {downloading ? "Downloading…" : "Download"}
+                {downloading ? "Downloading…" : "Download Image"}
               </button>
               <label
                 className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
@@ -5854,14 +6436,15 @@ export function ClientStage({ state, dispatch }: StageProps) {
 
   return (
     <DecisionCard
-      eyebrow="Client"
+      eyebrow="06 / Client"
       title="Make feedback easy to act on."
+      helper="The client sees the idea, not the production clutter. Every requested change records what needs fixing and routes it correctly."
       status={
         allApproved
           ? "Approved"
           : state.clientSent
             ? `${approvedCount}/${state.outputs.length} approved`
-            : "Not sent"
+            : "Waiting for review"
       }
       statusClass={allApproved ? "green" : "blue"}
       className="neo-stage-client"
@@ -5889,7 +6472,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
             type="button"
             onClick={() => dispatch(backAction)}
           >
-            Back to Internal QC
+            ← Back to Internal QC
           </button>
           <button
             className="btn primary"
@@ -5898,7 +6481,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
             title={deliverBlocked ?? undefined}
             onClick={() => dispatch(deliverAction)}
           >
-            Mark delivered
+            Deliver and learn →
           </button>
         </>
       }
@@ -6096,9 +6679,10 @@ export function SummaryStage({
 
   return (
     <DecisionCard
-      eyebrow="Learn"
+      eyebrow="07 / Learn"
       title="Every launch makes the next idea smarter."
-      status={state.done ? "Sent" : "Ready"}
+      helper="Close the loop by saving the creative hypothesis, performance result, and the pattern worth repeating."
+      status="Memory updated"
       statusClass="green"
       actions={
         <>

@@ -13,6 +13,7 @@ export interface PublicEnv {
   brandLearningSuggestionEndpoint: string;
   qualityCheckEndpoint: string;
   guidelineAnalysisEndpoint: string;
+  clientIngestionTriggerEndpoint: string;
 }
 
 function optional(value: string | undefined): string | null {
@@ -63,7 +64,10 @@ export const env: PublicEnv = {
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/quality-check`,
   guidelineAnalysisEndpoint:
     import.meta.env.VITE_GUIDELINE_ANALYSIS_ENDPOINT ||
-    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/analyze-brand-guideline`
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/analyze-brand-guideline`,
+  clientIngestionTriggerEndpoint:
+    import.meta.env.VITE_CLIENT_INGESTION_TRIGGER_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/trigger-client-ingestion`
 };
 
 export function hasSupabaseEnv(

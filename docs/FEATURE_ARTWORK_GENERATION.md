@@ -31,12 +31,28 @@ reconfigure the OpenAI/n8n provider choice above:
    visual medium and design grammar, so photographic/editorial work must not
    collapse into generic isometric 3D or SaaS illustration.
 3. `reference-library` — loads
-   `agent_prompt/agent_artwork_reference.md`, a deployment-safe catalog
-   distilled from the verified specs and reconstruction prompts in
-   `agent_prompt/Images/output`. It selects one relevant structural pattern
-   for layout, hierarchy, palette roles, lighting, density, and storytelling,
-   then translates that reasoning into a new brand-specific execution. It does
-   not copy the source artwork's brand, product, copy, characters, or scene.
+   `agent_prompt/agent_artwork_reference.md`, a catalog distilled from the
+   verified specs and reconstruction prompts in `agent_prompt/Images/output`.
+   It scores all 72 human-reviewed artworks using runtime brand/category,
+   brief, concept, format, canvas ratio, layout, and typography metadata, then
+   selects one primary reference from the private Supabase bucket
+   `artwork-reference-library`. The prompt-writing model inspects that
+   artwork's signed URL directly; the backend downloads the same stored object
+   and attaches it to the final GPT Image 2 edit request. The model can
+   therefore see the actual reference artwork while translating its layout,
+   hierarchy, palette roles, lighting, density, typography treatment, and
+   storytelling into a new brand-specific execution. Typography transfers
+   only when compatible with the runtime brand and approved mood; otherwise
+   only hierarchy and rhythm carry forward. It does not copy the source
+   artwork's brand, product, copy, characters, or scene.
+
+   Before returning `finalPrompt`, the Reference Library prompt writer silently
+   resolves a 12-principle design blueprint covering hierarchy, balance,
+   contrast, alignment, proximity, repetition, emphasis, white space, scale,
+   rhythm, unity, and grid/composition. The returned prompt must translate that
+   blueprint into concrete margins, zones, scale relationships, grouping,
+   focal point, balance strategy, and eye path rather than naming abstract
+   principles.
 
 The selection is stored on the run, is included in new-generation and
 regeneration requests, and survives workspace reloads. Older saved runs without
@@ -218,7 +234,23 @@ auto-applied, see `docs/DATABASE_CONTRACT.md`):
 
 ```text
 supabase/migrations/202606260008_creative_asset_storage.sql
+supabase/migrations/202607160001_artwork_reference_library.sql
 ```
+
+The second migration creates the private, read-only runtime reference bucket.
+Build the deployment catalog and seed or refresh all 72 inspected artwork
+objects with the service-role key:
+
+```bash
+npm run references:upload
+```
+
+The build step distills `agent_prompt/Images/output/library_index.json` and the
+human-written reconstruction prompts into
+`artwork-reference-catalog.generated.ts`. The uploader sources all 72 original
+images from `agent_prompt/Images`, creates the bucket if necessary, and upserts
+stable `artworks/*` object paths. Source images are not included in the Vercel
+artwork function; production generation reads them only from Supabase.
 
 ## Input handling
 
@@ -275,11 +307,13 @@ The three modes intentionally use different input strategies:
   its `prompt` response field.
 - `reference-library` reads `agent_prompt/agent_artwork_reference.md`, appends
   the full authoritative runtime input used by Design System mode, and returns
-  `finalPrompt`. Attached client references remain authoritative for brand and
-  product fidelity; the internal pattern catalog supplies transferable design
-  reasoning only.
+  `finalPrompt`. It also attaches the selected private Supabase object as a
+  high-detail signed URL so the prompt agent can inspect the actual artwork.
+  Attached client references remain authoritative for brand and product
+  fidelity; the internal pattern supplies transferable design reasoning only.
 
-All three prompt Markdown files are bundled into the Vercel function.
+All three prompt Markdown files are bundled into the Vercel function. Artwork
+source image files are not bundled; they are loaded from Supabase Storage.
 Standard-mode reference files are still attached as image inputs, while their
 text metadata is reduced to `{ id, role, fidelity }`. The design-system mode
 retains its full authoritative runtime block and keeps the approved Hook fixed
@@ -308,8 +342,9 @@ requests without `imagePromptModel` default to `gpt-5.6-terra`.
 ### Prompt and image request debug logs
 
 Set `ARTWORK_GENERATION_DEBUG_LOG_DIR` (for example,
-`logs/artwork-generation`) to retain the exact generation inputs for each
-selected hook. Each hook writes two sanitized JSON files:
+`logs/artwork-generation`) to retain the exact generation inputs and viewable
+image artifacts for each selected hook. Each hook writes three sanitized JSON
+files:
 
 - `*-image-agent.json` records the prompt-writer request to `/v1/responses` or
   OpenRouter `/api/v1/responses`: provider, model, artwork mode,
@@ -318,12 +353,19 @@ selected hook. Each hook writes two sanitized JSON files:
   format, and the returned production prompt or readable error.
 - The existing `*.json` file records the final request sent to
   `/v1/images/generations` or `/v1/images/edits`, including the final prompt
-  after runtime constraints are appended.
+  after runtime constraints are appended. For edit requests, its image entries
+  link to local `*-input-01.jpg`, `*-input-02.png`, and similar files containing
+  the exact reference bytes sent to the model.
+- `*-image-output.json` records the returned MIME type and byte count plus the
+  Supabase bucket/path. Its `localFile` points to the exact generated
+  `*-output.png` saved beside the logs.
 
-The logs never persist OpenAI or OpenRouter authorization headers, API keys, or
-base64 reference-image bodies. Prompt-agent failures are logged and stop final
-image generation. Logging is best-effort: a filesystem error emits a warning
-but does not fail the run.
+The JSON logs never persist OpenAI or OpenRouter authorization headers, API
+keys, signed Supabase URLs, or base64 image bodies. Reference and output images
+are deliberately saved as separate local files only when this opt-in variable
+is set. Prompt-agent failures are logged and stop final image generation.
+Logging is best-effort: a filesystem error emits a warning but does not fail
+the run. The default `logs/` directory is ignored by Git.
 
 ## "Use from library" reference picker
 
@@ -427,7 +469,9 @@ several images can take a while.
 - `src/server/artwork-generation/image-prompt-agent.ts`
 - `src/server/artwork-generation/openai-images-client.ts`
 - `agent_prompt/agent_image.md` — authoritative Standard-mode prompt.
-- `agent_prompt/agent_artwork_reference.md` — verified structural pattern
-  catalog loaded only in Reference Library mode.
+- `agent_prompt/agent_artwork_reference.md` — 72-artwork retrieval and
+  conditional typography contract loaded only in Reference Library mode.
+- `src/server/artwork-generation/artwork-reference-catalog.generated.ts` —
+  deployment-safe metadata distilled from all human-reviewed specs.
 - `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` — runtime
   source prompt loaded only in Design System mode.

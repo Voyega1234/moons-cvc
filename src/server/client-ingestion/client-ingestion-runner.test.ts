@@ -13,18 +13,25 @@ import {
 } from "./client-ingestion-runner";
 
 function createStore(): ClientIngestionStore & {
+  jobStatuses: unknown[];
   clientStatuses: unknown[];
   visualAssets: unknown[];
 } {
   return {
+    jobStatuses: [],
     clientStatuses: [],
     visualAssets: [],
-    async updateJobStatus() {},
+    async updateJobStatus(input) {
+      this.jobStatuses.push(input);
+    },
     async updateClientStatus(input) {
       this.clientStatuses.push(input);
     },
     async saveBrandSource(input) {
       return { id: `${input.sourceType}-source` };
+    },
+    async listManualBrandInputs() {
+      return [];
     },
     async saveSocialPosts(input) {
       return input.posts.map((post, index) => ({
@@ -122,6 +129,53 @@ describe("runNextClientIngestionJob", () => {
       status: "needs_review"
     });
     expect(store.visualAssets).toHaveLength(1);
+  });
+
+  it("marks the claimed job and client failed when an unexpected worker error escapes", async () => {
+    const queue: ClientIngestionJobQueue = {
+      claimNextQueuedJob: vi.fn(async () => ({
+        job: { id: "job-1", clientId: "client-1" },
+        client: {
+          id: "client-1",
+          name: "Client One",
+          facebookUrl: "https://www.facebook.com/client"
+        }
+      }))
+    };
+    const store = createStore();
+    store.saveSocialPosts = vi.fn(async () => {
+      throw new Error("Could not persist Facebook posts");
+    });
+
+    const result = await runNextClientIngestionJob({
+      queue,
+      apify: {
+        scrapeFacebookPosts: vi.fn(async () => [
+          {
+            url: "https://www.facebook.com/client/posts/1",
+            text: "Post"
+          }
+        ]),
+        scrapeFacebookAdsLibrary: vi.fn(async () => [])
+      },
+      store,
+      imageMirror: { mirror: vi.fn() }
+    });
+
+    expect(result).toMatchObject({
+      claimed: true,
+      result: { completed: false }
+    });
+    expect(store.jobStatuses.at(-1)).toMatchObject({
+      jobId: "job-1",
+      status: "failed",
+      errorMessage: "Could not persist Facebook posts"
+    });
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "failed",
+      errorMessage: "Could not persist Facebook posts"
+    });
   });
 });
 

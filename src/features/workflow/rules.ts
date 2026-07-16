@@ -1,5 +1,6 @@
 import { stages } from "./config";
 import { canSelectBrand } from "../../domain/brand";
+import type { ApprovalRole } from "../../domain/creative-run";
 import {
   totalCreativeMixQuantity,
   type WorkflowAction,
@@ -59,6 +60,30 @@ export function selectedDirectionCount(run: WorkflowState): number {
   return run.directions.filter((direction) => direction.selected).length;
 }
 
+export function approvalRolesForOutput(
+  output: WorkflowState["outputs"][number]
+): readonly ApprovalRole[] {
+  return output.format.toUpperCase().includes("UGC")
+    ? ["clientService", "projectManager"]
+    : ["graphicDesign", "clientService", "projectManager"];
+}
+
+export function currentApprovalRole(
+  output: WorkflowState["outputs"][number]
+): ApprovalRole | null {
+  return (
+    approvalRolesForOutput(output).find(
+      (role) => output.approval[role] !== "approved"
+    ) ?? null
+  );
+}
+
+function approvalRoleLabel(role: ApprovalRole): string {
+  if (role === "graphicDesign") return "Graphic Design";
+  if (role === "clientService") return "Client Service";
+  return "Project Manager";
+}
+
 export function workflowActionBlockReason(
   run: WorkflowState,
   action: WorkflowAction
@@ -72,6 +97,7 @@ export function workflowActionBlockReason(
       return canSelectBrand(action.brand)
         ? null
         : "This client has no Neo brand memory yet.";
+    case "start-idea-generation":
     case "generate-directions":
     case "generate-more-directions":
       if (!run.brand) return "Choose a brand first.";
@@ -93,6 +119,16 @@ export function workflowActionBlockReason(
       return action.directions.length === run.directions.length
         ? null
         : "Regenerated hook count does not match the current set.";
+    case "add-manual-direction":
+      if (!action.hook.trim()) return "Add the hook before saving.";
+      if (!action.pillar.trim() || !action.subheadline.trim() || !action.cta.trim()) {
+        return "Complete the manual hook template before saving.";
+      }
+      return null;
+    case "delete-direction":
+      return run.directions.some((direction) => direction.id === action.id)
+        ? null
+        : "Hook not found.";
     case "auto-select-directions":
       return run.directions.length > 0
         ? null
@@ -115,10 +151,20 @@ export function workflowActionBlockReason(
       if (action.decision === "rejected" && !action.comment.trim()) {
         return "Add a comment before rejecting.";
       }
+      {
+        const output = run.outputs.find((item) => item.id === action.id);
+        if (!output) return "Output not found.";
+        const currentRole = currentApprovalRole(output);
+        if (!currentRole) return "This creative already passed Internal QC.";
+        return currentRole === action.role
+          ? null
+          : `This creative is waiting for ${approvalRoleLabel(currentRole)} review.`;
+      }
+    case "resolve-qa-output":
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";
-    case "resolve-qa-output":
+    case "save-output-reference":
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";
@@ -128,9 +174,16 @@ export function workflowActionBlockReason(
         : "Output not found.";
     case "route-output-changes":
       if (!action.comment.trim()) return "Add one clear change instruction.";
-      return run.outputs.some((output) => output.id === action.id)
-        ? null
-        : "Output not found.";
+      {
+        const output = run.outputs.find((item) => item.id === action.id);
+        if (!output) return "Output not found.";
+        const currentRole = currentApprovalRole(output);
+        return currentRole === action.requestedBy
+          ? null
+          : currentRole
+            ? `This creative is waiting for ${approvalRoleLabel(currentRole)} review.`
+            : "This creative already passed Internal QC.";
+      }
     case "replace-output-asset":
       return run.outputs.some((output) => output.id === action.id)
         ? null
