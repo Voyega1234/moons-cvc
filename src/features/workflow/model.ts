@@ -1,4 +1,5 @@
 import type { Brand, LibrarySection } from "../../domain/brand";
+import type { CreativeQualityReport } from "../../domain/quality-check";
 import type {
   ApprovalRole,
   AngleExportGroup,
@@ -134,6 +135,7 @@ export type WorkflowAction =
         outputId: string;
         passed: boolean;
         reason: string;
+        report?: CreativeQualityReport;
       }[];
     }
   | { type: "resolve-qa-output"; id: string }
@@ -188,6 +190,7 @@ export type WorkspaceAction =
       id: string;
       now: string;
       keepBrand: boolean;
+      brand?: Brand;
     }
   | { type: "switch-run"; id: string }
   | { type: "close-run"; id: string }

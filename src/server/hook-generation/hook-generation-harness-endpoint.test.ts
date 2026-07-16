@@ -163,16 +163,19 @@ describe("handleHookGenerationHarnessRequest", () => {
     ) as { tools?: unknown[]; model: string; input: unknown };
     const secondBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
-    ) as { tools?: unknown[]; input: unknown };
+    ) as { tools?: unknown[]; model: string; input: unknown };
     const thirdBody = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as {
+      model: string;
       input: { content: { text: string }[] }[];
       text: { format: { name: string } };
     };
 
-    expect(firstBody.model).toBe("gpt-test");
+    expect(firstBody.model).toBe("gpt-5.6-luna");
     expect(firstBody.tools).toEqual([{ type: "web_search_preview" }]);
+    expect(secondBody.model).toBe("gpt-test");
+    expect(thirdBody.model).toBe("gpt-5.6-luna");
     expect(JSON.stringify(firstBody.input)).toContain(
       "THAI PROVABLE MOMENT"
     );

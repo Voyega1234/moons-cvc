@@ -8,6 +8,34 @@ export const GD_QUALITY_CHECKLIST = [
 export const CS_QUALITY_CHECKLIST = [
   "Key Message ชัด และตรง Brief / Objective",
   "Visual กับ Caption สื่อสารไปในทิศทางเดียวกัน",
-  "ข้อมูล ราคา โปรโมชัน คำสะกด และรายละเอียดต่าง ๆ ถูกต้อง",
-  "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"
+  "ข้อมูล ราคา โปรโมชัน คำสะกด และรายละเอียดต่าง ๆ ถูกต้อง"
 ] as const;
+
+export interface QualityCriterionResult {
+  criterion: string;
+  passed: boolean;
+  score: number;
+  detail: string;
+  suggestion: string;
+}
+
+export interface QualityAreaResult {
+  passed: boolean;
+  score: number;
+  summary: string;
+  criteria: readonly QualityCriterionResult[];
+}
+
+export interface QualitySuggestion {
+  title: string;
+  detail: string;
+  suggestedHook: string;
+}
+
+export interface CreativeQualityReport {
+  score: number;
+  summary: string;
+  gd: QualityAreaResult;
+  cs: QualityAreaResult;
+  suggestion: QualitySuggestion;
+}

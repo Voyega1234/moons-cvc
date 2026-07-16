@@ -1,7 +1,9 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import {
   CS_QUALITY_CHECKLIST,
-  GD_QUALITY_CHECKLIST
+  GD_QUALITY_CHECKLIST,
+  type CreativeQualityReport,
+  type QualityAreaResult
 } from "../../domain/quality-check.js";
 
 type FetchLike = typeof fetch;
@@ -67,6 +69,7 @@ interface QualityCheckResult {
   csReason: string;
   passed: boolean;
   reason: string;
+  report: CreativeQualityReport;
 }
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
@@ -181,6 +184,10 @@ async function buildContent(
         "- ถ้าไม่มี Revision Feedback ให้ถือว่าข้อ Revision ผ่านโดยไม่มีสิ่งให้เทียบ",
         "- ระบุปัญหาที่เห็นและวิธีแก้แบบสั้น ชัดเจน ห้ามใช้รสนิยมส่วนตัวที่ไม่มีหลักฐาน",
         "- gdPassed ต้องเป็น true เมื่อไม่มีปัญหา GD ที่พิสูจน์ได้ และ csPassed ต้องเป็น true เมื่อไม่มีปัญหา CS ที่พิสูจน์ได้",
+        "- ให้คะแนนทุกเกณฑ์และคะแนนรวมตั้งแต่ 0-100 โดยอิงหลักฐานที่เห็นจริง",
+        "- ตอบรายละเอียด GD ตามลำดับ GD Checklist ทั้ง 4 ข้อ และ CS ตามลำดับ CS Checklist ทั้ง 3 ข้อ ห้ามสลับลำดับ",
+        "- ถ้างานต้องแก้ ให้ suggestion เป็นคำแนะนำเดียวที่สำคัญที่สุด และ suggestedHook เป็น Hook ที่ปรับแล้วเมื่อปัญหาเกี่ยวกับข้อความ มิฉะนั้นให้เป็นสตริงว่าง",
+        "- ถ้างานผ่าน ให้ suggestion.title, suggestion.detail และ suggestion.suggestedHook เป็นสตริงว่าง",
         "",
         `Brief: ${input.brief}`,
         `Brand Context:\n${formatBrandContext(input.brandContext)}`,
@@ -291,23 +298,56 @@ const resultsSchema = {
         additionalProperties: false,
         properties: {
           outputId: { type: "string" },
-          gdPassed: { type: "boolean" },
-          gdReason: { type: "string" },
-          csPassed: { type: "boolean" },
-          csReason: { type: "string" }
+          score: { type: "integer", minimum: 0, maximum: 100 },
+          summary: { type: "string" },
+          gd: qualityAreaSchema(GD_QUALITY_CHECKLIST.length),
+          cs: qualityAreaSchema(CS_QUALITY_CHECKLIST.length),
+          suggestion: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              detail: { type: "string" },
+              suggestedHook: { type: "string" }
+            },
+            required: ["title", "detail", "suggestedHook"]
+          }
         },
-        required: [
-          "outputId",
-          "gdPassed",
-          "gdReason",
-          "csPassed",
-          "csReason"
-        ]
+        required: ["outputId", "score", "summary", "gd", "cs", "suggestion"]
       }
     }
   },
   required: ["results"]
 } as const;
+
+function qualityAreaSchema(criteriaCount: number) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      passed: { type: "boolean" },
+      score: { type: "integer", minimum: 0, maximum: 100 },
+      summary: { type: "string" },
+      criteria: {
+        type: "array",
+        minItems: criteriaCount,
+        maxItems: criteriaCount,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            passed: { type: "boolean" },
+            score: { type: "integer", minimum: 0, maximum: 100 },
+            detail: { type: "string" },
+            suggestion: { type: "string" }
+          },
+          required: ["passed", "score", "detail", "suggestion"]
+        }
+      }
+    },
+    required: ["passed", "score", "summary", "criteria"]
+  } as const;
+}
 
 function parseResults(
   text: string,
@@ -327,7 +367,8 @@ function parseResults(
         "Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.",
       passed: false,
       reason:
-        "GD ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.\nCS ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible."
+        "GD ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.\nCS ต้องแก้: Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.",
+      report: malformedQualityReport()
     }));
   }
   const value = readRecord(parsed, "quality check payload");
@@ -339,22 +380,40 @@ function parseResults(
   return value.results
     .map((item, index) => {
       const record = readRecord(item, `results[${index}]`);
-      const gdPassed = readBoolean(
-        record.gdPassed,
-        `results[${index}].gdPassed`
+      const gd = parseQualityArea(
+        record.gd,
+        `results[${index}].gd`,
+        GD_QUALITY_CHECKLIST
       );
-      const gdReason = readString(
-        record.gdReason,
-        `results[${index}].gdReason`
+      const cs = parseQualityArea(
+        record.cs,
+        `results[${index}].cs`,
+        CS_QUALITY_CHECKLIST
       );
-      const csPassed = readBoolean(
-        record.csPassed,
-        `results[${index}].csPassed`
+      const suggestionRecord = readRecord(
+        record.suggestion,
+        `results[${index}].suggestion`
       );
-      const csReason = readString(
-        record.csReason,
-        `results[${index}].csReason`
-      );
+      const suggestion = {
+        title: readString(
+          suggestionRecord.title,
+          `results[${index}].suggestion.title`
+        ),
+        detail: readString(
+          suggestionRecord.detail,
+          `results[${index}].suggestion.detail`
+        ),
+        suggestedHook: readString(
+          suggestionRecord.suggestedHook,
+          `results[${index}].suggestion.suggestedHook`
+        )
+      };
+      const score = readScore(record.score, `results[${index}].score`);
+      const summary = readString(record.summary, `results[${index}].summary`);
+      const gdPassed = gd.passed;
+      const csPassed = cs.passed;
+      const gdReason = gd.summary;
+      const csReason = cs.summary;
       return {
         outputId: readString(record.outputId, `results[${index}].outputId`),
         gdPassed,
@@ -365,10 +424,81 @@ function parseResults(
         reason: [
           `GD ${gdPassed ? "ผ่าน" : "ต้องแก้"}: ${gdReason}`,
           `CS ${csPassed ? "ผ่าน" : "ต้องแก้"}: ${csReason}`
-        ].join("\n")
+        ].join("\n"),
+        report: { score, summary, gd, cs, suggestion }
       };
     })
     .filter((result) => validIds.has(result.outputId));
+}
+
+function parseQualityArea(
+  value: unknown,
+  field: string,
+  checklist: readonly string[]
+): QualityAreaResult {
+  const record = readRecord(value, field);
+  if (!Array.isArray(record.criteria)) {
+    throw new Error(`${field}.criteria must be an array.`);
+  }
+  if (record.criteria.length !== checklist.length) {
+    throw new Error(`${field}.criteria must contain ${checklist.length} items.`);
+  }
+
+  return {
+    passed: readBoolean(record.passed, `${field}.passed`),
+    score: readScore(record.score, `${field}.score`),
+    summary: readString(record.summary, `${field}.summary`),
+    criteria: record.criteria.map((item, index) => {
+      const criterion = readRecord(item, `${field}.criteria[${index}]`);
+      return {
+        criterion: checklist[index]!,
+        passed: readBoolean(
+          criterion.passed,
+          `${field}.criteria[${index}].passed`
+        ),
+        score: readScore(
+          criterion.score,
+          `${field}.criteria[${index}].score`
+        ),
+        detail: readString(
+          criterion.detail,
+          `${field}.criteria[${index}].detail`
+        ),
+        suggestion: readString(
+          criterion.suggestion,
+          `${field}.criteria[${index}].suggestion`
+        )
+      };
+    })
+  };
+}
+
+function malformedQualityReport(): CreativeQualityReport {
+  const message =
+    "Quality agent returned malformed JSON. Re-run quality check after confirming the artwork image is accessible.";
+  const area = (checklist: readonly string[]): QualityAreaResult => ({
+    passed: false,
+    score: 0,
+    summary: message,
+    criteria: checklist.map((criterion) => ({
+      criterion,
+      passed: false,
+      score: 0,
+      detail: message,
+      suggestion: "Re-run quality check."
+    }))
+  });
+  return {
+    score: 0,
+    summary: message,
+    gd: area(GD_QUALITY_CHECKLIST),
+    cs: area(CS_QUALITY_CHECKLIST),
+    suggestion: {
+      title: "Re-run quality check",
+      detail: message,
+      suggestedHook: ""
+    }
+  };
 }
 
 function parseRequestBody(value: unknown): QualityCheckRequest {
@@ -528,6 +658,13 @@ function readString(value: unknown, field: string): string {
 function readBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${field} must be a boolean.`);
   return value;
+}
+
+function readScore(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be a number.`);
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

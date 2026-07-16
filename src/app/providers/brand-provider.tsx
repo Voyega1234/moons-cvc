@@ -8,6 +8,11 @@ import {
   type ReactNode
 } from "react";
 import type { Brand, ClientIngestionStatus } from "../../domain/brand";
+import {
+  allClientAccess,
+  filterBrandsForAccess,
+  type ClientAccessScope
+} from "../../domain/client-access";
 import type { BrandRepository } from "../../ports/brand-repository";
 import type { MappingClientRepository } from "../../ports/mapping-client-repository";
 import { mergeMappingClients } from "../../services/clients/merge-mapping-clients";
@@ -46,10 +51,12 @@ const BrandContext = createContext<BrandContextValue | null>(null);
 export function BrandProvider({
   repository,
   mappingRepository,
+  access = allClientAccess,
   children
 }: {
   repository: BrandRepository;
   mappingRepository: MappingClientRepository;
+  access?: ClientAccessScope;
   children: ReactNode;
 }) {
   const [value, setValue] = useState<BrandLoadState>({
@@ -69,7 +76,10 @@ export function BrandProvider({
     }
     return Promise.all([repository.list(), mappingRepository.list()])
       .then(([brands, mappingClients]) => {
-        const mergedBrands = mergeMappingClients(brands, mappingClients);
+        const mergedBrands = filterBrandsForAccess(
+          mergeMappingClients(brands, mappingClients),
+          access
+        );
         const nextStatuses = new Map<string, ClientIngestionStatus>();
 
         for (const brand of mergedBrands) {
@@ -125,7 +135,7 @@ export function BrandProvider({
             : { ...current, loading: false, error: nextError }
         );
       });
-  }, [mappingRepository, repository]);
+  }, [access, mappingRepository, repository]);
 
   const refresh = useCallback(() => loadBrands(true), [loadBrands]);
 

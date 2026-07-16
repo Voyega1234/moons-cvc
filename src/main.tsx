@@ -22,6 +22,7 @@ createRoot(root).render(
       <BrandProvider
         repository={dependencies.brandRepository}
         mappingRepository={dependencies.mappingClientRepository}
+        access={dependencies.clientAccess}
       >
         <ClientIntakeProvider repository={dependencies.clientIntakeRepository}>
           <BrandMemoryProvider repository={dependencies.brandMemoryRepository}>

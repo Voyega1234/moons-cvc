@@ -1,4 +1,5 @@
 import { env } from "../../config/env";
+import type { CreativeQualityReport } from "../../domain/quality-check";
 import type { WorkflowState } from "../../features/workflow/model";
 import { getSupabaseClient } from "../../lib/supabase/client";
 
@@ -10,6 +11,7 @@ export interface QualityCheckResult {
   csReason?: string;
   passed: boolean;
   reason: string;
+  report?: CreativeQualityReport;
 }
 
 export async function runQualityCheck(

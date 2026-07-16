@@ -49,7 +49,7 @@ export function workspaceReducer(
       const run = createInitialWorkflowState({
         id: action.id,
         now: action.now,
-        brand: action.keepBrand ? activeRun.brand : null
+        brand: action.brand ?? (action.keepBrand ? activeRun.brand : null)
       });
       return {
         ...state,

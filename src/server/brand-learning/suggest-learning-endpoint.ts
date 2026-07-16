@@ -41,7 +41,7 @@ interface LearningSuggestion {
   note: string;
 }
 
-const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 export async function handleSuggestLearningRequest({

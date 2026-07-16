@@ -25,6 +25,7 @@ type FetchLike = typeof fetch;
 export interface HookGenerationHarnessEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_HOOK_GENERATION_MODEL?: string;
+  OPENAI_HOOK_SUPPORT_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -98,6 +99,7 @@ interface HookGenerationResult {
 }
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 export async function handleHookGenerationHarnessRequest({
@@ -127,6 +129,8 @@ export async function handleHookGenerationHarnessRequest({
 
     const input = parseRequestBody(await request.json());
     const model = env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_MODEL;
+    const supportModel =
+      env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const pastPosts = await loadPastPostExamples({
       input,
       env,
@@ -137,7 +141,7 @@ export async function handleHookGenerationHarnessRequest({
     const research = await runResearchStep({
       input,
       apiKey,
-      model,
+      model: supportModel,
       fetchImpl
     });
     const result = await runGenerationStep({
@@ -153,7 +157,7 @@ export async function handleHookGenerationHarnessRequest({
     const highlightedDirections = await runSubheadlineHighlightStep({
       directions,
       apiKey,
-      model,
+      model: supportModel,
       fetchImpl
     });
 

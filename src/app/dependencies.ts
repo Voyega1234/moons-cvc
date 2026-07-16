@@ -3,6 +3,10 @@ import type { BrandMemoryRepository } from "../ports/brand-memory-repository";
 import type { ClientIntakeRepository } from "../ports/client-intake-repository";
 import type { MappingClientRepository } from "../ports/mapping-client-repository";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
+import {
+  allClientAccess,
+  type ClientAccessScope
+} from "../domain/client-access";
 import { env } from "../config/env";
 import { getSupabaseClient } from "../lib/supabase/client";
 import { mockBrandRepository } from "../repositories/brands/mock-brand-repository";
@@ -33,6 +37,7 @@ const signedInUserWorkspaceRepository = new ScopedLocalWorkspaceRepository(
 );
 
 export interface AppDependencies {
+  clientAccess: ClientAccessScope;
   brandRepository: BrandRepository;
   brandMemoryRepository: BrandMemoryRepository;
   clientIntakeRepository: ClientIntakeRepository;
@@ -45,6 +50,7 @@ export interface AppDependencies {
  * Swap a mock implementation for Supabase here without changing feature code.
  */
 export const dependencies: AppDependencies = {
+  clientAccess: allClientAccess,
   brandRepository:
     env.dataSource === "supabase"
       ? new SupabaseBrandRepository()

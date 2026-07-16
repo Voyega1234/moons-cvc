@@ -76,7 +76,24 @@ describe("runQualityCheck", () => {
                 csPassed: true,
                 csReason: "ผ่าน",
                 passed: true,
-                reason: "GD ผ่าน: ผ่าน\nCS ผ่าน: ผ่าน"
+                reason: "GD ผ่าน: ผ่าน\nCS ผ่าน: ผ่าน",
+                report: {
+                  score: 91,
+                  summary: "พร้อมสำหรับ human review",
+                  gd: {
+                    passed: true,
+                    score: 92,
+                    summary: "ผ่าน",
+                    criteria: []
+                  },
+                  cs: {
+                    passed: true,
+                    score: 90,
+                    summary: "ผ่าน",
+                    criteria: []
+                  },
+                  suggestion: { title: "", detail: "", suggestedHook: "" }
+                }
               }
             ]
           }),
@@ -85,7 +102,7 @@ describe("runQualityCheck", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await runQualityCheck(run);
+    const results = await runQualityCheck(run);
 
     const request = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
@@ -119,5 +136,6 @@ describe("runQualityCheck", () => {
       caption: direction.caption,
       revisionFeedback: "CS: Keep the approved product name."
     });
+    expect(results[0]?.report?.score).toBe(91);
   });
 });

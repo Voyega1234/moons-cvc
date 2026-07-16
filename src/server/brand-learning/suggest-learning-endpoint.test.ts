@@ -95,8 +95,10 @@ describe("handleSuggestLearningRequest", () => {
     expect(payload.suggestions[1]).toMatchObject({ polarity: "avoid" });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      model: string;
       input: unknown;
     };
+    expect(body.model).toBe("gpt-5.6-luna");
     expect(JSON.stringify(body.input)).toContain(
       "Flowers that make the room feel softer"
     );

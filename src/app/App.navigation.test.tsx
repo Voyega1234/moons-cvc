@@ -10,8 +10,8 @@ describe("redesigned application navigation", () => {
     expect(stages.map(({ id, name }) => [id, name])).toEqual([
       ["start", "Signal"],
       ["brief", "Brief"],
-      ["directions", "Angles"],
-      ["studio", "Build"],
+      ["directions", "Hook"],
+      ["studio", "Create"],
       ["approval", "Internal QC"],
       ["client", "Client"],
       ["summary", "Learn"]

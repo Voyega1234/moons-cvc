@@ -1,3 +1,5 @@
+import type { CreativeQualityReport } from "./quality-check";
+
 export const creativeStages = [
   "start",
   "brief",
@@ -209,6 +211,7 @@ export interface CreativeOutput {
   approval: ApprovalGate;
   approvalComments: ApprovalComments;
   qaNote?: string;
+  qaReport?: CreativeQualityReport;
   savedToReferences?: boolean;
 }
 

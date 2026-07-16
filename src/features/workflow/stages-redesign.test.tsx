@@ -2,6 +2,7 @@ import { render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
+import type { CreativeQualityReport } from "../../domain/quality-check";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
 import { BrandProvider } from "../../app/providers/brand-provider";
 import { ClientIntakeProvider } from "../../app/providers/client-intake-provider";
@@ -42,6 +43,41 @@ function buildCreativeState() {
   });
   state = workflowReducer(state, { type: "auto-select-directions" });
   return workflowReducer(state, { type: "create-outputs" });
+}
+
+function qualityReport(passed: boolean, score: number): CreativeQualityReport {
+  const criterion = (label: string) => ({
+    criterion: label,
+    passed,
+    score,
+    detail: passed ? "ตรวจแล้วผ่านเกณฑ์" : "ข้อความบน first frame ยังอ่านไม่ชัด",
+    suggestion: passed ? "" : "เพิ่ม contrast และลดจำนวนข้อความ"
+  });
+  return {
+    score,
+    summary: passed
+      ? "Clear, distinct, and ready for human review."
+      : "The idea is strong, but the first frame needs clearer communication.",
+    gd: {
+      passed,
+      score,
+      summary: passed ? "GD ผ่านทุกเกณฑ์" : "GD ต้องปรับความชัดของ first frame",
+      criteria: [criterion("ความสวยงาม องค์ประกอบ และจุดนำสายตา")]
+    },
+    cs: {
+      passed,
+      score,
+      summary: passed ? "CS ผ่านทุกเกณฑ์" : "CS ต้องทำ Key Message ให้ชัดขึ้น",
+      criteria: [criterion("Key Message ชัด และตรง Brief / Objective")]
+    },
+    suggestion: passed
+      ? { title: "", detail: "", suggestedHook: "" }
+      : {
+          title: "Tighten the first-frame hook",
+          detail: "Communicate the benefit faster with less interpretation.",
+          suggestedHook: "Premium features. The difference is visible in one glance."
+        }
+  };
 }
 
 function buildClientState() {
@@ -892,7 +928,8 @@ describe("redesigned workflow stages", () => {
       results: base.outputs.map((output) => ({
         outputId: output.id,
         passed: output.id !== first.id,
-        reason: output.id === first.id ? "Increase the headline contrast." : "Ready."
+        reason: output.id === first.id ? "Increase the headline contrast." : "Ready.",
+        report: qualityReport(output.id !== first.id, output.id === first.id ? 78 : 90)
       }))
     });
     const dispatch = vi.fn();
@@ -900,6 +937,16 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(stage.getByRole("button", { name: "Use suggestion" })).toBeTruthy();
+    const failedCard = stage
+      .getByRole("button", { name: "Use suggestion" })
+      .closest(".neo-build-review-card");
+    expect(failedCard?.textContent).toContain("Tighten the first-frame hook");
+    expect(failedCard?.textContent).toContain("GD details");
+    expect(failedCard?.textContent).toContain("CS details");
+    expect(failedCard?.textContent).toContain(
+      "Premium features. The difference is visible in one glance."
+    );
+    expect(failedCard?.textContent).toContain("78");
     expect(stage.queryByText("Quality check found a fix")).toBeNull();
     await user.click(stage.getByRole("button", { name: "Keep current" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
@@ -1019,11 +1066,6 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
-    ).toHaveLength(1);
-    expect(
-      stage.getAllByText(
-        "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"
-      )
     ).toHaveLength(1);
     expect(stage.getAllByRole("button", { name: "Approve → PM" })).toHaveLength(
       ugcOutputCount + 1

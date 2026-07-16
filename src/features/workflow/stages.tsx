@@ -7,7 +7,13 @@ import {
   type Dispatch,
   type ReactNode
 } from "react";
-import { Bell, CheckCircle, Sparkle } from "@phosphor-icons/react";
+import {
+  ArrowRight,
+  Bell,
+  CheckCircle,
+  MagnifyingGlass,
+  Sparkle
+} from "@phosphor-icons/react";
 import {
   canSelectBrand,
   canStartBrandIngestion,
@@ -38,7 +44,8 @@ import {
 } from "../../domain/subheadline-highlight";
 import {
   CS_QUALITY_CHECKLIST,
-  GD_QUALITY_CHECKLIST
+  GD_QUALITY_CHECKLIST,
+  type CreativeQualityReport
 } from "../../domain/quality-check";
 import { useBrandMemoryRepository } from "../../app/providers/brand-memory-provider";
 import { useBrands } from "../../app/providers/brand-provider";
@@ -54,7 +61,8 @@ import {
 import { getFileNames } from "../../shared/utils/files";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import { pluralize } from "../../shared/utils/text";
-import { serviceLabels } from "./config";
+import { createId, nowIso } from "../../shared/utils/id";
+import { serviceLabels, stages } from "./config";
 import {
   buildAngleExportReview,
   buildAngleGroups
@@ -5024,6 +5032,10 @@ function OutputGrid({
                 const direction = state.directions.find(
                   (candidate) => candidate.id === output.directionId
                 );
+                const qaReport = output.qaReport;
+                const qaScore = qaReport?.score ??
+                  (output.status === "needs-revision" ? 78 : 88);
+                const qaSuggestion = qaReport?.suggestion;
                 return (
                   <article
                     className={`output-card neo-build-review-card ${output.status === "ready" || output.status === "fixed" ? "ready qa-passed" : ""} ${output.status === "needs-revision" ? "attn qa-attention" : ""}`}
@@ -5091,16 +5103,24 @@ function OutputGrid({
                           </span>
                           <div>
                             <small>Suggested improvement</small>
-                            <b>Refine this draft</b>
+                            <b>{qaSuggestion?.title || "Refine this draft"}</b>
                           </div>
-                          <strong>78</strong>
+                          <strong>{qaScore}</strong>
                         </div>
-                        <p>{output.qaNote}</p>
+                        <p>{qaSuggestion?.detail || output.qaNote}</p>
+                        {qaReport ? (
+                          <QualityReportDetails report={qaReport} />
+                        ) : null}
                         <div className="neo-build-qa-suggestion">
-                          <small>Next step</small>
+                          <small>
+                            {qaSuggestion?.suggestedHook
+                              ? "Suggested hook"
+                              : "Suggested action"}
+                          </small>
                           <b>
-                            Apply this guidance to the draft, or keep the current
-                            version.
+                            {qaSuggestion?.suggestedHook ||
+                              qaSuggestion?.detail ||
+                              "Apply this guidance to the draft, or keep the current version."}
                           </b>
                         </div>
                       </div>
@@ -5108,9 +5128,15 @@ function OutputGrid({
                       <div className="neo-build-qa passed">
                         <div>
                           <small>Quality check</small>
-                          <b>Clear, distinct, and ready for human review.</b>
+                          <b>
+                            {qaReport?.summary ||
+                              "Clear, distinct, and ready for human review."}
+                          </b>
                         </div>
-                        <strong>88</strong>
+                        <strong>{qaScore}</strong>
+                        {qaReport ? (
+                          <QualityReportDetails report={qaReport} />
+                        ) : null}
                       </div>
                     ) : null}
                     <footer className="neo-build-output-foot">
@@ -5123,7 +5149,16 @@ function OutputGrid({
                               if (isUgcOutput(output)) {
                                 setEditOutputId(output.id);
                               } else {
-                                setQaPrompt(output.qaNote);
+                                setQaPrompt(
+                                  [
+                                    qaSuggestion?.detail || output.qaNote,
+                                    qaSuggestion?.suggestedHook
+                                      ? `Suggested hook: ${qaSuggestion.suggestedHook}`
+                                      : ""
+                                  ]
+                                    .filter(Boolean)
+                                    .join("\n")
+                                );
                                 setRegenerateOutputId(output.id);
                               }
                             }}
@@ -5262,6 +5297,42 @@ function BuildCaptionEditor({
           {saved ? "Saved" : "Save"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function QualityReportDetails({ report }: { report: CreativeQualityReport }) {
+  return (
+    <div className="neo-build-qa-details">
+      {([
+        ["GD", report.gd],
+        ["CS", report.cs]
+      ] as const).map(([label, area]) => (
+        <section key={label}>
+          <header>
+            <b>{label} details</b>
+            <span className={area.passed ? "passed" : "needs"}>
+              {area.score}
+            </span>
+          </header>
+          <p>{area.summary}</p>
+          <ul>
+            {area.criteria.map((criterion) => (
+              <li className={criterion.passed ? "passed" : "needs"} key={criterion.criterion}>
+                <span aria-hidden="true">{criterion.passed ? "✓" : "!"}</span>
+                <div>
+                  <b>{criterion.criterion}</b>
+                  <p>{criterion.detail}</p>
+                  {!criterion.passed && criterion.suggestion ? (
+                    <small>{criterion.suggestion}</small>
+                  ) : null}
+                </div>
+                <strong>{criterion.score}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
@@ -6902,6 +6973,15 @@ interface RunAttention {
   urgent: boolean;
 }
 
+type WorkboardFilter = "all" | "attention" | "active" | "unstarted";
+const WORKBOARD_PAGE_SIZE = 50;
+
+interface WorkboardClientState {
+  label: string;
+  tone: "neutral" | "ready" | "attention" | "active" | "error";
+  detail: string;
+}
+
 function computeRunAttention(run: WorkflowState): RunAttention | null {
   if (run.done || !run.brand) return null;
   const brand = run.brand;
@@ -6964,8 +7044,87 @@ function computeRunAttention(run: WorkflowState): RunAttention | null {
   return null;
 }
 
+function latestClientRun(
+  runs: readonly WorkflowState[],
+  clientId: string
+): WorkflowState | null {
+  return (
+    runs
+      .filter((run) => run.brand?.id === clientId)
+      .sort((a, b) => {
+        if (a.done !== b.done) return Number(a.done) - Number(b.done);
+        return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+      })[0] ?? null
+  );
+}
+
+function workboardClientState(
+  brand: Brand,
+  run: WorkflowState | null,
+  attention: RunAttention | null
+): WorkboardClientState {
+  if (attention?.urgent) {
+    return { label: "Needs action", tone: "attention", detail: attention.note };
+  }
+  if (attention) {
+    return { label: "In review", tone: "active", detail: attention.note };
+  }
+  if (run?.done) {
+    return {
+      label: "Delivered",
+      tone: "ready",
+      detail: "The latest creative run is complete."
+    };
+  }
+  if (run) {
+    const stage = stages.find((item) => item.id === run.stage);
+    return {
+      label: "In progress",
+      tone: "active",
+      detail: `${stage?.name ?? "Creative work"} is the current stage.`
+    };
+  }
+  if (brand.existsInSystem === false) {
+    return {
+      label: "Add to Neo",
+      tone: "neutral",
+      detail: "This active mapping client has not been added to Neo yet."
+    };
+  }
+  if (brand.ingestionStatus === "failed") {
+    return {
+      label: "Setup failed",
+      tone: "error",
+      detail: brand.ingestionError?.trim() || "Brand setup needs another attempt."
+    };
+  }
+  if (
+    brand.ingestionStatus &&
+    !["not_started", "ready", "needs_review"].includes(brand.ingestionStatus)
+  ) {
+    return {
+      label: "Setting up",
+      tone: "active",
+      detail: "Neo is preparing this client's brand signal."
+    };
+  }
+  if (canSelectBrand(brand)) {
+    return {
+      label: "Ready",
+      tone: "ready",
+      detail: "Brand signal is ready for a new creative run."
+    };
+  }
+  return {
+    label: "Setup needed",
+    tone: "neutral",
+    detail: "Open Signal to prepare this client for creative work."
+  };
+}
+
 export function Overview({
   state,
+  dispatch,
   workspace,
   workspaceDispatch,
   onOpenStudio
@@ -6975,79 +7134,290 @@ export function Overview({
   onOpenStudio: () => void;
 }) {
   const { brands, loading, error } = useBrands();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<WorkboardFilter>("all");
+  const [visibleLimit, setVisibleLimit] = useState(WORKBOARD_PAGE_SIZE);
 
-  const attentionItems = workspace.runOrder
+  const runs = workspace.runOrder
     .map((id) => workspace.runsById[id])
-    .filter((run): run is WorkflowState => Boolean(run))
+    .filter((run): run is WorkflowState => Boolean(run));
+  const visibleBrandIds = new Set(brands.map((brand) => brand.id));
+
+  const attentionItems = runs
+    .filter((run) => Boolean(run.brand && visibleBrandIds.has(run.brand.id)))
     .map((run) => computeRunAttention(run))
     .filter((item): item is RunAttention => Boolean(item))
     .sort((a, b) => Number(b.urgent) - Number(a.urgent));
 
+  const attentionByRunId = new Map(
+    attentionItems.map((item) => [item.runId, item] as const)
+  );
+  const activeClientIds = new Set(
+    runs
+      .filter((run) => !run.done && run.brand && visibleBrandIds.has(run.brand.id))
+      .map((run) => run.brand!.id)
+  );
+  const attentionClientIds = new Set(
+    attentionItems.map((item) => item.brand.id)
+  );
+  const deliveredClientIds = new Set(
+    runs
+      .filter((run) => run.done && run.brand && visibleBrandIds.has(run.brand.id))
+      .map((run) => run.brand!.id)
+  );
+
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const clientRows = brands
+    .map((brand) => {
+      const run = latestClientRun(runs, brand.id);
+      const attention = run ? attentionByRunId.get(run.id) ?? null : null;
+      return {
+        brand,
+        run,
+        attention,
+        status: workboardClientState(brand, run, attention)
+      };
+    })
+    .filter(({ brand, run, attention }) => {
+      const matchesSearch =
+        !normalizedQuery ||
+        brand.name.toLocaleLowerCase().includes(normalizedQuery) ||
+        brand.category.toLocaleLowerCase().includes(normalizedQuery);
+      if (!matchesSearch) return false;
+      if (filter === "attention") return Boolean(attention);
+      if (filter === "active") return Boolean(run && !run.done);
+      if (filter === "unstarted") return !run;
+      return true;
+    })
+    .sort((a, b) => {
+      const attentionDifference =
+        Number(Boolean(b.attention)) - Number(Boolean(a.attention));
+      if (attentionDifference) return attentionDifference;
+      const activeDifference =
+        Number(Boolean(b.run && !b.run.done)) -
+        Number(Boolean(a.run && !a.run.done));
+      return activeDifference || a.brand.name.localeCompare(b.brand.name);
+    });
+  const visibleClientRows = clientRows.slice(0, visibleLimit);
+
+  function openClient(brand: Brand, run: WorkflowState | null) {
+    if (run) {
+      workspaceDispatch({ type: "switch-run", id: run.id });
+      return;
+    }
+    if (canSelectBrand(brand)) {
+      workspaceDispatch({
+        type: "create-run",
+        id: createId("run"),
+        now: nowIso(),
+        keepBrand: false,
+        brand
+      });
+      return;
+    }
+    dispatch({ type: "set-stage", stage: "start" });
+    dispatch({ type: "search-brands", value: brand.name });
+    if (!state.brandMenuOpen) dispatch({ type: "toggle-brand-menu" });
+    onOpenStudio();
+  }
+
   return (
     <section id="overviewView">
       <div className="ov-head">
-        <p className="eyebrow">Live workspace</p>
-        <h2>Workboard</h2>
+        <div>
+          <p className="eyebrow">Live workspace</p>
+          <h2>Workboard</h2>
+          <p>Every client, active run, and next decision in one place.</p>
+        </div>
+        <span className="workboard-access-note">
+          <CheckCircle size={16} weight="fill" aria-hidden="true" />
+          All clients
+        </span>
       </div>
       <div className="ov-metrics">
         <div className="ov-metric">
           <b>{loading ? "..." : brands.length}</b>
-          <span>Brands</span>
+          <span>Clients visible</span>
         </div>
         <div className="ov-metric">
-          <b>{attentionItems.length}</b>
+          <b>{activeClientIds.size}</b>
+          <span>Active work</span>
+        </div>
+        <div className="ov-metric attention">
+          <b>{attentionClientIds.size}</b>
           <span>Need action</span>
+        </div>
+        <div className="ov-metric">
+          <b>{deliveredClientIds.size}</b>
+          <span>Delivered</span>
         </div>
       </div>
       <div className="ov-board">
         {error ? (
           <p className="repository-message error">{error.message}</p>
         ) : null}
-        {attentionItems.length ? (
-          <>
-            <div className="ov-group-h">Needs action · {attentionItems.length}</div>
-            {attentionItems.map(({ runId, brand, service, stageLabel, note, urgent }) => (
-              <div className={`brief-row ${urgent ? "attn" : ""}`} key={runId}>
-                <div className="brief-client">
-                  <span className="avatar ov-av">{brand.initials}</span>
+        <div className="workboard-toolbar">
+          <label className="workboard-search">
+            <MagnifyingGlass size={17} aria-hidden="true" />
+            <span className="sr-only">Search clients</span>
+            <input
+              type="search"
+              value={query}
+              placeholder="Search client or category"
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setVisibleLimit(WORKBOARD_PAGE_SIZE);
+              }}
+            />
+          </label>
+          <div className="workboard-filters" aria-label="Filter clients">
+            {(
+              [
+                ["all", "All"],
+                ["attention", `Need action ${attentionClientIds.size}`],
+                ["active", "Active"],
+                ["unstarted", "Not started"]
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                className={filter === value ? "active" : ""}
+                type="button"
+                key={value}
+                aria-pressed={filter === value}
+                onClick={() => {
+                  setFilter(value);
+                  setVisibleLimit(WORKBOARD_PAGE_SIZE);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="workboard-result-count">
+            {loading
+              ? "Loading clients"
+              : visibleClientRows.length < clientRows.length
+                ? `${visibleClientRows.length} of ${clientRows.length} shown`
+                : `${clientRows.length} shown`}
+          </span>
+        </div>
+
+        <div className="workboard-table-head" aria-hidden="true">
+          <span>Client</span>
+          <span>Status</span>
+          <span>Stage</span>
+          <span>Progress</span>
+          <span>Action</span>
+        </div>
+
+        <div className="workboard-client-list">
+          {loading
+            ? Array.from({ length: 5 }, (_, index) => (
+                <div
+                  className="workboard-client-row workboard-skeleton"
+                  aria-hidden="true"
+                  key={`workboard-loading-${index}`}
+                >
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              ))
+            : null}
+          {visibleClientRows.map(({ brand, run, status, attention }) => {
+            const stageIndex = run
+              ? stages.findIndex((item) => item.id === run.stage)
+              : -1;
+            const stageLabel = run
+              ? stages[stageIndex]?.name ?? "Creative run"
+              : "Not started";
+            return (
+              <article
+                className={`workboard-client-row ${attention?.urgent ? "urgent" : ""}`}
+                key={brand.id}
+              >
+                <div className="workboard-client-main">
+                  <span className="avatar ov-av" aria-hidden="true">
+                    {brand.initials}
+                  </span>
                   <span>
                     <b>{brand.name}</b>
-                    <small>{serviceLabels[service]}</small>
+                    <small>{brand.category || "Uncategorised client"}</small>
                   </span>
                 </div>
-                <div className="brief-stage">
-                  <span className="stage-chip">{stageLabel}</span>
+                <div className="workboard-client-status">
+                  <span className={`workboard-status ${status.tone}`}>
+                    {status.label}
+                  </span>
+                  <small>{status.detail}</small>
                 </div>
-                <div className="brief-ctx">
-                  <p>{note}</p>
+                <div className="workboard-client-stage">
+                  <b>{stageLabel}</b>
+                  <small>
+                    {run ? serviceLabels[run.service] : "No creative run"}
+                  </small>
                 </div>
-                <div className="brief-actions">
+                <div
+                  className="workboard-stage-track"
+                  aria-label={
+                    run
+                      ? `${stageLabel}, stage ${stageIndex + 1} of ${stages.length}`
+                      : "No creative stages completed"
+                  }
+                >
+                  {stages.map((item, index) => (
+                    <i
+                      className={
+                        run && (run.done || index <= stageIndex) ? "complete" : ""
+                      }
+                      key={item.id}
+                    />
+                  ))}
+                </div>
+                <div className="workboard-client-action">
                   <button
-                    className="btn small primary"
+                    className="btn small"
                     type="button"
-                    onClick={() => {
-                      workspaceDispatch({ type: "switch-run", id: runId });
-                      onOpenStudio();
-                    }}
+                    onClick={() => openClient(brand, run)}
                   >
-                    View
+                    {run ? "Open" : canSelectBrand(brand) ? "Start" : "Set up"}
+                    <ArrowRight size={14} weight="bold" aria-hidden="true" />
                   </button>
                 </div>
-              </div>
-            ))}
-          </>
-        ) : (
-          <div className="empty">
-            <b>Nothing needs action right now.</b>
-            <p>Runs waiting on internal QC or client review will show up here.</p>
+              </article>
+            );
+          })}
+        </div>
+
+        {visibleClientRows.length < clientRows.length ? (
+          <div className="workboard-load-more">
+            <span>
+              Showing {visibleClientRows.length} of {clientRows.length} clients
+            </span>
+            <button
+              className="btn small"
+              type="button"
+              onClick={() =>
+                setVisibleLimit((current) => current + WORKBOARD_PAGE_SIZE)
+              }
+            >
+              Show {Math.min(
+                WORKBOARD_PAGE_SIZE,
+                clientRows.length - visibleClientRows.length
+              )} more
+            </button>
           </div>
-        )}
+        ) : null}
+
+        {!loading && !clientRows.length ? (
+          <div className="empty workboard-empty">
+            <b>No clients match this view.</b>
+            <p>Clear the search or choose a different status filter.</p>
+          </div>
+        ) : null}
       </div>
-      {state.brand ? (
-        <p className="overview-active">
-          Active studio: <b>{state.brand.name}</b>
-        </p>
-      ) : null}
     </section>
   );
 }

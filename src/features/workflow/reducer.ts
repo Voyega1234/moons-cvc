@@ -735,7 +735,8 @@ export function workflowReducer(
             status: result.passed
               ? ("ready" as const)
               : ("needs-revision" as const),
-            qaNote: result.reason
+            qaNote: result.reason,
+            qaReport: result.report
           };
         })
       };
@@ -781,7 +782,8 @@ export function workflowReducer(
             ? {
                 ...currentOutput,
                 status: "draft" as const,
-                qaNote: undefined
+                qaNote: undefined,
+                qaReport: undefined
               }
             : currentOutput
         )

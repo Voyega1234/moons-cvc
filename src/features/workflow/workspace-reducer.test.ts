@@ -140,6 +140,26 @@ describe("workspaceReducer", () => {
     expect(workspace.runsById["run-1"]?.brand?.id).toBe(brand.id);
   });
 
+  it("creates a fresh run for a client selected from Workboard", () => {
+    const brand = brands[1];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    const workspace = workspaceReducer(
+      createInitialWorkspaceState({ runId: "run-1", now }),
+      {
+        type: "create-run",
+        id: "run-from-workboard",
+        now,
+        keepBrand: false,
+        brand
+      }
+    );
+
+    expect(workspace.view).toBe("studio");
+    expect(getActiveRun(workspace).id).toBe("run-from-workboard");
+    expect(getActiveRun(workspace).brand?.id).toBe(brand.id);
+  });
+
   it("closes an active run without deleting remaining runs", () => {
     let workspace = createInitialWorkspaceState({ runId: "run-1", now });
     workspace = workspaceReducer(workspace, {

@@ -35,6 +35,65 @@ const requestBody = {
   ]
 };
 
+function qualityAgentResult({
+  gdPassed = true,
+  gdScore = 92,
+  gdSummary = "องค์ประกอบและงานภาพเรียบร้อย",
+  csPassed = true,
+  csScore = 90,
+  csSummary = "ข้อความและรายละเอียดตรง Brief",
+  score = 91,
+  summary = "พร้อมสำหรับ human review",
+  suggestionTitle = "",
+  suggestionDetail = "",
+  suggestedHook = ""
+}: {
+  gdPassed?: boolean;
+  gdScore?: number;
+  gdSummary?: string;
+  csPassed?: boolean;
+  csScore?: number;
+  csSummary?: string;
+  score?: number;
+  summary?: string;
+  suggestionTitle?: string;
+  suggestionDetail?: string;
+  suggestedHook?: string;
+} = {}) {
+  const criterion = (passed: boolean, criterionScore: number, detail: string) => ({
+    passed,
+    score: criterionScore,
+    detail,
+    suggestion: passed ? "" : "ปรับให้อ่านง่ายและชัดขึ้น"
+  });
+  return {
+    outputId: "output-1",
+    score,
+    summary,
+    gd: {
+      passed: gdPassed,
+      score: gdScore,
+      summary: gdSummary,
+      criteria: Array.from({ length: 4 }, () =>
+        criterion(gdPassed, gdScore, gdSummary)
+      )
+    },
+    cs: {
+      passed: csPassed,
+      score: csScore,
+      summary: csSummary,
+      criteria: Array.from({ length: 3 }, () =>
+        criterion(csPassed, csScore, csSummary)
+      )
+    },
+    suggestion: {
+      title: suggestionTitle,
+      detail: suggestionDetail,
+      suggestedHook
+    }
+  };
+}
+
 function buildRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://moons.local/api/quality-check", {
     method: "POST",
@@ -77,13 +136,17 @@ describe("handleQualityCheckRequest", () => {
           JSON.stringify({
             output_text: JSON.stringify({
               results: [
-                {
-                  outputId: "output-1",
+                qualityAgentResult({
                   gdPassed: false,
-                  gdReason: "ข้อความในภาพอ่านไม่ชัด",
-                  csPassed: true,
-                  csReason: "Key Message และราคาตรงกับ Brief"
-                }
+                  gdScore: 72,
+                  gdSummary: "ข้อความในภาพอ่านไม่ชัด",
+                  csSummary: "Key Message และราคาตรงกับ Brief",
+                  score: 81,
+                  summary: "แนวคิดดี แต่ต้องปรับความชัดของข้อความ",
+                  suggestionTitle: "เพิ่มความชัดของข้อความ",
+                  suggestionDetail: "เพิ่ม contrast และลดข้อความใน first frame",
+                  suggestedHook: "Flowers that soften the room instantly"
+                })
               ]
             })
           }),
@@ -110,7 +173,7 @@ describe("handleQualityCheckRequest", () => {
       }[];
     };
     expect(payload.results).toEqual([
-      {
+      expect.objectContaining({
         outputId: "output-1",
         gdPassed: false,
         gdReason: "ข้อความในภาพอ่านไม่ชัด",
@@ -118,8 +181,17 @@ describe("handleQualityCheckRequest", () => {
         csReason: "Key Message และราคาตรงกับ Brief",
         passed: false,
         reason:
-          "GD ต้องแก้: ข้อความในภาพอ่านไม่ชัด\nCS ผ่าน: Key Message และราคาตรงกับ Brief"
-      }
+          "GD ต้องแก้: ข้อความในภาพอ่านไม่ชัด\nCS ผ่าน: Key Message และราคาตรงกับ Brief",
+        report: expect.objectContaining({
+          score: 81,
+          summary: "แนวคิดดี แต่ต้องปรับความชัดของข้อความ",
+          suggestion: {
+            title: "เพิ่มความชัดของข้อความ",
+            detail: "เพิ่ม contrast และลดข้อความใน first frame",
+            suggestedHook: "Flowers that soften the room instantly"
+          }
+        })
+      })
     ]);
 
     const openAiCall = fetchMock.mock.calls.find(([url]) =>
@@ -147,6 +219,9 @@ describe("handleQualityCheckRequest", () => {
       .join("\n");
     expect(prompt).toContain("ความสวยงาม องค์ประกอบ และจุดนำสายตา");
     expect(prompt).toContain("Key Message ชัด และตรง Brief / Objective");
+    expect(prompt).not.toContain(
+      "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"
+    );
     expect(prompt).toContain("Brand: Petal House");
     expect(prompt).toContain("Caption: Summer bouquet, THB 990.");
     expect(prompt).toContain("Revision Feedback: CS: Keep the price visible.");
@@ -185,13 +260,7 @@ describe("handleQualityCheckRequest", () => {
         JSON.stringify({
           output_text: JSON.stringify({
             results: [
-              {
-                outputId: "output-1",
-                gdPassed: true,
-                gdReason: "ผ่าน",
-                csPassed: true,
-                csReason: "ผ่าน"
-              }
+              qualityAgentResult()
             ]
           })
         }),

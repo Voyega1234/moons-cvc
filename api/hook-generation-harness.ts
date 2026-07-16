@@ -21,6 +21,7 @@ export default async function handler(
     env: {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       OPENAI_HOOK_GENERATION_MODEL: process.env.OPENAI_HOOK_GENERATION_MODEL,
+      OPENAI_HOOK_SUPPORT_MODEL: process.env.OPENAI_HOOK_SUPPORT_MODEL,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     }
