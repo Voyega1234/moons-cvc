@@ -4877,35 +4877,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 9px;
-}
-
-.neo-app .neo-qc-check-list {
-  display: grid;
-  gap: 7px;
   margin: 9px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.neo-app .neo-qc-check-list li {
-  position: relative;
-  margin: 0;
-  padding-left: 16px;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.neo-app .neo-qc-check-list li::before {
-  content: "";
-  position: absolute;
-  top: 0.52em;
-  left: 2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
 }
 
 .neo-app .neo-qc-work-note {

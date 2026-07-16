@@ -9,3 +9,4 @@ dist
 logs/
 agent_prompt/images
 tmp
+agent_prompt/reference_artworks

@@ -6207,12 +6207,12 @@ function QcSlide({
           </div>
         ) : null}
         <div className="neo-qc-check-box">
-          <b>{roleShort} Checklist</b>
-          <ul className="neo-qc-check-list">
+          <b>{roleShort} checks</b>
+          <div className="neo-qc-check-chips">
             {qcChecklistFor(output, role, roleConfig.checklist).map((check) => (
-              <li key={check}>{check}</li>
+              <span key={check}>{check}</span>
             ))}
-          </ul>
+          </div>
         </div>
         <QcApprovalTrail output={output} />
         {output.clientStatus === "revision" &&

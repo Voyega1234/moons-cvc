@@ -1006,6 +1006,11 @@ describe("redesigned workflow stages", () => {
     const ugcCard = view.container
       .querySelector(".neo-qc-ugc-ownership")
       ?.closest(".neo-qc-focus-card");
+    expect(
+      ugcCard?.querySelector(".neo-qc-check-box > b")?.textContent
+    ).toBe("CS checks");
+    expect(ugcCard?.querySelectorAll(".neo-qc-check-chips span")).toHaveLength(4);
+    expect(ugcCard?.querySelector(".neo-qc-check-list")).toBeNull();
     expect(ugcCard?.querySelector(".neo-qc-mini-trail")?.textContent).toContain(
       "CS→PM→Client"
     );
