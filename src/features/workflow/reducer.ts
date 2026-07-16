@@ -83,6 +83,8 @@ function resetCreativeWork(state: WorkflowState): WorkflowState {
     ...state,
     ideaGenerationStatus: "idle",
     ideaGenerationError: null,
+    artworkGenerationStatus: "idle",
+    artworkGenerationError: null,
     directions: [],
     outputs: [],
     qaComplete: false,
@@ -141,6 +143,8 @@ export function createInitialWorkflowState({
     referenceImages: [],
     ideaGenerationStatus: "idle",
     ideaGenerationError: null,
+    artworkGenerationStatus: "idle",
+    artworkGenerationError: null,
     directions: [],
     outputs: [],
     qaComplete: false,
@@ -250,6 +254,10 @@ export function workflowActionToast(
         "Recommended ideas selected",
         "Neo filled each creative type using the planned quota."
       );
+    case "start-artwork-generation":
+      return null;
+    case "fail-artwork-generation":
+      return errorToast("Artwork generation failed", action.message);
     case "create-outputs":
       return successToast(
         "Creative set created",
@@ -713,9 +721,23 @@ export function workflowReducer(
         })
       };
     }
+    case "start-artwork-generation":
+      return {
+        ...state,
+        artworkGenerationStatus: "running",
+        artworkGenerationError: null
+      };
+    case "fail-artwork-generation":
+      return {
+        ...state,
+        artworkGenerationStatus: "failed",
+        artworkGenerationError: action.message
+      };
     case "create-outputs":
       return {
         ...state,
+        artworkGenerationStatus: "idle",
+        artworkGenerationError: null,
         outputs: action.outputs ?? generateMockOutputs(state),
         stage: "studio",
         qaComplete: false

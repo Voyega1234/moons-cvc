@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch } from "react";
+import { useCallback, type Dispatch } from "react";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import type { WorkflowAction, WorkflowState } from "./model";
@@ -7,12 +7,15 @@ export function useCreateSelectedHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const loading = state.artworkGenerationStatus === "running";
+  const error =
+    state.artworkGenerationStatus === "failed"
+      ? state.artworkGenerationError
+      : null;
 
   const create = useCallback(() => {
-    setLoading(true);
-    setError(null);
+    if (state.artworkGenerationStatus === "running") return;
+    dispatch({ type: "start-artwork-generation" });
 
     void generateArtworkForSelectedHooks({
       run: state,
@@ -27,14 +30,13 @@ export function useCreateSelectedHooks(
         playGenerationSuccessSound();
       })
       .catch((caught: unknown) => {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "Could not create selected hooks."
-        );
-      })
-      .finally(() => {
-        setLoading(false);
+        dispatch({
+          type: "fail-artwork-generation",
+          message:
+            caught instanceof Error
+              ? caught.message
+              : "Could not create selected hooks."
+        });
       });
   }, [state, dispatch]);
 

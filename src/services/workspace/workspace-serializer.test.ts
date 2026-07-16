@@ -201,6 +201,62 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["run-1"]?.ideaGenerationError).toBeNull();
   });
 
+  it("restores interrupted artwork generation as retryable after refresh", () => {
+    const initialWorkspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T08:00:00.000Z"
+    });
+    const run = initialWorkspace.runsById["run-1"]!;
+    const workspace = {
+      ...initialWorkspace,
+      runsById: {
+        ...initialWorkspace.runsById,
+        "run-1": {
+          ...run,
+          artworkGenerationStatus: "running" as const
+        }
+      }
+    };
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-16T08:01:01.000Z")
+    );
+
+    expect(restored?.runsById["run-1"]?.artworkGenerationStatus).toBe(
+      "failed"
+    );
+    expect(restored?.runsById["run-1"]?.artworkGenerationError).toBe(
+      "Artwork generation was interrupted by refresh. Generate again."
+    );
+  });
+
+  it("loads older snapshots without artwork generation state as idle", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T08:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-07-16T08:01:00.000Z")
+    ) as {
+      data: {
+        runsById: Record<
+          string,
+          {
+            artworkGenerationStatus?: string;
+            artworkGenerationError?: string | null;
+          }
+        >;
+      };
+    };
+    delete parsed.data.runsById["run-1"]?.artworkGenerationStatus;
+    delete parsed.data.runsById["run-1"]?.artworkGenerationError;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.artworkGenerationStatus).toBe("idle");
+    expect(restored?.runsById["run-1"]?.artworkGenerationError).toBeNull();
+  });
+
   it("round-trips supporting details and verified CTA metadata", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

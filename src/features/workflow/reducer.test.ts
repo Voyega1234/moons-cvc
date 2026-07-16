@@ -221,6 +221,26 @@ describe("workflowReducer", () => {
     expect(state.outputs).toHaveLength(initialWorkflowState.quantity);
   });
 
+  it("keeps artwork generation running across stage changes", () => {
+    let state = workflowReducer(initialWorkflowState, {
+      type: "start-artwork-generation"
+    });
+
+    state = workflowReducer(state, { type: "set-stage", stage: "studio" });
+    state = workflowReducer(state, {
+      type: "set-stage",
+      stage: "directions"
+    });
+
+    expect(state.artworkGenerationStatus).toBe("running");
+    expect(state.artworkGenerationError).toBeNull();
+
+    state = workflowReducer(state, { type: "create-outputs", outputs: [] });
+
+    expect(state.artworkGenerationStatus).toBe("idle");
+    expect(state.artworkGenerationError).toBeNull();
+  });
+
   it("keeps a saved Build reference on the creative output", () => {
     const output = {
       id: "output-reference",

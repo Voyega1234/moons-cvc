@@ -19,7 +19,9 @@ export type AppView = "overview" | "studio";
 
 export const successMetrics = ["CTR", "CVR", "CPA", "ROAS"] as const;
 export type SuccessMetric = (typeof successMetrics)[number];
-export type IdeaGenerationStatus = "idle" | "running" | "failed";
+export type GenerationStatus = "idle" | "running" | "failed";
+export type IdeaGenerationStatus = GenerationStatus;
+export type ArtworkGenerationStatus = GenerationStatus;
 
 export interface WorkspaceToast {
   title: string;
@@ -64,6 +66,8 @@ export interface WorkflowState {
   referenceImages: readonly ReferenceImageSelection[];
   ideaGenerationStatus: IdeaGenerationStatus;
   ideaGenerationError: string | null;
+  artworkGenerationStatus: ArtworkGenerationStatus;
+  artworkGenerationError: string | null;
   directions: readonly CreativeDirection[];
   outputs: readonly CreativeOutput[];
   qaComplete: boolean;
@@ -128,6 +132,8 @@ export type WorkflowAction =
   | { type: "delete-direction"; id: string }
   | { type: "toggle-direction"; id: string }
   | { type: "auto-select-directions" }
+  | { type: "start-artwork-generation" }
+  | { type: "fail-artwork-generation"; message: string }
   | { type: "create-outputs"; outputs?: readonly CreativeOutput[] }
   | {
       type: "run-qa";

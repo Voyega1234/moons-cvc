@@ -35,6 +35,8 @@ const run: WorkflowState = {
   referenceImages: [],
   ideaGenerationStatus: "idle",
   ideaGenerationError: null,
+  artworkGenerationStatus: "idle",
+  artworkGenerationError: null,
   directions: [
     {
       id: "hook-1",

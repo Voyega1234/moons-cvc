@@ -148,6 +148,19 @@ function parseRun(value: unknown): WorkflowState | null {
     value.ideaGenerationError === undefined || value.ideaGenerationError === null
       ? null
       : parseString(value.ideaGenerationError, true);
+  const persistedArtworkGenerationStatus =
+    value.artworkGenerationStatus === undefined
+      ? "idle"
+      : parseMember(value.artworkGenerationStatus, [
+          "idle",
+          "running",
+          "failed"
+        ] as const);
+  const persistedArtworkGenerationError =
+    value.artworkGenerationError === undefined ||
+    value.artworkGenerationError === null
+      ? null
+      : parseString(value.artworkGenerationError, true);
 
   if (
     !id ||
@@ -164,9 +177,13 @@ function parseRun(value: unknown): WorkflowState | null {
     !attachments ||
     !uploadedMaterials ||
     !persistedIdeaGenerationStatus ||
+    !persistedArtworkGenerationStatus ||
     (persistedIdeaGenerationError === null &&
       value.ideaGenerationError !== undefined &&
       value.ideaGenerationError !== null) ||
+    (persistedArtworkGenerationError === null &&
+      value.artworkGenerationError !== undefined &&
+      value.artworkGenerationError !== null) ||
     typeof value.qaComplete !== "boolean" ||
     typeof value.approved !== "boolean" ||
     typeof value.clientSent !== "boolean" ||
@@ -209,6 +226,16 @@ function parseRun(value: unknown): WorkflowState | null {
       : ideaGenerationStatus === "failed"
         ? persistedIdeaGenerationError ?? "Could not generate hooks."
         : null;
+  const artworkGenerationStatus =
+    persistedArtworkGenerationStatus === "running"
+      ? "failed"
+      : persistedArtworkGenerationStatus;
+  const artworkGenerationError =
+    persistedArtworkGenerationStatus === "running"
+      ? "Artwork generation was interrupted by refresh. Generate again."
+      : artworkGenerationStatus === "failed"
+        ? persistedArtworkGenerationError ?? "Could not generate artwork."
+        : null;
 
   return {
     id,
@@ -232,6 +259,8 @@ function parseRun(value: unknown): WorkflowState | null {
     referenceImages,
     ideaGenerationStatus,
     ideaGenerationError,
+    artworkGenerationStatus,
+    artworkGenerationError,
     directions,
     outputs,
     qaComplete: value.qaComplete,

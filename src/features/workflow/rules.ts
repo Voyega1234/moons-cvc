@@ -133,6 +133,14 @@ export function workflowActionBlockReason(
       return run.directions.length > 0
         ? null
         : "Generate hooks before Neo can pick.";
+    case "start-artwork-generation":
+      if (run.artworkGenerationStatus === "running") {
+        return "Artwork generation is already in progress.";
+      }
+      if (!run.directions.length) return "Generate hooks first.";
+      return selectedDirectionCount(run) === totalCreativeMixQuantity(run)
+        ? null
+        : `Select ${totalCreativeMixQuantity(run)} hooks first.`;
     case "create-outputs":
       if (!run.directions.length) return "Generate hooks first.";
       return selectedDirectionCount(run) === totalCreativeMixQuantity(run)
