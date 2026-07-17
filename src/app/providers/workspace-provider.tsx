@@ -22,6 +22,7 @@ interface WorkspaceContextValue {
   workspace: WorkspaceState;
   dispatch: Dispatch<WorkspaceAction>;
   persistenceError: Error | null;
+  flush: () => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -79,6 +80,11 @@ export function WorkspaceProvider({
     );
   }, []);
 
+  const flush = useCallback(async () => {
+    if (!workspace) return;
+    await repository.save(workspace);
+  }, [repository, workspace]);
+
   if (loadingError) {
     return (
       <main className="boot-error">
@@ -98,7 +104,7 @@ export function WorkspaceProvider({
 
   return (
     <WorkspaceContext.Provider
-      value={{ workspace, dispatch, persistenceError }}
+      value={{ workspace, dispatch, persistenceError, flush }}
     >
       {children}
     </WorkspaceContext.Provider>

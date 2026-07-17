@@ -15,6 +15,7 @@ import {
   Sparkle
 } from "@phosphor-icons/react";
 import {
+  brandLogoUrl,
   canSelectBrand,
   canStartBrandIngestion,
   type Brand,
@@ -50,6 +51,8 @@ import {
 import { useBrandMemoryRepository } from "../../app/providers/brand-memory-provider";
 import { useBrands } from "../../app/providers/brand-provider";
 import { useClientIntakeRepository } from "../../app/providers/client-intake-provider";
+import { useOptionalRunCollaboration } from "../../app/providers/run-collaboration-provider";
+import { departmentLabel } from "../../domain/run-collaboration";
 import { validateFacebookUrl } from "../../domain/client-ingestion";
 import { regenerateOutputImage } from "../../services/artwork-generation/openai-image-generation";
 import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
@@ -211,7 +214,11 @@ export function StartStage({ state, dispatch }: StageProps) {
             >
               <span className="select-left">
                 <span className="avatar neo-brand-select-avatar">
-                  {state.brand?.initials ?? "NE"}
+                  {brandLogoUrl(state.brand) ? (
+                    <img src={brandLogoUrl(state.brand)} alt="" />
+                  ) : (
+                    state.brand?.initials ?? "NE"
+                  )}
                 </span>
                 <span>
                   <b>{state.brand?.name ?? "Choose a brand"}</b>
@@ -276,7 +283,13 @@ export function StartStage({ state, dispatch }: StageProps) {
                       className={`client-row ${canSetupExisting || canAddMapping ? "locked" : "disabled"}`}
                       title={disabledReason ?? undefined}
                     >
-                      <span className="avatar">{brand.initials}</span>
+                      <span className="avatar">
+                        {brandLogoUrl(brand) ? (
+                          <img src={brandLogoUrl(brand)} alt="" />
+                        ) : (
+                          brand.initials
+                        )}
+                      </span>
                       <span className="client-row-copy">
                         <b>{brand.name}</b>
                         <small>
@@ -319,7 +332,13 @@ export function StartStage({ state, dispatch }: StageProps) {
                     title={disabledReason ?? undefined}
                     onClick={() => dispatch({ type: "select-brand", brand })}
                   >
-                    <span className="avatar">{brand.initials}</span>
+                    <span className="avatar">
+                      {brandLogoUrl(brand) ? (
+                        <img src={brandLogoUrl(brand)} alt="" />
+                      ) : (
+                        brand.initials
+                      )}
+                    </span>
                     <span>
                       <b>{brand.name}</b>
                       <small>
@@ -1787,9 +1806,11 @@ function BrandKitMemoryList({
     }
   }
 
-  const logoItem = items.find(
+  const logoItems = items.filter(
     (item) => item.title.trim().toLowerCase() === "logo"
   );
+  const logoItem =
+    logoItems.find((item) => item.assetUrl) ?? logoItems[0];
   const colorsItem = items.find(
     (item) => item.title.trim().toLowerCase() === "colors"
   );
@@ -6973,10 +6994,10 @@ interface RunAttention {
   urgent: boolean;
 }
 
-type WorkboardFilter = "all" | "attention" | "active" | "unstarted";
+type WorkboardFilter = "all" | "mine" | "attention" | "active" | "unstarted";
 const WORKBOARD_PAGE_SIZE = 50;
 
-interface WorkboardClientState {
+interface WorkboardProjectState {
   label: string;
   tone: "neutral" | "ready" | "attention" | "active" | "error";
   detail: string;
@@ -7044,82 +7065,66 @@ function computeRunAttention(run: WorkflowState): RunAttention | null {
   return null;
 }
 
-function latestClientRun(
-  runs: readonly WorkflowState[],
-  clientId: string
-): WorkflowState | null {
-  return (
-    runs
-      .filter((run) => run.brand?.id === clientId)
-      .sort((a, b) => {
-        if (a.done !== b.done) return Number(a.done) - Number(b.done);
-        return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
-      })[0] ?? null
-  );
-}
-
-function workboardClientState(
+function workboardProjectState(
   brand: Brand,
   run: WorkflowState | null,
   attention: RunAttention | null
-): WorkboardClientState {
-  if (attention?.urgent) {
-    return { label: "Needs action", tone: "attention", detail: attention.note };
-  }
-  if (attention) {
-    return { label: "In review", tone: "active", detail: attention.note };
-  }
-  if (run?.done) {
-    return {
-      label: "Delivered",
-      tone: "ready",
-      detail: "The latest creative run is complete."
-    };
-  }
+): WorkboardProjectState {
   if (run) {
     const stage = stages.find((item) => item.id === run.stage);
     return {
-      label: "In progress",
-      tone: "active",
-      detail: `${stage?.name ?? "Creative work"} is the current stage.`
-    };
-  }
-  if (brand.existsInSystem === false) {
-    return {
-      label: "Add to Neo",
-      tone: "neutral",
-      detail: "This active mapping client has not been added to Neo yet."
-    };
-  }
-  if (brand.ingestionStatus === "failed") {
-    return {
-      label: "Setup failed",
-      tone: "error",
-      detail: brand.ingestionError?.trim() || "Brand setup needs another attempt."
-    };
-  }
-  if (
-    brand.ingestionStatus &&
-    !["not_started", "ready", "needs_review"].includes(brand.ingestionStatus)
-  ) {
-    return {
-      label: "Setting up",
-      tone: "active",
-      detail: "Neo is preparing this client's brand signal."
-    };
-  }
-  if (canSelectBrand(brand)) {
-    return {
-      label: "Ready",
-      tone: "ready",
-      detail: "Brand signal is ready for a new creative run."
+      label: "Active",
+      tone: attention?.urgent ? "attention" : "active",
+      detail: attention?.note ?? `${stage?.name ?? "Creative work"} in progress.`
     };
   }
   return {
-    label: "Setup needed",
-    tone: "neutral",
-    detail: "Open Signal to prepare this client for creative work."
+    label: "Ready",
+    tone: "ready",
+    detail: `${brand.name} is ready for a new creative run.`
   };
+}
+
+function workboardProjectName(run: WorkflowState): string {
+  const firstBriefLine = run.brief
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^project\s*:\s*/i, ""))
+    .find(Boolean);
+  if (firstBriefLine) {
+    return firstBriefLine.length > 58
+      ? `${firstBriefLine.slice(0, 57).trimEnd()}…`
+      : firstBriefLine;
+  }
+
+  const mix = creativeMixItems(run);
+  if (mix.length === 1) return `${serviceLabels[mix[0]!.service]} project`;
+  return "Mixed creative project";
+}
+
+function workboardProjectMeta(run: WorkflowState): string {
+  const mix = creativeMixItems(run);
+  const service =
+    mix.length === 1
+      ? serviceLabels[mix[0]!.service]
+      : `${mix.length} content types`;
+  const timestamp = Date.parse(run.updatedAt);
+  const updated = Number.isNaN(timestamp)
+    ? "Recently updated"
+    : `Updated ${new Intl.DateTimeFormat("en", {
+        month: "short",
+        day: "numeric"
+      }).format(timestamp)}`;
+  return `${service} · ${updated}`;
+}
+
+function initials(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 export function Overview({
@@ -7134,6 +7139,7 @@ export function Overview({
   onOpenStudio: () => void;
 }) {
   const { brands, loading, error } = useBrands();
+  const collaboration = useOptionalRunCollaboration();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<WorkboardFilter>("all");
   const [visibleLimit, setVisibleLimit] = useState(WORKBOARD_PAGE_SIZE);
@@ -7152,40 +7158,69 @@ export function Overview({
   const attentionByRunId = new Map(
     attentionItems.map((item) => [item.runId, item] as const)
   );
-  const activeClientIds = new Set(
-    runs
-      .filter((run) => !run.done && run.brand && visibleBrandIds.has(run.brand.id))
-      .map((run) => run.brand!.id)
+  const memberByUserId = new Map(
+    (collaboration?.members ?? []).map((member) => [member.userId, member])
   );
-  const attentionClientIds = new Set(
-    attentionItems.map((item) => item.brand.id)
+  const activeRuns = runs.filter(
+    (run) => !run.done && run.brand && visibleBrandIds.has(run.brand.id)
   );
-  const deliveredClientIds = new Set(
-    runs
-      .filter((run) => run.done && run.brand && visibleBrandIds.has(run.brand.id))
-      .map((run) => run.brand!.id)
+  const activeClientIds = new Set(activeRuns.map((run) => run.brand!.id));
+  const readyBrands = brands.filter(
+    (brand) => !activeClientIds.has(brand.id) && canSelectBrand(brand)
   );
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const clientRows = brands
-    .map((brand) => {
-      const run = latestClientRun(runs, brand.id);
-      const attention = run ? attentionByRunId.get(run.id) ?? null : null;
-      return {
+  const activeProjectRows = activeRuns.flatMap((run) => {
+    const brand = run.brand;
+    if (!brand) return [];
+    const attention = attentionByRunId.get(run.id) ?? null;
+    const ownership = collaboration?.ownershipByRunId[run.id] ?? null;
+    const ownerUserId = ownership?.currentOwnerUserId ?? null;
+    const owner = ownerUserId ? memberByUserId.get(ownerUserId) ?? null : null;
+    return [
+      {
+        key: run.id,
         brand,
         run,
         attention,
-        status: workboardClientState(brand, run, attention)
-      };
-    })
-    .filter(({ brand, run, attention }) => {
+        owner,
+        ownerUserId,
+        projectName: workboardProjectName(run),
+        projectMeta: workboardProjectMeta(run),
+        status: workboardProjectState(brand, run, attention)
+      }
+    ];
+  });
+  const readyProjectRows = readyBrands.map((brand) => ({
+    key: `ready-${brand.id}`,
+    brand,
+    run: null,
+    attention: null,
+    owner: null,
+    ownerUserId: null,
+    projectName: "New creative project",
+    projectMeta: "Choose a content type to begin",
+    status: workboardProjectState(brand, null, null)
+  }));
+  const allProjectRows = [...activeProjectRows, ...readyProjectRows];
+  const projectRows = allProjectRows
+    .filter(({ brand, projectName, run, attention, owner, ownerUserId }) => {
       const matchesSearch =
         !normalizedQuery ||
         brand.name.toLocaleLowerCase().includes(normalizedQuery) ||
-        brand.category.toLocaleLowerCase().includes(normalizedQuery);
+        brand.category.toLocaleLowerCase().includes(normalizedQuery) ||
+        projectName.toLocaleLowerCase().includes(normalizedQuery) ||
+        owner?.displayName.toLocaleLowerCase().includes(normalizedQuery);
       if (!matchesSearch) return false;
+      if (filter === "mine") {
+        return Boolean(
+          run &&
+            collaboration?.currentUserId &&
+            ownerUserId === collaboration.currentUserId
+        );
+      }
       if (filter === "attention") return Boolean(attention);
-      if (filter === "active") return Boolean(run && !run.done);
+      if (filter === "active") return Boolean(run);
       if (filter === "unstarted") return !run;
       return true;
     })
@@ -7193,14 +7228,23 @@ export function Overview({
       const attentionDifference =
         Number(Boolean(b.attention)) - Number(Boolean(a.attention));
       if (attentionDifference) return attentionDifference;
-      const activeDifference =
-        Number(Boolean(b.run && !b.run.done)) -
-        Number(Boolean(a.run && !a.run.done));
-      return activeDifference || a.brand.name.localeCompare(b.brand.name);
+      if (a.run && b.run) {
+        return Date.parse(b.run.updatedAt) - Date.parse(a.run.updatedAt);
+      }
+      if (a.run) return -1;
+      if (b.run) return 1;
+      return a.brand.name.localeCompare(b.brand.name);
     });
-  const visibleClientRows = clientRows.slice(0, visibleLimit);
+  const visibleProjectRows = projectRows.slice(0, visibleLimit);
+  const mineCount = activeProjectRows.filter(
+    ({ ownerUserId }) =>
+      Boolean(collaboration?.currentUserId) &&
+      ownerUserId === collaboration?.currentUserId
+  ).length;
+  const readyClientCount = readyProjectRows.length;
+  const attentionProjectCount = attentionItems.length;
 
-  function openClient(brand: Brand, run: WorkflowState | null) {
+  function openProject(brand: Brand, run: WorkflowState | null) {
     if (run) {
       workspaceDispatch({ type: "switch-run", id: run.id });
       return;
@@ -7227,29 +7271,29 @@ export function Overview({
         <div>
           <p className="eyebrow">Live workspace</p>
           <h2>Workboard</h2>
-          <p>Every client, active run, and next decision in one place.</p>
+          <p>Every project, current owner, and next decision in one place.</p>
         </div>
         <span className="workboard-access-note">
           <CheckCircle size={16} weight="fill" aria-hidden="true" />
-          All clients
+          All clients visible
         </span>
       </div>
       <div className="ov-metrics">
         <div className="ov-metric">
-          <b>{loading ? "..." : brands.length}</b>
-          <span>Clients visible</span>
+          <b>{loading ? "..." : activeProjectRows.length}</b>
+          <span>Active projects</span>
         </div>
         <div className="ov-metric">
-          <b>{activeClientIds.size}</b>
-          <span>Active work</span>
+          <b>{mineCount}</b>
+          <span>Assigned to me</span>
         </div>
         <div className="ov-metric attention">
-          <b>{attentionClientIds.size}</b>
+          <b>{attentionProjectCount}</b>
           <span>Need action</span>
         </div>
         <div className="ov-metric">
-          <b>{deliveredClientIds.size}</b>
-          <span>Delivered</span>
+          <b>{readyClientCount}</b>
+          <span>Ready to start</span>
         </div>
       </div>
       <div className="ov-board">
@@ -7259,24 +7303,25 @@ export function Overview({
         <div className="workboard-toolbar">
           <label className="workboard-search">
             <MagnifyingGlass size={17} aria-hidden="true" />
-            <span className="sr-only">Search clients</span>
+            <span className="sr-only">Search projects</span>
             <input
               type="search"
               value={query}
-              placeholder="Search client or category"
+              placeholder="Search project, client, or owner"
               onChange={(event) => {
                 setQuery(event.target.value);
                 setVisibleLimit(WORKBOARD_PAGE_SIZE);
               }}
             />
           </label>
-          <div className="workboard-filters" aria-label="Filter clients">
+          <div className="workboard-filters" aria-label="Filter projects">
             {(
               [
                 ["all", "All"],
-                ["attention", `Need action ${attentionClientIds.size}`],
+                ["mine", `Assigned to me ${mineCount}`],
+                ["attention", `Need action ${attentionProjectCount}`],
                 ["active", "Active"],
-                ["unstarted", "Not started"]
+                ["unstarted", "Ready"]
               ] as const
             ).map(([value, label]) => (
               <button
@@ -7295,16 +7340,18 @@ export function Overview({
           </div>
           <span className="workboard-result-count">
             {loading
-              ? "Loading clients"
-              : visibleClientRows.length < clientRows.length
-                ? `${visibleClientRows.length} of ${clientRows.length} shown`
-                : `${clientRows.length} shown`}
+              ? "Loading projects"
+              : visibleProjectRows.length < projectRows.length
+                ? `${visibleProjectRows.length} of ${projectRows.length} shown`
+                : `${projectRows.length} shown`}
           </span>
         </div>
 
         <div className="workboard-table-head" aria-hidden="true">
+          <span>Project</span>
           <span>Client</span>
           <span>Status</span>
+          <span>Owner</span>
           <span>Stage</span>
           <span>Progress</span>
           <span>Action</span>
@@ -7323,78 +7370,132 @@ export function Overview({
                   <i />
                   <i />
                   <i />
+                  <i />
+                  <i />
                 </div>
               ))
             : null}
-          {visibleClientRows.map(({ brand, run, status, attention }) => {
-            const stageIndex = run
-              ? stages.findIndex((item) => item.id === run.stage)
-              : -1;
-            const stageLabel = run
-              ? stages[stageIndex]?.name ?? "Creative run"
-              : "Not started";
-            return (
-              <article
-                className={`workboard-client-row ${attention?.urgent ? "urgent" : ""}`}
-                key={brand.id}
-              >
-                <div className="workboard-client-main">
-                  <span className="avatar ov-av" aria-hidden="true">
-                    {brand.initials}
-                  </span>
-                  <span>
-                    <b>{brand.name}</b>
-                    <small>{brand.category || "Uncategorised client"}</small>
-                  </span>
-                </div>
-                <div className="workboard-client-status">
-                  <span className={`workboard-status ${status.tone}`}>
-                    {status.label}
-                  </span>
-                  <small>{status.detail}</small>
-                </div>
-                <div className="workboard-client-stage">
-                  <b>{stageLabel}</b>
-                  <small>
-                    {run ? serviceLabels[run.service] : "No creative run"}
-                  </small>
-                </div>
-                <div
-                  className="workboard-stage-track"
-                  aria-label={
-                    run
-                      ? `${stageLabel}, stage ${stageIndex + 1} of ${stages.length}`
-                      : "No creative stages completed"
-                  }
+          {visibleProjectRows.map(
+            ({
+              key,
+              brand,
+              run,
+              status,
+              attention,
+              owner,
+              ownerUserId,
+              projectName,
+              projectMeta
+            }) => {
+              const stageIndex = run
+                ? stages.findIndex((item) => item.id === run.stage)
+                : -1;
+              const stageLabel = run
+                ? stages[stageIndex]?.name ?? "Creative run"
+                : "Not started";
+              const isCurrentOwner = Boolean(
+                ownerUserId && ownerUserId === collaboration?.currentUserId
+              );
+              const ownerName = run
+                ? owner?.displayName ??
+                  (collaboration?.enabled ? "Owner pending" : "Current user")
+                : "Not assigned";
+              const ownerMeta = run
+                ? owner
+                  ? `${isCurrentOwner ? "You · " : ""}${departmentLabel(owner.department)}`
+                  : collaboration?.enabled
+                    ? "Syncing team profile"
+                    : "Local workspace"
+                : "Assigned when started";
+              return (
+                <article
+                  className={`workboard-client-row ${attention?.urgent ? "urgent" : ""}`}
+                  key={key}
                 >
-                  {stages.map((item, index) => (
-                    <i
-                      className={
-                        run && (run.done || index <= stageIndex) ? "complete" : ""
-                      }
-                      key={item.id}
-                    />
-                  ))}
-                </div>
-                <div className="workboard-client-action">
-                  <button
-                    className="btn small"
-                    type="button"
-                    onClick={() => openClient(brand, run)}
+                  <div className="workboard-project-main">
+                    <span className="workboard-project-icon" aria-hidden="true">
+                      <Sparkle size={16} weight="duotone" />
+                    </span>
+                    <span>
+                      <b>{projectName}</b>
+                      <small>{projectMeta}</small>
+                    </span>
+                  </div>
+                  <div className="workboard-client-main">
+                    <span className="avatar ov-av" aria-hidden="true">
+                      {brandLogoUrl(brand) ? (
+                        <img src={brandLogoUrl(brand)} alt="" />
+                      ) : (
+                        brand.initials
+                      )}
+                    </span>
+                    <span>
+                      <b>{brand.name}</b>
+                      <small>{brand.category || "Uncategorised client"}</small>
+                    </span>
+                  </div>
+                  <div className="workboard-client-status">
+                    <span className={`workboard-status ${status.tone}`}>
+                      {status.label}
+                    </span>
+                    <small>{status.detail}</small>
+                  </div>
+                  <div className="workboard-project-owner">
+                    <span className="workboard-owner-avatar" aria-hidden="true">
+                      {initials(ownerName) || "NA"}
+                    </span>
+                    <span>
+                      <b>{ownerName}</b>
+                      <small>{ownerMeta}</small>
+                    </span>
+                  </div>
+                  <div className="workboard-client-stage">
+                    <b>{stageLabel}</b>
+                    <small>
+                      {run
+                        ? `Stage ${stageIndex + 1} of ${stages.length}`
+                        : "Ready to start"}
+                    </small>
+                  </div>
+                  <div
+                    className="workboard-stage-track"
+                    aria-label={
+                      run
+                        ? `${stageLabel}, stage ${stageIndex + 1} of ${stages.length}`
+                        : "No creative stages completed"
+                    }
                   >
-                    {run ? "Open" : canSelectBrand(brand) ? "Start" : "Set up"}
-                    <ArrowRight size={14} weight="bold" aria-hidden="true" />
-                  </button>
-                </div>
-              </article>
-            );
-          })}
+                    {stages.map((item, index) => (
+                      <i
+                        className={
+                          run && (run.done || index <= stageIndex)
+                            ? "complete"
+                            : ""
+                        }
+                        key={item.id}
+                      />
+                    ))}
+                  </div>
+                  <div className="workboard-client-action">
+                    <button
+                      className="btn small"
+                      type="button"
+                      onClick={() => openProject(brand, run)}
+                    >
+                      {run ? "Open" : "Start"}
+                      <ArrowRight size={14} weight="bold" aria-hidden="true" />
+                    </button>
+                  </div>
+                </article>
+              );
+            }
+          )}
         </div>
 
-        {visibleClientRows.length < clientRows.length ? (
+        {visibleProjectRows.length < projectRows.length ? (
           <div className="workboard-load-more">
             <span>
-              Showing {visibleClientRows.length} of {clientRows.length} clients
+              Showing {visibleProjectRows.length} of {projectRows.length} projects
             </span>
             <button
               className="btn small"
@@ -7405,15 +7506,15 @@ export function Overview({
             >
               Show {Math.min(
                 WORKBOARD_PAGE_SIZE,
-                clientRows.length - visibleClientRows.length
+                projectRows.length - visibleProjectRows.length
               )} more
             </button>
           </div>
         ) : null}
 
-        {!loading && !clientRows.length ? (
+        {!loading && !projectRows.length ? (
           <div className="empty workboard-empty">
-            <b>No clients match this view.</b>
+            <b>No projects match this view.</b>
             <p>Clear the search or choose a different status filter.</p>
           </div>
         ) : null}

@@ -17,6 +17,8 @@ type AdLibraryItemInsert =
   Database["moons"]["Tables"]["brand_ad_library_items"]["Insert"];
 type VisualAssetInsert =
   Database["moons"]["Tables"]["brand_visual_assets"]["Insert"];
+type BrandLibraryInsert =
+  Database["moons"]["Tables"]["brand_library"]["Insert"];
 
 export class SupabaseClientIngestionStore implements ClientIngestionStore {
   constructor(private readonly client: SupabaseClient<Database>) {}
@@ -263,6 +265,89 @@ export class SupabaseClientIngestionStore implements ClientIngestionStore {
 
     if (error) throw error;
   }
+
+  async saveFacebookPageDetails({
+    clientId,
+    category,
+    logo
+  }: Parameters<
+    NonNullable<ClientIngestionStore["saveFacebookPageDetails"]>
+  >[0]): Promise<void> {
+    if (category) {
+      const { data: clientRow, error: clientError } = await this.client
+        .schema("moons")
+        .from("clients")
+        .select("category")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (clientError) throw clientError;
+
+      if (clientRow && shouldReplaceClientCategory(clientRow.category)) {
+        const { error } = await this.client
+          .schema("moons")
+          .from("clients")
+          .update({ category })
+          .eq("id", clientId);
+
+        if (error) throw error;
+      }
+    }
+
+    if (!logo?.assetUrl) return;
+
+    const { data: existingLogo, error: logoLookupError } = await this.client
+      .schema("moons")
+      .from("brand_library")
+      .select("id, asset_url")
+      .eq("client_id", clientId)
+      .eq("section", "brand")
+      .ilike("title", "logo")
+      .limit(1)
+      .maybeSingle();
+
+    if (logoLookupError) throw logoLookupError;
+    if (existingLogo?.asset_url) return;
+
+    if (existingLogo) {
+      const { error } = await this.client
+        .schema("moons")
+        .from("brand_library")
+        .update({
+          asset_url: logo.assetUrl,
+          description: "Facebook page logo"
+        })
+        .eq("id", existingLogo.id);
+
+      if (error) throw error;
+      return;
+    }
+
+    const row: BrandLibraryInsert = {
+      client_id: clientId,
+      section: "brand",
+      title: "Logo",
+      description: "Facebook page logo",
+      asset_url: logo.assetUrl,
+      sort_order: 0
+    };
+    const { error } = await this.client
+      .schema("moons")
+      .from("brand_library")
+      .insert(row);
+
+    if (error) throw error;
+  }
+}
+
+export function shouldReplaceClientCategory(category: string): boolean {
+  return [
+    "",
+    "awaiting brand ingestion",
+    "uncategorised client",
+    "uncategorized client",
+    "not set"
+  ].includes(category.trim().toLowerCase());
 }
 
 export function toJson(value: unknown): Json {

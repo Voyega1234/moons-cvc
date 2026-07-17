@@ -44,4 +44,39 @@ describe("createApifyClient", () => {
       client.scrapeFacebookAdsLibrary("https://www.facebook.com/example")
     ).rejects.toThrow('400 · {"error":"Invalid input"}');
   });
+
+  it("uses the Facebook page details actor without putting the token in the URL", async () => {
+    let requestUrl = "";
+    let requestInit: RequestInit | undefined;
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requestUrl = String(input);
+        requestInit = init;
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    );
+    const client = createApifyClient({
+      token: "secret-token",
+      fetchImpl: fetchImpl as typeof fetch
+    });
+
+    await client.scrapeFacebookPageDetails?.(
+      "https://www.facebook.com/example"
+    );
+
+    expect(requestUrl).toContain(
+      "igview-owner~facebook-page-details-scraper/run-sync-get-dataset-items"
+    );
+    expect(requestUrl).not.toContain("secret-token");
+    expect(requestInit?.headers).toMatchObject({
+      Authorization: "Bearer secret-token"
+    });
+    expect(JSON.parse(String(requestInit?.body))).toEqual({
+      pageUrls: ["https://www.facebook.com/example"],
+      showVerifiedBadge: true
+    });
+  });
 });

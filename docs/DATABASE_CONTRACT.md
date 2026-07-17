@@ -153,19 +153,28 @@ No update/delete grant exists; suggestions are append-only.
 
 Stores the versioned UI state snapshot per authenticated user.
 
-This is currently the persistence source of truth for refresh/login restore.
+This remains the private refresh/login safety net. After
+`202607160002_single_owner_handoffs.sql` is applied, shared creative state is
+loaded from per-run snapshots in `moons.runs`; the private workspace is kept
+as a migration fallback and for each user's local view preference.
 
-**Isolation, not personalization.** `unique(owner_user_id)` plus RLS locked
-to `owner_user_id = auth.uid()` on every operation means each login has
-exactly one private row, invisible to every other login — not a filtered
-view of shared data. A run created under one Convert Cake account cannot be
-seen, reviewed, or approved by a colleague's account. This directly
-conflicts with the GD/CS/PM multi-role review flow in
-`docs/FEATURE_INTERNAL_QC.md`, which assumes different people touch the same
-run at different points. Flagged to the user 2026-07-09; not yet decided
-whether runs should move to being scoped by client/brand instead of by
-creating user. Don't build features that assume cross-login visibility of
-runs until this is resolved.
+### `moons.runs` collaboration fields
+
+Each shared run has one current owner. Assigned client members can view it,
+but only `current_owner_user_id` can update it. `version` is checked on every
+save so an old browser cannot overwrite newer data. `workspace_run_id` maps
+the existing `run-<uuid>` application id to the database UUID, and `snapshot`
+holds the validated workflow state while the remaining normalized adapters
+are connected.
+
+Handoffs use `moons.handoff_run(...)`, which locks the run, verifies the
+expected version, changes the owner, increments the version, and inserts one
+append-only `moons.run_handoffs` audit record in the same transaction.
+
+Client visibility is prepared through `moons.client_memberships`. A client
+with no membership rows remains visible to every Convert Cake user for the
+current rollout. Once memberships are added for that client, only its members
+and Neo admins can view it.
 
 ## Normalized workflow tables prepared for next slices
 
@@ -324,6 +333,9 @@ than assuming the repo state matches production.
 13. `supabase/migrations/202607091014_brand_learning_writes.sql` — brand
     learning write access (insert only), used by the Learning suggestions
     agent to persist approved suggestions.
+14. `supabase/migrations/202607160002_single_owner_handoffs.sql` — shared run
+    snapshots, team profiles, client membership visibility, single-owner RLS,
+    optimistic version checks, and atomic handoff history.
 
 Seed prototype clients with:
 

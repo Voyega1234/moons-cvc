@@ -24,10 +24,15 @@ import {
   type ImagePromptAgentTrace
 } from "./image-prompt-agent.js";
 import {
+  enrichCreativeStrategy,
+  type CreativeStrategyEnrichment,
+  type CreativeStrategyEnrichmentTrace
+} from "./creative-strategy-enrichment-agent.js";
+import {
   ARTWORK_REFERENCE_BUCKET,
   buildArtworkReferenceLabel,
   isArtworkPatternReference,
-  selectArtworkReferencePattern
+  selectArtworkReferencePatterns
 } from "./artwork-reference-library.js";
 import {
   editImage,
@@ -48,6 +53,7 @@ export interface ArtworkGenerationEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_GENERATION_MODEL?: string;
   OPENAI_IMAGE_PROMPT_MODEL?: string;
+  OPENAI_CREATIVE_STRATEGY_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
   ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
@@ -155,6 +161,27 @@ interface ImagePromptAgentDebugLog {
   error?: string;
 }
 
+interface CreativeStrategyAgentDebugLog {
+  kind: "creative-strategy-agent";
+  createdAt: string;
+  model: string;
+  runId: string;
+  directionId: string;
+  status: "succeeded" | "failed";
+  request: {
+    endpoint: "/v1/responses";
+    store: false;
+    inputText: string;
+    responseFormat: {
+      type: "json_schema";
+      name: "moons_creative_strategy_enrichment";
+      strict: true;
+    };
+  };
+  response?: CreativeStrategyEnrichment;
+  error?: string;
+}
+
 interface ImageOutputDebugLog {
   kind: "image-output";
   createdAt: string;
@@ -177,6 +204,7 @@ interface ArtworkGenerationDebugAsset {
 
 type ArtworkGenerationDebugLog =
   | ImageRequestDebugLog
+  | CreativeStrategyAgentDebugLog
   | ImagePromptAgentDebugLog
   | ImageOutputDebugLog;
 
@@ -246,6 +274,8 @@ export async function handleArtworkGenerationRequest({
       promptProvider === "openrouter"
         ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
         : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
+    const creativeStrategyModel =
+      env.OPENAI_CREATIVE_STRATEGY_MODEL?.trim() || undefined;
 
     const storage = createStorageClient({
       supabaseUrl,
@@ -260,6 +290,7 @@ export async function handleArtworkGenerationRequest({
       promptModel,
       promptProvider,
       promptApiKey,
+      creativeStrategyModel,
       debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),
       writeDebugLog,
       storage,
@@ -295,6 +326,7 @@ async function generateOutputsForSelectedHooks({
   promptModel,
   promptProvider,
   promptApiKey,
+  creativeStrategyModel,
   debugLogDirectory,
   writeDebugLog,
   storage,
@@ -307,6 +339,7 @@ async function generateOutputsForSelectedHooks({
   promptModel?: string;
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
+  creativeStrategyModel?: string;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   storage: ArtworkStorageClient;
@@ -333,6 +366,7 @@ async function generateOutputsForSelectedHooks({
         promptModel,
         promptProvider,
         promptApiKey,
+        creativeStrategyModel,
         debugLogDirectory,
         writeDebugLog,
         references,
@@ -351,6 +385,7 @@ async function generateOutputForHook({
   promptModel,
   promptProvider,
   promptApiKey,
+  creativeStrategyModel,
   debugLogDirectory,
   writeDebugLog,
   references,
@@ -365,6 +400,7 @@ async function generateOutputForHook({
   promptModel?: string;
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
+  creativeStrategyModel?: string;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
@@ -372,13 +408,28 @@ async function generateOutputForHook({
   storage: ArtworkStorageClient;
   fetchImpl: FetchLike;
 }): Promise<ArtworkOutput> {
-  const artworkReference =
+  const strategy =
     input.artworkMode === "reference-library"
-      ? await resolveStoredArtworkReference({ input, hook, storage })
-      : null;
-  const effectiveReferences = artworkReference
-    ? [...references, artworkReference.image]
-    : references;
+      ? await resolveCreativeStrategy({
+          input,
+          hook,
+          apiKey,
+          model: creativeStrategyModel,
+          debugLogDirectory,
+          writeDebugLog,
+          fetchImpl
+        })
+      : undefined;
+  const artworkReferences =
+    input.artworkMode === "reference-library"
+      ? await resolveStoredArtworkReferences({ input, hook, strategy, storage })
+      : [];
+  const promptReferences = [
+    ...references,
+    ...artworkReferences.map(({ image }) => image)
+  ];
+  const generationReferences =
+    input.artworkMode === "reference-library" ? references : promptReferences;
   const prompt = await resolveImagePrompt({
     input,
     hook,
@@ -387,31 +438,25 @@ async function generateOutputForHook({
     promptApiKey,
     debugLogDirectory,
     writeDebugLog,
-    references: effectiveReferences,
-    artworkReference,
+    references: promptReferences,
+    artworkReferences,
+    strategy,
     fetchImpl
   });
   const imagePrompt = (input.artworkMode === "design-system"
     ? [
         prompt,
         buildReferenceFidelityInstruction(
-          effectiveReferences,
+          promptReferences,
           "design-system"
         ),
         buildConceptAlignmentInstruction(hook),
         buildDesignSystemFinalArtworkInstruction(hook)
       ]
     : input.artworkMode === "reference-library"
-      ? [
-          prompt,
-          buildReferenceFidelityInstruction(
-            effectiveReferences,
-            "reference-library"
-          ),
-          buildConceptAlignmentInstruction(hook)
-        ]
+      ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
       : [
-          buildReferenceFidelityInstruction(effectiveReferences, "standard"),
+          buildReferenceFidelityInstruction(promptReferences, "standard"),
           buildConceptAlignmentInstruction(hook),
           prompt
         ])
@@ -423,7 +468,7 @@ async function generateOutputForHook({
     hook,
     prompt: imagePrompt,
     size: input.output.size,
-    references: effectiveReferences
+    references: generationReferences
   });
   await writeDebugLog(
     debugLogDirectory,
@@ -431,13 +476,13 @@ async function generateOutputForHook({
     imageRequestDebug.assets
   );
   const image =
-    effectiveReferences.length > 0
+    generationReferences.length > 0
       ? await editImage({
           apiKey,
           model,
           prompt: imagePrompt,
           size: input.output.size,
-          referenceImages: effectiveReferences,
+          referenceImages: generationReferences,
           fetchImpl
         })
       : await generateImage({
@@ -502,48 +547,133 @@ async function generateOutputForHook({
   };
 }
 
-async function resolveStoredArtworkReference({
+async function resolveCreativeStrategy({
   input,
   hook,
+  apiKey,
+  model,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  apiKey: string;
+  model?: string;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<CreativeStrategyEnrichment> {
+  return enrichCreativeStrategy({
+    apiKey,
+    model,
+    fetchImpl,
+    input: {
+      brand: input.brand,
+      service: input.service,
+      brief: input.brief,
+      hook,
+      brandMemory: input.brandMemory,
+      brandLibrary: input.brandLibrary
+    },
+    writeTrace: async (trace) => {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildCreativeStrategyAgentDebugLog(trace, input.runId, hook.id)
+      );
+    }
+  });
+}
+
+async function resolveStoredArtworkReferences({
+  input,
+  hook,
+  strategy,
   storage
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
+  strategy?: CreativeStrategyEnrichment;
   storage: ArtworkStorageClient;
-}): Promise<StoredArtworkReference> {
-  const pattern = selectArtworkReferencePattern({
+}): Promise<readonly StoredArtworkReference[]> {
+  const patterns = selectArtworkReferencePatterns({
     brandName: input.brand?.name,
     brandCategory: input.brand?.category,
     service: input.service,
     canvasRatio: referenceCanvasRatioFromSize(input.output.size),
     brief: input.brief,
-    hook
+    hook,
+    strategy
   });
   const bucket = storage.storage.from(ARTWORK_REFERENCE_BUCKET);
-  const [signedUrlResult, downloadResult] = await Promise.all([
-    bucket.createSignedUrl(pattern.storagePath, SIGNED_URL_EXPIRES_IN_SECONDS),
-    bucket.download(pattern.storagePath)
-  ]);
 
-  if (signedUrlResult.error) throw new Error(signedUrlResult.error.message);
-  if (!signedUrlResult.data) {
-    throw new Error(
-      `Could not create a signed URL for artwork reference "${pattern.label}".`
-    );
-  }
-  if (downloadResult.error) throw new Error(downloadResult.error.message);
-  if (!downloadResult.data) {
-    throw new Error(`Artwork reference "${pattern.label}" was not found.`);
-  }
+  return Promise.all(
+    patterns.map(async (pattern, index) => {
+      const [signedUrlResult, downloadResult] = await Promise.all([
+        bucket.createSignedUrl(
+          pattern.storagePath,
+          SIGNED_URL_EXPIRES_IN_SECONDS
+        ),
+        bucket.download(pattern.storagePath)
+      ]);
 
-  return {
-    signedUrl: signedUrlResult.data.signedUrl,
-    image: {
-      bytes: Buffer.from(await downloadResult.data.arrayBuffer()),
-      mimeType: downloadResult.data.type || pattern.mimeType,
-      label: buildArtworkReferenceLabel(pattern)
-    }
-  };
+      if (signedUrlResult.error) throw new Error(signedUrlResult.error.message);
+      if (!signedUrlResult.data) {
+        throw new Error(
+          `Could not create a signed URL for artwork reference "${pattern.label}".`
+        );
+      }
+      if (downloadResult.error) throw new Error(downloadResult.error.message);
+      if (!downloadResult.data) {
+        throw new Error(`Artwork reference "${pattern.label}" was not found.`);
+      }
+
+      return {
+        signedUrl: signedUrlResult.data.signedUrl,
+        image: {
+          bytes: Buffer.from(await downloadResult.data.arrayBuffer()),
+          mimeType: downloadResult.data.type || pattern.mimeType,
+          label: buildArtworkReferenceLabel(
+            pattern,
+            index === 0 ? "primary" : "secondary"
+          )
+        }
+      };
+    })
+  );
+}
+
+function buildReferenceLibraryImageInstruction(
+  references: readonly ReferenceImageInput[]
+): string {
+  const roles = references.map(
+    (reference, index) =>
+      `Image ${index + 1}: ${compactReferenceRole(reference.label)}`
+  );
+  return [
+    "ORIGINAL EXECUTION:",
+    ...roles,
+    "The Moons artwork references were analyzed upstream for abstract design lessons and are deliberately not attached as source assets. Follow the self-contained art direction in the prompt, but invent a new main visual, visual metaphor, subject, action, camera angle, background, environment, props, and scene logic from the approved idea. Do not reconstruct or lightly reskin recognizable reference content or arrangement. Preserve any attached official client assets exactly. Keep every generated element coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment."
+  ].join("\n");
+}
+
+function compactReferenceRole(label: string | undefined): string {
+  const normalized = label?.toLowerCase() ?? "";
+  if (normalized.includes("moons artwork reference — primary")) {
+    return "primary artwork reference";
+  }
+  if (normalized.includes("moons artwork reference — secondary")) {
+    return "secondary artwork reference";
+  }
+  if (/logo|โลโก้/.test(normalized)) return "official logo";
+  if (/product|packshot|สินค้า/.test(normalized)) return "official product";
+  if (/main object|hero object|source object/.test(normalized)) {
+    return "supplied hero object";
+  }
+  if (/supporting component/.test(normalized)) {
+    return "supplied supporting component";
+  }
+  return "client reference";
 }
 
 function buildReferenceFidelityInstruction(
@@ -576,11 +706,11 @@ function buildReferenceFidelityInstruction(
       : []),
     ...(artworkPatternReferences.length
       ? [
-          "The image labeled as a Moons artwork reference is the selected internal structural example from the complete 72-artwork catalog. Study and carry forward its layout engine, hierarchy, visual medium, crop energy, lighting logic, density, texture, and finish. Treat its typography as conditional: borrow font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects only when compatible with the runtime brand and approved mood; otherwise retain a brand-appropriate typeface while preserving compatible hierarchy and rhythm. Replace the reference brand, product, people, copy, offer, scene details, and recognisable campaign identity with the approved runtime brief."
+          "The image labeled as a Moons artwork reference is the selected primary execution blueprint from the complete 72-artwork catalog and the minimum visible craft standard. Faithfully carry forward its zone geometry, layout engine, hierarchy, visual medium, hero share and crop, lighting logic, density, layering, texture, compositing depth, CTA/logo behavior, and finish. Treat typography conditionally: preserve compatible font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects while using a brand-appropriate typeface. Replace the source brand, product, people, readable copy, offer, and campaign identity with the approved runtime content."
         ]
       : []),
     mode !== "standard"
-      ? "The dominant visual medium shown by the references is authoritative. If they are photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family. A new execution means a new message-specific idea and composition—not replacing the reference medium with simplified isometric 3D, toy-like objects, miniature SaaS scenes, generic UI cards, or sterile product renders."
+      ? "The dominant visual medium and compatible construction shown by the selected reference are authoritative. If it is photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family and comparable production richness. A new execution means a faithful content-and-brand adaptation inside that design construction—not an unrelated composition, simplified isometric 3D, toy-like objects, miniature SaaS scene, generic UI cards, or sterile product render."
       : hasUploadedSourceMaterials
         ? "Create a distinctly new execution for this brief, but preserve and visibly use every uploaded source material according to its label. A main object or product must remain recognisable and serve the requested role; a supporting component must be integrated as a real component. For ordinary style references, invent a different composition and never copy their readable text or recognisable layout."
         : "Create a distinctly new execution for this brief. Invent a different visual metaphor, hero subject, composition, information arrangement, and layout geometry; never reproduce the reference's objects, scene, text placement, visual sequence, or recognisable layout.",
@@ -595,7 +725,7 @@ function buildConceptAlignmentInstruction(hook: SelectedHook): string {
     `Strategic concept: ${hook.concept}`,
     `Reason this concept works: ${hook.why}`,
     `Approved visual direction: ${hook.visual}`,
-    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. Library references are style guidance; uploaded source materials must be used for the role stated in their label without overriding the concept."
+    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. When a Moons artwork reference is supplied, use it as the execution blueprint while mapping this approved concept into its structural roles. Uploaded source materials must be used for the role stated in their label."
   ].join("\n");
 }
 
@@ -726,6 +856,7 @@ function extensionFromMimeType(mimeType: string): "jpg" | "webp" | "png" {
 
 function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
   if (!("kind" in entry)) return "";
+  if (entry.kind === "creative-strategy-agent") return "-strategy-agent";
   return entry.kind === "image-prompt-agent" ? "-image-agent" : "-image-output";
 }
 
@@ -882,7 +1013,8 @@ async function resolveImagePrompt({
   debugLogDirectory,
   writeDebugLog,
   references,
-  artworkReference,
+  artworkReferences,
+  strategy,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
@@ -893,7 +1025,8 @@ async function resolveImagePrompt({
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
-  artworkReference: StoredArtworkReference | null;
+  artworkReferences: readonly StoredArtworkReference[];
+  strategy?: CreativeStrategyEnrichment;
   fetchImpl: FetchLike;
 }): Promise<string> {
   return generateImagePrompt({
@@ -924,21 +1057,50 @@ async function resolveImagePrompt({
       ),
       referenceImages: references.map((reference, index) => ({
         imageUrl:
-          artworkReference?.image === reference
-            ? artworkReference.signedUrl
-            : `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+          artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
+          `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
         label:
           reference.label ??
           input.referenceImages[index]?.label ??
           "Reference image"
       })),
       canvasRatio: canvasRatioFromSize(input.output.size),
+      strategy,
       brandLibrary: {
         brand: input.brandLibrary.brand,
-        products: input.brandLibrary.products
+        products: input.brandLibrary.products,
+        docs: input.brandLibrary.docs,
+        refs: input.brandLibrary.refs
       }
     }
   });
+}
+
+function buildCreativeStrategyAgentDebugLog(
+  trace: CreativeStrategyEnrichmentTrace,
+  runId: string,
+  directionId: string
+): CreativeStrategyAgentDebugLog {
+  return {
+    kind: "creative-strategy-agent",
+    createdAt: trace.createdAt,
+    model: trace.model,
+    runId,
+    directionId,
+    status: trace.status,
+    request: {
+      endpoint: "/v1/responses",
+      store: false,
+      inputText: trace.inputText,
+      responseFormat: {
+        type: "json_schema",
+        name: "moons_creative_strategy_enrichment",
+        strict: true
+      }
+    },
+    ...(trace.response ? { response: trace.response } : {}),
+    ...(trace.error ? { error: trace.error } : {})
+  };
 }
 
 function buildImagePromptAgentDebugLog(
@@ -1067,6 +1229,7 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     textInputs,
     referenceImages:
       value.referenceImages as ArtworkGenerationRequest["referenceImages"],
+    brandMemory: parseBrandMemory(value.brandMemory),
     brandLibrary: parseBrandLibrary(value.brandLibrary),
     output: {
       size: outputSize as ArtworkGenerationRequest["output"]["size"],
@@ -1075,6 +1238,16 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
         "output.format"
       ) as ArtworkGenerationRequest["output"]["format"]
     }
+  };
+}
+
+function parseBrandMemory(
+  value: unknown
+): ArtworkGenerationRequest["brandMemory"] {
+  if (!isRecord(value)) return { working: [], avoid: [] };
+  return {
+    working: readOptionalStringArray(value.working, "brandMemory.working"),
+    avoid: readOptionalStringArray(value.avoid, "brandMemory.avoid")
   };
 }
 

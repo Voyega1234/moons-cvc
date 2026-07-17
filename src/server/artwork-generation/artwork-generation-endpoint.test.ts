@@ -55,6 +55,32 @@ function promptAgentResponse(
   );
 }
 
+function strategyAgentResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        commercialStyle: "lifestyle",
+        sellingMechanism: "desire",
+        preferredMode: "standard_commercial",
+        preferredLayout: "lifestyle_commercial",
+        preferredHeroType: "person",
+        audienceMoment: "The customer wants to feel more confident.",
+        reasonToBelieve: "Show the desired lived experience directly.",
+        visibleProofDirection: "A human-centered beauty result moment.",
+        offer: { text: "", evidenceId: "", source: "none" },
+        proof: [],
+        differentiator: { text: "", evidenceId: "", source: "none" },
+        referenceSearchText:
+          "beauty lifestyle commercial human photographic composite",
+        evidenceStatus: "none",
+        requiresTextReview: false,
+        missingEvidence: ["verified offer", "verified proof"]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function fakeStorage(): {
   client: ArtworkStorageClient;
   uploads: { bucket: string; path: string }[];
@@ -460,8 +486,9 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("uses a private Supabase artwork reference URL in reference-library mode", async () => {
+    const strategyAgentBodies: Record<string, unknown>[] = [];
     const promptAgentBodies: Record<string, unknown>[] = [];
-    const editCalls: FormData[] = [];
+    const generationCalls: Record<string, unknown>[] = [];
     const debugLogs: unknown[] = [];
     const debugAssets: { filename: string; bytes: Buffer }[] = [];
     const referenceUrl =
@@ -474,13 +501,21 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        promptAgentBodies.push(
-          JSON.parse(String(init?.body)) as Record<string, unknown>
-        );
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        const responseName = (
+          body.text as { format?: { name?: string } } | undefined
+        )?.format?.name;
+        if (responseName === "moons_creative_strategy_enrichment") {
+          strategyAgentBodies.push(body);
+          return strategyAgentResponse();
+        }
+        promptAgentBodies.push(body);
         return promptAgentResponse("Reference-informed beauty artwork.");
       }
-      if (href.includes("/v1/images/edits")) {
-        editCalls.push(init?.body as FormData);
+      if (href.includes("/v1/images/generations")) {
+        generationCalls.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -536,34 +571,54 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
+    expect(strategyAgentBodies).toHaveLength(1);
+    expect(strategyAgentBodies[0]?.model).toBe("gpt-5.6-luna");
     const content = (promptAgentBodies[0]?.input as {
       content: { type: string; image_url?: string }[];
     }[])[0]?.content;
-    expect(content).toContainEqual({
-      type: "input_image",
-      image_url: referenceUrl,
-      detail: "high"
-    });
-    expect(editCalls).toHaveLength(1);
-    expect((editCalls[0]?.get("image[]") as File).type).toBe("image/jpeg");
-    expect(editCalls[0]?.get("prompt")).toContain(
-      "Image 1 — Moons artwork reference — Elida"
+    expect(content?.filter((item) => item.type === "input_image")).toEqual([
+      {
+        type: "input_image",
+        image_url: referenceUrl,
+        detail: "high"
+      },
+      {
+        type: "input_image",
+        image_url: referenceUrl,
+        detail: "high"
+      }
+    ]);
+    expect(generationCalls).toHaveLength(1);
+    expect(generationCalls[0]?.prompt).toContain(
+      "invent a new main visual, visual metaphor"
     );
+    expect(generationCalls[0]?.prompt).toContain(
+      "The Moons artwork references were analyzed upstream"
+    );
+    expect(generationCalls[0]?.prompt).toContain(
+      "coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment"
+    );
+    expect(generationCalls[0]?.prompt).not.toContain("Image 1: primary artwork reference");
+    expect(generationCalls[0]?.prompt).not.toContain("mode standard_commercial");
     expect(debugLogs).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          kind: "creative-strategy-agent",
+          model: "gpt-5.6-luna",
+          status: "succeeded",
+          response: expect.objectContaining({
+            commercialStyle: "lifestyle"
+          })
+        }),
         expect.objectContaining({
           runId: "run-1",
           directionId: "hook-1",
           request: expect.objectContaining({
-            endpoint: "/v1/images/edits",
-            multipartFields: expect.objectContaining({
-              images: [
-                expect.objectContaining({
-                  mimeType: "image/jpeg",
-                  bytes: Buffer.from("stored-reference").length,
-                  localFile: expect.stringMatching(/-input-01\.jpg$/)
-                })
-              ]
+            endpoint: "/v1/images/generations",
+            body: expect.objectContaining({
+              prompt: expect.stringContaining(
+                "The Moons artwork references were analyzed upstream"
+              )
             })
           })
         }),
@@ -577,10 +632,6 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(debugAssets).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          filename: expect.stringMatching(/-input-01\.jpg$/),
-          bytes: Buffer.from("stored-reference")
-        }),
         expect.objectContaining({
           filename: expect.stringMatching(/-output\.png$/),
           bytes: Buffer.from("fake-png-bytes")

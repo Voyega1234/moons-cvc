@@ -22,7 +22,7 @@ const baseInput = {
   referenceImageLabels: [],
   referenceImages: [],
   canvasRatio: "1:1",
-  brandLibrary: { brand: [], products: [] }
+  brandLibrary: { brand: [], products: [], docs: [], refs: [] }
 };
 
 describe("generateImagePrompt", () => {
@@ -252,7 +252,7 @@ describe("generateImagePrompt", () => {
     );
   });
 
-  it("loads the 72-artwork contract and conditional typography rule in reference-library mode", async () => {
+  it("uses a compact two-reference contract in reference-library mode", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
@@ -270,33 +270,63 @@ describe("generateImagePrompt", () => {
       apiKey: "test-key",
       mode: "reference-library",
       fetchImpl: fetchMock as unknown as typeof fetch,
-      input: baseInput,
+      input: {
+        ...baseInput,
+        referenceImages: [
+          {
+            label: "Logo",
+            imageUrl: "data:image/png;base64,bG9nbw=="
+          },
+          {
+            label: "Moons artwork reference — primary",
+            imageUrl: "https://example.com/primary.jpg"
+          },
+          {
+            label: "Moons artwork reference — secondary",
+            imageUrl: "https://example.com/secondary.jpg"
+          }
+        ],
+        brandLibrary: {
+          brand: [],
+          products: [],
+          docs: [],
+          refs: [
+            {
+              title: "Source: brand_analysis_jobs/hidden",
+              description: "Long audience analysis must stay upstream."
+            }
+          ]
+        }
+      },
       loadReferenceLibraryPrompt: async () =>
-        "72-ARTWORK VERIFIED LIBRARY\nTYPOGRAPHY COMPATIBILITY GATE\nDESIGN PRINCIPLES GATE"
+        "REFERENCE ART DIRECTOR\nStudy the actual attached images."
     });
 
     expect(result).toBe("Reference-informed production prompt.");
     const promptText = (
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
-    expect(promptText).toContain("72-ARTWORK VERIFIED LIBRARY");
-    expect(promptText).toContain("DESIGN PRINCIPLES GATE");
+    expect(promptText).toContain("REFERENCE ART DIRECTOR");
     expect(promptText).toContain(
       "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE"
     );
     expect(promptText).toContain(
-      "Required headline: Flowers that make the room feel softer"
+      "Primary artwork contributes abstract composition grammar"
     );
     expect(promptText).toContain(
-      "Approved visual direction: Photographic editorial bouquet scene with tactile grain."
+      "Invent all message-bearing visual content and the background from the approved idea"
+    );
+    expect(promptText).toContain('"headline": "Flowers that make the room feel softer"');
+    expect(promptText).toContain('"visualDirection": "Photographic editorial bouquet scene with tactile grain."');
+    expect(promptText).toContain('"role": "official logo — exact"');
+    expect(promptText).toContain(
+      '"role": "primary artwork — composition and visual medium"'
     );
     expect(promptText).toContain(
-      "Study the reference typography as a conditional style recipe"
+      '"role": "secondary artwork — compatible craft and finish"'
     );
-    expect(promptText).toContain(
-      "silently complete the 12-principle design blueprint"
-    );
-    expect(promptText).toContain("one dominant focal point");
+    expect(promptText).not.toContain("brand_analysis_jobs/hidden");
+    expect(promptText).not.toContain("Long audience analysis must stay upstream.");
     expect(calls[0]?.body.text).toMatchObject({
       format: {
         schema: {

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ARTWORK_REFERENCE_BUCKET,
   artworkReferencePatterns,
-  selectArtworkReferencePattern
+  selectArtworkReferencePattern,
+  selectArtworkReferencePatterns
 } from "./artwork-reference-library";
 
 const hook = {
@@ -78,5 +79,41 @@ describe("artwork reference library", () => {
     });
 
     expect(selected.client).toBe("CVC");
+  });
+
+  it("uses Luna style intent before generic category keywords", () => {
+    const selected = selectArtworkReferencePattern({
+      brandCategory: "Marketing technology",
+      service: "single-static",
+      canvasRatio: "1:1",
+      brief: "Launch a verified limited offer.",
+      hook,
+      strategy: {
+        commercialStyle: "promotion",
+        sellingMechanism: "offer",
+        preferredMode: "fmcg_energy",
+        preferredLayout: "marketplace_promo",
+        preferredHeroType: "product_group",
+        referenceSearchText: "dense retail offer price hierarchy product group"
+      }
+    });
+
+    expect(selected.layoutArchetype).toBe("marketplace_promo");
+    expect(selected.mode).toBe("fmcg_energy");
+  });
+
+  it("selects two distinct and compatible artwork references", () => {
+    const selected = selectArtworkReferencePatterns({
+      brandName: "CVC",
+      brandCategory: "Marketing agency",
+      service: "single-static",
+      canvasRatio: "4:5",
+      brief: "Show why advertising spend is not producing sales.",
+      hook
+    });
+
+    expect(selected).toHaveLength(2);
+    expect(new Set(selected.map((pattern) => pattern.id)).size).toBe(2);
+    expect(selected[1]?.canvasRatio).toBe(selected[0]?.canvasRatio);
   });
 });

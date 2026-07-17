@@ -3,21 +3,26 @@ export interface ApifyClientOptions {
   fetchImpl?: typeof fetch;
   postsActorId?: string;
   adsActorId?: string;
+  pageDetailsActorId?: string;
 }
 
 export interface ApifyClient {
   scrapeFacebookPosts(facebookUrl: string): Promise<unknown>;
   scrapeFacebookAdsLibrary(facebookUrl: string): Promise<unknown>;
+  scrapeFacebookPageDetails?(facebookUrl: string): Promise<unknown>;
 }
 
 const DEFAULT_POSTS_ACTOR_ID = "apify~facebook-posts-scraper";
 const DEFAULT_ADS_ACTOR_ID = "curious_coder~facebook-ads-library-scraper";
+const DEFAULT_PAGE_DETAILS_ACTOR_ID =
+  "igview-owner~facebook-page-details-scraper";
 
 export function createApifyClient({
   token,
   fetchImpl = fetch,
   postsActorId = DEFAULT_POSTS_ACTOR_ID,
-  adsActorId = DEFAULT_ADS_ACTOR_ID
+  adsActorId = DEFAULT_ADS_ACTOR_ID,
+  pageDetailsActorId = DEFAULT_PAGE_DETAILS_ACTOR_ID
 }: ApifyClientOptions): ApifyClient {
   if (!token.trim()) throw new Error("APIFY_TOKEN is required.");
 
@@ -38,6 +43,12 @@ export function createApifyClient({
         scrapeAdDetails: true,
         "scrapePageAds.activeStatus": "all",
         "scrapePageAds.countryCode": "ALL"
+      });
+    },
+    scrapeFacebookPageDetails(facebookUrl) {
+      return runActor(fetchImpl, token, pageDetailsActorId, {
+        pageUrls: [facebookUrl],
+        showVerifiedBadge: true
       });
     }
   };

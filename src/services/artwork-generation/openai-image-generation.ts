@@ -78,6 +78,10 @@ export interface ArtworkGenerationRequest {
   >[];
   textInputs: readonly string[];
   referenceImages: readonly ArtworkReferenceImage[];
+  brandMemory: {
+    working: readonly string[];
+    avoid: readonly string[];
+  };
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
     products: readonly { title: string; description: string }[];
@@ -513,9 +517,13 @@ function compactUnique(values: readonly string[]): readonly string[] {
 
 function buildBrandContext(brand: WorkflowState["brand"]): Pick<
   ArtworkGenerationRequest,
-  "brandLibrary"
+  "brandMemory" | "brandLibrary"
 > {
   return {
+    brandMemory: {
+      working: brand?.memory.working ?? [],
+      avoid: brand?.memory.avoid ?? []
+    },
     brandLibrary: {
       brand: compactLibraryItems(brand?.library.brand ?? []),
       products: compactLibraryItems(brand?.library.products ?? []),

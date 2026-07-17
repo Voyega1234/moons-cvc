@@ -102,7 +102,7 @@ describe("buildArtworkGenerationRequest", () => {
       colors: []
     });
     expect(request.brand).not.toHaveProperty("mustAvoid");
-    expect(request).not.toHaveProperty("brandMemory");
+    expect(request.brandMemory).toEqual({ working: [], avoid: [] });
   });
 
   it("passes the selected output size to the backend contract", () => {
@@ -380,6 +380,6 @@ describe("buildArtworkGenerationRequest", () => {
       }
     ]);
     expect(n8nRequest.selectedHooks).toEqual(request.selectedHooks);
-    expect(n8nRequest).not.toHaveProperty("brandMemory");
+    expect(n8nRequest.brandMemory).toEqual(request.brandMemory);
   });
 });

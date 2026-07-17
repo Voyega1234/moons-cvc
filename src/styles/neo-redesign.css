@@ -5509,17 +5509,24 @@
 .neo-app .workboard-table-head,
 .neo-app .workboard-client-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.15fr) minmax(210px, 1.35fr) minmax(120px, 0.75fr) minmax(120px, 0.75fr) 78px;
-  gap: 16px;
+  grid-template-columns:
+    minmax(210px, 1.35fr)
+    minmax(140px, 0.82fr)
+    minmax(165px, 1fr)
+    minmax(140px, 0.82fr)
+    minmax(105px, 0.62fr)
+    minmax(115px, 0.72fr)
+    78px;
+  gap: 14px;
   align-items: center;
 }
 
 .neo-app .workboard-table-head {
   min-height: 42px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--accentLine);
-  background: var(--accentSoft);
-  color: var(--accent);
+  border-bottom: 1px solid var(--line);
+  background: #f5f6f8;
+  color: #686e79;
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.07em;
@@ -5527,11 +5534,11 @@
 }
 
 .neo-app .workboard-client-row {
-  min-height: 82px;
-  padding: 13px 16px;
+  min-height: 88px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   background: #fff;
-  transition: background 0.16s var(--ease);
+  transition: background 0.16s var(--ease), transform 0.16s var(--ease);
 }
 
 .neo-app .workboard-client-row:last-child {
@@ -5539,35 +5546,58 @@
 }
 
 .neo-app .workboard-client-row:hover {
-  background: #fafbff;
+  background: #f9fafc;
 }
 
 .neo-app .workboard-client-row.urgent {
   background: linear-gradient(90deg, var(--orangeSoft), #fff 34%);
 }
 
+.neo-app .workboard-project-main,
 .neo-app .workboard-client-main,
+.neo-app .workboard-project-owner,
+.neo-app .workboard-project-main > span:last-child,
 .neo-app .workboard-client-main > span:last-child,
+.neo-app .workboard-project-owner > span:last-child,
 .neo-app .workboard-client-status,
 .neo-app .workboard-client-stage {
   min-width: 0;
 }
 
+.neo-app .workboard-project-main,
 .neo-app .workboard-client-main {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
+.neo-app .workboard-project-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accentLine);
+  border-radius: 11px;
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+
+.neo-app .workboard-project-main b,
+.neo-app .workboard-project-main small,
 .neo-app .workboard-client-main b,
 .neo-app .workboard-client-main small,
 .neo-app .workboard-client-status small,
+.neo-app .workboard-project-owner b,
+.neo-app .workboard-project-owner small,
 .neo-app .workboard-client-stage b,
 .neo-app .workboard-client-stage small {
   display: block;
 }
 
+.neo-app .workboard-project-main b,
 .neo-app .workboard-client-main b,
+.neo-app .workboard-project-owner b,
 .neo-app .workboard-client-stage b {
   overflow: hidden;
   color: var(--ink);
@@ -5577,7 +5607,9 @@
   white-space: nowrap;
 }
 
+.neo-app .workboard-project-main small,
 .neo-app .workboard-client-main small,
+.neo-app .workboard-project-owner small,
 .neo-app .workboard-client-stage small {
   margin-top: 3px;
   overflow: hidden;
@@ -5585,6 +5617,37 @@
   font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.neo-app .workboard-project-main b {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.neo-app .workboard-client-main .ov-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.neo-app .workboard-project-owner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.neo-app .workboard-owner-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .neo-app .workboard-client-status small {
@@ -5728,12 +5791,18 @@
 
   .neo-app .workboard-table-head,
   .neo-app .workboard-client-row {
-    grid-template-columns: minmax(180px, 1.1fr) minmax(190px, 1.25fr) minmax(110px, 0.75fr) 78px;
+    grid-template-columns:
+      minmax(200px, 1.3fr)
+      minmax(130px, 0.8fr)
+      minmax(155px, 1fr)
+      minmax(135px, 0.82fr)
+      minmax(105px, 0.65fr)
+      78px;
   }
 
-  .neo-app .workboard-table-head span:nth-child(4),
+  .neo-app .workboard-table-head span:nth-child(6),
   .neo-app .workboard-stage-track,
-  .neo-app .workboard-skeleton > i:nth-child(4) {
+  .neo-app .workboard-skeleton > i:nth-child(6) {
     display: none;
   }
 }
@@ -5777,7 +5846,7 @@
     padding: 15px;
   }
 
-  .neo-app .workboard-client-main {
+  .neo-app .workboard-project-main {
     grid-column: 1;
     grid-row: 1;
   }
@@ -5787,9 +5856,32 @@
     grid-row: 1;
   }
 
-  .neo-app .workboard-client-status,
-  .neo-app .workboard-client-stage {
+  .neo-app .workboard-client-main {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .neo-app .workboard-project-owner {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  .neo-app .workboard-client-status {
     grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .neo-app .workboard-client-stage {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  .neo-app .workboard-stage-track {
+    display: grid;
+    grid-column: 2;
+    grid-row: 4;
+    width: min(210px, 42vw);
   }
 
   .neo-app .workboard-client-status small {
@@ -5802,6 +5894,28 @@
 
   .neo-app .workboard-skeleton > i:nth-child(n + 3) {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 540px) {
+  .neo-app .workboard-project-owner {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: stretch;
+  }
+
+  .neo-app .workboard-client-status {
+    grid-row: 4;
+  }
+
+  .neo-app .workboard-client-stage {
+    grid-row: 5;
+  }
+
+  .neo-app .workboard-stage-track {
+    grid-column: 1 / -1;
+    grid-row: 6;
+    width: 100%;
   }
 }
 
@@ -6345,5 +6459,142 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+.neo-app .neo-run-edit-scope {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.neo-app .neo-run-edit-scope:disabled {
+  opacity: 0.76;
+}
+
+.neo-app .neo-ownership-bar {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 58px;
+  margin: 18px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+
+.neo-app .neo-ownership-bar.viewer {
+  background: color-mix(in srgb, var(--surface) 96%, var(--ink) 4%);
+}
+
+.neo-app .neo-ownership-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  flex: 0 0 34px;
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--accent);
+}
+
+.neo-app .neo-ownership-bar.viewer .neo-ownership-icon {
+  color: var(--muted);
+  background: var(--surface3);
+}
+
+.neo-app .neo-ownership-copy {
+  display: grid;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.neo-app .neo-ownership-copy small,
+.neo-app .neo-ownership-version,
+.neo-app .neo-ownership-error,
+.neo-app .neo-ownership-success {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.neo-app .neo-ownership-copy b {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neo-app .neo-ownership-version {
+  white-space: nowrap;
+}
+
+.neo-app .neo-ownership-error {
+  color: var(--red);
+}
+
+.neo-app .neo-ownership-success {
+  color: var(--green);
+}
+
+.neo-app .neo-handoff-backdrop {
+  z-index: 90;
+}
+
+.neo-app .neo-handoff-modal {
+  width: min(520px, calc(100vw - 32px));
+  padding: 22px;
+}
+
+.neo-app .neo-handoff-modal label {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.neo-app .neo-handoff-modal label small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.neo-app .neo-handoff-modal select,
+.neo-app .neo-handoff-modal textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.neo-app .neo-handoff-modal select {
+  min-height: 42px;
+  padding: 0 11px;
+}
+
+.neo-app .neo-handoff-modal textarea {
+  min-height: 100px;
+  padding: 11px;
+  resize: vertical;
+}
+
+.neo-app .neo-handoff-modal > p {
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .neo-app .neo-ownership-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .neo-app .neo-ownership-bar .btn {
+    width: 100%;
   }
 }

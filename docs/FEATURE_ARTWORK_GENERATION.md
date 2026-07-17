@@ -33,15 +33,30 @@ reconfigure the OpenAI/n8n provider choice above:
 3. `reference-library` — loads
    `agent_prompt/agent_artwork_reference.md`, a catalog distilled from the
    verified specs and reconstruction prompts in `agent_prompt/Images/output`.
-   It scores all 72 human-reviewed artworks using runtime brand/category,
-   brief, concept, format, canvas ratio, layout, and typography metadata, then
-   selects one primary reference from the private Supabase bucket
-   `artwork-reference-library`. The prompt-writing model inspects that
-   artwork's signed URL directly; the backend downloads the same stored object
-   and attaches it to the final GPT Image 2 edit request. The model can
-   therefore see the actual reference artwork while translating its layout,
-   hierarchy, palette roles, lighting, density, typography treatment, and
-   storytelling into a new brand-specific execution. Typography transfers
+   Before selection, a GPT Luna (`gpt-5.6-luna`) strategy-enrichment step reads
+   the approved direction, Brand Memory, and Brand Library snapshot. It chooses
+   the commercial style, visible selling mechanism, and preferred catalog
+   mode/layout/hero. Offer, proof, and differentiator fields carry a source of
+   `verified`, `creative-placeholder`, or `none`. Verified excerpts must resolve
+   to verbatim supplied evidence; creative placeholders may complete temporary
+   dates, prices, discounts, reviews, ratings, metrics, or supporting details
+   and set `requiresTextReview: true`. Placeholders are never written to Brand
+   Memory as facts. It then
+   scores all 72 human-reviewed artworks using that strategy plus runtime
+   brand/category, brief, concept, format, canvas ratio, layout, and typography
+   metadata, and selects two compatible references from the private Supabase
+   bucket `artwork-reference-library`. The first contributes abstract layout
+   grammar and visual medium; the second contributes compatible typography, lighting,
+   materials, and finish without introducing another layout. The prompt-writing
+   model inspects both signed URLs directly. The internal artworks are not sent
+   to GPT Image 2 as edit-source images because that creates unwanted pressure
+   to preserve their hero and background. Instead, the prompt writer translates
+   the useful abstract lessons into self-contained art direction; GPT Image 2
+   receives only real client assets such as logo, product, or uploaded source
+   objects. Main
+   visual, visual metaphor, subject, camera angle, background, props, and scene
+   logic must be newly invented from the approved idea; recognizable reference
+   content or arrangement cannot be reskinned. Typography transfers
    only when compatible with the runtime brand and approved mood; otherwise
    only hierarchy and rhythm carry forward. It does not copy the source
    artwork's brand, product, copy, characters, or scene.
@@ -52,7 +67,11 @@ reconfigure the OpenAI/n8n provider choice above:
    rhythm, unity, and grid/composition. The returned prompt must translate that
    blueprint into concrete margins, zones, scale relationships, grouping,
    focal point, balance strategy, and eye path rather than naming abstract
-   principles.
+   principles. A final visual-coherence pass replaces vague aesthetic labels
+   with observable visual facts, resolves contradictory media or lighting
+   directions, writes the result as bounded layout sections, and adds
+   artifact-specific negative constraints only when the selected subject or
+   reference boundary creates that risk.
 
 The selection is stored on the run, is included in new-generation and
 regeneration requests, and survives workspace reloads. Older saved runs without
@@ -153,10 +172,11 @@ type ArtworkGenerationRequest = {
 };
 ```
 
-`brandLibrary` feeds the image prompt agent below. Brand Learning remains
-excluded, while the approved hook `visual` direction is included alongside the
-hook, concept, rationale, CTA, caption, brief, Brand Kit, products, and selected
-reference images.
+`brandLibrary` feeds GPT Luna's upstream strategy enrichment and Design System
+mode. Reference Library mode does not forward raw Brand Analysis, document, or
+reference-note descriptions to the prompt writer or GPT Image 2; it forwards
+only Luna's compact actionable strategy plus the approved brief, hook, visual
+direction, CTA, Brand Kit, and attached images.
 
 ## Response shape
 
@@ -306,11 +326,15 @@ The three modes intentionally use different input strategies:
   `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and retains
   its `prompt` response field.
 - `reference-library` reads `agent_prompt/agent_artwork_reference.md`, appends
-  the full authoritative runtime input used by Design System mode, and returns
-  `finalPrompt`. It also attaches the selected private Supabase object as a
-  high-detail signed URL so the prompt agent can inspect the actual artwork.
+  a compact runtime input that deliberately excludes raw Brand Library and
+  Brand Analysis prose, and returns `finalPrompt`. It attaches the two selected
+  private Supabase objects as high-detail signed URLs so the prompt agent can
+  inspect the actual artwork.
   Attached client references remain authoritative for brand and product
-  fidelity; the internal pattern supplies transferable design reasoning only.
+  fidelity; the primary internal pattern supplies composition and visual
+  medium, while the secondary supplies compatible craft and finish. Only the
+  actionable GPT Luna strategy fields are forwarded, not its catalog-search
+  rationale or the source Brand Analysis blob.
 
 All three prompt Markdown files are bundled into the Vercel function. Artwork
 source image files are not bundled; they are loaded from Supabase Storage.
@@ -339,13 +363,22 @@ This selection changes only the model that writes the production prompt. Final
 artwork still uses OpenAI `gpt-image-2`. Older saved workspaces and older API
 requests without `imagePromptModel` default to `gpt-5.6-terra`.
 
+Reference Library strategy enrichment always uses OpenAI `gpt-5.6-luna` through
+the existing `OPENAI_API_KEY`. `OPENAI_CREATIVE_STRATEGY_MODEL` can override the
+deployed support model without adding another user-facing model selector.
+
 ### Prompt and image request debug logs
 
 Set `ARTWORK_GENERATION_DEBUG_LOG_DIR` (for example,
 `logs/artwork-generation`) to retain the exact generation inputs and viewable
-image artifacts for each selected hook. Each hook writes three sanitized JSON
+image artifacts for each selected hook. Reference Library hooks write four
+sanitized JSON
 files:
 
+- `*-strategy-agent.json` records the GPT Luna input, selected commercial
+  style/mechanism, catalog preferences, verified or creative-placeholder
+  offer/proof/differentiator copy, evidence status, text-review flag, and
+  missing evidence.
 - `*-image-agent.json` records the prompt-writer request to `/v1/responses` or
   OpenRouter `/api/v1/responses`: provider, model, artwork mode,
   success/failure status, the complete rendered

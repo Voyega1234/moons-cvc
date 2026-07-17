@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../lib/supabase/database.types";
 import {
   SupabaseClientIngestionStore,
+  shouldReplaceClientCategory,
   toJson
 } from "./supabase-client-ingestion-store";
 
@@ -21,8 +22,11 @@ class QueryBuilder {
 
   constructor(
     private readonly table: string,
-    private readonly operations: Operation[]
-  ) {}
+    private readonly operations: Operation[],
+    seed: Record<string, unknown>
+  ) {
+    this.data = seed[table] ?? null;
+  }
 
   update(payload: unknown) {
     this.operations.push({
@@ -71,18 +75,35 @@ class QueryBuilder {
     return { data: this.data, error: null };
   }
 
+  maybeSingle() {
+    const data = Array.isArray(this.data) ? this.data[0] ?? null : this.data;
+    return { data, error: null };
+  }
+
   eq(column: string, value: unknown) {
     this.filters.push([column, value]);
     return this;
   }
+
+  ilike(column: string, value: unknown) {
+    this.filters.push([column, value]);
+    return this;
+  }
+
+  limit() {
+    return this;
+  }
 }
 
-function createClient(operations: Operation[]): SupabaseClient<Database> {
+function createClient(
+  operations: Operation[],
+  seed: Record<string, unknown> = {}
+): SupabaseClient<Database> {
   return {
     schema() {
       return {
         from(table: string) {
-          return new QueryBuilder(table, operations);
+          return new QueryBuilder(table, operations, seed);
         }
       };
     }
@@ -187,6 +208,73 @@ describe("SupabaseClientIngestionStore", () => {
 
   it("converts undefined payloads to JSON null", () => {
     expect(toJson(undefined)).toBeNull();
+  });
+
+  it("uses page details only as defaults for category and logo", async () => {
+    const operations: Operation[] = [];
+    const store = new SupabaseClientIngestionStore(
+      createClient(operations, {
+        clients: { category: "Awaiting brand ingestion" },
+        brand_library: null
+      })
+    );
+
+    await store.saveFacebookPageDetails({
+      clientId: "client-1",
+      category: "TV show",
+      logo: {
+        assetBucket: "brand-source-assets",
+        assetStoragePath: "client/job/facebook_page/logo.png",
+        assetUrl: "https://storage.example.com/logo.png",
+        originalUrlHash: "logo-hash"
+      }
+    });
+
+    expect(operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          table: "clients",
+          action: "update",
+          payload: { category: "TV show" }
+        }),
+        expect.objectContaining({
+          table: "brand_library",
+          action: "insert",
+          payload: expect.objectContaining({
+            title: "Logo",
+            asset_url: "https://storage.example.com/logo.png"
+          })
+        })
+      ])
+    );
+    expect(shouldReplaceClientCategory("Agency-defined category")).toBe(false);
+    expect(shouldReplaceClientCategory("Uncategorised client")).toBe(true);
+  });
+
+  it("preserves a curated category and an existing logo", async () => {
+    const operations: Operation[] = [];
+    const store = new SupabaseClientIngestionStore(
+      createClient(operations, {
+        clients: { category: "Entertainment brand" },
+        brand_library: {
+          id: "logo-1",
+          asset_url: "https://storage.example.com/manual-logo.png"
+        }
+      })
+    );
+
+    await store.saveFacebookPageDetails({
+      clientId: "client-1",
+      category: "TV show",
+      logo: {
+        assetBucket: "brand-source-assets",
+        assetStoragePath: "client/job/facebook_page/logo.png",
+        assetUrl: "https://storage.example.com/facebook-logo.png",
+        originalUrlHash: "logo-hash"
+      }
+    });
+
+    expect(operations).toEqual([]);
   });
 });
 

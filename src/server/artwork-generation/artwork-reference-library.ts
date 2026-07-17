@@ -1,4 +1,5 @@
 import { artworkReferenceCatalog } from "./artwork-reference-catalog.generated.js";
+import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 
 export const ARTWORK_PATTERN_REFERENCE_PREFIX =
   "Moons artwork reference —";
@@ -12,7 +13,7 @@ type ArtworkMode =
   | "social_youth";
 type CanvasRatio = "1:1" | "4:5" | "9:16" | "16:9";
 
-interface ArtworkReferenceSelectionInput {
+export interface ArtworkReferenceSelectionInput {
   brandName?: string;
   brandCategory?: string;
   service: string;
@@ -23,6 +24,15 @@ interface ArtworkReferenceSelectionInput {
     concept: string;
     visual: string;
   };
+  strategy?: Pick<
+    CreativeStrategyEnrichment,
+    | "commercialStyle"
+    | "sellingMechanism"
+    | "preferredMode"
+    | "preferredLayout"
+    | "preferredHeroType"
+    | "referenceSearchText"
+  >;
 }
 
 export interface ArtworkReferencePattern {
@@ -110,6 +120,13 @@ const shortSignalTokens = new Set([
 export function selectArtworkReferencePattern(
   input: ArtworkReferenceSelectionInput
 ): ArtworkReferencePattern {
+  return selectArtworkReferencePatterns(input, 1)[0]!;
+}
+
+export function selectArtworkReferencePatterns(
+  input: ArtworkReferenceSelectionInput,
+  count = 2
+): readonly ArtworkReferencePattern[] {
   const context = [
     input.brandName,
     input.brandCategory,
@@ -117,7 +134,13 @@ export function selectArtworkReferencePattern(
     input.brief,
     input.hook.hook,
     input.hook.concept,
-    input.hook.visual
+    input.hook.visual,
+    input.strategy?.commercialStyle,
+    input.strategy?.sellingMechanism,
+    input.strategy?.preferredMode,
+    input.strategy?.preferredLayout,
+    input.strategy?.preferredHeroType,
+    input.strategy?.referenceSearchText
   ]
     .filter(Boolean)
     .join(" ");
@@ -134,6 +157,9 @@ export function selectArtworkReferencePattern(
     if (input.canvasRatio === pattern.canvasRatio) score += 6;
     if (pattern.mode === intendedMode) score += 8;
     if (intendedLayouts.has(pattern.layoutArchetype)) score += 6;
+    if (pattern.mode === input.strategy?.preferredMode) score += 10;
+    if (pattern.layoutArchetype === input.strategy?.preferredLayout) score += 18;
+    if (pattern.heroType === input.strategy?.preferredHeroType) score += 8;
     if (preferredTypography.has(pattern.typography.treatment)) score += 3;
     if (
       thaiCopy &&
@@ -168,19 +194,34 @@ export function selectArtworkReferencePattern(
     (left, right) =>
       right.score - left.score || left.pattern.id.localeCompare(right.pattern.id)
   );
-  return ranked[0]!.pattern;
+  const primary = ranked[0]!.pattern;
+  const compatibleRanked = ranked
+    .filter(({ pattern }) => pattern.id !== primary.id)
+    .map(({ pattern, score }) => ({
+      pattern,
+      score:
+        score +
+        (pattern.canvasRatio === primary.canvasRatio ? 4 : 0) +
+        (pattern.mode === primary.mode ? 6 : 0) +
+        (pattern.typography.treatment === primary.typography.treatment ? 2 : 0)
+    }))
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.pattern.id.localeCompare(right.pattern.id)
+    );
+
+  return [primary, ...compatibleRanked.map(({ pattern }) => pattern)].slice(
+    0,
+    Math.max(1, count)
+  );
 }
 
 export function buildArtworkReferenceLabel(
-  pattern: ArtworkReferencePattern
+  _pattern: ArtworkReferencePattern,
+  role: "primary" | "secondary" = "primary"
 ): string {
-  return [
-    `${ARTWORK_PATTERN_REFERENCE_PREFIX} ${pattern.label}`,
-    `mode ${pattern.mode}`,
-    `layout ${pattern.layoutArchetype}`,
-    `typography ${pattern.typography.treatment}, ${pattern.typography.scaleRhythm}`,
-    "use composition, visual medium, lighting, density, finish, and typography treatment only when compatible with the runtime brand and mood"
-  ].join("; ");
+  return `${ARTWORK_PATTERN_REFERENCE_PREFIX} ${role}`;
 }
 
 export function isArtworkPatternReference(

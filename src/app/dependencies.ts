@@ -3,6 +3,7 @@ import type { BrandMemoryRepository } from "../ports/brand-memory-repository";
 import type { ClientIntakeRepository } from "../ports/client-intake-repository";
 import type { MappingClientRepository } from "../ports/mapping-client-repository";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
+import type { RunCollaborationRepository } from "../ports/run-collaboration-repository";
 import {
   allClientAccess,
   type ClientAccessScope
@@ -17,9 +18,10 @@ import { SupabaseBrandMemoryRepository } from "../repositories/brand-memory/supa
 import { GoogleSheetMappingClientRepository } from "../repositories/mapping-clients/google-sheet-mapping-client-repository";
 import { SupabaseBrandRepository } from "../repositories/brands/supabase-brand-repository";
 import { LocalWorkspaceRepository } from "../repositories/workspace/local-workspace-repository";
-import { LocalFirstWorkspaceRepository } from "../repositories/workspace/local-first-workspace-repository";
+import { CloudFirstWorkspaceRepository } from "../repositories/workspace/cloud-first-workspace-repository";
 import { ScopedLocalWorkspaceRepository } from "../repositories/workspace/scoped-local-workspace-repository";
-import { SupabaseWorkspaceRepository } from "../repositories/workspace/supabase-workspace-repository";
+import { SupabaseCollaborativeWorkspaceRepository } from "../repositories/workspace/supabase-collaborative-workspace-repository";
+import { SupabaseRunCollaborationRepository } from "../repositories/run-collaboration/supabase-run-collaboration-repository";
 
 const localWorkspaceRepository = new LocalWorkspaceRepository(
   window.localStorage
@@ -43,6 +45,7 @@ export interface AppDependencies {
   clientIntakeRepository: ClientIntakeRepository;
   mappingClientRepository: MappingClientRepository;
   workspaceRepository: WorkspaceRepository;
+  runCollaborationRepository: RunCollaborationRepository | null;
 }
 
 /**
@@ -66,9 +69,13 @@ export const dependencies: AppDependencies = {
   mappingClientRepository: new GoogleSheetMappingClientRepository(),
   workspaceRepository:
     env.dataSource === "supabase"
-      ? new LocalFirstWorkspaceRepository(
+      ? new CloudFirstWorkspaceRepository(
           signedInUserWorkspaceRepository,
-          new SupabaseWorkspaceRepository()
+          new SupabaseCollaborativeWorkspaceRepository()
         )
-      : localWorkspaceRepository
+      : localWorkspaceRepository,
+  runCollaborationRepository:
+    env.dataSource === "supabase"
+      ? new SupabaseRunCollaborationRepository()
+      : null
 };

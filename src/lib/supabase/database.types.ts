@@ -735,6 +735,13 @@ export type Database = {
           id: string;
           owner_user_id: string;
           client_id: string | null;
+          workspace_run_id: string | null;
+          snapshot: Json | null;
+          current_owner_user_id: string;
+          status: "active" | "completed" | "archived";
+          version: number;
+          updated_by: string | null;
+          completed_at: string | null;
           stage: string;
           service: string;
           quantity: number;
@@ -749,6 +756,13 @@ export type Database = {
           id?: string;
           owner_user_id: string;
           client_id?: string | null;
+          workspace_run_id?: string | null;
+          snapshot?: Json | null;
+          current_owner_user_id: string;
+          status?: "active" | "completed" | "archived";
+          version?: number;
+          updated_by?: string | null;
+          completed_at?: string | null;
           stage: string;
           service: string;
           quantity: number;
@@ -756,6 +770,70 @@ export type Database = {
           is_pitching?: boolean;
           pitching_save_name?: string | null;
           expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        }
+      >;
+      run_handoffs: TableDefinition<
+        {
+          id: string;
+          run_id: string;
+          from_user_id: string;
+          to_user_id: string;
+          from_department: string;
+          to_department: string;
+          note: string | null;
+          version: number;
+          created_by: string;
+          created_at: string;
+        },
+        {
+          id?: string;
+          run_id: string;
+          from_user_id: string;
+          to_user_id: string;
+          from_department: string;
+          to_department: string;
+          note?: string | null;
+          version: number;
+          created_by: string;
+          created_at?: string;
+        }
+      >;
+      client_memberships: TableDefinition<
+        {
+          client_id: string;
+          user_id: string;
+          role: "member" | "lead" | "admin";
+          created_by: string | null;
+          created_at: string;
+        },
+        {
+          client_id: string;
+          user_id: string;
+          role?: "member" | "lead" | "admin";
+          created_by?: string | null;
+          created_at?: string;
+        }
+      >;
+      team_profiles: TableDefinition<
+        {
+          user_id: string;
+          email: string;
+          display_name: string;
+          department: "cs" | "gd" | "pm" | "admin" | "unassigned";
+          is_admin: boolean;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          user_id: string;
+          email: string;
+          display_name: string;
+          department?: "cs" | "gd" | "pm" | "admin" | "unassigned";
+          is_admin?: boolean;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         }
@@ -784,6 +862,20 @@ export type Database = {
       is_convert_cake_user: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      handoff_run: {
+        Args: {
+          p_workspace_run_id: string;
+          p_to_user_id: string;
+          p_expected_version: number;
+          p_note?: string | null;
+        };
+        Returns: {
+          workspace_run_id: string;
+          current_owner_user_id: string;
+          version: number;
+          updated_at: string;
+        }[];
       };
       claim_next_brand_analysis_job: {
         Args: Record<string, never>;

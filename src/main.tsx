@@ -7,6 +7,7 @@ import { BrandMemoryProvider } from "./app/providers/brand-memory-provider";
 import { BrandProvider } from "./app/providers/brand-provider";
 import { ClientIntakeProvider } from "./app/providers/client-intake-provider";
 import { WorkspaceProvider } from "./app/providers/workspace-provider";
+import { RunCollaborationProvider } from "./app/providers/run-collaboration-provider";
 import "./styles/app.css";
 import "./styles/neo-redesign.css";
 
@@ -27,7 +28,11 @@ createRoot(root).render(
         <ClientIntakeProvider repository={dependencies.clientIntakeRepository}>
           <BrandMemoryProvider repository={dependencies.brandMemoryRepository}>
             <WorkspaceProvider repository={dependencies.workspaceRepository}>
-              <App />
+              <RunCollaborationProvider
+                repository={dependencies.runCollaborationRepository}
+              >
+                <App />
+              </RunCollaborationProvider>
             </WorkspaceProvider>
           </BrandMemoryProvider>
         </ClientIntakeProvider>

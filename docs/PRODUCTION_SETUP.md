@@ -250,6 +250,11 @@ The migration creates:
 - service-role access to ingestion and Brand Memory tables used by the worker
 - service-role access to extracted product defaults
 
+The same backend-only `APIFY_TOKEN` is used for the posts, Ads Library, and
+`igview-owner~facebook-page-details-scraper` actors. Page-details enrichment is
+optional: it supplies a default client category and mirrored Brand Library
+logo without replacing values curated by the team.
+
 RLS is enabled. Access is limited by `moons.is_convert_cake_user()`, currently
 defined as:
 

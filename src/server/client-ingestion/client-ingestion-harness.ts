@@ -9,6 +9,7 @@ import {
   normalizeFacebookPosts
 } from "../../services/client-ingestion/facebook-source-normalizers.js";
 import type { ApifyClient } from "./apify-client.js";
+import { normalizeFacebookPageDetails } from "./facebook-page-details.js";
 
 export type IngestionJobStatus =
   | "queued"
@@ -122,13 +123,19 @@ export interface ClientIngestionStore {
     captionContext: string;
     ocrText?: string;
   }): Promise<void>;
+
+  saveFacebookPageDetails?(input: {
+    clientId: string;
+    category: string | null;
+    logo: MirroredVisualAsset | null;
+  }): Promise<void>;
 }
 
 export interface ImageMirror {
   mirror(input: {
     clientId: string;
     jobId: string;
-    sourceType: VisualAssetCandidate["sourceType"];
+    sourceType: VisualAssetCandidate["sourceType"] | "facebook_page";
     sourceItemId: string | null;
     index: number;
     imageUrl: string;
@@ -251,6 +258,15 @@ export async function runClientIngestionJob(
   let postSource: SavedBrandSource | null = null;
   let adSource: SavedBrandSource | null = null;
   let facebookSourceErrorDetected = false;
+
+  await enrichFacebookPageDetails({
+    job,
+    client,
+    apify,
+    store,
+    imageMirror,
+    sourceStatus
+  });
 
   await setStatus(store, job, client, "scraping_facebook_posts");
   try {
@@ -481,6 +497,70 @@ export async function runClientIngestionJob(
     usedFallbackSearch,
     completed: false
   };
+}
+
+async function enrichFacebookPageDetails({
+  job,
+  client,
+  apify,
+  store,
+  imageMirror,
+  sourceStatus
+}: {
+  job: ClientIngestionJob;
+  client: ClientIngestionClient;
+  apify: ApifyClient;
+  store: ClientIngestionStore;
+  imageMirror: ImageMirror;
+  sourceStatus: Record<string, unknown>;
+}): Promise<void> {
+  if (!apify.scrapeFacebookPageDetails || !store.saveFacebookPageDetails) {
+    return;
+  }
+
+  let details;
+  try {
+    details = normalizeFacebookPageDetails(
+      await apify.scrapeFacebookPageDetails(client.facebookUrl)
+    );
+  } catch {
+    sourceStatus.facebook_page_details = "failed";
+    return;
+  }
+
+  if (!details) {
+    sourceStatus.facebook_page_details = "partial";
+    return;
+  }
+
+  let logo: MirroredVisualAsset | null = null;
+  let logoFailed = false;
+  if (details.imageUrl) {
+    try {
+      logo = await imageMirror.mirror({
+        clientId: client.id,
+        jobId: job.id,
+        sourceType: "facebook_page",
+        sourceItemId: "profile-logo",
+        index: 0,
+        imageUrl: details.imageUrl
+      });
+    } catch {
+      logoFailed = true;
+    }
+  }
+
+  try {
+    await store.saveFacebookPageDetails({
+      clientId: client.id,
+      category: details.category,
+      logo
+    });
+    sourceStatus.facebook_page_details =
+      logoFailed || (!details.category && !logo) ? "partial" : "succeeded";
+  } catch {
+    sourceStatus.facebook_page_details = "failed";
+  }
 }
 
 function buildTextEvidence(

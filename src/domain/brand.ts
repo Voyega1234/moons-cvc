@@ -75,3 +75,11 @@ export function canStartBrandIngestion(brand: Brand): boolean {
     brand.ingestionStatus ?? ""
   );
 }
+
+export function brandLogoUrl(
+  brand: Brand | null | undefined
+): string | undefined {
+  return brand?.library.brand.find(
+    (item) => item.title.trim().toLowerCase() === "logo" && item.assetUrl
+  )?.assetUrl;
+}

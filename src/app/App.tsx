@@ -1,6 +1,7 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
   type Dispatch
 } from "react";
@@ -27,13 +28,16 @@ import {
   SignOut,
   X
 } from "@phosphor-icons/react";
-import type { Brand } from "../domain/brand";
+import { brandLogoUrl, type Brand } from "../domain/brand";
 import {
   useBrands,
   type BrandNotification
 } from "./providers/brand-provider";
 import { useWorkspace } from "./providers/workspace-provider";
 import { useAuth } from "./providers/auth-provider";
+import { useRunCollaboration } from "./providers/run-collaboration-provider";
+import { canEditRun } from "../domain/run-collaboration";
+import { RunOwnershipBar } from "../features/collaboration/run-ownership-bar";
 import type { CreativeStage } from "../domain/creative-run";
 import { serviceLabels, stages } from "../features/workflow/config";
 import type {
@@ -75,13 +79,27 @@ export function App() {
     persistenceError
   } = useWorkspace();
   const state = getActiveRun(workspace);
+  const collaboration = useRunCollaboration();
+  const ownership = collaboration.ownershipByRunId[state.id] ?? null;
+  const runCanEdit =
+    !collaboration.enabled ||
+    canEditRun(ownership, collaboration.currentUserId);
+  const canEditRef = useRef(runCanEdit);
+  canEditRef.current = runCanEdit;
+  const [editWarning, setEditWarning] = useState<string | null>(null);
   const visibleToast = persistenceError
     ? {
         title: "Workspace could not be saved",
         message: persistenceError.message,
         tone: "error" as const
       }
-    : workspace.toast;
+    : editWarning
+      ? {
+          title: "View-only project",
+          message: editWarning,
+          tone: "warning" as const
+        }
+      : workspace.toast;
 
   // Bound to state.id (not "whichever run is active") so that an async
   // action started against this run — hook generation, artwork generation,
@@ -91,13 +109,21 @@ export function App() {
   // closes over the dispatch instance (and therefore the runId) that was
   // current when the action was kicked off, not whatever is active later.
   const dispatch = useCallback<Dispatch<WorkflowAction>>(
-    (action) =>
+    (action) => {
+      if (!canEditRef.current) {
+        setEditWarning(
+          "Only the current owner can make changes. Ask them to hand the project to you."
+        );
+        return;
+      }
+      setEditWarning(null);
       workspaceDispatch({
         type: "apply-run-action",
         runId: state.id,
         action,
         now: nowIso()
-      }),
+      });
+    },
     [state.id]
   );
 
@@ -137,6 +163,7 @@ export function App() {
           dispatch={dispatch}
           workspaceDispatch={workspaceDispatch}
           createRun={createRun}
+          canEdit={runCanEdit}
         />
         <main>
           <div className="shell neo-workspace">
@@ -152,6 +179,14 @@ export function App() {
               />
             ) : (
               <>
+                <RunOwnershipBar
+                  runId={state.id}
+                  completed={state.done}
+                  busy={
+                    state.ideaGenerationStatus === "running" ||
+                    state.artworkGenerationStatus === "running"
+                  }
+                />
                 {state.stage === "start" ? (
                   <section className="hero neo-hero">
                     <div className="neo-hero-copy">
@@ -244,11 +279,13 @@ export function App() {
                     </aside>
                   </section>
                 ) : null}
-                <CurrentStage
-                  state={state}
-                  dispatch={dispatch}
-                  onCreateRun={() => createRun(true)}
-                />
+                <fieldset className="neo-run-edit-scope" disabled={!runCanEdit}>
+                  <CurrentStage
+                    state={state}
+                    dispatch={dispatch}
+                    onCreateRun={() => createRun(true)}
+                  />
+                </fieldset>
               </>
             )}
           </div>
@@ -365,20 +402,22 @@ function Header({
   state,
   dispatch,
   workspaceDispatch,
-  createRun
+  createRun,
+  canEdit
 }: {
   workspace: WorkspaceState;
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
+  canEdit: boolean;
 }) {
   return (
     <header className="topbar">
       <div className="shell">
         <div className="nav">
           {workspace.view === "studio" ? (
-            <Journey state={state} dispatch={dispatch} />
+            <Journey state={state} dispatch={dispatch} canEdit={canEdit} />
           ) : (
             <div className="neo-workboard-label">
               <Kanban size={20} weight="duotone" aria-hidden="true" />
@@ -400,7 +439,11 @@ function Header({
             />
             <div className="client-pill">
               <span className="mini-avatar">
-                {state.brand?.initials ?? "MO"}
+                {brandLogoUrl(state.brand) ? (
+                  <img src={brandLogoUrl(state.brand)} alt="" />
+                ) : (
+                  state.brand?.initials ?? "MO"
+                )}
               </span>
               <span>{state.brand?.name ?? "No client"}</span>
             </div>
@@ -659,10 +702,12 @@ function RunBar({
 
 function Journey({
   state,
-  dispatch
+  dispatch,
+  canEdit
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
+  canEdit: boolean;
 }) {
   const activeIndex = stages.findIndex((stage) => stage.id === state.stage);
   const progress = (activeIndex / (stages.length - 1)) * 100;
@@ -702,7 +747,7 @@ function Journey({
                     ? `${stage.name} (current)`
                     : stage.name
               }
-              disabled={locked}
+              disabled={locked || !canEdit}
               title={blockedReason ?? undefined}
               className={`${active ? "active" : ""} ${done ? "done" : ""} ${locked ? "locked" : ""}`}
               onClick={() => dispatch(navigationAction)}
@@ -752,7 +797,13 @@ function MemoryRibbon({ state }: { state: WorkflowState }) {
     <div className="memory-ribbon show">
       <div className="ribbon">
         <div className="ribbon-brand">
-          <span className="big-avatar">{state.brand.initials}</span>
+          <span className="big-avatar">
+            {brandLogoUrl(state.brand) ? (
+              <img src={brandLogoUrl(state.brand)} alt="" />
+            ) : (
+              state.brand.initials
+            )}
+          </span>
           <span>
             <b>{state.brand.name}</b>
             <span>{state.brand.category}</span>

@@ -15,6 +15,7 @@ function createStore(): ClientIngestionStore & {
   posts: unknown[];
   ads: unknown[];
   visualAssets: unknown[];
+  pageDetails: unknown[];
 } {
   return {
     jobStatuses: [],
@@ -23,6 +24,7 @@ function createStore(): ClientIngestionStore & {
     posts: [],
     ads: [],
     visualAssets: [],
+    pageDetails: [],
     async updateJobStatus(input) {
       this.jobStatuses.push(input);
     },
@@ -53,11 +55,107 @@ function createStore(): ClientIngestionStore & {
     },
     async saveVisualAsset(input) {
       this.visualAssets.push(input);
+    },
+    async saveFacebookPageDetails(input) {
+      this.pageDetails.push(input);
     }
   };
 }
 
 describe("runClientIngestionJob", () => {
+  it("mirrors the page logo and saves the primary category as optional enrichment", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPageDetails: vi.fn(async () => [
+        {
+          title: "Mr Bean",
+          image: "https://cdn.example.com/logo.png",
+          category: ["TV show"]
+        }
+      ]),
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Post without an image"
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+    const imageMirror: ImageMirror = {
+      async mirror(input) {
+        return {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: `${input.clientId}/${input.sourceType}/logo.png`,
+          assetUrl: "https://storage.example.com/logo.png",
+          originalUrlHash: "logo-hash"
+        };
+      }
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Mr Bean",
+        facebookUrl: "https://www.facebook.com/MrBean"
+      },
+      { apify, store, imageMirror }
+    );
+
+    expect(store.pageDetails).toEqual([
+      {
+        clientId: "client-1",
+        category: "TV show",
+        logo: expect.objectContaining({
+          assetStoragePath: "client-1/facebook_page/logo.png"
+        })
+      }
+    ]);
+    expect(result.visualAssetsMirrored).toBe(0);
+    expect(store.jobStatuses.at(-1)).toMatchObject({
+      sourceStatus: expect.objectContaining({
+        facebook_page_details: "succeeded"
+      })
+    });
+  });
+
+  it("continues ingestion when Facebook page details enrichment fails", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPageDetails: vi.fn(async () => {
+        throw new Error("Page details unavailable");
+      }),
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Organic brand post"
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [])
+    };
+    const store = createStore();
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror: { mirror: vi.fn() } }
+    );
+
+    expect(result.postsSaved).toBe(1);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "needs_review"
+    });
+    expect(store.jobStatuses.at(-1)).toMatchObject({
+      sourceStatus: expect.objectContaining({
+        facebook_page_details: "failed",
+        facebook_posts: "succeeded"
+      })
+    });
+  });
+
   it("collects posts and ads, mirrors image-only assets, and leaves the job ready for analysis", async () => {
     const apify: ApifyClient = {
       scrapeFacebookPosts: vi.fn(async () => [

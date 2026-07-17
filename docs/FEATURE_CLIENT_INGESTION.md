@@ -67,20 +67,36 @@ Recommended controlled agent flow:
 
 1. Validate Facebook URL.
 2. Create `moons.brand_analysis_jobs`.
-3. Run Apify Facebook posts scraper.
-4. Run Apify Facebook Ads Library scraper.
-5. If Facebook sources are inaccessible, use Gemini grounding search fallback.
-6. Normalize post/ad records.
-7. Extract image-only visual candidates.
-8. Download each candidate image immediately.
-9. Upload mirrored images to Supabase Storage bucket `brand-source-assets`.
-10. Save normalized records and visual assets.
-11. Analyze visual mood/style from mirrored Supabase images.
-12. Analyze brand signals.
-13. Write Brand kit, Products, and Brand learning.
-14. Mark client `ready`, `needs_review`, or `failed`.
+3. Run the optional Apify Facebook page-details scraper for logo/category defaults.
+4. Run Apify Facebook posts scraper.
+5. Run Apify Facebook Ads Library scraper.
+6. If Facebook sources are inaccessible, use Gemini grounding search fallback.
+7. Normalize post/ad records.
+8. Extract image-only visual candidates.
+9. Download each candidate image immediately.
+10. Upload mirrored images to Supabase Storage bucket `brand-source-assets`.
+11. Save normalized records and visual assets.
+12. Analyze visual mood/style from mirrored Supabase images.
+13. Analyze brand signals.
+14. Write Brand kit, Products, and Brand learning.
+15. Mark client `ready`, `needs_review`, or `failed`.
 
 ## Source collection
+
+### Facebook page details
+
+Use Apify actor:
+
+```text
+igview-owner~facebook-page-details-scraper
+```
+
+The worker sends `pageUrls: [facebookUrl]` and uses the first returned
+`category` value only when the client still has a placeholder category. The
+returned `image` is downloaded and mirrored to `brand-source-assets`, then
+saved as the Brand Library `Logo` default. A manually curated category or an
+existing uploaded logo is never overwritten. Failure of this optional actor is
+recorded in the job source status and does not stop posts/ads ingestion.
 
 ### Facebook posts
 
@@ -170,6 +186,8 @@ MP4 URLs must not be sent to the visual analyzer in v1.
 ## Storage rule
 
 Facebook CDN URLs are temporary and must not be the durable image source.
+This rule also applies to the Facebook page logo returned by the page-details
+actor.
 
 Backend must:
 

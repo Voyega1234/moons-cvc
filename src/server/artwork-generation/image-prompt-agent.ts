@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArtworkMode } from "../../domain/creative-run.js";
+import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 
 type FetchLike = typeof fetch;
 
@@ -37,9 +38,12 @@ export interface ImagePromptAgentInput {
     label: string;
   }[];
   canvasRatio: string;
+  strategy?: CreativeStrategyEnrichment;
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
     products: readonly { title: string; description: string }[];
+    docs: readonly { title: string; description: string }[];
+    refs: readonly { title: string; description: string }[];
   };
 }
 
@@ -340,15 +344,81 @@ function renderReferenceLibraryPrompt(
     source.trim(),
     "",
     "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE",
-    "Inspect the attached image labeled as a Moons artwork reference. It is the selected result from the complete 72-artwork verified catalog. Transfer its design reasoning only; create a new execution for the approved campaign angle.",
-    "Attached client references and labeled source assets override the internal library for brand identity, product fidelity, and visual-medium consistency.",
-    "Study the reference typography as a conditional style recipe: font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, dimensionality, outline, and shadow. Use those traits only when they fit the runtime brand identity and approved mood. If they conflict, keep the brand-appropriate typeface and borrow only compatible hierarchy and rhythm; state the chosen typography treatment explicitly in the final prompt.",
-    "Before writing finalPrompt, silently complete the 12-principle design blueprint: hierarchy, balance, contrast, alignment, proximity, repetition, emphasis, white space, scale and proportion, rhythm and movement, unity and consistency, and grid and composition. Commit to one dominant focal point, one reading order, one balance strategy, shared alignment lines, grouped information, controlled repetition, protected white space, explicit scale relationships, one eye path, one visual language, and measurable margins/zones. Translate these into concrete generation instructions; never merely name the principles.",
-    "Reject any proposed composition in which the headline, hero, offer, and CTA all compete equally, unrelated information floats without alignment or proximity, or the reference style overrides message clarity and brand fit.",
-    "The selected hook and strategic concept are approved. Do not replace them with a library example's message, objects, brand, or scene.",
-    "Return only one final English GPT Image 2 prompt in the required finalPrompt JSON field.",
-    buildRuntimeInputBlock(input)
+    "Study the attached images directly. Primary artwork contributes abstract composition grammar; secondary artwork adds only compatible craft and finish. Invent all message-bearing visual content and the background from the approved idea. Client assets remain exact. The final image model will not receive the Moons artwork references, so make finalPrompt fully self-contained and never refer to their image numbers or ask the image model to copy an attached artwork. Apply design principles and an originality/coherence check silently, then leave room for tasteful local decisions.",
+    buildReferenceLibraryRuntimeInputBlock(input)
   ].join("\n");
+}
+
+function buildReferenceLibraryRuntimeInputBlock(
+  input: ImagePromptAgentInput
+): string {
+  const strategy = input.strategy
+    ? {
+        commercialStyle: input.strategy.commercialStyle,
+        sellingMechanism: input.strategy.sellingMechanism,
+        audienceMoment: input.strategy.audienceMoment,
+        visibleProofDirection: input.strategy.visibleProofDirection,
+        offer: compactStrategyClaim(input.strategy.offer),
+        proof: input.strategy.proof
+          .map(compactStrategyClaim)
+          .filter((claim) => claim !== null),
+        differentiator: compactStrategyClaim(input.strategy.differentiator),
+        requiresTextReview: input.strategy.requiresTextReview
+      }
+    : null;
+  const runtimeInput = {
+    brand: {
+      name: input.brand?.name ?? "Unknown",
+      category: input.brand?.category ?? "Unknown",
+      personality: input.brand?.personality ?? [],
+      colors: input.brand?.colors ?? []
+    },
+    output: { service: compactServiceName(input.service), ratio: input.canvasRatio },
+    brief: input.brief || "Not provided.",
+    approved: {
+      headline: input.hook.hook,
+      concept: input.hook.concept,
+      visualDirection: input.hook.visual,
+      ...(input.hook.supportingPoints?.length
+        ? { supportingDetails: input.hook.supportingPoints }
+        : {}),
+      cta: input.hook.cta
+    },
+    strategy,
+    references: input.referenceImages.map((image, index) => ({
+      image: index + 1,
+      role: referenceLibraryRole(image.label)
+    })),
+    ...(input.textInputs.length
+      ? { revisionInstructions: input.textInputs }
+      : {})
+  };
+
+  return [
+    "AUTHORITATIVE COMPACT RUN INPUT",
+    JSON.stringify(runtimeInput, null, 2)
+  ].join("\n");
+}
+
+function compactStrategyClaim(
+  claim: CreativeStrategyEnrichment["offer"]
+): { text: string; source: string } | null {
+  return claim.text ? { text: claim.text, source: claim.source } : null;
+}
+
+function referenceLibraryRole(label: string): string {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("moons artwork reference — primary")) {
+    return "primary artwork — composition and visual medium";
+  }
+  if (normalized.includes("moons artwork reference — secondary")) {
+    return "secondary artwork — compatible craft and finish";
+  }
+  if (/logo|โลโก้/.test(normalized)) return "official logo — exact";
+  if (/product|packshot|สินค้า/.test(normalized)) {
+    return "official product — exact";
+  }
+  return "client reference — use only for its supplied asset role";
 }
 
 function extractPromptBody(source: string): string {
@@ -362,6 +432,9 @@ function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
       (item) => `${item.title}: ${item.description}`
     ),
     ...input.brandLibrary.products.map(
+      (item) => `${item.title}: ${item.description}`
+    ),
+    ...input.brandLibrary.docs.map(
       (item) => `${item.title}: ${item.description}`
     )
   ];
@@ -393,18 +466,30 @@ function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
     `CTA: ${input.hook.cta}`,
     `Caption context: ${input.hook.caption}`,
     "",
+    "Creative strategy enrichment from GPT Luna:",
+    input.strategy
+      ? JSON.stringify(input.strategy, null, 2)
+      : "No enrichment was requested for this mode.",
+    "",
     "Additional user instructions:",
     input.textInputs.length ? input.textInputs.join("\n") : "None.",
     "",
     "Brand and product library:",
     brandInformation.length ? brandInformation.join("\n") : "Not provided.",
     "",
+    "Brand reference notes:",
+    input.brandLibrary.refs.length
+      ? input.brandLibrary.refs
+          .map((item) => `${item.title}: ${item.description}`)
+          .join("\n")
+      : "Not provided.",
+    "",
     "Attached reference map:",
     ...referenceMap,
     "Use each image only for the role implied by its label. Do not average all references into one vague style.",
     "",
     "Non-negotiable constraints:",
-    "Use supplied Thai copy exactly. Do not invent claims, prices, logos, certifications, or unreadable text.",
+    "Use supplied Thai copy exactly. Use only verified details or GPT Luna creative-placeholder copy explicitly marked for text review. Do not invent additional logos, real identities, trademarks, certifications, guarantees, or unreadable text.",
     "Reference images guide design language and asset fidelity; they do not override the approved hook or strategic concept."
   ].join("\n");
 }
