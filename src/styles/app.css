@@ -167,7 +167,7 @@ body {
   opacity: 0.72;
 }
 
-.auth-brand-panel .neo-kicker {
+.auth-brand-panel .compass-kicker {
   position: relative;
   z-index: 1;
   width: fit-content;
@@ -185,7 +185,7 @@ body {
   text-transform: uppercase;
 }
 
-.auth-brand-panel .neo-kicker span {
+.auth-brand-panel .compass-kicker span {
   width: 7px;
   height: 7px;
   border-radius: 50%;

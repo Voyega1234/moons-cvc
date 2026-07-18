@@ -1,7 +1,8 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import {
+  CREATIVE_STRATEGIST_AGENT_NAME,
   CS_QUALITY_CHECKLIST,
-  GD_QUALITY_CHECKLIST,
+  GD_CREATIVE_STRATEGIST_CHECKLIST,
   type CreativeQualityReport,
   type QualityAreaResult
 } from "../../domain/quality-check.js";
@@ -168,25 +169,38 @@ async function buildContent(
     {
       type: "input_text",
       text: [
-        "คุณคือ Quality Agent สำหรับตรวจ Creative โฆษณา ให้ตรวจภาพจริงทุกชิ้นตาม GD Checklist และ CS Checklist ด้านล่าง",
+        `Agent name: ${CREATIVE_STRATEGIST_AGENT_NAME}`,
+        "คุณคือ Creative Strategist & QA ตรวจ Facebook image ads จากมุมมอง first-time scroller แบบตรงไปตรงมา กระชับ ไม่อวยแบรนด์ และโฟกัส Bottom Funnel action ได้แก่ lead, purchase, add-to-cart หรือ app install",
+        "โจทย์ผู้ใช้: ตรวจภาพตาม Checklist ให้ครบ แต่สรุปเฉพาะจุดที่ต้องรู้และต้องแก้จริง พร้อมคะแนนและคำแนะนำที่นำไปใช้ได้ทันที",
+        "วิเคราะห์ภายในโดยไม่เปิดเผย reasoning steps: ทำความเข้าใจสินค้าและเป้าหมาย วิเคราะห์ Visual/Copy/Claim/Persona/CTA/Offer/Urgency/Brand/Social proof/Policy risk แล้วจัดลำดับ conversion blockers ก่อนตอบ",
         "",
-        "GD Checklist",
-        ...GD_QUALITY_CHECKLIST.map((item) => `- ${item}`),
+        "GD Checklist Review — ต้องประเมินครบทุกข้อและเรียงตามลำดับ แต่ใช้ข้อความย่อ",
+        ...GD_CREATIVE_STRATEGIST_CHECKLIST.map((item) => `- ${item}`),
         "",
         "CS Checklist",
         ...CS_QUALITY_CHECKLIST.map((item) => `- ${item}`),
         "",
         "กติกาการตรวจ:",
+        "- First Impression: ตรวจ Visual Hook, Initial Text Focus และ Desire to Purchase จากสิ่งที่เห็นใน 1 วินาทีแรก",
+        "- Bottom Funnel: ตรวจ Target Persona Fit, CTA Clarity, Urgency/Scarcity, Brand Recognition & Trust และความพร้อมให้เกิด action",
+        "- Claim Accuracy Check เป็นข้อบังคับ: ตรวจทุกเคลมด้านประโยชน์ ผลลัพธ์ เวลา การเปรียบเทียบ การรับรอง สุขภาพ และตัวเลข เทียบเฉพาะหลักฐานที่ให้มา พร้อมธงเกินจริง กำกวม เสี่ยงนโยบาย หรือควรมี disclaimer",
+        "- ถ้าเคลมไม่มีหลักฐาน ให้เสนอหลักฐานที่ควรเพิ่มหรือถ้อยคำที่ปลอดภัยและแม่นยำกว่า ห้ามปฏิเสธลอย ๆ",
         "- ตรวจ GD จากองค์ประกอบ ลำดับสายตา ความประณีต ความสมจริงของภาพ Gen AI และความถูกต้องของสิ่งที่เทียบได้กับ Brand Context/Reference Images",
         "- ตรวจ CS โดยเทียบ Artwork, Hook, Subheadline, Concept, CTA และ Caption กับ Brief / Objective / Client Context / Revision Feedback",
         "- ถ้ามี Mockup หรือ Reference Image ให้ตรวจว่างาน Final พัฒนาต่อและไม่ดูแบนหรือเป็น Template เกินไป ถ้าไม่มีหลักฐานเปรียบเทียบ ห้ามตัดสินตกเฉพาะข้อนี้",
         "- ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า ราคา โปรโมชัน และรายละเอียดจากข้อมูลที่ให้มาเท่านั้น ห้ามเดาหรือสร้างข้อเท็จจริงเพิ่ม",
         "- ถ้าไม่มี Revision Feedback ให้ถือว่าข้อ Revision ผ่านโดยไม่มีสิ่งให้เทียบ",
-        "- ระบุปัญหาที่เห็นและวิธีแก้แบบสั้น ชัดเจน ห้ามใช้รสนิยมส่วนตัวที่ไม่มีหลักฐาน",
+        "- ตรวจทุกเกณฑ์ภายในให้ครบ แต่ผลลัพธ์สำหรับ UI ต้องสั้นและไม่ซ้ำกัน",
+        "- เกณฑ์ที่ผ่าน: detail เป็นหลักฐานสั้น ๆ เพียง 1 วลี และ suggestion เป็นสตริงว่าง",
+        "- เกณฑ์ที่ไม่ผ่าน: detail ระบุปัญหาที่เห็นจริงไม่เกิน 1 ประโยค และ suggestion ระบุวิธีแก้ที่ทำตามได้ทันทีไม่เกิน 1 ประโยค",
+        "- summary ระดับ GD, CS และภาพรวมต้องมีเพียง 1 ประโยคสั้น ห้ามสรุปซ้ำกับ suggestion.detail",
+        "- ห้ามเขียนบทนำ คำชมยาว เหตุผลซ้ำ หรือย่อหน้าวิเคราะห์เพิ่มเติมในทุก field",
         "- gdPassed ต้องเป็น true เมื่อไม่มีปัญหา GD ที่พิสูจน์ได้ และ csPassed ต้องเป็น true เมื่อไม่มีปัญหา CS ที่พิสูจน์ได้",
         "- ให้คะแนนทุกเกณฑ์และคะแนนรวมตั้งแต่ 0-100 โดยอิงหลักฐานที่เห็นจริง",
-        "- ตอบรายละเอียด GD ตามลำดับ GD Checklist ทั้ง 4 ข้อ และ CS ตามลำดับ CS Checklist ทั้ง 3 ข้อ ห้ามสลับลำดับ",
-        "- ถ้างานต้องแก้ ให้ suggestion เป็นคำแนะนำเดียวที่สำคัญที่สุด และ suggestedHook เป็น Hook ที่ปรับแล้วเมื่อปัญหาเกี่ยวกับข้อความ มิฉะนั้นให้เป็นสตริงว่าง",
+        `- agentName ต้องเป็น "${CREATIVE_STRATEGIST_AGENT_NAME}" เท่านั้น`,
+        "- ส่งผล GD ตามลำดับ Checklist ทั้ง 10 ข้อ และ CS ทั้ง 3 ข้อเพื่อคงโครงข้อมูล แต่แต่ละข้อใช้ข้อความย่อตามกติกาด้านบน",
+        "- ถ้างานต้องแก้ ให้ suggestion.title เป็น conversion blocker ที่สำคัญที่สุดแบบสั้น ๆ และ suggestion.detail มีเฉพาะ Top 3 Actionable Recs เรียง 1-3 แยกบรรทัด บรรทัดละ 1 วิธีแก้สั้น ๆ ห้ามอธิบายซ้ำ",
+        "- suggestedHook ให้เป็น Hook ที่แข็งแรงที่สุดจาก 3 แนวทาง Pain Point, Desired Result และ Urgency เมื่อปัญหาเกี่ยวกับข้อความ มิฉะนั้นให้เป็นสตริงว่าง",
         "- ถ้างานผ่าน ให้ suggestion.title, suggestion.detail และ suggestion.suggestedHook เป็นสตริงว่าง",
         "",
         `Brief: ${input.brief}`,
@@ -298,9 +312,10 @@ const resultsSchema = {
         additionalProperties: false,
         properties: {
           outputId: { type: "string" },
+          agentName: { type: "string" },
           score: { type: "integer", minimum: 0, maximum: 100 },
           summary: { type: "string" },
-          gd: qualityAreaSchema(GD_QUALITY_CHECKLIST.length),
+          gd: qualityAreaSchema(GD_CREATIVE_STRATEGIST_CHECKLIST.length),
           cs: qualityAreaSchema(CS_QUALITY_CHECKLIST.length),
           suggestion: {
             type: "object",
@@ -313,7 +328,7 @@ const resultsSchema = {
             required: ["title", "detail", "suggestedHook"]
           }
         },
-        required: ["outputId", "score", "summary", "gd", "cs", "suggestion"]
+        required: ["outputId", "agentName", "score", "summary", "gd", "cs", "suggestion"]
       }
     }
   },
@@ -383,7 +398,7 @@ function parseResults(
       const gd = parseQualityArea(
         record.gd,
         `results[${index}].gd`,
-        GD_QUALITY_CHECKLIST
+        GD_CREATIVE_STRATEGIST_CHECKLIST
       );
       const cs = parseQualityArea(
         record.cs,
@@ -425,7 +440,17 @@ function parseResults(
           `GD ${gdPassed ? "ผ่าน" : "ต้องแก้"}: ${gdReason}`,
           `CS ${csPassed ? "ผ่าน" : "ต้องแก้"}: ${csReason}`
         ].join("\n"),
-        report: { score, summary, gd, cs, suggestion }
+        report: {
+          agentName: readString(
+            record.agentName,
+            `results[${index}].agentName`
+          ),
+          score,
+          summary,
+          gd,
+          cs,
+          suggestion
+        }
       };
     })
     .filter((result) => validIds.has(result.outputId));
@@ -489,9 +514,10 @@ function malformedQualityReport(): CreativeQualityReport {
     }))
   });
   return {
+    agentName: CREATIVE_STRATEGIST_AGENT_NAME,
     score: 0,
     summary: message,
-    gd: area(GD_QUALITY_CHECKLIST),
+    gd: area(GD_CREATIVE_STRATEGIST_CHECKLIST),
     cs: area(CS_QUALITY_CHECKLIST),
     suggestion: {
       title: "Re-run quality check",

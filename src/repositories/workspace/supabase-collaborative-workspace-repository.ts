@@ -1,9 +1,10 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   WorkspaceState,
   WorkflowState
 } from "../../features/workflow/model";
 import { getSupabaseClient } from "../../lib/supabase/client";
-import type { Json } from "../../lib/supabase/database.types";
+import type { Database, Json } from "../../lib/supabase/database.types";
 import type { WorkspaceRepository } from "../../ports/workspace-repository";
 import {
   deserializeWorkspace,
@@ -28,13 +29,18 @@ interface SharedRunRow {
 export class SupabaseCollaborativeWorkspaceRepository
   implements WorkspaceRepository
 {
-  private readonly legacy = new SupabaseWorkspaceRepository();
   private readonly knownRuns = new Map<string, KnownRun>();
   private saveQueue: Promise<void> = Promise.resolve();
 
+  constructor(
+    private readonly legacy: WorkspaceRepository =
+      new SupabaseWorkspaceRepository(),
+    private readonly client: SupabaseClient<Database> = getSupabaseClient()
+  ) {}
+
   async load(): Promise<WorkspaceState | null> {
     const legacyWorkspace = await this.legacy.load();
-    const { data, error } = await getSupabaseClient()
+    const { data, error } = await this.client
       .schema("moons")
       .from("runs")
       .select("workspace_run_id,snapshot,current_owner_user_id,version")
@@ -72,18 +78,25 @@ export class SupabaseCollaborativeWorkspaceRepository
 
   private async persist(workspace: WorkspaceState): Promise<void> {
     await this.legacy.save(workspace);
-    const userId = await getUserId();
+    const userId = await getUserId(this.client);
 
     for (const runId of workspace.runOrder) {
       const run = workspace.runsById[runId];
       if (!run) continue;
       const serialized = serializeSharedRun(run);
-      const known = this.knownRuns.get(run.id);
+      let known = this.knownRuns.get(run.id);
       if (known?.serialized === serialized) continue;
 
       if (!known) {
+        const existing = await this.findKnownRun(run.id);
+        if (existing) {
+          this.knownRuns.set(run.id, existing);
+          if (existing.serialized === serialized) continue;
+          throw staleLocalProjectError();
+        }
+
         const snapshot = JSON.parse(serialized) as Json;
-        const { data, error } = await getSupabaseClient()
+        const { data, error } = await this.client
           .schema("moons")
           .from("runs")
           .insert({
@@ -105,7 +118,18 @@ export class SupabaseCollaborativeWorkspaceRepository
           .select("current_owner_user_id,version")
           .single();
 
-        if (error) throw error;
+        if (error) {
+          if (!isUniqueViolation(error)) throw error;
+          const conflictingRun = await this.findKnownRun(run.id);
+          if (!conflictingRun) {
+            throw new Error(
+              "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
+            );
+          }
+          this.knownRuns.set(run.id, conflictingRun);
+          if (conflictingRun.serialized === serialized) continue;
+          throw staleLocalProjectError();
+        }
         this.knownRuns.set(run.id, {
           currentOwnerUserId: data.current_owner_user_id,
           version: data.version,
@@ -119,7 +143,7 @@ export class SupabaseCollaborativeWorkspaceRepository
       }
 
       const snapshot = JSON.parse(serialized) as Json;
-      const { data, error } = await getSupabaseClient()
+      const { data, error } = await this.client
         .schema("moons")
         .from("runs")
         .update({
@@ -151,6 +175,24 @@ export class SupabaseCollaborativeWorkspaceRepository
         serialized
       });
     }
+  }
+
+  private async findKnownRun(workspaceRunId: string): Promise<KnownRun | null> {
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("runs")
+      .select("workspace_run_id,snapshot,current_owner_user_id,version")
+      .eq("workspace_run_id", workspaceRunId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+    const remoteRun = deserializeSharedRun(data);
+    return {
+      currentOwnerUserId: data.current_owner_user_id,
+      version: data.version,
+      serialized: remoteRun ? serializeSharedRun(remoteRun) : ""
+    };
   }
 }
 
@@ -204,9 +246,19 @@ function deserializeSharedRun(row: SharedRunRow): WorkflowState | null {
   return workspace?.runsById[row.workspace_run_id] ?? null;
 }
 
-async function getUserId(): Promise<string> {
-  const { data, error } = await getSupabaseClient().auth.getUser();
+async function getUserId(client: SupabaseClient<Database>): Promise<string> {
+  const { data, error } = await client.auth.getUser();
   if (error) throw error;
   if (!data.user) throw new Error("Sign in before saving a project.");
   return data.user.id;
+}
+
+function isUniqueViolation(error: { code?: string }): boolean {
+  return error.code === "23505";
+}
+
+function staleLocalProjectError(): Error {
+  return new Error(
+    "This project already exists in the cloud and may be newer. Reload the workspace before editing so no work is overwritten."
+  );
 }

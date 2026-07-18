@@ -136,7 +136,7 @@ export function createInitialWorkflowState({
     imagePromptModel: "gpt-5.6-terra",
     outputSize: defaultArtworkOutputSize,
     quantity: 6,
-    successMetric: "CTR",
+    successMetric: "CVR",
     brief: defaultBrief,
     attachments: [],
     uploadedMaterials: [],
@@ -252,7 +252,7 @@ export function workflowActionToast(
     case "auto-select-directions":
       return successToast(
         "Recommended ideas selected",
-        "Neo filled each creative type using the planned quota."
+        "Compass filled each creative type using the planned quota."
       );
     case "start-artwork-generation":
       return null;
@@ -887,12 +887,19 @@ export function workflowReducer(
                 : {}),
               ...(action.assetBucket ? { assetBucket: action.assetBucket } : {}),
               revisionCount: output.revisionCount + 1,
-              status: "fixed" as const,
+              status: "draft" as const,
+              qaNote: undefined,
+              qaReport: undefined,
               approval: emptyApprovalGate
             }
           : output
       );
-      return { ...state, outputs, approved: computeApproved(outputs) };
+      return {
+        ...state,
+        outputs,
+        qaComplete: false,
+        approved: computeApproved(outputs)
+      };
     }
     case "send-client":
       return {

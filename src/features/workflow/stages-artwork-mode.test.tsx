@@ -97,4 +97,28 @@ describe("DirectionsStage artwork mode", () => {
       within(dialog).getByRole("button", { name: "↻ Regenerate hooks" })
     ).toHaveProperty("disabled", true);
   });
+
+  it("shows that Design System goes directly to GPT Image 2", () => {
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "design-system" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+
+    const pathSelect = stage.getByRole("combobox", {
+      name: "Image prompt model"
+    }) as HTMLSelectElement;
+    expect(pathSelect.disabled).toBe(true);
+    expect(pathSelect.selectedOptions[0]?.textContent).toBe(
+      "Luna treatment → GPT Image 2"
+    );
+    expect(stage.getByText("Generation path")).toBeTruthy();
+  });
 });

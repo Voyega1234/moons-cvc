@@ -88,7 +88,7 @@ export function WorkspaceProvider({
   if (loadingError) {
     return (
       <main className="boot-error">
-        <h1>Neo could not restore this workspace.</h1>
+        <h1>Compass could not restore this workspace.</h1>
         <p>{loadingError.message}</p>
       </main>
     );
@@ -97,7 +97,7 @@ export function WorkspaceProvider({
   if (!workspace) {
     return (
       <main className="boot-loading" aria-live="polite">
-        Loading Neo...
+        Loading Compass...
       </main>
     );
   }

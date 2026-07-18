@@ -1,6 +1,7 @@
 import type { Brand } from "../../domain/brand";
 import {
   initialsFromClientName,
+  validateClientCategory,
   validateFacebookUrl,
   type CreateClientDraftInput,
   type CreateClientDraftResult,
@@ -27,6 +28,8 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
 
     const urlError = validateFacebookUrl(facebookUrl);
     if (urlError) throw new Error(urlError);
+    const categoryError = validateClientCategory(category ?? "");
+    if (categoryError) throw new Error(categoryError);
 
     const client = getSupabaseClient();
     const { data: userData } = await client.auth.getUser();

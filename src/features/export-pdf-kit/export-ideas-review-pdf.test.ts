@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildNeoReviewPdfPages } from "./export-ideas-review-pdf"
+import { buildCompassReviewPdfPages } from "./export-ideas-review-pdf"
 
 function idea(title: string, contentType: string) {
   return {
@@ -14,9 +14,9 @@ function idea(title: string, contentType: string) {
   }
 }
 
-describe("Neo review PDF page planning", () => {
+describe("Compass review PDF page planning", () => {
   it("groups by creative type, places Recommended first, and preserves the current renderer inputs", () => {
-    const pages = buildNeoReviewPdfPages(
+    const pages = buildCompassReviewPdfPages(
       [
         {
           heading: "Recommended topics",

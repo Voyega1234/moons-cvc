@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { canSelectBrand, canStartBrandIngestion, type Brand } from "./brand";
-import { initialsFromClientName, validateFacebookUrl } from "./client-ingestion";
+import {
+  initialsFromClientName,
+  validateClientCategory,
+  validateFacebookUrl
+} from "./client-ingestion";
 
 const brand: Brand = {
   id: "client-1",
@@ -22,6 +26,17 @@ describe("client ingestion domain rules", () => {
     );
     expect(validateFacebookUrl("https://www.facebook.com/example")).toBeNull();
     expect(validateFacebookUrl("https://fb.com/example")).toBeNull();
+  });
+
+  it("keeps client categories as short labels", () => {
+    expect(validateClientCategory("")).toBeNull();
+    expect(validateClientCategory("Leather goods")).toBeNull();
+    expect(validateClientCategory("Product details\nPrice details")).toBe(
+      "Use a short category label (80 characters or fewer)."
+    );
+    expect(validateClientCategory("x".repeat(81))).toBe(
+      "Use a short category label (80 characters or fewer)."
+    );
   });
 
   it("only selects clients after ingestion has produced memory", () => {

@@ -509,7 +509,7 @@ function buildGenerationPrompt(
     "",
     buildPastPostsBlock(pastPosts),
     "",
-    "## Neo output adapter — this overrides only the supplied prompt's final JSON shape",
+    "## Compass output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
     "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; formatBeats = the exact format-native sequence defined above; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
@@ -567,7 +567,7 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
   return [
-    "## Neo current input",
+    "## Compass current input",
     `Run ID: ${input.runId}`,
     `Brand: ${input.brand?.name ?? "Unknown"}`,
     `Category: ${input.brand?.category ?? "Unknown"}`,

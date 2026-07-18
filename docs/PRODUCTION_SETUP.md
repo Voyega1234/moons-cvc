@@ -42,7 +42,7 @@ https://moons-cvc.vercel.app/
 Moons passes this URL as `emailRedirectTo` for every non-local sign-in. Local
 development sign-ins continue to return to their active localhost origin.
 
-In Supabase Auth → Providers → Email, keep the Email provider enabled. Neo now
+In Supabase Auth → Providers → Email, keep the Email provider enabled. Compass now
 uses email/password accounts rather than magic-link-only login. New account
 creation in the UI is limited to `@convertcake.com`, matching the existing
 `moons.is_convert_cake_user()` RLS policy and server authorization checks.

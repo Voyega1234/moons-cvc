@@ -1,6 +1,7 @@
 import type { Brand } from "../../domain/brand";
 import {
   initialsFromClientName,
+  validateClientCategory,
   validateFacebookUrl,
   type CreateClientDraftInput,
   type CreateClientDraftResult,
@@ -21,6 +22,8 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
   }: CreateClientDraftInput): Promise<CreateClientDraftResult> {
     const error = validateFacebookUrl(facebookUrl);
     if (error) throw new Error(error);
+    const categoryError = validateClientCategory(category ?? "");
+    if (categoryError) throw new Error(categoryError);
 
     const brand: Brand = {
       id: createClientId(name),

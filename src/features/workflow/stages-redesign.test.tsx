@@ -1,4 +1,4 @@
-import { render, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
@@ -16,12 +16,14 @@ import {
   ClientStage,
   downloadOutputAsset,
   DirectionsStage,
+  missingBrandIdentityInputs,
   repositoryErrorMessage,
   StartStage,
   StudioStage
 } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
 import { buildAngleExportReview } from "./angle-content-types";
+import { pmApprovedClientSlideItems } from "./export-client-slides-pptx";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -168,8 +170,33 @@ describe("redesigned workflow stages", () => {
   });
 
   it("presents Signal with the reference workspace and memory composition", async () => {
-    const user = userEvent.setup();
-    const state = buildCreativeState();
+    const baseState = buildCreativeState();
+    const state = {
+      ...baseState,
+      brand: baseState.brand
+        ? {
+            ...baseState.brand,
+            category: "Product/Service questionnaire content that should not appear as the client subtitle",
+            ingestionStatus: "ready" as const,
+            library: {
+              ...baseState.brand.library,
+              docs: []
+            },
+            memory: {
+              working: [
+                "UGC testimonial hooks beat studio polish",
+                "Lead with the business problem",
+                "Show the product early",
+                "Use a direct CTA\nSource: brand_analysis_jobs/job-789 · 12 images"
+              ],
+              avoid: [
+                "Avoid vague lifestyle claims",
+                "Avoid crowded layouts\nSource: brand_analysis_jobs/job-789 · 12 images"
+              ]
+            }
+          }
+        : null
+    };
     const brandRepository = new MockBrandRepository();
     const memoryRepository = new MockBrandMemoryRepository();
     vi.spyOn(memoryRepository, "listBrandRules").mockResolvedValue([
@@ -180,12 +207,45 @@ describe("redesigned workflow stages", () => {
         description: "#5664F5, #D8FF72"
       },
       {
-        id: "visual-guidance",
-        title: "Visual guidance",
+        id: "brand-details",
+        title: "แบรนด์ทำอะไร",
         description:
-          "Use bold editorial typography with spacious layouts. Keep product imagery clean and preserve clear visual hierarchy across every placement."
+          "Performance marketing agency, Creative strategy, Full-funnel planning Source: brand_analysis_jobs/job-789 · 12 images"
+      },
+      {
+        id: "target-audience",
+        title: "กลุ่มเป้าหมายและปัญหาที่ต้องการแก้",
+        description: "B2B brands, Unclear funnel, Low-quality leads"
+      },
+      {
+        id: "usp",
+        title: "จุดยืน จุดแตกต่าง และคุณค่าหลัก",
+        description: "Quality leads, Integrated strategy, Measurable outcomes"
+      },
+      {
+        id: "mood-tone",
+        title: "น้ำเสียงและแนวทางการสื่อสาร",
+        description: "Direct, Expert, Minimal"
       }
     ]);
+    vi.spyOn(memoryRepository, "listProducts").mockResolvedValue(
+      ["Posture support", "Standing desk", "Ergonomic chair", "Foot rest"].map(
+        (name, index) => ({
+          id: `product-${index}`,
+          clientId: state.brand?.id ?? "brand",
+          name,
+          description: `${name} description`,
+          offer: "",
+          keyBenefit: `${name} benefit`,
+          audience: "Office workers",
+          claimNotes: "",
+          price: "",
+          landingUrl: "",
+          isActive: true,
+          sortOrder: index
+        })
+      )
+    );
     const view = render(
       <BrandProvider
         repository={brandRepository}
@@ -202,38 +262,83 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    expect(view.container.querySelector(".neo-signal-stage")).toBeTruthy();
+    expect(view.container.querySelector(".compass-signal-stage")).toBeTruthy();
     expect(stage.getByText("01 / Signal")).toBeTruthy();
     expect(stage.getByText("Brand workspace")).toBeTruthy();
     expect(stage.getByText("Brand materials")).toBeTruthy();
     expect(stage.getByText(`${state.brand?.name} memory`)).toBeTruthy();
-    expect(stage.getByRole("navigation", { name: "Brand memory sections" })).toBeTruthy();
+    const memoryNavigation = stage.getByRole("navigation", {
+      name: "Brand memory sections"
+    });
+    expect(
+      within(memoryNavigation)
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+    ).toEqual(["Brand system", "Product truths", "Creative learnings"]);
     expect(stage.getByText("Signal before output")).toBeTruthy();
     expect(stage.getByRole("button", { name: "Continue to brief →" })).toBeTruthy();
     expect(
-      view.container.querySelectorAll(".brand-colors-section .colors-card")
+      view.container.querySelector(
+        ".compass-brand-select-card .select-btn small"
+      )?.textContent
+    ).toBe("Brand memory ready");
+    await waitFor(() =>
+      expect(
+        view.container.querySelectorAll(
+          ".compass-brand-snapshot-colors span"
+        )
+      ).toHaveLength(4)
+    );
+    expect(view.container.querySelector(".compass-brand-snapshot-logo")).toBeTruthy();
+    expect(
+      view.container.querySelectorAll(".compass-brand-snapshot-list article")
+        .length
+    ).toBe(4);
+    expect(
+      Array.from(
+        view.container.querySelectorAll(".compass-brand-snapshot-list article b")
+      ).map((item) => item.textContent)
+    ).toEqual(["Brand Details", "Target Audience", "USP", "Mood&Tone"]);
+    expect(
+      view.container.querySelector(".compass-brand-snapshot-list")?.className
+    ).toContain("is-full");
+    expect(view.container.querySelector(".compass-brand-snapshot-tags")).toBeNull();
+    expect(
+      view.container.querySelector(".compass-brand-snapshot-list")?.textContent
+    ).not.toContain("brand_analysis_jobs");
+    fireEvent.click(stage.getByRole("button", { name: "Product truths" }));
+    expect(stage.getByText("Posture support")).toBeTruthy();
+    expect(
+      view.container.querySelectorAll(".compass-brand-snapshot-list article")
+    ).toHaveLength(4);
+    fireEvent.click(stage.getByRole("button", { name: "Creative learnings" }));
+    expect(stage.getByText("UGC testimonial hooks beat studio polish")).toBeTruthy();
+    expect(
+      view.container.querySelectorAll(".compass-brand-learning-group")
     ).toHaveLength(2);
+    expect(
+      view.container.querySelectorAll(".compass-brand-learning-group.working li")
+    ).toHaveLength(4);
+    expect(
+      view.container.querySelectorAll(".compass-brand-learning-group.avoid li")
+    ).toHaveLength(2);
+    expect(
+      view.container.querySelector(".compass-brand-snapshot-list")?.className
+    ).toContain("is-full");
+    expect(
+      view.container.querySelector(".compass-brand-snapshot-list")?.textContent
+    ).not.toContain("Source:");
+    expect(stage.queryByRole("button", { name: "See more brand memory" })).toBeNull();
+    expect(stage.queryByRole("alert")).toBeNull();
 
-    const memoryViewport = view.container.querySelector(
-      ".neo-signal-memory-viewport"
-    );
-    expect(memoryViewport?.classList.contains("collapsed")).toBe(true);
-    await user.click(
-      stage.getByRole("button", { name: "See more brand memory" })
-    );
-    expect(memoryViewport?.classList.contains("expanded")).toBe(true);
-
-    await user.click(await stage.findByRole("button", { name: "See more" }));
-    expect(stage.getByRole("button", { name: "See less" })).toBeTruthy();
-
-    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    fireEvent.click(stage.getByRole("button", { name: "Manage library" }));
     expect(
       stage.getByRole("dialog", { name: "Manage brand materials" })
     ).toBeTruthy();
     expect(
       stage.getByRole("navigation", { name: "Brand library folders" })
     ).toBeTruthy();
-    await user.click(
+    fireEvent.click(
       stage.getByRole("button", { name: "Close brand library" })
     );
     expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
@@ -285,7 +390,7 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    await user.click(await stage.findByRole("button", { name: "Add to Neo" }));
+    await user.click(await stage.findByRole("button", { name: "Add to Compass" }));
     expect(
       (
         stage.getByRole("radio", {
@@ -475,10 +580,11 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
     expect(
       stage.getByRole("button", { name: /CTR/i }).getAttribute("aria-pressed")
-    ).toBe("true");
+    ).toBe("false");
     expect(
       stage.getByRole("button", { name: /CVR/i }).getAttribute("aria-pressed")
-    ).toBe("false");
+    ).toBe("true");
+    expect(stage.queryByRole("alert")).toBeNull();
     expect(stage.queryByRole("combobox", { name: /Content type/i })).toBeNull();
     expect(stage.queryByRole("button", { name: "Add item" })).toBeNull();
     expect(stage.getByText("Static")).toBeTruthy();
@@ -511,21 +617,61 @@ describe("redesigned workflow stages", () => {
     });
 
     await user.click(
-      stage.getByRole("button", { name: "Manage uploaded materials" })
+      stage.getByRole("button", { name: "Manage brief materials" })
     );
+    const materialsDialog = stage.getByRole("dialog", {
+      name: "Brief materials"
+    });
+    expect(materialsDialog).toBeTruthy();
     expect(
-      stage.getByRole("dialog", { name: "Uploaded materials" })
+      within(materialsDialog).getByRole("heading", { name: "Use from library" })
     ).toBeTruthy();
     expect(
-      stage.getByRole("navigation", { name: "Uploaded material folders" })
+      within(materialsDialog).getByRole("heading", {
+        name: "References in Brief materials"
+      })
     ).toBeTruthy();
-    await user.click(stage.getByRole("button", { name: /References/ }));
+    expect(
+      within(materialsDialog).getByRole("heading", { name: "Uploaded materials" })
+    ).toBeTruthy();
     await user.click(
-      stage.getByRole("button", { name: "Close uploaded materials" })
+      stage.getByRole("button", { name: "Close brief materials" })
     );
     expect(
-      stage.queryByRole("dialog", { name: "Uploaded materials" })
+      stage.queryByRole("dialog", { name: "Brief materials" })
     ).toBeNull();
+  });
+
+  it("links extracted guideline tone and colors into brand identity readiness", () => {
+    expect(missingBrandIdentityInputs([], [], [])).toEqual([
+      "Logo",
+      "Brand CI / Guideline",
+      "Colors"
+    ]);
+    expect(
+      missingBrandIdentityInputs(
+        [
+          {
+            id: "logo",
+            title: "Logo",
+            description: "Primary mark",
+            assetUrl: "https://example.com/logo.png"
+          },
+          {
+            id: "tone",
+            title: "Tone & Style",
+            description: "Direct and premium"
+          },
+          {
+            id: "colors",
+            title: "Colors",
+            description: "#112233, #FFFFFF"
+          }
+        ],
+        [],
+        []
+      )
+    ).toEqual([]);
   });
 
   it("selects an available brand logo as the default artwork reference", async () => {
@@ -581,14 +727,14 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    expect(view.container.querySelector(".neo-stage-angles")).toBeTruthy();
+    expect(view.container.querySelector(".compass-stage-angles")).toBeTruthy();
     expect(
       stage.getByRole("region", { name: "Artwork settings" })
     ).toBeTruthy();
-    expect(view.container.querySelectorAll(".neo-angle-setting")).toHaveLength(3);
-    expect(view.container.querySelectorAll(".neo-angle-settings")).toHaveLength(1);
+    expect(view.container.querySelectorAll(".compass-angle-setting")).toHaveLength(3);
+    expect(view.container.querySelectorAll(".compass-angle-settings")).toHaveLength(1);
     expect(stage.getByRole("heading", { name: "Review hooks" })).toBeTruthy();
-    expect(stage.queryByRole("button", { name: "Let Neo pick" })).toBeNull();
+    expect(stage.queryByRole("button", { name: "Let Compass pick" })).toBeNull();
     expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
     expect(stage.queryByRole("combobox", { name: "PDF design" })).toBeNull();
     expect(
@@ -605,7 +751,7 @@ describe("redesigned workflow stages", () => {
           !button.classList.contains("primary")
       )
     ).toBe(true);
-    expect(view.container.querySelectorAll(".neo-angle-group-buttons")).toHaveLength(
+    expect(view.container.querySelectorAll(".compass-angle-group-buttons")).toHaveLength(
       3
     );
     expect(stage.queryByRole("menuitem", { name: /Export PDF/ })).toBeNull();
@@ -627,14 +773,14 @@ describe("redesigned workflow stages", () => {
       })
     ).toBeTruthy();
     await user.click(stage.getByRole("button", { name: "Cancel" }));
-    const angleCards = view.container.querySelectorAll(".neo-angle-card");
+    const angleCards = view.container.querySelectorAll(".compass-angle-card");
     expect(angleCards).toHaveLength(state.directions.length);
-    expect(angleCards[0]?.querySelector(".neo-angle-badge-row")).toBeTruthy();
-    expect(angleCards[0]?.querySelector(".neo-angle-meta-line")?.textContent).toContain(
-      "Creative concept · Awareness"
+    expect(angleCards[0]?.querySelector(".compass-angle-badge-row")).toBeTruthy();
+    expect(angleCards[0]?.querySelector(".compass-angle-meta-line")?.textContent).toContain(
+      "Creative concept · Conversion"
     );
-    expect(angleCards[0]?.querySelector(".neo-angle-hook-wrap")).toBeTruthy();
-    expect(angleCards[0]?.querySelectorAll(".neo-angle-copy-block")).toHaveLength(3);
+    expect(angleCards[0]?.querySelector(".compass-angle-hook-wrap")).toBeTruthy();
+    expect(angleCards[0]?.querySelectorAll(".compass-angle-copy-block")).toHaveLength(3);
     const albumCard = Array.from(angleCards).find((card) =>
       card.textContent?.includes("ALBUM AD")
     );
@@ -646,22 +792,31 @@ describe("redesigned workflow stages", () => {
     expect(albumCard?.textContent).toContain("ปัญหาที่คนมองข้าม");
     expect(ugcCard?.textContent).toContain("Opening hook");
     expect(ugcCard?.textContent).toContain("UGC video flow · 3 beats");
-    expect(angleCards[0]?.querySelector(".neo-angle-card-foot")).toBeTruthy();
+    expect(angleCards[0]?.querySelector(".compass-angle-card-foot")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("82")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("score")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("Subheadline 1")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("Concept 1")).toBeTruthy();
-    expect(stage.getAllByRole("button", { name: "Edit" })).toHaveLength(
+    expect(stage.getAllByRole("button", { name: /Edit Idea/ })).toHaveLength(
       state.directions.length
     );
+    expect(angleCards[0]?.classList.contains("selected")).toBe(true);
+    expect(
+      within(angleCards[0] as HTMLElement).getByText("Your pick")
+    ).toBeTruthy();
     expect(
       within(angleCards[0] as HTMLElement)
-        .getByRole("button", { name: "Edit" })
-        .closest(".neo-angle-top-actions")
+        .getByRole("button", { name: "Edit Idea 1" })
+        .closest(".compass-angle-top-actions")
+    ).toBeTruthy();
+    expect(
+      within(angleCards[0] as HTMLElement)
+        .getByRole("button", { name: "Edit Idea 1" })
+        .querySelector("svg")
     ).toBeTruthy();
     expect(
       Array.from(
-        angleCards[0]?.querySelectorAll(".neo-angle-card-foot .btn") ?? []
+        angleCards[0]?.querySelectorAll(".compass-angle-card-foot .btn") ?? []
       ).map((button) => button.textContent)
     ).toEqual(["Rewrite hook", "Delete"]);
     expect(stage.getAllByRole("button", { name: "Rewrite hook" })).toHaveLength(
@@ -705,7 +860,7 @@ describe("redesigned workflow stages", () => {
       type: "add-manual-direction",
       service: "single-static",
       pillar: "Product proof",
-      objective: "Awareness",
+      objective: "Conversion",
       hook: "A manual proof hook",
       subheadline: "Show the difference clearly",
       cta: "See the proof"
@@ -746,29 +901,36 @@ describe("redesigned workflow stages", () => {
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
     const headings = Array.from(
-      view.container.querySelectorAll(".neo-angle-group-title h3")
+      view.container.querySelectorAll(".compass-angle-group-title h3")
     ).map((node) => node.textContent);
 
-    expect(headings).toEqual(["Static hooks"]);
-    expect(stage.queryByRole("heading", { name: "Album hooks" })).toBeNull();
-    expect(stage.queryByRole("heading", { name: "UGC video hooks" })).toBeNull();
+    expect(headings).toEqual(["STATIC"]);
+    expect(stage.queryByRole("heading", { name: "ALBUM" })).toBeNull();
+    expect(stage.queryByRole("heading", { name: "UGC VIDEO" })).toBeNull();
     expect(
       stage.getAllByRole("button", { name: "Generate more ideas" })
     ).toHaveLength(1);
   });
 
   it("derives Recommended and Option PDF groups from selection and deletion", async () => {
-    const state = buildMixedAngleState();
+    const base = buildMixedAngleState();
+    const state = {
+      ...base,
+      creativeMix: [...base.creativeMix!].reverse()
+    };
     const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
     const headings = Array.from(
-      view.container.querySelectorAll(".neo-angle-group-title h3")
+      view.container.querySelectorAll(".compass-angle-group-title h3")
     ).map((node) => node.textContent);
 
-    expect(headings).toEqual(["Static hooks", "Album hooks", "UGC video hooks"]);
-    expect(stage.getAllByText("STATIC AD")).toHaveLength(3);
-    expect(stage.getAllByText("ALBUM AD")).toHaveLength(1);
-    expect(stage.getAllByText("UGC VIDEO")).toHaveLength(2);
+    expect(headings).toEqual(["STATIC", "ALBUM", "UGC VIDEO"]);
+    const formatPills = Array.from(
+      view.container.querySelectorAll(".compass-angle-format-pill")
+    ).map((pill) => pill.textContent);
+    expect(formatPills.filter((format) => format === "STATIC AD")).toHaveLength(3);
+    expect(formatPills.filter((format) => format === "ALBUM AD")).toHaveLength(1);
+    expect(formatPills.filter((format) => format === "UGC VIDEO")).toHaveLength(2);
     expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
     expect(stage.queryByRole("combobox", { name: "PDF design" })).toBeNull();
     expect(buildAngleExportReview(state).sections.map((section) => section.heading)).toEqual([
@@ -820,28 +982,147 @@ describe("redesigned workflow stages", () => {
   });
 
   it("presents Build as a format-grouped draft-review workspace", () => {
-    const state = buildCreativeState();
+    const base = buildCreativeState();
+    const state = { ...base, outputs: [...base.outputs].reverse() };
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
 
-    expect(view.container.querySelector(".neo-stage-build")).toBeTruthy();
+    expect(view.container.querySelector(".compass-stage-build")).toBeTruthy();
     expect(
       stage.getByRole("heading", { name: `Creative set · ${state.brand?.name}` })
     ).toBeTruthy();
     expect(
-      stage.getByRole("heading", { name: "1:1 Static creatives" })
+      stage.getByRole("heading", { name: "STATIC" })
     ).toBeTruthy();
+    expect(
+      Array.from(
+        view.container.querySelectorAll(".build-section-head h3")
+      ).map((heading) => heading.textContent)
+    ).toEqual(["STATIC", "ALBUM", "UGC VIDEO"]);
     expect(stage.getAllByText(/Creative \d/)).toHaveLength(state.outputs.length);
     const reviewCards = view.container.querySelectorAll(
-      ".neo-build-review-card"
+      ".compass-build-review-card"
     );
     expect(reviewCards).toHaveLength(state.outputs.length);
-    expect(reviewCards[0]?.querySelector(".neo-build-card-head")).toBeTruthy();
-    expect(reviewCards[0]?.querySelector(".neo-build-asset-pair")).toBeTruthy();
-    expect(reviewCards[0]?.querySelector(".neo-build-caption")).toBeTruthy();
-    expect(reviewCards[0]?.querySelector(".neo-build-qa")).toBeNull();
+    expect(reviewCards[0]?.querySelector(".compass-build-card-head")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".compass-build-asset-pair")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".compass-build-caption")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".compass-build-qa")).toBeNull();
     expect(stage.queryByText("Not checked yet")).toBeNull();
-    expect(reviewCards[0]?.querySelector(".neo-build-output-foot")).toBeTruthy();
+    expect(reviewCards[0]?.querySelector(".compass-build-output-foot")).toBeTruthy();
+  });
+
+  it("combines three album panels into one review card and preview", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const sourceOutput = base.outputs[0];
+    if (!sourceOutput) throw new Error("Expected a creative output fixture.");
+    const state = {
+      ...base,
+      outputs: [1, 2, 3].map((panel) => ({
+        ...sourceOutput,
+        id: `${sourceOutput.directionId}-album-${panel}-v1`,
+        format: "Album post",
+        assetUrl: `https://example.com/album-panel-${panel}.png`
+      }))
+    };
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+    const albumHeading = stage.getByRole("heading", {
+      name: "ALBUM"
+    });
+    const albumSection = albumHeading.closest(".build-type-section");
+    if (!(albumSection instanceof HTMLElement)) {
+      throw new Error("Expected the album review section.");
+    }
+
+    expect(
+      albumSection.querySelectorAll(".compass-build-review-card")
+    ).toHaveLength(1);
+    expect(
+      albumSection.querySelectorAll(".compass-album-mosaic img")
+    ).toHaveLength(3);
+    expect(within(albumSection).getAllByRole("textbox", {
+      name: "Edit caption"
+    })).toHaveLength(1);
+    expect(albumSection.querySelector(".build-section-head strong")?.textContent).toBe(
+      "1"
+    );
+
+    await user.click(
+      within(albumSection).getByRole("button", { name: "Save album" })
+    );
+    expect(dispatch).toHaveBeenCalledTimes(3);
+    state.outputs.forEach((output) => {
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "save-output-reference",
+        id: output.id
+      });
+    });
+
+    await user.click(
+      within(albumSection).getByRole("button", {
+        name: "Open album creative 1 preview"
+      })
+    );
+
+    const dialog = stage.getByRole("dialog", {
+      name: "Album creative preview"
+    });
+    expect(dialog.querySelectorAll(".compass-album-mosaic img")).toHaveLength(3);
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+  });
+
+  it("does not show a fake score for generated artwork before real QA runs", () => {
+    const base = buildCreativeState();
+    const state = {
+      ...base,
+      outputs: base.outputs.map((output) => ({
+        ...output,
+        status: "ready" as const
+      }))
+    };
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+    const reviewCards = view.container.querySelectorAll(
+      ".compass-build-review-card"
+    );
+
+    expect(reviewCards[0]?.querySelector(".compass-build-qa")).toBeNull();
+    expect(stage.queryByText("88")).toBeNull();
+    expect(
+      stage.queryByText("Clear, distinct, and ready for human review.")
+    ).toBeNull();
+    expect(stage.getAllByText("AI draft")).toHaveLength(state.outputs.length);
+  });
+
+  it("shows the score and compact review returned by real QA", () => {
+    const base = buildCreativeState();
+    const state = workflowReducer(base, {
+      type: "run-qa",
+      results: base.outputs.map((output, index) => ({
+        outputId: output.id,
+        passed: true,
+        reason: "Passed real quality review.",
+        report: qualityReport(true, 91 + index)
+      }))
+    });
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const firstCard = view.container.querySelector(
+      ".compass-build-review-card"
+    );
+
+    expect(firstCard?.textContent).toContain("91");
+    expect(firstCard?.textContent).toContain(
+      "Clear, distinct, and ready for human review."
+    );
+    expect(
+      firstCard?.querySelector(".compass-build-qa-score-grid")
+    ).toBeTruthy();
+    expect(firstCard?.textContent).not.toContain("GD Checklist Review");
+    expect(firstCard?.textContent).not.toContain("CS Checklist Review");
+    expect(firstCard?.textContent).not.toContain("88");
   });
 
   it("saves a Build execution to references through the workflow", async () => {
@@ -914,8 +1195,8 @@ describe("redesigned workflow stages", () => {
     const state = workflowReducer(buildMixedAngleState(), { type: "create-outputs" });
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
 
-    expect(view.container.querySelectorAll(".neo-ugc-template").length).toBeGreaterThan(0);
-    expect(within(view.container).getByRole("heading", { name: "9:16 UGC creatives" })).toBeTruthy();
+    expect(view.container.querySelectorAll(".compass-ugc-template").length).toBeGreaterThan(0);
+    expect(within(view.container).getByRole("heading", { name: "UGC VIDEO" })).toBeTruthy();
   });
 
   it("gives every failed Build quality result a next step", async () => {
@@ -939,15 +1220,36 @@ describe("redesigned workflow stages", () => {
     expect(stage.getByRole("button", { name: "Use suggestion" })).toBeTruthy();
     const failedCard = stage
       .getByRole("button", { name: "Use suggestion" })
-      .closest(".neo-build-review-card");
+      .closest(".compass-build-review-card");
     expect(failedCard?.textContent).toContain("Tighten the first-frame hook");
-    expect(failedCard?.textContent).toContain("GD details");
-    expect(failedCard?.textContent).toContain("CS details");
+    expect(failedCard?.textContent).toContain("View 2 priority issues");
+    expect(failedCard?.textContent).not.toContain("GD Checklist Review");
+    expect(failedCard?.textContent).not.toContain("CS Checklist Review");
     expect(failedCard?.textContent).toContain(
       "Premium features. The difference is visible in one glance."
     );
     expect(failedCard?.textContent).toContain("78");
     expect(stage.queryByText("Quality check found a fix")).toBeNull();
+    await user.click(stage.getByRole("button", { name: "Use suggestion" }));
+    const regenerateDialog = stage.getByRole("dialog");
+    const regenerationInstructions = within(regenerateDialog).getByRole(
+      "textbox",
+      { name: "Revision instructions" }
+    ) as HTMLTextAreaElement;
+    expect(regenerationInstructions.value).toContain(
+      "Creative review direction:"
+    );
+    expect(regenerationInstructions.value).toContain(
+      "Communicate the benefit faster with less interpretation."
+    );
+    expect(regenerationInstructions.value).not.toContain("quality score");
+    expect(regenerationInstructions.value).not.toContain(
+      "Premium features. The difference is visible in one glance."
+    );
+    expect(within(regenerateDialog).getByText(/improve the full composition/)).toBeTruthy();
+    await user.click(
+      within(regenerateDialog).getAllByRole("button", { name: "Close" })[0]!
+    );
     await user.click(stage.getByRole("button", { name: "Keep current" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
   });
@@ -975,7 +1277,7 @@ describe("redesigned workflow stages", () => {
         !output.format.toLowerCase().includes("album")
     ).length;
 
-    expect(view.container.querySelector(".neo-stage-qc")).toBeTruthy();
+    expect(view.container.querySelector(".compass-stage-qc")).toBeTruthy();
     expect(
       stage
         .getByRole("progressbar", { name: "Internal QC progress" })
@@ -995,10 +1297,10 @@ describe("redesigned workflow stages", () => {
     expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(
       gdOutputCount
     );
-    const firstCard = view.container.querySelector(".neo-qc-focus-card");
-    const firstCardContent = firstCard?.querySelector(".neo-qc-focus-content");
-    expect(firstCard?.querySelector(".neo-caption-scroll")).toBeTruthy();
-    expect(firstCard?.querySelector(".neo-qc-mini-trail")?.textContent).toContain(
+    const firstCard = view.container.querySelector(".compass-qc-focus-card");
+    const firstCardContent = firstCard?.querySelector(".compass-qc-focus-content");
+    expect(firstCard?.querySelector(".compass-caption-scroll")).toBeTruthy();
+    expect(firstCard?.querySelector(".compass-qc-mini-trail")?.textContent).toContain(
       "GD→CS→PM→Client"
     );
     expect(firstCard?.querySelector(".fb-see-more")).toBeNull();
@@ -1007,7 +1309,7 @@ describe("redesigned workflow stages", () => {
     ).toContain("Download Image");
     expect(firstCardContent?.querySelector(".upload-inline")).toBeTruthy();
     expect(
-      firstCard?.querySelector(".neo-qc-focus-asset .neo-qc-asset-actions")
+      firstCard?.querySelector(".compass-qc-focus-asset .compass-qc-asset-actions")
     ).toBeNull();
     expect(stage.queryByText("Review route")).toBeNull();
     expect(stage.queryByRole("dialog")).toBeNull();
@@ -1037,7 +1339,7 @@ describe("redesigned workflow stages", () => {
       <ApprovalStage state={approvedState} dispatch={dispatch} />
     );
 
-    expect(view.container.querySelectorAll(".neo-qc-focus-card")).toHaveLength(
+    expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(
       gdOutputCount - 1
     );
     if (firstDirection) {
@@ -1051,17 +1353,17 @@ describe("redesigned workflow stages", () => {
     expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
     expect(stage.queryByText("ALBUM")).toBeNull();
     const ugcCard = view.container
-      .querySelector(".neo-qc-ugc-ownership")
-      ?.closest(".neo-qc-focus-card");
+      .querySelector(".compass-qc-ugc-ownership")
+      ?.closest(".compass-qc-focus-card");
     expect(
-      ugcCard?.querySelector(".neo-qc-check-box > b")?.textContent
+      ugcCard?.querySelector(".compass-qc-check-box > b")?.textContent
     ).toBe("CS checks");
-    expect(ugcCard?.querySelectorAll(".neo-qc-check-chips span")).toHaveLength(4);
-    expect(ugcCard?.querySelector(".neo-qc-check-list")).toBeNull();
-    expect(ugcCard?.querySelector(".neo-qc-mini-trail")?.textContent).toContain(
+    expect(ugcCard?.querySelectorAll(".compass-qc-check-chips span")).toHaveLength(4);
+    expect(ugcCard?.querySelector(".compass-qc-check-list")).toBeNull();
+    expect(ugcCard?.querySelector(".compass-qc-mini-trail")?.textContent).toContain(
       "CS→PM→Client"
     );
-    expect(ugcCard?.querySelector(".neo-qc-mini-trail")?.textContent).not.toContain(
+    expect(ugcCard?.querySelector(".compass-qc-mini-trail")?.textContent).not.toContain(
       "GD"
     );
     expect(
@@ -1088,6 +1390,38 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("offers one client deck from PM Review when approved assets are ready", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const view = render(<ApprovalStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("tab", { name: /PM Review/i }));
+    const emptyDownload = stage.getByRole("button", {
+      name: "Download client slides · 0"
+    }) as HTMLButtonElement;
+    expect(emptyDownload.disabled).toBe(true);
+    expect(
+      stage.getByText("One .pptx with every PM-approved asset, including UGC.")
+    ).toBeTruthy();
+
+    const approvedState = workflowReducer(state, { type: "approve-all" });
+    view.rerender(
+      <ApprovalStage state={approvedState} dispatch={dispatch} />
+    );
+
+    const readyItems = pmApprovedClientSlideItems(approvedState);
+    expect(readyItems).toHaveLength(approvedState.outputs.length);
+    expect(
+      readyItems.some((item) => item.output.format.toUpperCase().includes("UGC"))
+    ).toBe(true);
+    const readyDownload = stage.getByRole("button", {
+      name: `Download client slides · ${approvedState.outputs.length}`
+    }) as HTMLButtonElement;
+    expect(readyDownload.disabled).toBe(false);
+  });
+
   it("requires client feedback before routing a creative to Internal QC", async () => {
     const user = userEvent.setup();
     const state = buildClientState();
@@ -1097,7 +1431,7 @@ describe("redesigned workflow stages", () => {
     const firstOutput = state.outputs[0];
     if (!firstOutput) throw new Error("Expected a creative output fixture.");
 
-    expect(view.container.querySelector(".neo-stage-client")).toBeTruthy();
+    expect(view.container.querySelector(".compass-stage-client")).toBeTruthy();
     expect(
       stage.getByRole("button", { name: "← Back to Internal QC" })
     ).toBeTruthy();

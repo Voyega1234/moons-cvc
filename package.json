@@ -1,5 +1,5 @@
 {
-  "name": "moons-creative-os",
+  "name": "compass-creative-os",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -37,7 +37,9 @@
     "@supabase/supabase-js": "^2.108.2",
     "@vercel/functions": "^3.7.5",
     "jspdf": "^4.2.1",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "sharp": "^0.35.3"
   }
 }

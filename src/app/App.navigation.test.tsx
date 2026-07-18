@@ -40,8 +40,8 @@ describe("redesigned application navigation", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Open Neo studio" }).textContent
-    ).toBe("neo");
+      screen.getByRole("button", { name: "Open Compass studio" }).textContent
+    ).toBe("compass");
 
     await user.click(screen.getByRole("button", { name: "Workboard" }));
     expect(workspaceDispatch).toHaveBeenCalledWith({
@@ -59,8 +59,8 @@ describe("redesigned application navigation", () => {
       stage: "start"
     });
 
-    await user.click(screen.getByRole("button", { name: "New" }));
-    expect(createRun).toHaveBeenCalledWith(true);
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    expect(createRun).toHaveBeenCalledWith(false);
 
     expect(
       (screen.getByRole("button", { name: "Learnings" }) as HTMLButtonElement)

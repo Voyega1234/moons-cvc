@@ -170,12 +170,18 @@ function buildPrompt(
     "ใช้ Ads เพื่อเข้าใจข้อเสนอ ประโยชน์ กลุ่มเป้าหมาย CTA และ claim ที่ใช้เชิงพาณิชย์",
     "หากสองแหล่งให้ข้อมูลไม่ตรงกัน ให้ระบุความไม่แน่นอนและตั้ง needsReview เป็น true",
     "",
-    "Brand kit ต้องครอบคลุม:",
-    "- แบรนด์ทำอะไร",
-    "- กลุ่มเป้าหมายและปัญหาที่ต้องการแก้",
-    "- จุดยืน จุดแตกต่าง และคุณค่าหลัก",
-    "- น้ำเสียงและแนวทางการสื่อสาร",
-    "- ข้อความหรือกฎที่ควรใช้ในการสร้างครีเอทีฟ",
+    "brandKitEntries ต้องมี 4 รายการเท่านั้น เรียงตามลำดับและใช้ title ภาษาอังกฤษตามนี้ทุกตัวอักษร:",
+    "- Brand Details: แบรนด์ทำอะไร",
+    "- Target Audience: กลุ่มเป้าหมายและปัญหาที่ต้องการแก้",
+    "- USP: จุดยืน จุดแตกต่าง และคุณค่าหลัก",
+    "- Mood&Tone: น้ำเสียงและแนวทางการสื่อสาร",
+    "ใช้รูปแบบ description ให้เหมาะกับข้อมูลของแต่ละหัวข้อ:",
+    "- Brand Details: เขียนเป็นข้อความกระชับ 1-2 ประโยค อธิบายว่าแบรนด์ทำอะไร หมวดธุรกิจ และสิ่งที่ขาย ห้ามใช้ tag ล้วน",
+    "- Target Audience: แยกเป็น 2 บรรทัด Audience: ... และ Pain points: ... ใช้วลีสั้นที่มีหลักฐานรองรับ",
+    "- USP: เขียนจุดยืน จุดแตกต่าง และคุณค่าหลักเป็นข้อความสั้น 1-3 ข้อ โดยรักษาความสัมพันธ์และเหตุผล ห้ามลดเหลือ tag ที่ขาดบริบท",
+    "- Mood&Tone: ใช้ tag สั้น 3-6 tag คั่นด้วย comma เช่น เรียบหรู, Minimal, Expert, Direct",
+    "ใช้ภาษาไทยหรืออังกฤษให้สอดคล้องกับหลักฐาน และห้ามใส่ Source หรือข้อมูลระบบใน description",
+    "Visual guidance แยกอยู่ใน visualGuidance เท่านั้น ห้ามเพิ่มเป็น brandKitEntries รายการที่ 5",
     "",
     "แยกสินค้าและบริการที่พบออกเป็น products โดยแต่ละรายการต้องมี:",
     "- name: ชื่อสินค้า/บริการ",
@@ -238,11 +244,16 @@ const brandVisualAnalysisSchema = {
   properties: {
     brandKitEntries: {
       type: "array",
+      minItems: 4,
+      maxItems: 4,
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          title: { type: "string" },
+          title: {
+            type: "string",
+            enum: ["Brand Details", "Target Audience", "USP", "Mood&Tone"]
+          },
           description: { type: "string" }
         },
         required: ["title", "description"]

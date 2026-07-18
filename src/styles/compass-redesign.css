@@ -1,12 +1,12 @@
 /*
- * Neo creative-tech redesign.
+ * Compass creative-tech redesign.
  *
- * This file is intentionally loaded after app.css and scoped to .neo-app.
+ * This file is intentionally loaded after app.css and scoped to .compass-app.
  * It changes presentation only. Existing workflow selectors remain available
  * while the migration is verified, which keeps rollback and comparison safe.
  */
 
-.neo-app {
+.compass-app {
   --font: "Sukhumvit Set", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Arial, sans-serif;
   --display: var(--font);
@@ -56,27 +56,27 @@
     var(--bg);
 }
 
-.neo-app b,
-.neo-app strong {
+.compass-app b,
+.compass-app strong {
   font-weight: 600;
 }
 
-.neo-page {
+.compass-page {
   min-width: 0;
 }
 
-.neo-app .shell {
+.compass-app .shell {
   width: 100%;
   max-width: 1380px;
   padding: 0;
 }
 
-.neo-app main {
+.compass-app main {
   padding: 18px 0 0;
 }
 
-/* Action feedback, matched to the original Neo HTML notification card. */
-.neo-app .toast-wrap {
+/* Action feedback, matched to the original Compass HTML notification card. */
+.compass-app .toast-wrap {
   left: auto;
   right: 24px;
   bottom: 24px;
@@ -84,7 +84,7 @@
   transform: none;
 }
 
-.neo-app .neo-action-toast {
+.compass-app .compass-action-toast {
   width: 100%;
   display: flex;
   align-items: center;
@@ -97,7 +97,7 @@
   box-shadow: 0 16px 42px rgba(28, 35, 52, 0.14);
 }
 
-.neo-app .neo-action-toast-icon {
+.compass-app .compass-action-toast-icon {
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
@@ -108,41 +108,41 @@
   color: #405126;
 }
 
-.neo-app .neo-action-toast.warning .neo-action-toast-icon {
+.compass-app .compass-action-toast.warning .compass-action-toast-icon {
   background: var(--orangeSoft);
   color: #b8472e;
 }
 
-.neo-app .neo-action-toast.error .neo-action-toast-icon {
+.compass-app .compass-action-toast.error .compass-action-toast-icon {
   background: var(--redSoft);
   color: var(--red);
 }
 
-.neo-app .neo-action-toast-copy {
+.compass-app .compass-action-toast-copy {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.neo-app .neo-action-toast-copy b {
+.compass-app .compass-action-toast-copy b {
   font-size: 11.5px;
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
-.neo-app .neo-action-toast-copy > span {
+.compass-app .compass-action-toast-copy > span {
   color: var(--muted);
   font-size: 9.8px;
   line-height: 1.3;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .neo-app .neo-action-toast {
-    animation: neo-action-toast-in 240ms var(--ease) both;
+  .compass-app .compass-action-toast {
+    animation: compass-action-toast-in 240ms var(--ease) both;
   }
 }
 
-@keyframes neo-action-toast-in {
+@keyframes compass-action-toast-in {
   from {
     opacity: 0;
     transform: translateY(18px);
@@ -154,7 +154,7 @@
 }
 
 /* Persistent product navigation */
-.neo-rail {
+.compass-rail {
   position: fixed;
   z-index: 60;
   inset: 16px auto 16px 16px;
@@ -171,7 +171,7 @@
   backdrop-filter: blur(18px);
 }
 
-.neo-logo-button {
+.compass-logo-button {
   width: 54px;
   height: 54px;
   flex: 0 0 auto;
@@ -187,14 +187,14 @@
   text-transform: lowercase;
 }
 
-.neo-rail-nav {
+.compass-rail-nav {
   width: 100%;
   display: grid;
   gap: 7px;
 }
 
-.neo-rail-nav button,
-.neo-rail-create {
+.compass-rail-nav button,
+.compass-rail-create {
   width: 100%;
   min-height: 58px;
   display: grid;
@@ -207,24 +207,24 @@
   position: relative;
 }
 
-.neo-rail-nav button span,
-.neo-rail-create span {
+.compass-rail-nav button span,
+.compass-rail-create span {
   font-size: 9.5px;
   font-weight: 650;
   letter-spacing: 0;
 }
 
-.neo-rail-nav button:hover:not(:disabled) {
+.compass-rail-nav button:hover:not(:disabled) {
   color: var(--ink);
   background: #f3f5f8;
 }
 
-.neo-rail-nav button.active {
+.compass-rail-nav button.active {
   color: var(--accent);
   background: var(--accentSoft);
 }
 
-.neo-rail-nav button.active::before {
+.compass-rail-nav button.active::before {
   content: "";
   position: absolute;
   left: -4px;
@@ -234,7 +234,7 @@
   background: var(--accent);
 }
 
-.neo-rail-create {
+.compass-rail-create {
   margin-top: auto;
   min-height: 61px;
   background: var(--accent);
@@ -242,13 +242,13 @@
   box-shadow: 0 8px 18px rgba(86, 100, 245, 0.2);
 }
 
-.neo-rail-create:hover {
+.compass-rail-create:hover {
   background: var(--accentHover);
   transform: translateY(-1px);
 }
 
 /* Header, workflow steps, and active runs */
-.neo-app .topbar {
+.compass-app .topbar {
   position: sticky;
   top: 16px;
   z-index: 40;
@@ -257,7 +257,7 @@
   box-shadow: none;
 }
 
-.neo-app .nav {
+.compass-app .nav {
   height: auto;
   min-height: 76px;
   padding: 10px 12px;
@@ -268,22 +268,22 @@
   backdrop-filter: blur(18px);
 }
 
-.neo-app .nav > .journey-wrap {
+.compass-app .nav > .journey-wrap {
   min-width: 0;
   flex: 1;
   padding: 0;
 }
 
-.neo-app .journey-track {
+.compass-app .journey-track {
   display: none;
 }
 
-.neo-app .journey {
+.compass-app .journey {
   grid-template-columns: repeat(7, minmax(72px, 1fr));
   gap: 5px;
 }
 
-.neo-app .journey button {
+.compass-app .journey button {
   height: 52px;
   justify-content: center;
   border-color: transparent;
@@ -293,65 +293,65 @@
   padding: 0 9px;
 }
 
-.neo-app .journey button:hover:not(:disabled) {
+.compass-app .journey button:hover:not(:disabled) {
   background: #f5f6f9;
   color: var(--ink);
 }
 
-.neo-app .journey button.active {
+.compass-app .journey button.active {
   color: var(--accent);
   border-color: rgba(86, 100, 245, 0.12);
   background: var(--accentSoft);
   box-shadow: inset 0 0 0 1px rgba(86, 100, 245, 0.05);
 }
 
-.neo-app .journey button.done {
+.compass-app .journey button.done {
   color: #4c5360;
 }
 
-.neo-app .journey button.done svg {
-  color: var(--green);
+.compass-app .journey button.done svg {
+  color: #22c55e;
 }
 
-.neo-app .journey b {
+.compass-app .journey b {
   font-size: 11px;
   font-weight: 650;
 }
 
-.neo-app .nav-right {
+.compass-app .nav-right {
   flex: 0 0 auto;
 }
 
-.neo-app .client-pill,
-.neo-app .refresh,
-.neo-app .neo-notification-button {
+.compass-app .client-pill,
+.compass-app .refresh,
+.compass-app .compass-notification-button {
   height: 44px;
   border-radius: 15px;
   background: #fff;
   box-shadow: none;
 }
 
-.neo-app .client-pill {
+.compass-app .client-pill {
   padding: 0 12px;
 }
 
-.neo-app .refresh {
+.compass-app .refresh {
   width: 44px;
 }
 
-.neo-app .client-pill:hover,
-.neo-app .refresh:hover,
-.neo-app .neo-notification-button:hover {
+.compass-app .client-pill:hover,
+.compass-app .refresh:hover,
+.compass-app .compass-notification-button:hover {
   border-color: var(--accentLine);
   background: #fff;
 }
 
-.neo-app .neo-notification-wrap {
+.compass-app .compass-notification-wrap {
   position: relative;
   flex: 0 0 auto;
 }
 
-.neo-app .neo-notification-button {
+.compass-app .compass-notification-button {
   position: relative;
   width: 44px;
   display: grid;
@@ -366,28 +366,28 @@
     transform 0.16s var(--ease);
 }
 
-.neo-app .neo-notification-button:hover {
+.compass-app .compass-notification-button:hover {
   border-color: var(--accentLine);
   background: #fafbff;
   transform: translateY(-1px);
 }
 
-.neo-app .neo-notification-button:active {
+.compass-app .compass-notification-button:active {
   transform: translateY(0);
 }
 
-.neo-app .neo-notification-button.open {
+.compass-app .compass-notification-button.open {
   border-color: var(--accentLine);
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .neo-notification-button:focus-visible {
+.compass-app .compass-notification-button:focus-visible {
   outline: 3px solid rgba(86, 100, 245, 0.2);
   outline-offset: 2px;
 }
 
-.neo-app .neo-notification-badge {
+.compass-app .compass-notification-badge {
   position: absolute;
   top: 7px;
   right: 7px;
@@ -398,7 +398,7 @@
   box-shadow: 0 0 0 2px #fff;
 }
 
-.neo-app .neo-notification-popover {
+.compass-app .compass-notification-popover {
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
@@ -411,7 +411,7 @@
   box-shadow: 0 24px 60px rgba(28, 35, 52, 0.16);
 }
 
-.neo-app .neo-notification-popover > header {
+.compass-app .compass-notification-popover > header {
   min-height: 66px;
   padding: 13px 14px 12px 16px;
   display: flex;
@@ -421,22 +421,22 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-notification-popover > header div {
+.compass-app .compass-notification-popover > header div {
   display: grid;
   gap: 3px;
 }
 
-.neo-app .neo-notification-popover > header b {
+.compass-app .compass-notification-popover > header b {
   color: var(--ink);
   font-size: 13px;
 }
 
-.neo-app .neo-notification-popover > header span {
+.compass-app .compass-notification-popover > header span {
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-notification-popover > header button {
+.compass-app .compass-notification-popover > header button {
   width: 34px;
   height: 34px;
   display: grid;
@@ -448,19 +448,19 @@
   cursor: pointer;
 }
 
-.neo-app .neo-notification-popover > header button:hover {
+.compass-app .compass-notification-popover > header button:hover {
   border-color: var(--line);
   background: var(--surface2);
   color: var(--ink);
 }
 
-.neo-app .neo-notification-list {
+.compass-app .compass-notification-list {
   max-height: min(420px, calc(100vh - 150px));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.neo-app .neo-notification-item {
+.compass-app .compass-notification-item {
   width: 100%;
   min-height: 92px;
   padding: 14px 16px;
@@ -476,15 +476,15 @@
   cursor: pointer;
 }
 
-.neo-app .neo-notification-item:last-child {
+.compass-app .compass-notification-item:last-child {
   border-bottom: 0;
 }
 
-.neo-app .neo-notification-item:hover {
+.compass-app .compass-notification-item:hover {
   background: #f8f9fb;
 }
 
-.neo-app .neo-notification-avatar {
+.compass-app .compass-notification-avatar {
   width: 42px;
   height: 42px;
   display: grid;
@@ -496,45 +496,45 @@
   font-weight: 760;
 }
 
-.neo-app .neo-notification-item.needs_review .neo-notification-avatar {
+.compass-app .compass-notification-item.needs_review .compass-notification-avatar {
   background: var(--babySoft);
   color: #50631d;
 }
 
-.neo-app .neo-notification-item.failed .neo-notification-avatar {
+.compass-app .compass-notification-item.failed .compass-notification-avatar {
   background: var(--redSoft);
   color: var(--red);
 }
 
-.neo-app .neo-notification-item.stalled .neo-notification-avatar {
+.compass-app .compass-notification-item.stalled .compass-notification-avatar {
   background: #fff2d6;
   color: #a46200;
 }
 
-.neo-app .neo-notification-copy {
+.compass-app .compass-notification-copy {
   min-width: 0;
   display: grid;
   gap: 4px;
 }
 
-.neo-app .neo-notification-copy b {
+.compass-app .compass-notification-copy b {
   font-size: 11.5px;
 }
 
-.neo-app .neo-notification-copy > span {
+.compass-app .compass-notification-copy > span {
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.4;
 }
 
-.neo-app .neo-notification-copy small {
+.compass-app .compass-notification-copy small {
   margin-top: 2px;
   color: var(--accent);
   font-size: 9.5px;
   font-weight: 700;
 }
 
-.neo-app .neo-notification-empty {
+.compass-app .compass-notification-empty {
   min-height: 150px;
   padding: 24px;
   display: grid;
@@ -545,21 +545,21 @@
   text-align: center;
 }
 
-.neo-app .neo-notification-empty b {
+.compass-app .compass-notification-empty b {
   color: var(--ink);
   font-size: 11.5px;
 }
 
-.neo-app .neo-notification-empty span {
+.compass-app .compass-notification-empty span {
   font-size: 10px;
 }
 
-.neo-app .neo-setup-queued-backdrop {
+.compass-app .compass-setup-queued-backdrop {
   padding: 20px;
   background: rgba(25, 29, 40, 0.42);
 }
 
-.neo-app .neo-setup-queued-modal {
+.compass-app .compass-setup-queued-modal {
   max-width: 480px;
   padding: 28px;
   overflow: visible;
@@ -568,7 +568,7 @@
   box-shadow: 0 24px 64px rgba(28, 35, 52, 0.18);
 }
 
-.neo-app .neo-setup-queued-status {
+.compass-app .compass-setup-queued-status {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -577,21 +577,21 @@
   font-weight: 700;
 }
 
-.neo-app .neo-setup-queued-modal h3 {
+.compass-app .compass-setup-queued-modal h3 {
   margin: 16px 0 8px;
   color: var(--ink);
   font-size: 24px;
   line-height: 1.25;
 }
 
-.neo-app .neo-setup-queued-modal > p {
+.compass-app .compass-setup-queued-modal > p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
 
-.neo-app .neo-setup-queued-mailbox {
+.compass-app .compass-setup-queued-mailbox {
   margin-top: 20px;
   padding: 14px;
   display: grid;
@@ -604,7 +604,7 @@
   color: var(--accent);
 }
 
-.neo-app .neo-setup-queued-mailbox > svg {
+.compass-app .compass-setup-queued-mailbox > svg {
   width: 40px;
   height: 40px;
   padding: 9px;
@@ -613,38 +613,38 @@
   background: #fff;
 }
 
-.neo-app .neo-setup-queued-mailbox div {
+.compass-app .compass-setup-queued-mailbox div {
   display: grid;
   gap: 4px;
 }
 
-.neo-app .neo-setup-queued-mailbox b {
+.compass-app .compass-setup-queued-mailbox b {
   color: var(--ink);
   font-size: 12.5px;
 }
 
-.neo-app .neo-setup-queued-mailbox span {
+.compass-app .compass-setup-queued-mailbox span {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
 }
 
-.neo-app .neo-setup-queued-actions {
+.compass-app .compass-setup-queued-actions {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
 }
 
-.neo-app .neo-setup-queued-actions .btn {
+.compass-app .compass-setup-queued-actions .btn {
   min-width: 96px;
   justify-content: center;
 }
 
-.neo-app .neo-account-wrap {
+.compass-app .compass-account-wrap {
   position: relative;
 }
 
-.neo-app .neo-account-button {
+.compass-app .compass-account-button {
   width: 42px;
   height: 42px;
   display: grid;
@@ -657,13 +657,13 @@
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-.neo-app .neo-account-button:hover,
-.neo-app .neo-account-button.open {
+.compass-app .compass-account-button:hover,
+.compass-app .compass-account-button.open {
   border-color: #c7cde0;
   background: #f7f8fc;
 }
 
-.neo-app .neo-account-popover {
+.compass-app .compass-account-popover {
   position: absolute;
   z-index: 80;
   top: calc(100% + 10px);
@@ -676,19 +676,19 @@
   box-shadow: 0 18px 50px rgba(23, 27, 42, 0.16);
 }
 
-.neo-app .neo-account-copy {
+.compass-app .compass-account-copy {
   display: grid;
   gap: 2px;
   padding: 9px 10px 12px;
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-account-copy span {
+.compass-app .compass-account-copy span {
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-account-copy b {
+.compass-app .compass-account-copy b {
   overflow: hidden;
   color: #242834;
   font-size: 12px;
@@ -697,7 +697,7 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-account-popover > button {
+.compass-app .compass-account-popover > button {
   width: 100%;
   min-height: 38px;
   display: flex;
@@ -715,41 +715,41 @@
   cursor: pointer;
 }
 
-.neo-app .neo-account-popover > button:hover {
+.compass-app .compass-account-popover > button:hover {
   background: #f4f5f8;
 }
 
-.neo-app .neo-account-popover > p {
+.compass-app .compass-account-popover > p {
   margin: 7px 8px 2px;
   color: var(--red);
   font-size: 10.5px;
   line-height: 1.35;
 }
 
-.neo-workboard-label {
+.compass-workboard-label {
   display: flex;
   align-items: center;
   gap: 10px;
   padding-left: 7px;
 }
 
-.neo-workboard-label > span,
-.neo-workboard-label b,
-.neo-workboard-label small {
+.compass-workboard-label > span,
+.compass-workboard-label b,
+.compass-workboard-label small {
   display: block;
 }
 
-.neo-workboard-label b {
+.compass-workboard-label b {
   font-size: 14px;
 }
 
-.neo-workboard-label small {
+.compass-workboard-label small {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10.5px;
 }
 
-.neo-app .runs-bar {
+.compass-app .runs-bar {
   display: none;
   margin: 8px 0 0;
   padding: 8px;
@@ -758,47 +758,47 @@
   background: rgba(255, 255, 255, 0.78);
 }
 
-.neo-app .run-tab {
+.compass-app .run-tab {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
 
-.neo-app .run-tab.on {
+.compass-app .run-tab.on {
   border-color: var(--line);
   background: #fff;
   box-shadow: var(--soft);
 }
 
-.neo-app .run-dot {
+.compass-app .run-dot {
   background: var(--accent);
 }
 
-.neo-app .runs-new {
+.compass-app .runs-new {
   border-radius: 12px;
   background: #fff;
 }
 
-.neo-app .memory-ribbon {
+.compass-app .memory-ribbon {
   display: none;
   padding: 8px 0 0;
 }
 
-.neo-app .ribbon {
+.compass-app .ribbon {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.74);
   box-shadow: none;
 }
 
-.neo-app .mini-avatar,
-.neo-app .big-avatar,
-.neo-app .avatar,
-.neo-app .run-tab-av {
+.compass-app .mini-avatar,
+.compass-app .big-avatar,
+.compass-app .avatar,
+.compass-app .run-tab-av {
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .ribbon-brand .big-avatar {
+.compass-app .ribbon-brand .big-avatar {
   display: grid;
   place-items: center;
   margin-top: 0;
@@ -806,7 +806,7 @@
 }
 
 /* Welcome hero */
-.neo-hero {
+.compass-hero {
   min-height: 218px;
   display: grid;
   grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
@@ -822,7 +822,7 @@
   box-shadow: var(--shadowLg);
 }
 
-.neo-hero::before {
+.compass-hero::before {
   content: "";
   position: absolute;
   right: -90px;
@@ -834,13 +834,13 @@
   pointer-events: none;
 }
 
-.neo-hero-copy {
+.compass-hero-copy {
   align-self: center;
   position: relative;
   z-index: 1;
 }
 
-.neo-kicker {
+.compass-kicker {
   height: 25px;
   width: fit-content;
   display: inline-flex;
@@ -857,14 +857,14 @@
   text-transform: uppercase;
 }
 
-.neo-kicker > span {
+.compass-kicker > span {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--orange);
 }
 
-.neo-hero h1 {
+.compass-hero h1 {
   max-width: 690px;
   margin: 12px 0 11px;
   font-size: clamp(36px, 4.3vw, 56px);
@@ -874,7 +874,7 @@
   text-wrap: balance;
 }
 
-.neo-hero h1 em {
+.compass-hero h1 em {
   position: relative;
   z-index: 0;
   display: inline-block;
@@ -883,7 +883,7 @@
   font-style: normal;
 }
 
-.neo-hero h1 em::after {
+.compass-hero h1 em::after {
   content: "";
   position: absolute;
   z-index: -1;
@@ -895,7 +895,7 @@
   background: var(--baby);
 }
 
-.neo-hero p {
+.compass-hero p {
   max-width: 610px;
   margin: 0;
   color: var(--muted);
@@ -903,7 +903,7 @@
   line-height: 1.45;
 }
 
-.neo-hero-meta {
+.compass-hero-meta {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -911,7 +911,7 @@
   margin-top: 14px;
 }
 
-.neo-status-pill {
+.compass-status-pill {
   min-height: 31px;
   display: inline-flex;
   align-items: center;
@@ -925,7 +925,7 @@
   font-size: 11px;
 }
 
-.neo-status-pill::before {
+.compass-status-pill::before {
   content: "";
   width: 7px;
   height: 7px;
@@ -934,7 +934,7 @@
   background: var(--orange);
 }
 
-.neo-hero-signals {
+.compass-hero-signals {
   position: relative;
   z-index: 1;
   display: grid;
@@ -943,7 +943,7 @@
   gap: 8px;
 }
 
-.neo-signal-card {
+.compass-signal-card {
   min-width: 0;
   min-height: 88px;
   display: flex;
@@ -955,7 +955,7 @@
   background: #fff;
 }
 
-.neo-signal-card span {
+.compass-signal-card span {
   color: var(--muted);
   font-size: 9px;
   font-weight: 700;
@@ -963,7 +963,7 @@
   text-transform: uppercase;
 }
 
-.neo-signal-card b {
+.compass-signal-card b {
   display: block;
   overflow: hidden;
   font-size: 19px;
@@ -972,48 +972,48 @@
   text-overflow: ellipsis;
 }
 
-.neo-signal-card small {
+.compass-signal-card small {
   display: block;
   color: var(--muted);
   font-size: 9px;
   line-height: 1.3;
 }
 
-.neo-signal-primary {
+.compass-signal-primary {
   grid-row: 1 / 3;
   background: linear-gradient(145deg, #fff, #f7f8ff);
 }
 
-.neo-signal-primary b {
+.compass-signal-primary b {
   font-size: 19px;
 }
 
-.neo-signal-lime {
+.compass-signal-lime {
   background: #f5ffdd;
 }
 
-.neo-signal-orange {
+.compass-signal-orange {
   background: var(--orangeSoft);
 }
 
-.neo-signal-lime b,
-.neo-signal-orange b {
+.compass-signal-lime b,
+.compass-signal-orange b {
   font-size: 19px;
 }
 
-.neo-motion-stage {
+.compass-motion-stage {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 8px;
 }
 
-.neo-spark-lines {
+.compass-spark-lines {
   display: grid;
   gap: 6px;
 }
 
-.neo-spark-lines i {
+.compass-spark-lines i {
   position: relative;
   display: block;
   height: 8px;
@@ -1022,29 +1022,29 @@
   background: linear-gradient(90deg, rgba(86, 100, 245, 0.18), rgba(86, 100, 245, 0.65));
 }
 
-.neo-spark-lines i::after {
+.compass-spark-lines i::after {
   content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.88), transparent);
-  animation: neo-signal-sweep 2.4s linear infinite;
+  animation: compass-signal-sweep 2.4s linear infinite;
 }
 
-.neo-spark-lines i:nth-child(1) { width: 76%; }
-.neo-spark-lines i:nth-child(2) { width: 92%; }
-.neo-spark-lines i:nth-child(3) { width: 66%; }
-.neo-spark-lines i:nth-child(4) { width: 84%; }
-.neo-spark-lines i:nth-child(5) { width: 58%; }
+.compass-spark-lines i:nth-child(1) { width: 76%; }
+.compass-spark-lines i:nth-child(2) { width: 92%; }
+.compass-spark-lines i:nth-child(3) { width: 66%; }
+.compass-spark-lines i:nth-child(4) { width: 84%; }
+.compass-spark-lines i:nth-child(5) { width: 58%; }
 
-.neo-motion-stack {
+.compass-motion-stack {
   position: relative;
   width: 86px;
   height: 82px;
   justify-self: end;
 }
 
-.neo-motion-stack i {
+.compass-motion-stack i {
   position: absolute;
   display: block;
   border: 1px solid rgba(86, 100, 245, 0.14);
@@ -1053,43 +1053,43 @@
   box-shadow: 0 12px 22px rgba(28, 35, 52, 0.06);
 }
 
-.neo-motion-stack i:nth-child(1) {
+.compass-motion-stack i:nth-child(1) {
   top: 6px;
   left: 7px;
   width: 58px;
   height: 72px;
   transform: rotate(-8deg);
-  animation: neo-signal-float 5s ease-in-out infinite;
+  animation: compass-signal-float 5s ease-in-out infinite;
 }
 
-.neo-motion-stack i:nth-child(2) {
+.compass-motion-stack i:nth-child(2) {
   top: 9px;
   left: 23px;
   width: 60px;
   height: 74px;
   transform: rotate(4deg);
   background: #f5ffdd;
-  animation: neo-signal-float 5s ease-in-out 0.8s infinite;
+  animation: compass-signal-float 5s ease-in-out 0.8s infinite;
 }
 
-.neo-motion-stack i:nth-child(3) {
+.compass-motion-stack i:nth-child(3) {
   top: 1px;
   left: 14px;
   width: 62px;
   height: 76px;
   transform: rotate(11deg);
   background: #fff1ec;
-  animation: neo-signal-float 5s ease-in-out 1.6s infinite;
+  animation: compass-signal-float 5s ease-in-out 1.6s infinite;
 }
 
-.neo-orbit-wrap {
+.compass-orbit-wrap {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.neo-orbit {
+.compass-orbit {
   position: relative;
   width: 50px;
   height: 50px;
@@ -1099,7 +1099,7 @@
   border-radius: 50%;
 }
 
-.neo-orbit i {
+.compass-orbit i {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1109,22 +1109,22 @@
   border-radius: 50%;
   background: var(--accent);
   transform-origin: 0 0;
-  animation: neo-signal-orbit 5.8s linear infinite;
+  animation: compass-signal-orbit 5.8s linear infinite;
 }
 
-.neo-orbit i:nth-child(2) {
+.compass-orbit i:nth-child(2) {
   background: var(--orange);
   animation-duration: 7s;
   animation-delay: -1.8s;
 }
 
-.neo-orbit i:nth-child(3) {
+.compass-orbit i:nth-child(3) {
   background: var(--baby);
   animation-duration: 8.4s;
   animation-delay: -2.5s;
 }
 
-.neo-orbit::after {
+.compass-orbit::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -1137,14 +1137,14 @@
   background: #fff;
 }
 
-.neo-flip-words {
+.compass-flip-words {
   position: relative;
   height: 100%;
   min-height: 64px;
   overflow: hidden;
 }
 
-.neo-flip-words b {
+.compass-flip-words b {
   position: absolute;
   top: 50%;
   right: 0;
@@ -1155,59 +1155,59 @@
   line-height: 1.02;
   letter-spacing: -0.04em;
   opacity: 0;
-  animation: neo-signal-flip 9s infinite;
+  animation: compass-signal-flip 9s infinite;
 }
 
-.neo-flip-words b:nth-child(2) { animation-delay: 3s; }
-.neo-flip-words b:nth-child(3) { animation-delay: 6s; }
+.compass-flip-words b:nth-child(2) { animation-delay: 3s; }
+.compass-flip-words b:nth-child(3) { animation-delay: 6s; }
 
-@keyframes neo-signal-sweep {
+@keyframes compass-signal-sweep {
   to { transform: translateX(100%); }
 }
 
-@keyframes neo-signal-orbit {
+@keyframes compass-signal-orbit {
   from { transform: rotate(0deg) translateX(18px); }
   to { transform: rotate(360deg) translateX(18px); }
 }
 
-@keyframes neo-signal-float {
+@keyframes compass-signal-float {
   0%, 100% { transform: translateY(0) rotate(-8deg); }
   50% { transform: translateY(-6px) rotate(-4deg); }
 }
 
-@keyframes neo-signal-flip {
+@keyframes compass-signal-flip {
   0%, 18% { opacity: 0; transform: translateY(60%); }
   22%, 30% { opacity: 1; transform: translateY(-50%); }
   48%, 100% { opacity: 0; transform: translateY(-140%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .neo-spark-lines i::after,
-  .neo-motion-stack i,
-  .neo-orbit i,
-  .neo-flip-words b {
+  .compass-spark-lines i::after,
+  .compass-motion-stack i,
+  .compass-orbit i,
+  .compass-flip-words b {
     animation: none;
   }
 
-  .neo-flip-words b:first-child {
+  .compass-flip-words b:first-child {
     opacity: 1;
     transform: translateY(-50%);
   }
 }
 
 @media (max-width: 760px) {
-  .neo-app .toast-wrap {
+  .compass-app .toast-wrap {
     right: 16px;
     bottom: 98px;
   }
 
-  .neo-app .neo-action-toast {
+  .compass-app .compass-action-toast {
     gap: 10px;
     padding: 11px 12px;
     border-radius: 15px;
   }
 
-  .neo-app .neo-action-toast-icon {
+  .compass-app .compass-action-toast-icon {
     width: 32px;
     height: 32px;
     flex-basis: 32px;
@@ -1216,7 +1216,7 @@
 }
 
 /* Workflow surfaces */
-.neo-app .decision-card {
+.compass-app .decision-card {
   border-color: var(--line);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.97);
@@ -1224,13 +1224,13 @@
   overflow: visible;
 }
 
-.neo-app .decision-head {
+.compass-app .decision-head {
   min-height: 104px;
   padding: 25px 28px 22px;
   border-bottom-color: var(--line);
 }
 
-.neo-app .decision-head h2 {
+.compass-app .decision-head h2 {
   max-width: 760px;
   font-size: clamp(25px, 2.4vw, 34px);
   font-weight: 520;
@@ -1238,7 +1238,7 @@
   letter-spacing: -0.045em;
 }
 
-.neo-app .decision-helper {
+.compass-app .decision-helper {
   max-width: 650px;
   margin: 10px 0 0;
   color: var(--muted);
@@ -1246,7 +1246,7 @@
   line-height: 1.45;
 }
 
-.neo-app .eyebrow {
+.compass-app .eyebrow {
   margin-bottom: 8px;
   color: var(--accent);
   font-size: 10px;
@@ -1254,11 +1254,11 @@
   letter-spacing: 0.11em;
 }
 
-.neo-app .decision-body {
+.compass-app .decision-body {
   padding: 22px 28px;
 }
 
-.neo-app .decision-actions {
+.compass-app .decision-actions {
   min-height: 74px;
   padding: 14px 20px;
   border-radius: 0 0 28px 28px;
@@ -1267,30 +1267,30 @@
 
 /* Signal copies the Brand workspace + Brand memory composition from the
    reference HTML while keeping the existing repositories and editors. */
-.neo-app .neo-signal-stage .decision-actions {
+.compass-app .compass-signal-stage .decision-actions {
   justify-content: space-between;
 }
 
-.neo-app .neo-signal-before-output {
+.compass-app .compass-signal-before-output {
   color: var(--muted);
 }
 
-.neo-app .neo-signal-footer-actions {
+.compass-app .compass-signal-footer-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.neo-app .neo-start-grid {
+.compass-app .compass-start-grid {
   display: grid;
   grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.28fr);
   gap: 16px;
   align-items: start;
 }
 
-.neo-app .neo-brand-select-card,
-.neo-app .neo-signal-memory-card {
+.compass-app .compass-brand-select-card,
+.compass-app .compass-signal-memory-card {
   min-width: 0;
   overflow: visible;
   border: 1px solid var(--line);
@@ -1298,11 +1298,11 @@
   background: var(--surface2);
 }
 
-.neo-app .neo-brand-select-card {
+.compass-app .compass-brand-select-card {
   padding: 16px;
 }
 
-.neo-app .neo-card-label {
+.compass-app .compass-card-label {
   display: block;
   margin-bottom: 9px;
   color: var(--muted);
@@ -1312,7 +1312,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-signal-stage .select-btn {
+.compass-app .compass-signal-stage .select-btn {
   min-height: 60px;
   height: auto;
   padding: 10px 11px;
@@ -1322,29 +1322,29 @@
   transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
 
-.neo-app .neo-signal-stage .select-btn:hover {
+.compass-app .compass-signal-stage .select-btn:hover {
   border-color: rgba(86, 100, 245, 0.38);
   box-shadow: 0 7px 18px rgba(28, 35, 52, 0.055);
 }
 
-.neo-app .neo-brand-select-avatar {
+.compass-app .compass-brand-select-avatar {
   width: 38px;
   height: 38px;
   border-radius: 12px;
   font-size: 11px;
 }
 
-.neo-app .neo-signal-stage .select-btn b {
+.compass-app .compass-signal-stage .select-btn b {
   display: block;
   font-size: 13px;
 }
 
-.neo-app .neo-signal-stage .select-btn small {
+.compass-app .compass-signal-stage .select-btn small {
   margin-top: 3px;
   font-size: 11px;
 }
 
-.neo-app .neo-signal-stage .menu {
+.compass-app .compass-signal-stage .menu {
   top: 68px;
   padding: 10px;
   border-color: var(--line);
@@ -1352,7 +1352,7 @@
   box-shadow: 0 18px 42px rgba(28, 35, 52, 0.12);
 }
 
-.neo-app .neo-start-blank {
+.compass-app .compass-start-blank {
   margin-top: 13px;
   padding: 22px 16px;
   border: 1px dashed var(--line2);
@@ -1361,20 +1361,20 @@
   text-align: center;
 }
 
-.neo-app .neo-start-blank b {
+.compass-app .compass-start-blank b {
   display: block;
   color: var(--ink);
   font-size: 13px;
 }
 
-.neo-app .neo-start-blank p {
+.compass-app .compass-start-blank p {
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.45;
 }
 
-.neo-app .neo-material-uploader {
+.compass-app .compass-material-uploader {
   margin-top: 11px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -1382,7 +1382,7 @@
   background: #fff;
 }
 
-.neo-app .neo-materials-head {
+.compass-app .compass-materials-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1390,16 +1390,16 @@
   margin-bottom: 9px;
 }
 
-.neo-app .neo-materials-head > div:first-child > b,
-.neo-app .neo-materials-head > div:first-child > small {
+.compass-app .compass-materials-head > div:first-child > b,
+.compass-app .compass-materials-head > div:first-child > small {
   display: block;
 }
 
-.neo-app .neo-materials-head > div:first-child > b {
+.compass-app .compass-materials-head > div:first-child > b {
   font-size: 12px;
 }
 
-.neo-app .neo-materials-head > div:first-child > small {
+.compass-app .compass-materials-head > div:first-child > small {
   max-width: 250px;
   margin-top: 3px;
   color: var(--muted);
@@ -1407,7 +1407,7 @@
   line-height: 1.35;
 }
 
-.neo-app .neo-materials-head-actions {
+.compass-app .compass-materials-head-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1415,13 +1415,13 @@
   flex-wrap: wrap;
 }
 
-.neo-app .neo-materials-compact-grid {
+.compass-app .compass-materials-compact-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
 
-.neo-app .neo-material-compact-row {
+.compass-app .compass-material-compact-row {
   min-width: 0;
   min-height: 48px;
   display: flex;
@@ -1435,25 +1435,25 @@
   transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
 }
 
-.neo-app .neo-material-compact-row:hover {
+.compass-app .compass-material-compact-row:hover {
   border-color: rgba(86, 100, 245, 0.26);
   background: #f8f9ff;
 }
 
-.neo-app .neo-material-compact-row.wide {
+.compass-app .compass-material-compact-row.wide {
   grid-column: 1 / -1;
 }
 
-.neo-app .neo-material-compact-row b,
-.neo-app .neo-material-compact-row span {
+.compass-app .compass-material-compact-row b,
+.compass-app .compass-material-compact-row span {
   display: block;
 }
 
-.neo-app .neo-material-compact-row b {
+.compass-app .compass-material-compact-row b {
   font-size: 11.5px;
 }
 
-.neo-app .neo-material-compact-row span {
+.compass-app .compass-material-compact-row span {
   max-width: 160px;
   margin-top: 2px;
   overflow: hidden;
@@ -1463,17 +1463,17 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-material-compact-row .btn {
+.compass-app .compass-material-compact-row .btn {
   min-height: 32px;
   flex: 0 0 auto;
   background: #fff;
 }
 
-.neo-app .neo-signal-memory-card {
+.compass-app .compass-signal-memory-card {
   overflow: hidden;
 }
 
-.neo-app .neo-signal-memory-top {
+.compass-app .compass-signal-memory-top {
   min-height: 68px;
   display: flex;
   align-items: center;
@@ -1483,25 +1483,235 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-signal-memory-top h3 {
+.compass-app .compass-signal-memory-top h3 {
   margin: 0;
   font-size: 14px;
 }
 
-.neo-app .neo-signal-memory-top p {
+.compass-app .compass-signal-memory-top p {
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 11px;
 }
 
-.neo-app .neo-signal-memory-tabs {
+.compass-app .compass-brand-snapshot {
+  display: grid;
+  gap: 14px;
+  padding: 15px 16px 16px;
+}
+
+.compass-app .compass-brand-snapshot-identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.compass-app .compass-brand-snapshot-logo {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--accentSoft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compass-app .compass-brand-snapshot-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.compass-app .compass-brand-snapshot-name {
+  min-width: 0;
+}
+
+.compass-app .compass-brand-snapshot-name b,
+.compass-app .compass-brand-snapshot-name span {
+  display: block;
+}
+
+.compass-app .compass-brand-snapshot-name b {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-brand-snapshot-name span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.compass-app .compass-brand-snapshot-colors {
+  min-width: 154px;
+}
+
+.compass-app .compass-brand-snapshot-colors small {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.compass-app .compass-brand-snapshot-colors > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compass-app .compass-brand-snapshot-colors span {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(28, 35, 52, 0.14);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.compass-app .compass-brand-snapshot-colors em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.compass-app .compass-brand-snapshot > .compass-signal-memory-tabs {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.compass-app .compass-brand-snapshot-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.compass-app .compass-brand-snapshot-list article {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(96px, 0.34fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compass-app .compass-brand-snapshot-list article:last-child {
+  border-bottom: 0;
+}
+
+.compass-app .compass-brand-snapshot-list article b {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.compass-app .compass-brand-snapshot-list article p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.compass-app .compass-brand-snapshot-list.is-full article p {
+  display: block;
+  overflow: visible;
+  white-space: pre-wrap;
+  -webkit-line-clamp: unset;
+}
+
+.compass-app .compass-brand-snapshot-list.is-learning {
+  padding: 10px;
+  background: var(--surface2);
+}
+
+.compass-app .compass-brand-learning-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compass-app .compass-brand-learning-group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid;
+  border-radius: 12px;
+}
+
+.compass-app .compass-brand-learning-group.working {
+  border-color: rgba(20, 143, 96, 0.22);
+  background: #f0faf5;
+}
+
+.compass-app .compass-brand-learning-group.avoid {
+  border-color: rgba(196, 66, 58, 0.2);
+  background: #fff4f3;
+}
+
+.compass-app .compass-brand-learning-group h4 {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+}
+
+.compass-app .compass-brand-learning-group.working h4,
+.compass-app .compass-brand-learning-group.working li::marker {
+  color: #0f7a55;
+}
+
+.compass-app .compass-brand-learning-group.avoid h4,
+.compass-app .compass-brand-learning-group.avoid li::marker {
+  color: #b33a34;
+}
+
+.compass-app .compass-brand-learning-group ul {
+  margin: 0;
+  padding-left: 17px;
+}
+
+.compass-app .compass-brand-learning-group li {
+  color: var(--ink);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.compass-app .compass-brand-learning-group li + li {
+  margin-top: 6px;
+}
+
+.compass-app .compass-brand-snapshot-empty {
+  padding: 22px 14px;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.compass-app .compass-signal-memory-tabs {
   display: flex;
   justify-content: flex-end;
   gap: 5px;
   flex-wrap: wrap;
 }
 
-.neo-app .neo-signal-memory-tabs button {
+.compass-app .compass-signal-memory-tabs button {
   min-height: 29px;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -1512,35 +1722,35 @@
   font-weight: 700;
 }
 
-.neo-app .neo-signal-memory-tabs button.active {
+.compass-app .compass-signal-memory-tabs button.active {
   border-color: rgba(86, 100, 245, 0.18);
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .neo-signal-memory-viewport {
+.compass-app .compass-signal-memory-viewport {
   position: relative;
   min-height: 207px;
 }
 
-.neo-app .neo-signal-memory-content {
+.compass-app .compass-signal-memory-content {
   min-height: 207px;
   padding: 15px;
 }
 
-.neo-app .neo-signal-memory-viewport.collapsed .neo-signal-memory-content {
+.compass-app .compass-signal-memory-viewport.collapsed .compass-signal-memory-content {
   max-height: 470px;
   overflow: hidden;
 }
 
-.neo-app .neo-signal-memory-viewport.expanded .neo-signal-memory-content {
+.compass-app .compass-signal-memory-viewport.expanded .compass-signal-memory-content {
   max-height: 560px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
-.neo-app .neo-signal-memory-fade {
+.compass-app .compass-signal-memory-fade {
   position: absolute;
   z-index: 4;
   right: 0;
@@ -1560,8 +1770,8 @@
   pointer-events: none;
 }
 
-.neo-app .neo-signal-memory-fade button,
-.neo-app .neo-signal-memory-collapse {
+.compass-app .compass-signal-memory-fade button,
+.compass-app .compass-signal-memory-collapse {
   min-height: 34px;
   padding: 0 16px;
   border: 1px solid var(--line2);
@@ -1574,18 +1784,18 @@
   pointer-events: auto;
 }
 
-.neo-app .neo-signal-memory-fade button:hover,
-.neo-app .neo-signal-memory-collapse:hover {
+.compass-app .compass-signal-memory-fade button:hover,
+.compass-app .compass-signal-memory-collapse:hover {
   border-color: rgba(86, 100, 245, 0.32);
   color: var(--accent);
 }
 
-.neo-app .neo-signal-memory-collapse {
+.compass-app .compass-signal-memory-collapse {
   display: block;
   margin: 0 auto 14px;
 }
 
-.neo-app .neo-signal-memory-empty {
+.compass-app .compass-signal-memory-empty {
   min-height: 175px;
   display: grid;
   place-items: center;
@@ -1596,22 +1806,22 @@
   text-align: center;
 }
 
-.neo-app .neo-signal-memory-empty b,
-.neo-app .neo-signal-memory-empty span {
+.compass-app .compass-signal-memory-empty b,
+.compass-app .compass-signal-memory-empty span {
   display: block;
 }
 
-.neo-app .neo-signal-memory-empty b {
+.compass-app .compass-signal-memory-empty b {
   margin-bottom: 5px;
   color: var(--ink);
   font-size: 13px;
 }
 
-.neo-app .neo-signal-memory-empty span {
+.compass-app .compass-signal-memory-empty span {
   font-size: 11px;
 }
 
-.neo-app .brand-colors-section {
+.compass-app .brand-colors-section {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 12px;
@@ -1621,7 +1831,7 @@
   background: var(--surface2);
 }
 
-.neo-app .brand-colors-section .colors-card {
+.compass-app .brand-colors-section .colors-card {
   min-width: 0;
   margin: 0;
   border: 0;
@@ -1629,18 +1839,18 @@
   background: transparent;
 }
 
-.neo-app .brand-colors-section .colors-card + .colors-card {
+.compass-app .brand-colors-section .colors-card + .colors-card {
   border-left: 1px solid var(--line);
 }
 
-.neo-app .visual-guidance-item .memory-item-desc.collapsed {
+.compass-app .visual-guidance-item .memory-item-desc.collapsed {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }
 
-.neo-app .memory-expand-button {
+.compass-app .memory-expand-button {
   margin-top: 9px;
   padding: 0;
   color: var(--accent);
@@ -1648,17 +1858,17 @@
   font-weight: 700;
 }
 
-.neo-app .memory-expand-button:hover {
+.compass-app .memory-expand-button:hover {
   text-decoration: underline;
 }
 
-.neo-app .neo-library-backdrop {
+.compass-app .compass-library-backdrop {
   padding: 24px;
   background: rgba(24, 28, 38, 0.24);
   backdrop-filter: blur(7px);
 }
 
-.neo-app .neo-material-manager-modal {
+.compass-app .compass-material-manager-modal {
   width: min(1180px, 96vw);
   max-width: none;
   max-height: 92vh;
@@ -1672,7 +1882,7 @@
   box-shadow: 0 24px 70px rgba(28, 35, 52, 0.18);
 }
 
-.neo-app .neo-material-manager-head {
+.compass-app .compass-material-manager-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1681,20 +1891,20 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-material-manager-head h3 {
+.compass-app .compass-material-manager-head h3 {
   margin: 0;
   font-size: 20px;
   font-weight: 520;
   letter-spacing: -0.035em;
 }
 
-.neo-app .neo-material-manager-head p:not(.eyebrow) {
+.compass-app .compass-material-manager-head p:not(.eyebrow) {
   margin: 5px 0 0;
   color: var(--muted);
   font-size: 11.5px;
 }
 
-.neo-app .neo-material-close {
+.compass-app .compass-material-close {
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
@@ -1705,7 +1915,7 @@
   font-size: 18px;
 }
 
-.neo-app .neo-material-manager-toolbar {
+.compass-app .compass-material-manager-toolbar {
   min-height: 56px;
   display: flex;
   align-items: center;
@@ -1717,29 +1927,29 @@
   background: #fafbfc;
 }
 
-.neo-app .neo-material-manager-toolbar > div b,
-.neo-app .neo-material-manager-toolbar > div span {
+.compass-app .compass-material-manager-toolbar > div b,
+.compass-app .compass-material-manager-toolbar > div span {
   display: block;
 }
 
-.neo-app .neo-material-manager-toolbar > div b {
+.compass-app .compass-material-manager-toolbar > div b {
   font-size: 12px;
 }
 
-.neo-app .neo-material-manager-toolbar > div span {
+.compass-app .compass-material-manager-toolbar > div span {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-material-manager-window {
+.compass-app .compass-material-manager-window {
   min-height: min(520px, calc(92vh - 151px));
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);
   overflow: hidden;
 }
 
-.neo-app .neo-material-folder-nav {
+.compass-app .compass-material-folder-nav {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -1749,7 +1959,7 @@
   background: #f7f8fb;
 }
 
-.neo-app .neo-material-folder-btn {
+.compass-app .compass-material-folder-btn {
   width: 100%;
   min-height: 47px;
   display: flex;
@@ -1763,19 +1973,19 @@
   text-align: left;
 }
 
-.neo-app .neo-material-folder-btn:hover {
+.compass-app .compass-material-folder-btn:hover {
   background: #fff;
   color: var(--ink);
 }
 
-.neo-app .neo-material-folder-btn.active {
+.compass-app .compass-material-folder-btn.active {
   border-color: var(--line);
   background: #fff;
   color: var(--ink);
   box-shadow: 0 5px 15px rgba(28, 35, 52, 0.055);
 }
 
-.neo-app .neo-material-folder-icon {
+.compass-app .compass-material-folder-icon {
   width: 26px;
   height: 26px;
   flex: 0 0 auto;
@@ -1788,20 +1998,20 @@
   font-weight: 700;
 }
 
-.neo-app .neo-material-folder-btn > span:last-child {
+.compass-app .compass-material-folder-btn > span:last-child {
   min-width: 0;
 }
 
-.neo-app .neo-material-folder-btn b,
-.neo-app .neo-material-folder-btn small {
+.compass-app .compass-material-folder-btn b,
+.compass-app .compass-material-folder-btn small {
   display: block;
 }
 
-.neo-app .neo-material-folder-btn b {
+.compass-app .compass-material-folder-btn b {
   font-size: 10.5px;
 }
 
-.neo-app .neo-material-folder-btn small {
+.compass-app .compass-material-folder-btn small {
   margin-top: 1px;
   overflow: hidden;
   color: var(--faint);
@@ -1810,7 +2020,7 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-material-browser {
+.compass-app .compass-material-browser {
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1818,7 +2028,7 @@
   overflow: hidden;
 }
 
-.neo-app .neo-material-browser-head {
+.compass-app .compass-material-browser-head {
   min-height: 55px;
   display: flex;
   align-items: center;
@@ -1828,23 +2038,23 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-material-browser-head div b,
-.neo-app .neo-material-browser-head div span {
+.compass-app .compass-material-browser-head div b,
+.compass-app .compass-material-browser-head div span {
   display: block;
 }
 
-.neo-app .neo-material-browser-head div b {
+.compass-app .compass-material-browser-head div b {
   font-size: 12px;
 }
 
-.neo-app .neo-material-browser-head div span,
-.neo-app .neo-material-browser-head > span {
+.compass-app .compass-material-browser-head div span,
+.compass-app .compass-material-browser-head > span {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-material-browser-content {
+.compass-app .compass-material-browser-content {
   min-height: 0;
   flex: 1;
   padding: 16px;
@@ -1853,19 +2063,19 @@
   scrollbar-gutter: stable;
 }
 
-.neo-app .pill {
+.compass-app .pill {
   min-height: 31px;
   border-radius: 999px;
   background: var(--surface2);
   font-weight: 650;
 }
 
-.neo-app .pill.blue {
+.compass-app .pill.blue {
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .btn {
+.compass-app .btn {
   min-height: 41px;
   border-radius: 13px;
   padding: 0 15px;
@@ -1873,100 +2083,100 @@
   transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease), background 0.16s var(--ease);
 }
 
-.neo-app .btn.small {
+.compass-app .btn.small {
   min-height: 33px;
   border-radius: 10px;
 }
 
-.neo-app .btn:hover:not(:disabled) {
+.compass-app .btn:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 7px 18px rgba(28, 35, 52, 0.08);
 }
 
-.neo-app .btn:active:not(:disabled) {
+.compass-app .btn:active:not(:disabled) {
   transform: scale(0.98);
   box-shadow: none;
 }
 
-.neo-app .btn.primary {
+.compass-app .btn.primary {
   border-color: var(--accent);
   background: var(--accent);
 }
 
-.neo-app .btn.primary:hover:not(:disabled) {
+.compass-app .btn.primary:hover:not(:disabled) {
   border-color: var(--accentHover);
   background: var(--accentHover);
 }
 
-.neo-app .btn.secondary {
+.compass-app .btn.secondary {
   border-color: var(--line2);
   background: #fff;
 }
 
-.neo-app .btn.download-action {
+.compass-app .btn.download-action {
   border-color: #202124;
   background: #202124;
   color: #fff;
   text-decoration: none;
 }
 
-.neo-app .btn.download-action:hover:not(:disabled) {
+.compass-app .btn.download-action:hover:not(:disabled) {
   border-color: #090a0b;
   background: #090a0b;
 }
 
-.neo-app .select-btn,
-.neo-app input,
-.neo-app textarea,
-.neo-app select {
+.compass-app .select-btn,
+.compass-app input,
+.compass-app textarea,
+.compass-app select {
   border-color: var(--line2);
 }
 
-.neo-app .file-input {
+.compass-app .file-input {
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
 }
 
-.neo-app .select-btn:focus-visible,
-.neo-app input:focus-visible,
-.neo-app textarea:focus-visible,
-.neo-app select:focus-visible,
-.neo-app button:focus-visible {
+.compass-app .select-btn:focus-visible,
+.compass-app input:focus-visible,
+.compass-app textarea:focus-visible,
+.compass-app select:focus-visible,
+.compass-app button:focus-visible {
   outline: 3px solid rgba(86, 100, 245, 0.25);
   outline-offset: 2px;
 }
 
-.neo-app .start-single {
+.compass-app .start-single {
   max-width: none;
 }
 
-.neo-app .brand-profile,
-.neo-app .brief-box,
-.neo-app .source-checks,
-.neo-app .review-panel,
-.neo-app .summary-panel,
-.neo-app .artwork-mode-picker,
-.neo-app .studio-toolbar {
+.compass-app .brand-profile,
+.compass-app .brief-box,
+.compass-app .source-checks,
+.compass-app .review-panel,
+.compass-app .summary-panel,
+.compass-app .artwork-mode-picker,
+.compass-app .studio-toolbar {
   border-color: var(--line);
   background: var(--surface2);
   box-shadow: none;
 }
 
-.neo-app .source-checks {
+.compass-app .source-checks {
   max-height: 430px;
   overflow: hidden;
 }
 
-.neo-app .reference-accordion {
+.compass-app .reference-accordion {
   max-height: 370px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
-.neo-app .reference-accordion-toggle {
+.compass-app .reference-accordion-toggle {
   width: 100%;
   min-height: 42px;
   display: flex;
@@ -1977,60 +2187,60 @@
   text-align: left;
 }
 
-.neo-app .reference-toggle-icon {
+.compass-app .reference-toggle-icon {
   color: var(--muted);
   font-size: 18px;
   line-height: 1;
   transition: transform 0.16s var(--ease);
 }
 
-.neo-app .reference-toggle-icon.open {
+.compass-app .reference-toggle-icon.open {
   transform: rotate(180deg);
 }
 
-.neo-app .reference-category-body {
+.compass-app .reference-category-body {
   max-height: 290px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 5px;
 }
 
-.neo-app .direction-card,
-.neo-app .output-card,
-.neo-app .client-card,
-.neo-app .memory-item,
-.neo-app .past-work-card {
+.compass-app .direction-card,
+.compass-app .output-card,
+.compass-app .client-card,
+.compass-app .memory-item,
+.compass-app .past-work-card {
   border-color: var(--line);
   background: #fff;
   box-shadow: 0 3px 14px rgba(28, 35, 52, 0.025);
 }
 
-.neo-app .direction-card:hover,
-.neo-app .output-card:hover,
-.neo-app .client-card:hover {
+.compass-app .direction-card:hover,
+.compass-app .output-card:hover,
+.compass-app .client-card:hover {
   border-color: var(--accentLine);
   box-shadow: 0 12px 28px rgba(28, 35, 52, 0.075);
   transform: translateY(-2px);
 }
 
-.neo-app .direction-card.selected {
+.compass-app .direction-card.selected {
   border-color: var(--accent);
   background: #fcfcff;
   box-shadow: var(--halo), 0 14px 28px rgba(28, 35, 52, 0.06);
 }
 
-.neo-app .check-dot,
-.neo-app .type-icon {
+.compass-app .check-dot,
+.compass-app .type-icon {
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .direction-card.selected .check-dot {
+.compass-app .direction-card.selected .check-dot {
   background: var(--accent);
   color: #fff;
 }
 
-.neo-app .direction-card-select {
+.compass-app .direction-card-select {
   width: 100%;
   min-width: 0;
   flex: 1;
@@ -2046,7 +2256,7 @@
   cursor: pointer;
 }
 
-.neo-app .direction-card-actions {
+.compass-app .direction-card-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
@@ -2054,22 +2264,22 @@
   border-top: 1px solid var(--line);
 }
 
-.neo-app .direction-card-actions .btn {
+.compass-app .direction-card-actions .btn {
   justify-content: center;
 }
 
-.neo-app .hook-edit-modal {
+.compass-app .hook-edit-modal {
   max-height: min(760px, calc(100dvh - 48px));
   overflow-y: auto;
 }
 
-.neo-app .hook-edit-fields {
+.compass-app .hook-edit-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
-.neo-app .hook-edit-fields label {
+.compass-app .hook-edit-fields label {
   min-width: 0;
   display: grid;
   gap: 7px;
@@ -2078,14 +2288,14 @@
   font-weight: 650;
 }
 
-.neo-app .hook-edit-fields input,
-.neo-app .hook-edit-fields select,
-.neo-app .hook-edit-fields textarea,
-.neo-app .hook-regenerate-modal input,
-.neo-app .hook-regenerate-modal textarea,
-.neo-app .neo-manual-hook-field input,
-.neo-app .neo-manual-hook-field select,
-.neo-app .neo-manual-hook-field textarea {
+.compass-app .hook-edit-fields input,
+.compass-app .hook-edit-fields select,
+.compass-app .hook-edit-fields textarea,
+.compass-app .hook-regenerate-modal input,
+.compass-app .hook-regenerate-modal textarea,
+.compass-app .compass-manual-hook-field input,
+.compass-app .compass-manual-hook-field select,
+.compass-app .compass-manual-hook-field textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2097,19 +2307,19 @@
   resize: vertical;
 }
 
-.neo-app .hook-edit-fields input:focus,
-.neo-app .hook-edit-fields select:focus,
-.neo-app .hook-edit-fields textarea:focus,
-.neo-app .hook-regenerate-modal input:focus,
-.neo-app .hook-regenerate-modal textarea:focus,
-.neo-app .neo-manual-hook-field input:focus,
-.neo-app .neo-manual-hook-field select:focus,
-.neo-app .neo-manual-hook-field textarea:focus {
+.compass-app .hook-edit-fields input:focus,
+.compass-app .hook-edit-fields select:focus,
+.compass-app .hook-edit-fields textarea:focus,
+.compass-app .hook-regenerate-modal input:focus,
+.compass-app .hook-regenerate-modal textarea:focus,
+.compass-app .compass-manual-hook-field input:focus,
+.compass-app .compass-manual-hook-field select:focus,
+.compass-app .compass-manual-hook-field textarea:focus {
   border-color: var(--accent);
   outline: 3px solid var(--accentSoft);
 }
 
-.neo-app .hook-regenerate-original {
+.compass-app .hook-regenerate-original {
   display: grid;
   gap: 7px;
   padding: 14px;
@@ -2118,8 +2328,8 @@
   background: var(--surface2);
 }
 
-.neo-app .hook-regenerate-original span,
-.neo-app .output-modal-prompt-label span {
+.compass-app .hook-regenerate-original span,
+.compass-app .output-modal-prompt-label span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
@@ -2127,41 +2337,41 @@
   text-transform: uppercase;
 }
 
-.neo-app .hook-regenerate-original p,
-.neo-app .hook-regenerate-note {
+.compass-app .hook-regenerate-original p,
+.compass-app .hook-regenerate-note {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
 }
 
-.neo-app .hook-regenerate-modal textarea {
+.compass-app .hook-regenerate-modal textarea {
   min-height: 112px;
   line-height: 1.45;
 }
 
-.neo-app .neo-manual-hook-modal {
+.compass-app .compass-manual-hook-modal {
   max-width: 620px;
 }
 
-.neo-app .neo-manual-hook-form {
+.compass-app .compass-manual-hook-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.neo-app .neo-manual-hook-field {
+.compass-app .compass-manual-hook-field {
   min-width: 0;
   display: grid;
   gap: 7px;
 }
 
-.neo-app .neo-manual-hook-field.full {
+.compass-app .compass-manual-hook-field.full {
   grid-column: 1 / -1;
 }
 
-.neo-app .neo-manual-hook-field > span {
+.compass-app .compass-manual-hook-field > span {
   color: var(--muted);
   font-size: 10px;
   font-weight: 650;
@@ -2169,24 +2379,24 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-manual-hook-field textarea {
+.compass-app .compass-manual-hook-field textarea {
   min-height: 82px;
   line-height: 1.45;
 }
 
-.neo-app .output-modal-prompt-label {
+.compass-app .output-modal-prompt-label {
   display: grid;
   gap: 7px;
 }
 
-.neo-app .review-decision-actions {
+.compass-app .review-decision-actions {
   display: flex;
   justify-content: flex-end;
   gap: 7px;
   margin-top: 7px;
 }
 
-.neo-app .review-comment-error {
+.compass-app .review-comment-error {
   margin: 5px 0 0;
   color: var(--red);
   font-size: 11px;
@@ -2194,7 +2404,7 @@
 }
 
 /* Brief, Angles, Build, and Internal QC follow the prototype's stage composition. */
-.neo-app .neo-context-label {
+.compass-app .compass-context-label {
   display: block;
   color: var(--faint);
   font-size: 9.5px;
@@ -2203,33 +2413,33 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-workflow-module,
-.neo-app .neo-qc-progress-rail,
-.neo-app .neo-qc-role-tabs {
+.compass-app .compass-workflow-module,
+.compass-app .compass-qc-progress-rail,
+.compass-app .compass-qc-role-tabs {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: #fff;
 }
 
-.neo-app .neo-module-head,
-.neo-app .neo-create-section-head,
-.neo-app .neo-qc-section-head {
+.compass-app .compass-module-head,
+.compass-app .compass-create-section-head,
+.compass-app .compass-qc-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 
-.neo-app .neo-module-head {
+.compass-app .compass-module-head {
   min-height: 68px;
   padding: 13px 15px;
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-module-head h3,
-.neo-app .neo-create-intro h3,
-.neo-app .neo-qc-progress-rail h3,
-.neo-app .neo-qc-section-head h3 {
+.compass-app .compass-module-head h3,
+.compass-app .compass-create-intro h3,
+.compass-app .compass-qc-progress-rail h3,
+.compass-app .compass-qc-section-head h3 {
   margin: 0;
   color: var(--ink);
   font-size: 15px;
@@ -2237,85 +2447,85 @@
   letter-spacing: -0.025em;
 }
 
-.neo-app .neo-module-head p,
-.neo-app .neo-create-intro p,
-.neo-app .neo-qc-progress-rail > p {
+.compass-app .compass-module-head p,
+.compass-app .compass-create-intro p,
+.compass-app .compass-qc-progress-rail > p {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.45;
 }
 
-.neo-app .neo-module-head > span,
-.neo-app .neo-create-section-head > span,
-.neo-app .neo-qc-section-head > span {
+.compass-app .compass-module-head > span,
+.compass-app .compass-create-section-head > span,
+.compass-app .compass-qc-section-head > span {
   flex: 0 0 auto;
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 650;
 }
 
-.neo-app .neo-stage-brief .decision-body,
-.neo-app .neo-stage-angles .decision-body,
-.neo-app .neo-stage-build .decision-body,
-.neo-app .neo-stage-qc .decision-body {
+.compass-app .compass-stage-brief .decision-body,
+.compass-app .compass-stage-angles .decision-body,
+.compass-app .compass-stage-build .decision-body,
+.compass-app .compass-stage-qc .decision-body {
   background: #fafbfc;
 }
 
-.neo-app .neo-stage-build {
+.compass-app .compass-stage-build {
   font-family: "Sukhumvit Set", var(--font);
 }
 
-.neo-app .neo-stage-brief .decision-actions {
+.compass-app .compass-stage-brief .decision-actions {
   justify-content: space-between;
 }
 
-.neo-app .neo-stage-brief .btn.orange {
+.compass-app .compass-stage-brief .btn.orange {
   border-color: var(--orange);
   background: var(--orange);
   color: #fff;
 }
 
-.neo-app .neo-stage-brief .btn.orange:hover:not(:disabled) {
+.compass-app .compass-stage-brief .btn.orange:hover:not(:disabled) {
   border-color: #ee5a39;
   background: #ee5a39;
 }
 
-.neo-app .neo-brief-layout {
+.compass-app .compass-brief-layout {
   grid-template-columns: minmax(0, 1fr) 325px;
   gap: 16px;
 }
 
-.neo-app .neo-stage-brief .neo-workflow-module,
-.neo-app .neo-stage-brief .neo-context-card {
+.compass-app .compass-stage-brief .compass-workflow-module,
+.compass-app .compass-stage-brief .compass-context-card {
   border-radius: 20px;
   background: #fbfcfd;
 }
 
-.neo-app .neo-stage-brief .neo-module-head h3 {
+.compass-app .compass-stage-brief .compass-module-head h3 {
   font-size: 13px;
   font-weight: 600;
 }
 
-.neo-app .neo-stage-brief .neo-module-head p {
+.compass-app .compass-stage-brief .compass-module-head p {
   font-size: 10.5px;
 }
 
-.neo-app .neo-stage-brief .neo-module-head {
+.compass-app .compass-stage-brief .compass-module-head {
   min-height: 0;
 }
 
-.neo-app .brief-main {
+.compass-app .brief-main {
   display: grid;
   gap: 14px;
   min-width: 0;
 }
 
-.neo-app .neo-plan-rows {
+.compass-app .compass-plan-rows {
   padding: 7px 14px;
 }
 
-.neo-app .neo-plan-row {
+.compass-app .compass-plan-row {
   min-height: 58px;
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
@@ -2325,11 +2535,11 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-plan-row:last-child {
+.compass-app .compass-plan-row:last-child {
   border-bottom: 0;
 }
 
-.neo-app .neo-type-icon {
+.compass-app .compass-type-icon {
   width: 36px;
   height: 36px;
   display: grid;
@@ -2341,33 +2551,33 @@
   font-weight: 600;
 }
 
-.neo-app .neo-type-icon.quantity {
+.compass-app .compass-type-icon.quantity {
   background: var(--accentSoft);
   color: var(--accent);
   font-size: 15px;
 }
 
-.neo-app .neo-plan-copy p {
+.compass-app .compass-plan-copy p {
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 10.5px;
 }
 
-.neo-app .neo-plan-copy b {
+.compass-app .compass-plan-copy b {
   display: block;
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
 }
 
-.neo-app .neo-mix-row-controls {
+.compass-app .compass-mix-row-controls {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.neo-app .neo-plan-row .qty {
+.compass-app .compass-plan-row .qty {
   width: 108px;
   height: 36px;
   justify-self: end;
@@ -2376,17 +2586,17 @@
   background: #fff;
 }
 
-.neo-app .neo-plan-row .qty button {
+.compass-app .compass-plan-row .qty button {
   width: 29px;
   height: 29px;
   border-radius: 9px;
 }
 
-.neo-app .brief-editor-module .textarea-wrap {
+.compass-app .brief-editor-module .textarea-wrap {
   padding: 14px 15px 16px;
 }
 
-.neo-app .brief-editor-module .textarea-wrap label {
+.compass-app .brief-editor-module .textarea-wrap label {
   margin-bottom: 8px;
   color: var(--ink);
   font-size: 11px;
@@ -2395,14 +2605,14 @@
   text-transform: none;
 }
 
-.neo-app .brief-editor-module .neo-brief-field-label {
+.compass-app .brief-editor-module .compass-brief-field-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.neo-app .brief-editor-module .neo-brief-char-count {
+.compass-app .brief-editor-module .compass-brief-char-count {
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
@@ -2411,7 +2621,7 @@
   text-transform: none;
 }
 
-.neo-app .brief-editor-module textarea {
+.compass-app .brief-editor-module textarea {
   height: 218px;
   min-height: 218px;
   max-height: 218px;
@@ -2424,14 +2634,14 @@
   line-height: 1.55;
 }
 
-.neo-app .neo-context-stack {
+.compass-app .compass-context-stack {
   position: sticky;
   top: 108px;
   display: grid;
   gap: 12px;
 }
 
-.neo-app .neo-context-card {
+.compass-app .compass-context-card {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--line);
@@ -2439,49 +2649,57 @@
   background: #fbfcfd;
 }
 
-.neo-app .neo-context-card > h3,
-.neo-app .neo-context-card-head h3 {
+.compass-app .compass-quality-note {
+  margin: 5px 0 0;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.compass-app .compass-context-card > h3,
+.compass-app .compass-context-card-head h3 {
   margin: 0 0 10px;
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
 }
 
-.neo-app .neo-signal-list {
+.compass-app .compass-signal-list {
   display: grid;
   gap: 7px;
 }
 
-.neo-app .neo-signal-line {
+.compass-app .compass-signal-line {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 13px;
   background: #fff;
 }
 
-.neo-app .neo-signal-line b,
-.neo-app .neo-signal-line span {
+.compass-app .compass-signal-line b,
+.compass-app .compass-signal-line span {
   display: block;
 }
 
-.neo-app .neo-signal-line b {
+.compass-app .compass-signal-line b {
   font-size: 11px;
 }
 
-.neo-app .neo-signal-line span {
+.compass-app .compass-signal-line span {
   margin-top: 3px;
   color: var(--muted);
   font-size: 10px;
   line-height: 1.4;
 }
 
-.neo-app .neo-metric-choice {
+.compass-app .compass-metric-choice {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
 
-.neo-app .neo-metric-choice button {
+.compass-app .compass-metric-choice button {
   -webkit-appearance: none;
   appearance: none;
   min-height: 54px;
@@ -2495,16 +2713,16 @@
   transition: border-color 0.16s var(--ease), background 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
 
-.neo-app .neo-metric-choice button:hover {
+.compass-app .compass-metric-choice button:hover {
   border-color: var(--accentLine);
 }
 
-.neo-app .neo-stage-brief .neo-metric-choice button.active,
-.neo-app .neo-stage-brief .neo-metric-choice button[aria-pressed="true"],
-.neo-app .neo-stage-brief .neo-metric-choice button.active:hover,
-.neo-app .neo-stage-brief .neo-metric-choice button.active:active,
-.neo-app .neo-stage-brief .neo-metric-choice button.active:focus,
-.neo-app .neo-stage-brief .neo-metric-choice button.active:focus-visible {
+.compass-app .compass-stage-brief .compass-metric-choice button.active,
+.compass-app .compass-stage-brief .compass-metric-choice button[aria-pressed="true"],
+.compass-app .compass-stage-brief .compass-metric-choice button.active:hover,
+.compass-app .compass-stage-brief .compass-metric-choice button.active:active,
+.compass-app .compass-stage-brief .compass-metric-choice button.active:focus,
+.compass-app .compass-stage-brief .compass-metric-choice button.active:focus-visible {
   border: 1px solid #d6eaa6 !important;
   outline: none !important;
   background: #f4ffdc !important;
@@ -2512,38 +2730,38 @@
   transform: none !important;
 }
 
-.neo-app .neo-stage-brief .neo-metric-choice button:focus:not(:focus-visible) {
+.compass-app .compass-stage-brief .compass-metric-choice button:focus:not(:focus-visible) {
   outline: none;
 }
 
-.neo-app .neo-metric-choice b,
-.neo-app .neo-metric-choice span {
+.compass-app .compass-metric-choice b,
+.compass-app .compass-metric-choice span {
   display: block;
 }
 
-.neo-app .neo-metric-choice b {
+.compass-app .compass-metric-choice b {
   font-size: 11px;
 }
 
-.neo-app .neo-metric-choice span {
+.compass-app .compass-metric-choice span {
   margin-top: 3px;
   color: var(--muted);
   font-size: 9.5px;
 }
 
-.neo-app .neo-principle-card {
+.compass-app .compass-principle-card {
   border-color: var(--line);
   background: #fbfcfd;
 }
 
-.neo-app .neo-principle-card p {
+.compass-app .compass-principle-card p {
   margin: 0;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
 
-.neo-app .neo-material-summary-open {
+.compass-app .compass-material-summary-open {
   width: 100%;
   padding: 0;
   border: 0;
@@ -2552,12 +2770,12 @@
   text-align: left;
 }
 
-.neo-app .neo-material-summary {
+.compass-app .compass-material-summary {
   display: grid;
   gap: 8px;
 }
 
-.neo-app .neo-material-summary-line {
+.compass-app .compass-material-summary-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2566,30 +2784,30 @@
   border-top: 1px solid var(--line);
 }
 
-.neo-app .neo-material-summary-line:first-child {
+.compass-app .compass-material-summary-line:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.neo-app .neo-material-summary-line b {
+.compass-app .compass-material-summary-line b {
   font-size: 11.2px;
 }
 
-.neo-app .neo-material-summary-line > span {
+.compass-app .compass-material-summary-line > span {
   color: var(--muted);
   font-size: 10.5px;
 }
 
-.neo-app .neo-material-summary-open:hover .neo-material-summary-line b {
+.compass-app .compass-material-summary-open:hover .compass-material-summary-line b {
   color: var(--accent);
 }
 
-.neo-app .neo-brief-material-backdrop {
+.compass-app .compass-brief-material-backdrop {
   background: rgba(24, 28, 38, 0.24);
   backdrop-filter: blur(7px);
 }
 
-.neo-app .neo-brief-material-modal {
+.compass-app .compass-brief-material-modal {
   width: min(720px, 96vw);
   max-width: none;
   padding: 18px;
@@ -2597,24 +2815,268 @@
   background: #fff;
 }
 
-.neo-app .neo-brief-material-modal-body {
+.compass-app .compass-brief-material-modal-body {
   display: grid;
   gap: 12px;
 }
 
-.neo-app .neo-brief-add-files {
+.compass-app .compass-brief-material-totals {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.compass-app .compass-brief-material-totals span {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compass-app .compass-brief-material-totals span b {
+  display: inline;
+  margin-right: 3px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.compass-app .compass-brief-materials-workspace {
+  min-height: min(560px, calc(92vh - 151px));
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(360px, 0.92fr) minmax(460px, 1.08fr);
+  overflow: hidden;
+  background: #f7f8fb;
+}
+
+.compass-app .compass-brief-material-section {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.compass-app .compass-brief-library-section {
+  border-right: 1px solid var(--line);
+}
+
+.compass-app .compass-brief-materials-side {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(150px, 0.65fr) minmax(230px, 1.35fr);
+  overflow: hidden;
+}
+
+.compass-app .compass-brief-selected-section {
+  border-bottom: 1px solid var(--line);
+}
+
+.compass-app .compass-brief-material-section-head {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.compass-app .compass-brief-material-section-head h4,
+.compass-app .compass-brief-material-section-head p {
+  margin: 0;
+}
+
+.compass-app .compass-brief-material-section-head h4 {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.compass-app .compass-brief-material-section-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.compass-app .compass-brief-material-section-head > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.compass-app .compass-brief-material-section-body {
+  min-height: 0;
+  flex: 1;
+  padding: 13px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.compass-app .compass-brief-library-section .source-checks {
+  max-height: none;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.compass-app .compass-brief-library-section .reference-accordion,
+.compass-app .compass-brief-library-section .reference-category-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.compass-app .compass-selected-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compass-app .compass-selected-reference {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.compass-app .compass-selected-reference img {
+  width: 48px;
+  height: 48px;
+  grid-row: 1 / span 2;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--surface2);
+}
+
+.compass-app .compass-selected-reference div {
+  min-width: 0;
+}
+
+.compass-app .compass-selected-reference div b,
+.compass-app .compass-selected-reference div span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-selected-reference div b {
+  font-size: 10px;
+}
+
+.compass-app .compass-selected-reference div span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-app .compass-selected-reference button {
+  grid-column: 2;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.compass-app .compass-selected-reference button:hover {
+  color: var(--accent);
+}
+
+.compass-app .compass-brief-material-empty {
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14px;
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.compass-app .compass-brief-material-empty b {
+  font-size: 11px;
+}
+
+.compass-app .compass-brief-material-empty span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.compass-app .compass-brief-uploaded-section .compass-creative-material-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+  .compass-app .compass-brief-materials-workspace {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .compass-app .compass-brief-library-section,
+  .compass-app .compass-brief-selected-section {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .compass-app .compass-brief-materials-side {
+    display: block;
+    overflow: visible;
+  }
+
+  .compass-app .compass-brief-material-section-body {
+    max-height: 380px;
+  }
+}
+
+@media (max-width: 560px) {
+  .compass-app .compass-brief-material-totals {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .compass-app .compass-brief-materials-workspace {
+    min-height: 0;
+  }
+
+  .compass-app .compass-brief-material-section-head {
+    align-items: flex-start;
+  }
+
+  .compass-app .compass-selected-reference-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.compass-app .compass-brief-add-files {
   width: fit-content;
   cursor: pointer;
 }
 
-.neo-app .neo-creative-material-upload-row {
+.compass-app .compass-creative-material-upload-row {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.neo-app .neo-brief-document-upload {
+.compass-app .compass-brief-document-upload {
   position: relative;
   color: var(--muted);
   font-size: 11px;
@@ -2622,24 +3084,24 @@
   cursor: pointer;
 }
 
-.neo-app .neo-brief-document-upload:hover {
+.compass-app .compass-brief-document-upload:hover {
   color: var(--ink);
 }
 
-.neo-app .neo-creative-material-helper {
+.compass-app .compass-creative-material-helper {
   margin: -2px 0 2px;
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.5;
 }
 
-.neo-app .neo-creative-material-grid {
+.compass-app .compass-creative-material-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.neo-app .neo-creative-material-card {
+.compass-app .compass-creative-material-card {
   min-width: 0;
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
@@ -2650,7 +3112,7 @@
   background: #fff;
 }
 
-.neo-app .neo-creative-material-card > img {
+.compass-app .compass-creative-material-card > img {
   width: 96px;
   height: 112px;
   object-fit: contain;
@@ -2658,20 +3120,20 @@
   background: var(--surface2);
 }
 
-.neo-app .neo-creative-material-fields {
+.compass-app .compass-creative-material-fields {
   min-width: 0;
   display: grid;
   gap: 7px;
 }
 
-.neo-app .neo-creative-material-name {
+.compass-app .compass-creative-material-name {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.neo-app .neo-creative-material-name b {
+.compass-app .compass-creative-material-name b {
   min-width: 0;
   overflow: hidden;
   font-size: 11px;
@@ -2679,7 +3141,7 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-creative-material-name button {
+.compass-app .compass-creative-material-name button {
   width: 22px;
   height: 22px;
   border: 0;
@@ -2689,7 +3151,7 @@
   cursor: pointer;
 }
 
-.neo-app .neo-creative-material-fields label {
+.compass-app .compass-creative-material-fields label {
   display: grid;
   gap: 3px;
   color: var(--muted);
@@ -2697,12 +3159,12 @@
   font-weight: 650;
 }
 
-.neo-app .neo-creative-material-fields label span {
+.compass-app .compass-creative-material-fields label span {
   font-weight: 450;
 }
 
-.neo-app .neo-creative-material-fields select,
-.neo-app .neo-creative-material-fields input {
+.compass-app .compass-creative-material-fields select,
+.compass-app .compass-creative-material-fields input {
   min-width: 0;
   width: 100%;
   height: 31px;
@@ -2716,103 +3178,103 @@
 }
 
 @media (max-width: 760px) {
-  .neo-app .neo-creative-material-grid {
+  .compass-app .compass-creative-material-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.neo-app .neo-brief-material-modal .source-checks {
+.compass-app .compass-brief-material-modal .source-checks {
   max-height: min(58vh, 520px);
   overflow-y: auto;
 }
 
-.neo-app .neo-context-card-head {
+.compass-app .compass-context-card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.neo-app .neo-context-card-head h3 {
+.compass-app .compass-context-card-head h3 {
   margin-bottom: 3px;
 }
 
-.neo-app .neo-context-card-head p {
+.compass-app .compass-context-card-head p {
   margin: 0;
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-material-card .btn {
+.compass-app .compass-material-card .btn {
   min-height: 32px;
   cursor: pointer;
 }
 
-.neo-app .neo-context-stack .upload,
-.neo-app .neo-context-stack .source-checks {
+.compass-app .compass-context-stack .upload,
+.compass-app .compass-context-stack .source-checks {
   border-radius: 18px;
   background: #fff;
   box-shadow: none;
 }
 
-.neo-app .neo-context-stack .upload {
+.compass-app .compass-context-stack .upload {
   padding: 15px;
   text-align: left;
 }
 
-.neo-app .neo-context-stack .upload b {
+.compass-app .compass-context-stack .upload b {
   display: block;
   margin-top: 6px;
   font-size: 14px;
 }
 
-.neo-app .neo-context-stack .upload p {
+.compass-app .compass-context-stack .upload p {
   max-width: 250px;
   line-height: 1.45;
 }
 
-.neo-app .neo-context-stack .upload .btn {
+.compass-app .compass-context-stack .upload .btn {
   width: 100%;
 }
 
-.neo-app .neo-attachment-chips {
+.compass-app .compass-attachment-chips {
   max-height: 88px;
   overflow-y: auto;
 }
 
-.neo-app .neo-context-stack .source-checks {
+.compass-app .compass-context-stack .source-checks {
   max-height: 430px;
   padding: 14px;
 }
 
-.neo-app .neo-context-stack .source-checks > h3 {
+.compass-app .compass-context-stack .source-checks > h3 {
   margin-bottom: 8px;
   font-size: 14px;
 }
 
-.neo-app .neo-stage-angles .artwork-mode-picker,
-.neo-app .neo-stage-angles .direction-tools,
-.neo-app .neo-stage-angles .direction-generate-more {
+.compass-app .compass-stage-angles .artwork-mode-picker,
+.compass-app .compass-stage-angles .direction-tools,
+.compass-app .compass-stage-angles .direction-generate-more {
   border-color: var(--line);
   border-radius: 18px;
   background: #fff;
 }
 
-.neo-app .neo-angle-toolbar {
+.compass-app .compass-angle-toolbar {
   position: relative;
   align-items: center;
   margin-bottom: 12px;
 }
 
-.neo-app .neo-angle-toolbar-actions {
+.compass-app .compass-angle-toolbar-actions {
   display: flex;
   align-items: center;
   gap: 7px;
   flex: 0 0 auto;
 }
 
-.neo-app .neo-angle-export-pdf,
-.neo-app .neo-angle-regenerate-all {
+.compass-app .compass-angle-export-pdf,
+.compass-app .compass-angle-regenerate-all {
   height: 28px;
   min-height: 28px;
   padding: 0 10px;
@@ -2822,7 +3284,7 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-angle-settings {
+.compass-app .compass-angle-settings {
   display: grid;
   grid-template-columns: minmax(260px, 1.05fr) minmax(300px, 1.2fr) minmax(250px, 0.95fr);
   gap: 0;
@@ -2833,7 +3295,7 @@
   background: #fff;
 }
 
-.neo-app .neo-angle-setting {
+.compass-app .compass-angle-setting {
   min-width: 0;
   min-height: 38px;
   display: grid;
@@ -2844,16 +3306,16 @@
   border-right: 1px solid var(--line);
 }
 
-.neo-app .neo-angle-setting:first-child {
+.compass-app .compass-angle-setting:first-child {
   padding-left: 0;
 }
 
-.neo-app .neo-angle-setting:last-child {
+.compass-app .compass-angle-setting:last-child {
   padding-right: 0;
   border-right: 0;
 }
 
-.neo-app .neo-angle-setting-label {
+.compass-app .compass-angle-setting-label {
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 700;
@@ -2861,7 +3323,7 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-angle-mode-options {
+.compass-app .compass-angle-mode-options {
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2872,7 +3334,7 @@
   background: #f3f5f8;
 }
 
-.neo-app .neo-angle-mode-options button {
+.compass-app .compass-angle-mode-options button {
   min-width: 0;
   min-height: 30px;
   padding: 0 10px;
@@ -2887,20 +3349,20 @@
   box-shadow: none;
 }
 
-.neo-app .neo-angle-mode-options button:hover:not(:disabled) {
+.compass-app .compass-angle-mode-options button:hover:not(:disabled) {
   background: #fff;
   color: var(--ink);
   box-shadow: none;
   transform: none;
 }
 
-.neo-app .neo-angle-mode-options button.active,
-.neo-app .neo-angle-mode-options button[aria-pressed="true"] {
+.compass-app .compass-angle-mode-options button.active,
+.compass-app .compass-angle-mode-options button[aria-pressed="true"] {
   background: var(--accent);
   color: #fff;
 }
 
-.neo-app .neo-angle-model-select {
+.compass-app .compass-angle-model-select {
   width: 100%;
   min-width: 0;
   min-height: 36px;
@@ -2914,25 +3376,25 @@
   font-weight: 650;
 }
 
-.neo-app .neo-angle-model-select:focus-visible {
+.compass-app .compass-angle-model-select:focus-visible {
   outline: 3px solid rgba(86, 100, 245, 0.2);
   outline-offset: 2px;
   border-color: var(--primary);
 }
 
-.neo-app .neo-angle-groups {
+.compass-app .compass-angle-groups {
   display: grid;
   gap: 18px;
 }
 
-.neo-app .neo-angle-group {
+.compass-app .compass-angle-group {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 20px;
   background: #fff;
 }
 
-.neo-app .neo-angle-group-head {
+.compass-app .compass-angle-group-head {
   min-height: 82px;
   display: flex;
   align-items: center;
@@ -2942,7 +3404,7 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-angle-group-head-actions {
+.compass-app .compass-angle-group-head-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -2950,38 +3412,38 @@
   flex-wrap: wrap;
 }
 
-.neo-app .neo-angle-group-buttons {
+.compass-app .compass-angle-group-buttons {
   display: flex;
   align-items: center;
   gap: 7px;
 }
 
-.neo-app .neo-angle-generate-ideas,
-.neo-app .neo-angle-add-hook {
+.compass-app .compass-angle-generate-ideas,
+.compass-app .compass-angle-add-hook {
   white-space: nowrap;
 }
 
-.neo-app .neo-angle-generate-ideas,
-.neo-app .neo-angle-add-hook {
+.compass-app .compass-angle-generate-ideas,
+.compass-app .compass-angle-add-hook {
   border-color: rgba(86, 100, 245, 0.22);
   background: #fff;
   color: var(--accent);
 }
 
-.neo-app .neo-angle-generate-ideas:hover:not(:disabled),
-.neo-app .neo-angle-add-hook:hover:not(:disabled) {
+.compass-app .compass-angle-generate-ideas:hover:not(:disabled),
+.compass-app .compass-angle-add-hook:hover:not(:disabled) {
   border-color: rgba(86, 100, 245, 0.38);
   background: var(--accentSoft);
 }
 
-.neo-app .neo-angle-group-title {
+.compass-app .compass-angle-group-title {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 13px;
 }
 
-.neo-app .neo-angle-group-icon {
+.compass-app .compass-angle-group-icon {
   width: 46px;
   height: 46px;
   flex: 0 0 46px;
@@ -2995,24 +3457,24 @@
   font-weight: 750;
 }
 
-.neo-app .neo-angle-group-title h3,
-.neo-app .neo-angle-group-title p {
+.compass-app .compass-angle-group-title h3,
+.compass-app .compass-angle-group-title p {
   margin: 0;
 }
 
-.neo-app .neo-angle-group-title h3 {
+.compass-app .compass-angle-group-title h3 {
   color: var(--ink);
   font-size: 16px;
   line-height: 1.2;
 }
 
-.neo-app .neo-angle-group-title p {
+.compass-app .compass-angle-group-title p {
   margin-top: 5px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.neo-app .neo-angle-group-progress {
+.compass-app .compass-angle-group-progress {
   flex: 0 0 auto;
   padding: 8px 11px;
   border: 1px solid var(--line);
@@ -3023,19 +3485,19 @@
   font-weight: 700;
 }
 
-.neo-app .neo-angle-group-progress.complete {
+.compass-app .compass-angle-group-progress.complete {
   border-color: #d4e9a6;
   background: #efffca;
   color: #405126;
 }
 
-.neo-app .neo-angle-grid {
+.compass-app .compass-angle-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 14px;
 }
 
-.neo-app .neo-angle-card {
+.compass-app .compass-angle-card {
   min-height: 450px;
   display: flex;
   flex-direction: column;
@@ -3049,7 +3511,7 @@
   box-shadow: none;
 }
 
-.neo-app .neo-angle-card-select-surface {
+.compass-app .compass-angle-card-select-surface {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -3059,22 +3521,28 @@
   cursor: pointer;
 }
 
-.neo-app .neo-angle-card-select-surface:focus-visible {
+.compass-app .compass-angle-card-select-surface:focus-visible {
   outline: 3px solid rgba(86, 100, 245, 0.35);
   outline-offset: 3px;
 }
 
-.neo-app .neo-angle-card::before {
+.compass-app .compass-angle-card::before {
   display: none;
 }
 
-.neo-app .neo-angle-card.selected {
-  border: 1.5px solid #aebcf4;
-  background: linear-gradient(180deg, #fbfcff, #fff);
-  box-shadow: 0 10px 24px rgba(86, 100, 245, 0.08);
+.compass-app .compass-angle-card.selected {
+  border: 2px solid var(--baby);
+  background: linear-gradient(180deg, #fcfff4, #fff 28%);
+  box-shadow:
+    0 0 0 3px var(--babyGlow),
+    0 14px 30px rgba(83, 112, 20, 0.1);
 }
 
-.neo-app .neo-angle-card-top {
+.compass-app .compass-angle-card.selected .compass-angle-card-select-surface:focus-visible {
+  outline-color: rgba(174, 222, 55, 0.5);
+}
+
+.compass-app .compass-angle-card-top {
   position: relative;
   z-index: 2;
   min-height: 50px;
@@ -3085,15 +3553,15 @@
   pointer-events: none;
 }
 
-.neo-app .neo-angle-badge-row {
+.compass-app .compass-angle-badge-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.neo-app .neo-angle-idea-pill,
-.neo-app .neo-angle-format-pill {
+.compass-app .compass-angle-idea-pill,
+.compass-app .compass-angle-format-pill {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
@@ -3106,48 +3574,88 @@
   letter-spacing: -0.01em;
 }
 
-.neo-app .neo-angle-idea-pill {
+.compass-app .compass-angle-idea-pill {
   background: #eef2ff;
   color: var(--accent);
 }
 
-.neo-app .neo-angle-format-pill {
+.compass-app .compass-angle-format-pill {
   background: #f6f7fb;
   color: var(--accent);
 }
 
-.neo-app .neo-angle-meta-line {
+.compass-app .compass-angle-meta-line {
   margin: 2px 0 0;
   color: #72798a;
   font-size: 12px;
   line-height: 1.35;
 }
 
-.neo-app .neo-angle-meta-line b {
+.compass-app .compass-angle-meta-line b {
   color: #4f5566;
   font-weight: 600;
 }
 
-.neo-app .neo-angle-top-actions {
+.compass-app .compass-angle-top-actions {
   position: relative;
   z-index: 2;
-  display: grid;
-  justify-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 7px;
   pointer-events: auto;
 }
 
-.neo-app .neo-angle-edit {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 9px;
-  background: #fff;
-  color: var(--accent);
-  font-size: 10.5px;
+.compass-app .compass-angle-pick-tag {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--babyLine);
+  border-radius: 999px;
+  background: var(--babySoft);
+  color: #405126;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
   white-space: nowrap;
+  pointer-events: none;
 }
 
-.neo-app .neo-angle-manual-note {
+.compass-app .compass-angle-edit {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: #555d70;
+  cursor: pointer;
+}
+
+.compass-app .compass-angle-edit:hover:not(:disabled) {
+  border-color: var(--babyLine);
+  background: var(--babySoft);
+  color: #405126;
+}
+
+.compass-app .compass-angle-edit:focus-visible {
+  outline: 3px solid var(--babyGlow);
+  outline-offset: 2px;
+}
+
+.compass-app .compass-angle-edit:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.compass-app .compass-angle-manual-note {
   position: relative;
   z-index: 2;
   width: fit-content;
@@ -3158,7 +3666,7 @@
   pointer-events: none;
 }
 
-.neo-app .neo-angle-export-select {
+.compass-app .compass-angle-export-select {
   width: 110px;
   min-height: 30px;
   border: 1px solid var(--line);
@@ -3172,45 +3680,45 @@
   cursor: pointer;
 }
 
-.neo-app .neo-angle-export-select:hover {
+.compass-app .compass-angle-export-select:hover {
   border-color: #c9cfe0;
 }
 
-.neo-app .neo-angle-export-select.is-unselected {
+.compass-app .compass-angle-export-select.is-unselected {
   background: #f8f9fc;
   color: #4f5669;
 }
 
-.neo-app .neo-angle-export-select.is-unselected:hover {
+.compass-app .compass-angle-export-select.is-unselected:hover {
   background: #fff;
 }
 
-.neo-app .neo-angle-export-select.is-recommended {
+.compass-app .compass-angle-export-select.is-recommended {
   border-color: #c8dd91;
   background: #efffca;
   color: #405126;
 }
 
-.neo-app .neo-angle-export-select.is-recommended:hover {
+.compass-app .compass-angle-export-select.is-recommended:hover {
   background: #e8ffb2;
 }
 
-.neo-app .neo-angle-export-select.is-option {
+.compass-app .compass-angle-export-select.is-option {
   border-color: #efb9aa;
   background: #ffe9e2;
   color: #8e3b29;
 }
 
-.neo-app .neo-angle-export-select.is-option:hover {
+.compass-app .compass-angle-export-select.is-option:hover {
   background: #ffddd3;
 }
 
-.neo-app .neo-angle-export-select:focus {
+.compass-app .compass-angle-export-select:focus {
   border-color: var(--accent);
   outline: 3px solid var(--accentSoft);
 }
 
-.neo-app .neo-angle-hook-wrap {
+.compass-app .compass-angle-hook-wrap {
   min-height: 170px;
   display: flex;
   flex-direction: column;
@@ -3218,7 +3726,7 @@
   padding: 18px 0 10px;
 }
 
-.neo-app .neo-angle-card-kicker {
+.compass-app .compass-angle-card-kicker {
   display: block;
   margin-bottom: 7px;
   color: var(--muted);
@@ -3228,7 +3736,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-angle-hook-wrap h3 {
+.compass-app .compass-angle-hook-wrap h3 {
   margin: 0;
   color: #171d2d;
   font-family: "Sukhumvit Set", var(--display);
@@ -3238,34 +3746,34 @@
   letter-spacing: -0.035em;
 }
 
-.neo-app .neo-angle-copy-block {
+.compass-app .compass-angle-copy-block {
   padding-top: 2px;
 }
 
-.neo-app .neo-angle-copy-block p {
+.compass-app .compass-angle-copy-block p {
   margin: 0;
   color: #51586b;
   font-size: 13px;
   line-height: 1.45;
 }
 
-.neo-app .neo-angle-concept-block {
+.compass-app .compass-angle-concept-block {
   padding-top: 8px;
   border-top: 1px solid rgba(23, 25, 31, 0.06);
 }
 
-.neo-app .neo-angle-concept-block p {
+.compass-app .compass-angle-concept-block p {
   color: #687083;
   font-size: 11.5px;
   line-height: 1.42;
 }
 
-.neo-app .neo-angle-format-beats {
+.compass-app .compass-angle-format-beats {
   padding: 10px 0 8px;
   border-top: 1px solid rgba(23, 25, 31, 0.06);
 }
 
-.neo-app .neo-angle-format-beats ol {
+.compass-app .compass-angle-format-beats ol {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -3273,14 +3781,14 @@
   list-style: none;
 }
 
-.neo-app .neo-angle-format-beats li {
+.compass-app .compass-angle-format-beats li {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: start;
   gap: 7px;
 }
 
-.neo-app .neo-angle-format-beats li > span {
+.compass-app .compass-angle-format-beats li > span {
   width: 22px;
   height: 22px;
   display: grid;
@@ -3292,24 +3800,24 @@
   font-weight: 750;
 }
 
-.neo-app .neo-angle-format-beats li p {
+.compass-app .compass-angle-format-beats li p {
   padding-top: 2px;
   color: #3f4659;
   font-size: 11px;
   line-height: 1.38;
 }
 
-.neo-app .neo-angle-copy-block strong {
+.compass-app .compass-angle-copy-block strong {
   color: #171d2d;
   font-weight: 700;
 }
 
-.neo-app .neo-angle-copy-block .neo-angle-cta-text {
+.compass-app .compass-angle-copy-block .compass-angle-cta-text {
   color: #202534;
   font-weight: 500;
 }
 
-.neo-app .neo-angle-card-foot {
+.compass-app .compass-angle-card-foot {
   position: relative;
   z-index: 2;
   margin-top: auto;
@@ -3321,7 +3829,7 @@
   pointer-events: none;
 }
 
-.neo-app .neo-angle-number-pill {
+.compass-app .compass-angle-number-pill {
   min-height: 31px;
   display: inline-flex;
   align-items: center;
@@ -3332,17 +3840,17 @@
   color: #555bcf;
 }
 
-.neo-app .neo-angle-number-pill b {
+.compass-app .compass-angle-number-pill b {
   font-size: 11px;
   font-weight: 650;
 }
 
-.neo-app .neo-angle-number-pill small {
+.compass-app .compass-angle-number-pill small {
   color: var(--muted);
   font-size: 8.5px;
 }
 
-.neo-app .neo-angle-card .direction-card-actions {
+.compass-app .compass-angle-card .direction-card-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -3352,7 +3860,7 @@
   border: 0;
 }
 
-.neo-app .neo-angle-card .direction-card-actions .btn {
+.compass-app .compass-angle-card .direction-card-actions .btn {
   flex: 0 0 auto;
   min-height: 30px;
   padding: 0 10px;
@@ -3362,23 +3870,23 @@
   pointer-events: auto;
 }
 
-.neo-app .neo-angle-card .neo-angle-delete {
+.compass-app .compass-angle-card .compass-angle-delete {
   border-color: rgba(198, 60, 56, 0.2);
   background: #fff;
   color: var(--red);
 }
 
-.neo-app .neo-angle-card .neo-angle-delete:hover:not(:disabled) {
+.compass-app .compass-angle-card .compass-angle-delete:hover:not(:disabled) {
   border-color: rgba(198, 60, 56, 0.32);
   background: var(--redSoft);
 }
 
-.neo-app .create-stage-stack {
+.compass-app .create-stage-stack {
   display: grid;
   gap: 16px;
 }
 
-.neo-app .neo-create-intro {
+.compass-app .compass-create-intro {
   min-height: 0;
   padding: 15px 17px;
   border: 1px solid var(--line);
@@ -3390,46 +3898,46 @@
   gap: 20px;
 }
 
-.neo-app .neo-create-intro h3 {
+.compass-app .compass-create-intro h3 {
   margin-top: 6px;
   font-size: 17px;
 }
 
-.neo-app .neo-build-intro {
+.compass-app .compass-build-intro {
   border-color: var(--line);
   background: #f8f9fc;
   color: var(--ink);
   box-shadow: none;
 }
 
-.neo-app .neo-build-intro h3 {
+.compass-app .compass-build-intro h3 {
   color: var(--ink);
   font-size: 14px;
 }
 
-.neo-app .neo-build-intro p,
-.neo-app .neo-build-intro .neo-context-label {
+.compass-app .compass-build-intro p,
+.compass-app .compass-build-intro .compass-context-label {
   color: var(--muted);
 }
 
-.neo-app .neo-create-section-head {
+.compass-app .compass-create-section-head {
   margin: 0;
   padding: 0 2px;
   border: 0;
   background: transparent;
 }
 
-.neo-app .build-sections {
+.compass-app .build-sections {
   display: grid;
   gap: 22px;
 }
 
-.neo-app .build-type-section {
+.compass-app .build-type-section {
   display: grid;
   gap: 10px;
 }
 
-.neo-app .build-section-head {
+.compass-app .build-section-head {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
@@ -3437,22 +3945,22 @@
   padding: 0 2px;
 }
 
-.neo-app .build-section-head h3,
-.neo-app .build-section-head p {
+.compass-app .build-section-head h3,
+.compass-app .build-section-head p {
   margin: 0;
 }
 
-.neo-app .build-section-head h3 {
+.compass-app .build-section-head h3 {
   font-size: 13px;
 }
 
-.neo-app .build-section-head p {
+.compass-app .build-section-head p {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .build-section-head strong {
+.compass-app .build-section-head strong {
   min-width: 30px;
   height: 26px;
   display: grid;
@@ -3462,12 +3970,12 @@
   font-size: 10px;
 }
 
-.neo-app .neo-stage-build .output-grid {
+.compass-app .compass-stage-build .output-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
-.neo-app .neo-stage-build .output-card {
+.compass-app .compass-stage-build .output-card {
   min-height: 520px;
   display: flex;
   flex-direction: column;
@@ -3477,19 +3985,19 @@
   box-shadow: none;
 }
 
-.neo-app .neo-stage-build .output-card:hover {
+.compass-app .compass-stage-build .output-card:hover {
   border-color: #cbd0dc;
   box-shadow: 0 10px 24px rgba(28, 35, 52, 0.08);
 }
 
-.neo-app .neo-stage-build .output-title.neo-create-card-head {
+.compass-app .compass-stage-build .output-title.compass-create-card-head {
   min-height: 32px;
   align-items: flex-start;
   padding: 0;
   border-bottom: 0;
 }
 
-.neo-app .neo-create-card-badges {
+.compass-app .compass-create-card-badges {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -3497,8 +4005,8 @@
   gap: 7px;
 }
 
-.neo-app .neo-create-idea-pill,
-.neo-app .neo-create-format-pill {
+.compass-app .compass-create-idea-pill,
+.compass-app .compass-create-format-pill {
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -3510,17 +4018,17 @@
   line-height: 1;
 }
 
-.neo-app .neo-create-idea-pill {
+.compass-app .compass-create-idea-pill {
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .neo-create-format-pill {
+.compass-app .compass-create-format-pill {
   background: #f6f7fb;
   color: var(--accent);
 }
 
-.neo-app .neo-create-hook-wrap {
+.compass-app .compass-create-hook-wrap {
   min-height: 118px;
   display: flex;
   flex-direction: column;
@@ -3528,7 +4036,7 @@
   padding: 5px 2px 2px;
 }
 
-.neo-app .neo-create-card-kicker {
+.compass-app .compass-create-card-kicker {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
@@ -3538,7 +4046,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-create-hook-wrap h3 {
+.compass-app .compass-create-hook-wrap h3 {
   margin: 0;
   color: var(--ink);
   font-size: clamp(23px, 2vw, 32px);
@@ -3547,14 +4055,14 @@
   letter-spacing: -0.045em;
 }
 
-.neo-app .neo-create-hook-wrap p {
+.compass-app .compass-create-hook-wrap p {
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.42;
 }
 
-.neo-app .neo-stage-build .preview-area {
+.compass-app .compass-stage-build .preview-area {
   display: grid;
   min-height: 220px;
   place-items: center;
@@ -3565,31 +4073,31 @@
   background: #f4f5f8;
 }
 
-.neo-app .neo-stage-build .generated-preview {
+.compass-app .compass-stage-build .generated-preview {
   width: 100%;
   max-height: 300px;
   object-fit: contain;
 }
 
-.neo-app .neo-stage-build .output-caption {
+.compass-app .compass-stage-build .output-caption {
   margin: 0;
   padding: 2px;
   border: 0;
   background: transparent;
 }
 
-.neo-app .neo-stage-build .output-caption p {
+.compass-app .compass-stage-build .output-caption p {
   min-height: 0;
   color: #51586b;
   font-size: 11px;
   line-height: 1.45;
 }
 
-.neo-app .neo-stage-build .output-qa-note {
+.compass-app .compass-stage-build .output-qa-note {
   margin: 0;
 }
 
-.neo-app .neo-output-qa-callout {
+.compass-app .compass-output-qa-callout {
   margin: 0 24px 18px;
   padding: 16px;
   border: 1px solid rgba(199, 50, 47, 0.22);
@@ -3598,7 +4106,7 @@
   color: #7f3330;
 }
 
-.neo-app .neo-output-qa-callout > span {
+.compass-app .compass-output-qa-callout > span {
   display: block;
   color: #c7322f;
   font-size: 11px;
@@ -3607,7 +4115,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-output-qa-callout > p {
+.compass-app .compass-output-qa-callout > p {
   display: -webkit-box;
   margin: 7px 0 12px;
   overflow: hidden;
@@ -3617,13 +4125,13 @@
   -webkit-line-clamp: 3;
 }
 
-.neo-app .neo-output-qa-callout > div {
+.compass-app .compass-output-qa-callout > div {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.neo-app .neo-ugc-template {
+.compass-app .compass-ugc-template {
   position: relative;
   width: min(210px, 72%);
   aspect-ratio: 9 / 16;
@@ -3636,52 +4144,52 @@
   text-align: left;
 }
 
-.neo-app .neo-ugc-template::after {
+.compass-app .compass-ugc-template::after {
   position: absolute;
   inset: 28% 0 0;
   background: linear-gradient(180deg, transparent, rgba(12, 14, 22, 0.94));
   content: "";
 }
 
-.neo-app .neo-ugc-template.compact {
+.compass-app .compass-ugc-template.compact {
   width: min(160px, 60%);
   border-radius: 22px;
   box-shadow: 7px 7px 0 #202124;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy {
   right: 13px;
   bottom: 14px;
   left: 13px;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy small {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy small {
   margin-bottom: 4px;
   font-size: 7px;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy b {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy b {
   font-size: 13px;
   line-height: 1.12;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy p,
-.neo-app .neo-ugc-template.compact .neo-ugc-copy ol {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy p,
+.compass-app .compass-ugc-template.compact .compass-ugc-copy ol {
   margin: 5px 0;
   font-size: 7px;
   line-height: 1.32;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy ol {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy ol {
   padding-left: 11px;
 }
 
-.neo-app .neo-ugc-template.compact .neo-ugc-copy > span {
+.compass-app .compass-ugc-template.compact .compass-ugc-copy > span {
   padding: 5px 7px;
   font-size: 6.5px;
 }
 
-.neo-app .neo-ugc-story {
+.compass-app .compass-ugc-story {
   position: absolute;
   z-index: 2;
   top: 12px;
@@ -3692,13 +4200,13 @@
   gap: 4px;
 }
 
-.neo-app .neo-ugc-story i {
+.compass-app .compass-ugc-story i {
   height: 3px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.82);
 }
 
-.neo-app .neo-ugc-creator-dot {
+.compass-app .compass-ugc-creator-dot {
   position: absolute;
   z-index: 2;
   top: 25px;
@@ -3710,7 +4218,7 @@
   background: #cfff62;
 }
 
-.neo-app .neo-ugc-copy {
+.compass-app .compass-ugc-copy {
   position: absolute;
   z-index: 3;
   right: 15px;
@@ -3718,7 +4226,7 @@
   left: 15px;
 }
 
-.neo-app .neo-ugc-copy small {
+.compass-app .compass-ugc-copy small {
   display: block;
   margin-bottom: 6px;
   font-size: 9px;
@@ -3727,24 +4235,24 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-ugc-copy b {
+.compass-app .compass-ugc-copy b {
   display: block;
   font-size: 18px;
   line-height: 1.08;
 }
 
-.neo-app .neo-ugc-copy p,
-.neo-app .neo-ugc-copy ol {
+.compass-app .compass-ugc-copy p,
+.compass-app .compass-ugc-copy ol {
   margin: 7px 0;
   font-size: 9px;
   line-height: 1.35;
 }
 
-.neo-app .neo-ugc-copy ol {
+.compass-app .compass-ugc-copy ol {
   padding-left: 14px;
 }
 
-.neo-app .neo-ugc-copy > span {
+.compass-app .compass-ugc-copy > span {
   display: inline-flex;
   margin-top: 5px;
   padding: 6px 8px;
@@ -3755,12 +4263,12 @@
   font-weight: 700;
 }
 
-.neo-app .neo-output-card-action {
+.compass-app .compass-output-card-action {
   margin-top: auto;
   padding: 0;
 }
 
-.neo-app .neo-create-card-foot {
+.compass-app .compass-create-card-foot {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -3768,11 +4276,11 @@
   padding-top: 2px;
 }
 
-.neo-app .neo-create-cta-block {
+.compass-app .compass-create-cta-block {
   min-width: 0;
 }
 
-.neo-app .neo-create-cta-block b {
+.compass-app .compass-create-cta-block b {
   display: block;
   overflow: hidden;
   color: var(--ink);
@@ -3783,18 +4291,18 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-create-card-foot .btn {
+.compass-app .compass-create-card-foot .btn {
   flex: 0 0 auto;
   justify-content: center;
 }
 
 /* Build review cards mirror the approved HTML prototype. */
-.neo-app .neo-stage-build .output-grid {
+.compass-app .compass-stage-build .output-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
-.neo-app .neo-stage-build .neo-build-review-card {
+.compass-app .compass-stage-build .compass-build-review-card {
   min-height: 0;
   gap: 0;
   overflow: hidden;
@@ -3804,22 +4312,22 @@
   box-shadow: 0 5px 16px rgba(28, 35, 52, 0.04);
 }
 
-.neo-app .neo-stage-build .neo-build-review-card:hover {
+.compass-app .compass-stage-build .compass-build-review-card:hover {
   border-color: var(--line);
   box-shadow: 0 10px 28px rgba(28, 35, 52, 0.08);
   transform: none;
 }
 
-.neo-app .neo-stage-build .neo-build-review-card.qa-attention {
+.compass-app .compass-stage-build .compass-build-review-card.qa-attention {
   border-color: rgba(157, 99, 0, 0.35);
   box-shadow: 0 0 0 3px rgba(157, 99, 0, 0.07);
 }
 
-.neo-app .neo-stage-build .neo-build-review-card.qa-passed {
+.compass-app .compass-stage-build .compass-build-review-card.qa-passed {
   border-color: rgba(22, 129, 90, 0.22);
 }
 
-.neo-app .neo-build-card-head {
+.compass-app .compass-build-card-head {
   min-height: 0;
   display: flex;
   align-items: center;
@@ -3829,44 +4337,44 @@
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-build-card-head b,
-.neo-app .neo-build-card-head small {
+.compass-app .compass-build-card-head b,
+.compass-app .compass-build-card-head small {
   display: block;
 }
 
-.neo-app .neo-build-card-head b {
+.compass-app .compass-build-card-head b {
   color: var(--ink);
   font-size: 12px;
   font-weight: 650;
 }
 
-.neo-app .neo-build-card-head small {
+.compass-app .compass-build-card-head small {
   margin-top: 2px;
   color: var(--muted);
   font-size: 9.8px;
 }
 
-.neo-app .neo-build-card-head .pill {
+.compass-app .compass-build-card-head .pill {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
   font-size: 9.8px;
 }
 
-.neo-app .neo-build-card-head .pill.amber {
+.compass-app .compass-build-card-head .pill.amber {
   border-color: rgba(157, 99, 0, 0.24);
   background: #fff5d8;
   color: #936000;
 }
 
-.neo-app .neo-build-asset-pair {
+.compass-app .compass-build-asset-pair {
   min-height: 236px;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   border-bottom: 1px solid var(--line);
 }
 
-.neo-app .neo-stage-build .neo-build-preview {
+.compass-app .compass-stage-build .compass-build-preview {
   min-height: 236px;
   padding: 14px;
   border-right: 1px solid var(--line);
@@ -3874,55 +4382,94 @@
   background: #f4f6fa;
 }
 
-.neo-app .neo-stage-build .neo-build-preview:hover {
+.compass-app .compass-stage-build .compass-build-preview:hover {
   background: #f1f3f8;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .static-preview,
-.neo-app .neo-stage-build .neo-build-preview .generated-preview {
+.compass-app .compass-album-mosaic {
+  width: min(100%, 520px);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(28, 35, 52, 0.12);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.compass-app .compass-album-mosaic > :first-child {
+  grid-column: 1 / -1;
+}
+
+.compass-app .compass-album-mosaic img,
+.compass-app .compass-build-image-modal .output-modal-image .compass-album-mosaic img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  display: block;
+  object-fit: cover;
+}
+
+.compass-app .compass-album-panel-empty {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: #eef1f6;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.compass-app .compass-stage-build .compass-build-preview .static-preview,
+.compass-app .compass-stage-build .compass-build-preview .generated-preview {
   width: min(100%, 250px);
   max-width: 250px;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .generated-preview {
+.compass-app .compass-stage-build .compass-build-preview .generated-preview {
   max-height: 320px;
   object-fit: contain;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy {
   right: 11px;
   bottom: 12px;
   left: 11px;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy small {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy small {
   margin-bottom: 3px;
   font-size: 5.8px;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy b {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy b {
   font-size: 10.5px;
   line-height: 1.1;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy p,
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy ol {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy p,
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy ol {
   margin: 3.5px 0;
   font-size: 5.7px;
   line-height: 1.28;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy ol {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy ol {
   padding-left: 9px;
 }
 
-.neo-app .neo-stage-build .neo-build-preview .neo-ugc-copy > span {
+.compass-app .compass-stage-build .compass-build-preview .compass-ugc-copy > span {
   margin-top: 3px;
   padding: 4px 6px;
   font-size: 5.5px;
 }
 
-.neo-app .neo-build-caption {
+.compass-app .compass-build-caption {
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -3932,8 +4479,8 @@
   background: #fff;
 }
 
-.neo-app .neo-build-caption label,
-.neo-app .neo-build-qa small {
+.compass-app .compass-build-caption label,
+.compass-app .compass-build-qa small {
   color: var(--muted);
   font-size: 9px;
   font-weight: 650;
@@ -3941,7 +4488,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-build-caption textarea {
+.compass-app .compass-build-caption textarea {
   flex: 1 1 auto;
   width: 100%;
   height: auto;
@@ -3961,13 +4508,13 @@
   white-space: pre-wrap;
 }
 
-.neo-app .neo-build-caption textarea:focus {
+.compass-app .compass-build-caption textarea:focus {
   border-color: rgba(86, 100, 245, 0.38);
   background: #fff;
   box-shadow: 0 0 0 4px rgba(86, 100, 245, 0.08);
 }
 
-.neo-app .neo-build-caption-actions {
+.compass-app .compass-build-caption-actions {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -3975,18 +4522,18 @@
   gap: 8px;
 }
 
-.neo-app .neo-build-caption-actions span {
+.compass-app .compass-build-caption-actions span {
   color: var(--green);
   font-size: 10px;
 }
 
-.neo-app .neo-build-caption-actions .btn {
+.compass-app .compass-build-caption-actions .btn {
   min-height: 24px;
   padding: 0 9px;
   font-size: 10.5px;
 }
 
-.neo-app .neo-build-qa {
+.compass-app .compass-build-qa {
   min-height: 0;
   margin: 11px 12px 0;
   padding: 10px 11px;
@@ -3994,25 +4541,25 @@
   border-radius: 14px;
 }
 
-.neo-app .neo-build-qa.passed {
+.compass-app .compass-build-qa.passed {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.neo-app .neo-build-qa.passed {
+.compass-app .compass-build-qa.passed {
   flex-wrap: wrap;
   border-color: rgba(22, 129, 90, 0.22);
   background: var(--greenSoft);
 }
 
-.neo-app .neo-build-qa.passed > div:first-child {
+.compass-app .compass-build-qa.passed > div:first-child {
   min-width: 0;
   flex: 1;
 }
 
-.neo-app .neo-build-qa b {
+.compass-app .compass-build-qa b {
   display: block;
   margin-top: 4px;
   color: var(--ink);
@@ -4021,7 +4568,7 @@
   line-height: 1.4;
 }
 
-.neo-app .neo-build-qa strong {
+.compass-app .compass-build-qa strong {
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
@@ -4033,19 +4580,19 @@
   font-size: 11px;
 }
 
-.neo-app .neo-build-qa.needs {
+.compass-app .compass-build-qa.needs {
   border-color: rgba(157, 99, 0, 0.24);
   background: #fff5d8;
 }
 
-.neo-app .neo-build-qa-head {
+.compass-app .compass-build-qa-head {
   display: grid;
   grid-template-columns: 25px minmax(0, 1fr) 36px;
   align-items: center;
   gap: 9px;
 }
 
-.neo-app .neo-build-qa-head > span {
+.compass-app .compass-build-qa-head > span {
   width: 25px;
   height: 25px;
   display: grid;
@@ -4055,95 +4602,111 @@
   color: #a96b00;
 }
 
-.neo-app .neo-build-qa.needs strong {
+.compass-app .compass-build-qa.needs strong {
   color: #936000;
 }
 
-.neo-app .neo-build-qa.needs > p {
+.compass-app .compass-build-qa-actions-summary {
+  display: grid;
+  gap: 5px;
   margin: 10px 0;
+  padding-left: 20px;
   color: #73551b;
-  font-size: 10.8px;
-  line-height: 1.45;
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 
-.neo-app .neo-build-qa-suggestion {
+.compass-app .compass-build-qa-actions-summary li {
+  padding-left: 2px;
+}
+
+.compass-app .compass-build-qa-suggestion {
   padding: 9px 10px;
   border: 1px solid rgba(157, 99, 0, 0.18);
   border-radius: 10px;
   background: #fff;
 }
 
-.neo-app .neo-build-qa-details {
+.compass-app .compass-build-qa-details {
   width: 100%;
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.neo-app .neo-build-qa-details > section {
-  padding: 9px 10px;
+.compass-app .compass-build-qa-score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.compass-app .compass-build-qa-score-grid > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
   border: 1px solid rgba(28, 35, 52, 0.1);
-  border-radius: 11px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.82);
 }
 
-.neo-app .neo-build-qa-details header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.neo-app .neo-build-qa-details header b,
-.neo-app .neo-build-qa-details li b {
+.compass-app .compass-build-qa-score-grid b {
   margin: 0;
-  font-size: 9.5px;
-  line-height: 1.35;
-}
-
-.neo-app .neo-build-qa-details header > span {
-  min-width: 27px;
-  min-height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--greenSoft);
-  color: var(--green);
   font-size: 9px;
-  font-weight: 750;
 }
 
-.neo-app .neo-build-qa-details header > span.needs {
-  background: #fff5d8;
+.compass-app .compass-build-qa-score-grid span {
+  color: var(--green);
+  font-size: 8.5px;
+}
+
+.compass-app .compass-build-qa-score-grid span.needs {
   color: #936000;
 }
 
-.neo-app .neo-build-qa-details section > p {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 8.8px;
-  line-height: 1.4;
+.compass-app .compass-build-qa-score-grid strong {
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: var(--ink);
+  font-size: 9.5px;
 }
 
-.neo-app .neo-build-qa-details ul {
+.compass-app .compass-build-qa-details details {
+  border: 1px solid rgba(28, 35, 52, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+}
+
+.compass-app .compass-build-qa-details summary {
+  padding: 7px 8px;
+  color: #73551b;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.compass-app .compass-build-qa-details li {
   display: grid;
-  gap: 6px;
-  margin: 8px 0 0;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 8px;
+  border-top: 1px solid rgba(28, 35, 52, 0.08);
+}
+
+.compass-app .compass-build-qa-details ul {
+  display: grid;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.neo-app .neo-build-qa-details li {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 7px;
-  margin: 0;
-  padding-top: 6px;
-  border-top: 1px solid rgba(28, 35, 52, 0.08);
-}
-
-.neo-app .neo-build-qa-details li > span {
+.compass-app .compass-build-qa-details li > span {
   width: 18px;
   height: 18px;
   display: grid;
@@ -4155,33 +4718,25 @@
   font-weight: 800;
 }
 
-.neo-app .neo-build-qa-details li.needs > span {
+.compass-app .compass-build-qa-details li > span {
   background: #fff5d8;
   color: #936000;
 }
 
-.neo-app .neo-build-qa-details li p,
-.neo-app .neo-build-qa-details li small {
-  display: block;
+.compass-app .compass-build-qa-details li b {
+  margin: 0;
+  font-size: 8.8px;
+  line-height: 1.35;
+}
+
+.compass-app .compass-build-qa-details li p {
   margin: 3px 0 0;
-  color: var(--muted);
-  font-size: 8.5px;
+  color: #73551b;
+  font-size: 8.3px;
   line-height: 1.4;
 }
 
-.neo-app .neo-build-qa-details li small {
-  color: #73551b;
-}
-
-.neo-app .neo-build-qa-details li > strong {
-  width: auto;
-  height: auto;
-  background: transparent;
-  color: var(--muted);
-  font-size: 8.5px;
-}
-
-.neo-app .neo-build-output-foot {
+.compass-app .compass-build-output-foot {
   min-height: 58px;
   display: flex;
   align-items: center;
@@ -4190,7 +4745,7 @@
   margin-top: auto;
 }
 
-.neo-app .neo-build-qa-strip {
+.compass-app .compass-build-qa-strip {
   min-height: 60px;
   display: flex;
   align-items: center;
@@ -4202,109 +4757,118 @@
   background: #f4fbf7;
 }
 
-.neo-app .neo-build-qa-strip.needs {
+.compass-app .compass-build-qa-strip.needs {
   border-color: rgba(157, 99, 0, 0.24);
   background: #fff5d8;
 }
 
-.neo-app .neo-build-qa-strip b {
+.compass-app .compass-build-qa-strip b {
   color: var(--ink);
   font-size: 12px;
 }
 
-.neo-app .neo-build-qa-strip p {
+.compass-app .compass-build-qa-strip p {
   margin: 3px 0 0;
   color: #35644f;
   font-size: 10.5px;
 }
 
-.neo-app .neo-build-qa-strip.needs p {
+.compass-app .compass-build-qa-strip.needs p {
   color: #73551b;
 }
 
-.neo-app .neo-build-image-modal {
+.compass-app .compass-build-image-modal {
   width: min(920px, calc(100vw - 48px));
   max-width: none;
   padding: 16px;
   overflow: hidden;
 }
 
-.neo-app .neo-build-image-modal .output-modal-head {
+.compass-app .compass-build-image-modal .output-modal-head {
   margin-bottom: 12px;
 }
 
-.neo-app .neo-build-image-modal .output-modal-image {
+.compass-app .compass-build-image-modal .output-modal-image {
   min-height: min(720px, 72vh);
   margin-bottom: 0;
   padding: 20px 20px 40px;
   background: #f4f6fa;
 }
 
-.neo-app .neo-build-image-modal .output-modal-image img {
+.compass-app .compass-build-image-modal .output-modal-image img {
   width: auto;
   max-width: 100%;
   max-height: 68vh;
 }
 
-.neo-app .neo-build-image-modal .static-preview {
+.compass-app .compass-album-preview-modal .output-modal-image {
+  min-height: 0;
+}
+
+.compass-app .compass-album-preview-modal .compass-album-mosaic,
+.compass-app .output-modal .compass-album-mosaic {
+  width: min(100%, 720px, 68vh);
+}
+
+.compass-app .compass-build-image-modal .static-preview {
   width: min(520px, 72vw);
   max-width: 100%;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-template {
+.compass-app .compass-build-image-modal .compass-ugc-template {
   width: min(360px, 68vw, calc(40.5vh - 40px));
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy {
+.compass-app .compass-build-image-modal .compass-ugc-copy {
   right: 22px;
   bottom: 24px;
   left: 22px;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy small {
+.compass-app .compass-build-image-modal .compass-ugc-copy small {
   margin-bottom: 8px;
   font-size: 12px;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy b {
+.compass-app .compass-build-image-modal .compass-ugc-copy b {
   font-size: 26px;
   line-height: 1.08;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy p,
-.neo-app .neo-build-image-modal .neo-ugc-copy ol {
+.compass-app .compass-build-image-modal .compass-ugc-copy p,
+.compass-app .compass-build-image-modal .compass-ugc-copy ol {
   margin: 10px 0;
   font-size: 12.5px;
   line-height: 1.4;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy ol {
+.compass-app .compass-build-image-modal .compass-ugc-copy ol {
   padding-left: 19px;
 }
 
-.neo-app .neo-build-image-modal .neo-ugc-copy > span {
+.compass-app .compass-build-image-modal .compass-ugc-copy > span {
   margin-top: 8px;
   padding: 9px 12px;
   font-size: 11.5px;
 }
 
 @media (max-width: 1150px) {
-  .neo-app .neo-stage-build .output-grid {
+  .compass-app .compass-stage-build .output-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1080px) {
-  .neo-app .neo-build-asset-pair {
+  .compass-app .compass-build-asset-pair {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-stage-build .neo-build-preview {
+  .compass-app .compass-stage-build .compass-build-preview {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
-  .neo-app .neo-build-caption textarea {
+  .compass-app .compass-build-caption textarea {
     flex: none;
     height: 180px;
     min-height: 180px;
@@ -4313,115 +4877,115 @@
 }
 
 @media (max-width: 760px) {
-  .neo-app .neo-stage-build .output-grid {
+  .compass-app .compass-stage-build .output-grid {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-build-asset-pair,
-  .neo-app .neo-stage-build .neo-build-preview {
+  .compass-app .compass-build-asset-pair,
+  .compass-app .compass-stage-build .compass-build-preview {
     min-height: 0;
   }
 
-  .neo-app .neo-build-caption textarea {
+  .compass-app .compass-build-caption textarea {
     height: 108px;
     min-height: 108px;
     max-height: 108px;
   }
 
-  .neo-app .neo-build-image-modal {
+  .compass-app .compass-build-image-modal {
     width: calc(100vw - 32px);
     padding: 12px;
   }
 
-  .neo-app .neo-build-image-modal .output-modal-image {
+  .compass-app .compass-build-image-modal .output-modal-image {
     min-height: 0;
     padding: 12px 12px 24px;
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-template {
+  .compass-app .compass-build-image-modal .compass-ugc-template {
     width: min(300px, 68vw);
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-copy {
+  .compass-app .compass-build-image-modal .compass-ugc-copy {
     right: 16px;
     bottom: 18px;
     left: 16px;
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-copy small {
+  .compass-app .compass-build-image-modal .compass-ugc-copy small {
     font-size: 8px;
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-copy b {
+  .compass-app .compass-build-image-modal .compass-ugc-copy b {
     font-size: 16px;
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-copy p,
-  .neo-app .neo-build-image-modal .neo-ugc-copy ol {
+  .compass-app .compass-build-image-modal .compass-ugc-copy p,
+  .compass-app .compass-build-image-modal .compass-ugc-copy ol {
     margin: 6px 0;
     font-size: 8px;
   }
 
-  .neo-app .neo-build-image-modal .neo-ugc-copy > span {
+  .compass-app .compass-build-image-modal .compass-ugc-copy > span {
     padding: 6px 8px;
     font-size: 7.5px;
   }
 
-  .neo-app .neo-build-qa-strip {
+  .compass-app .compass-build-qa-strip {
     align-items: flex-start;
     flex-direction: column;
   }
 }
 
-.neo-app .neo-qc-workspace {
+.compass-app .compass-qc-workspace {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
 
-.neo-app .neo-qc-progress-rail {
+.compass-app .compass-qc-progress-rail {
   position: sticky;
   top: 188px;
   padding: 15px;
   box-shadow: 0 8px 24px rgba(28, 35, 52, 0.04);
 }
 
-.neo-app .neo-qc-progress-rail h3 {
+.compass-app .compass-qc-progress-rail h3 {
   margin-top: 6px;
 }
 
-.neo-app .neo-qc-overall {
+.compass-app .compass-qc-overall {
   display: grid;
   gap: 8px;
   margin: 16px 0;
 }
 
-.neo-app .neo-qc-overall > div:first-child {
+.compass-app .compass-qc-overall > div:first-child {
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
 
-.neo-app .neo-qc-overall b {
+.compass-app .compass-qc-overall b {
   font-size: 25px;
   font-weight: 540;
   letter-spacing: -0.045em;
 }
 
-.neo-app .neo-qc-overall span {
+.compass-app .compass-qc-overall span {
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .neo-qc-progress-track {
+.compass-app .compass-qc-progress-track {
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
   background: #eceff4;
 }
 
-.neo-app .neo-qc-progress-track span {
+.compass-app .compass-qc-progress-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -4429,12 +4993,12 @@
   transition: width 0.2s var(--ease);
 }
 
-.neo-app .neo-qc-role-list {
+.compass-app .compass-qc-role-list {
   display: grid;
   gap: 7px;
 }
 
-.neo-app .neo-qc-role-progress {
+.compass-app .compass-qc-role-progress {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
@@ -4445,8 +5009,8 @@
   background: #fafbfc;
 }
 
-.neo-app .neo-qc-role-progress > span,
-.neo-app .neo-qc-role-tab > span {
+.compass-app .compass-qc-role-progress > span,
+.compass-app .compass-qc-role-tab > span {
   width: 30px;
   height: 30px;
   border-radius: 10px;
@@ -4458,14 +5022,14 @@
   font-weight: 750;
 }
 
-.neo-app .neo-qc-role-progress b,
-.neo-app .neo-qc-role-tab b {
+.compass-app .compass-qc-role-progress b,
+.compass-app .compass-qc-role-tab b {
   display: block;
   font-size: 10.5px;
 }
 
-.neo-app .neo-qc-role-progress small,
-.neo-app .neo-qc-role-tab small {
+.compass-app .compass-qc-role-progress small,
+.compass-app .compass-qc-role-tab small {
   display: block;
   margin-top: 2px;
   overflow: hidden;
@@ -4475,11 +5039,11 @@
   text-overflow: ellipsis;
 }
 
-.neo-app .neo-qc-role-progress strong {
+.compass-app .compass-qc-role-progress strong {
   font-size: 10.5px;
 }
 
-.neo-app .neo-qc-client-ready {
+.compass-app .compass-qc-client-ready {
   margin-top: 10px;
   padding: 10px;
   border: 1px solid rgba(22, 129, 90, 0.17);
@@ -4487,28 +5051,28 @@
   background: var(--greenSoft);
 }
 
-.neo-app .neo-qc-client-ready b,
-.neo-app .neo-qc-client-ready span {
+.compass-app .compass-qc-client-ready b,
+.compass-app .compass-qc-client-ready span {
   display: block;
 }
 
-.neo-app .neo-qc-client-ready b {
+.compass-app .compass-qc-client-ready b {
   font-size: 11px;
 }
 
-.neo-app .neo-qc-client-ready span {
+.compass-app .compass-qc-client-ready span {
   margin-top: 3px;
   color: var(--muted);
   font-size: 9.5px;
 }
 
-.neo-app .neo-qc-main {
+.compass-app .compass-qc-main {
   min-width: 0;
   display: grid;
   gap: 14px;
 }
 
-.neo-app .neo-qc-role-tabs {
+.compass-app .compass-qc-role-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
@@ -4516,7 +5080,7 @@
   background: #f3f5f9;
 }
 
-.neo-app .neo-qc-role-tab {
+.compass-app .compass-qc-role-tab {
   min-width: 0;
   min-height: 64px;
   display: grid;
@@ -4529,31 +5093,31 @@
   background: rgba(255, 255, 255, 0.76);
 }
 
-.neo-app .neo-qc-role-tab strong {
+.compass-app .compass-qc-role-tab strong {
   color: var(--muted);
   font-size: 9.5px;
   white-space: nowrap;
 }
 
-.neo-app .neo-qc-role-tab.complete {
+.compass-app .compass-qc-role-tab.complete {
   border-color: rgba(22, 129, 90, 0.19);
   background: var(--greenSoft);
 }
 
-.neo-app .neo-qc-role-tab.attention {
+.compass-app .compass-qc-role-tab.attention {
   border-color: var(--redLine);
   background: var(--redSoft);
 }
 
-.neo-app .neo-qc-section-head {
+.compass-app .compass-qc-section-head {
   padding: 0 2px;
 }
 
-.neo-app .neo-qc-section-head h3 {
+.compass-app .compass-qc-section-head h3 {
   margin-top: 5px;
 }
 
-.neo-app .neo-stage-qc .qc-slide {
+.compass-app .compass-stage-qc .qc-slide {
   grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
   gap: 0;
   overflow: hidden;
@@ -4563,31 +5127,31 @@
   box-shadow: 0 10px 28px rgba(28, 35, 52, 0.055);
 }
 
-.neo-app .neo-stage-qc .qc-slide > .fb-mockup,
-.neo-app .neo-stage-qc .qc-slide > .qc-gate-panel {
+.compass-app .compass-stage-qc .qc-slide > .fb-mockup,
+.compass-app .compass-stage-qc .qc-slide > .qc-gate-panel {
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
 
-.neo-app .neo-stage-qc .qc-slide > .fb-mockup {
+.compass-app .compass-stage-qc .qc-slide > .fb-mockup {
   border-right: 1px solid var(--line);
 }
 
-.neo-app .neo-stage-qc .qc-gate-panel {
+.compass-app .compass-stage-qc .qc-gate-panel {
   background: #fff;
 }
 
-.neo-app .neo-stage-qc .qc-review-list {
+.compass-app .compass-stage-qc .qc-review-list {
   padding: 13px;
 }
 
-.neo-app .neo-stage-qc .review-row {
+.compass-app .compass-stage-qc .review-row {
   border-radius: 14px;
   background: #fafbfc;
 }
 
-.neo-app .neo-qc-role-focus {
+.compass-app .compass-qc-role-focus {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -4595,7 +5159,7 @@
   box-shadow: 0 10px 28px rgba(28, 35, 52, 0.045);
 }
 
-.neo-app .neo-qc-role-tab {
+.compass-app .compass-qc-role-tab {
   appearance: none;
   color: inherit;
   font: inherit;
@@ -4604,39 +5168,47 @@
   transition: border-color 0.16s var(--ease), background 0.16s var(--ease), box-shadow 0.16s var(--ease), transform 0.16s var(--ease);
 }
 
-.neo-app .neo-qc-role-tab:hover {
+.compass-app .compass-qc-role-tab:hover {
   transform: translateY(-1px);
   border-color: var(--line2);
 }
 
-.neo-app .neo-qc-role-tab:focus-visible {
+.compass-app .compass-qc-role-tab:focus-visible {
   outline: 3px solid var(--accentSoft);
   outline-offset: 1px;
 }
 
-.neo-app .neo-qc-role-tab.active {
+.compass-app .compass-qc-role-tab.active {
   border-color: rgba(92, 92, 255, 0.25);
   background: #fff;
   box-shadow: 0 7px 18px rgba(28, 35, 52, 0.08);
 }
 
-.neo-app .neo-qc-role-progress > span.cs,
-.neo-app .neo-qc-role-tab > span.cs,
-.neo-app .neo-qc-role-character.cs,
-.neo-app .neo-qc-card-role-mark i.cs {
-  background: var(--orangeSoft);
-  color: var(--orange);
+.compass-app .compass-qc-role-progress > span.gd,
+.compass-app .compass-qc-role-tab > span.gd,
+.compass-app .compass-qc-role-character.gd,
+.compass-app .compass-qc-card-role-mark i.gd {
+  background: linear-gradient(145deg, #7d87ff, #5664f5);
+  color: #fff;
 }
 
-.neo-app .neo-qc-role-progress > span.pm,
-.neo-app .neo-qc-role-tab > span.pm,
-.neo-app .neo-qc-role-character.pm,
-.neo-app .neo-qc-card-role-mark i.pm {
-  background: #f1edff;
-  color: #7957d5;
+.compass-app .compass-qc-role-progress > span.cs,
+.compass-app .compass-qc-role-tab > span.cs,
+.compass-app .compass-qc-role-character.cs,
+.compass-app .compass-qc-card-role-mark i.cs {
+  background: linear-gradient(145deg, #ff8d74, #ff6846);
+  color: #fff;
 }
 
-.neo-app .neo-qc-role-tab strong {
+.compass-app .compass-qc-role-progress > span.pm,
+.compass-app .compass-qc-role-tab > span.pm,
+.compass-app .compass-qc-role-character.pm,
+.compass-app .compass-qc-card-role-mark i.pm {
+  background: linear-gradient(145deg, #9b8cff, #725df0);
+  color: #fff;
+}
+
+.compass-app .compass-qc-role-tab strong {
   min-width: 22px;
   height: 22px;
   display: grid;
@@ -4645,12 +5217,12 @@
   background: #eef0f4;
 }
 
-.neo-app .neo-qc-role-tab.active strong {
+.compass-app .compass-qc-role-tab.active strong {
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .neo-qc-role-guide {
+.compass-app .compass-qc-role-guide {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
@@ -4663,7 +5235,7 @@
     #fbfbff;
 }
 
-.neo-app .neo-qc-role-character {
+.compass-app .compass-qc-role-character {
   width: 56px;
   height: 56px;
   display: grid;
@@ -4676,7 +5248,7 @@
   box-shadow: inset 0 0 0 1px rgba(92, 92, 255, 0.08);
 }
 
-.neo-app .neo-qc-role-speech {
+.compass-app .compass-qc-role-speech {
   position: relative;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -4684,24 +5256,24 @@
   background: #fff;
 }
 
-.neo-app .neo-qc-role-speech b,
-.neo-app .neo-qc-role-speech p {
+.compass-app .compass-qc-role-speech b,
+.compass-app .compass-qc-role-speech p {
   margin: 0;
 }
 
-.neo-app .neo-qc-role-speech b {
+.compass-app .compass-qc-role-speech b {
   color: var(--ink);
   font-size: 11px;
 }
 
-.neo-app .neo-qc-role-speech p {
+.compass-app .compass-qc-role-speech p {
   margin-top: 3px;
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.45;
 }
 
-.neo-app .neo-qc-role-summary {
+.compass-app .compass-qc-role-summary {
   padding: 8px 10px;
   border: 1px solid rgba(92, 92, 255, 0.15);
   border-radius: 999px;
@@ -4712,12 +5284,42 @@
   white-space: nowrap;
 }
 
-.neo-app .neo-qc-focus-grid {
+.compass-app .compass-qc-role-guide-actions {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  max-width: 280px;
+}
+
+.compass-app .compass-qc-pm-download-note {
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.compass-app .compass-qc-client-slides-button {
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compass-app .compass-qc-client-slides-error {
+  max-width: 280px;
+  color: #be3838;
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.compass-app .compass-qc-focus-grid {
   display: grid;
   gap: 14px;
 }
 
-.neo-app .neo-qc-queue-clear {
+.compass-app .compass-qc-queue-clear {
   min-height: 150px;
   display: flex;
   align-items: center;
@@ -4729,23 +5331,23 @@
   background: #fbfcfd;
 }
 
-.neo-app .neo-qc-queue-clear b,
-.neo-app .neo-qc-queue-clear p {
+.compass-app .compass-qc-queue-clear b,
+.compass-app .compass-qc-queue-clear p {
   margin: 0;
 }
 
-.neo-app .neo-qc-queue-clear b {
+.compass-app .compass-qc-queue-clear b {
   font-size: 14px;
 }
 
-.neo-app .neo-qc-queue-clear p {
+.compass-app .compass-qc-queue-clear p {
   margin-top: 5px;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.45;
 }
 
-.neo-app .neo-qc-focus-card {
+.compass-app .compass-qc-focus-card {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(230px, 0.68fr) minmax(0, 1.32fr);
@@ -4756,12 +5358,12 @@
   box-shadow: 0 10px 30px rgba(28, 35, 52, 0.05);
 }
 
-.neo-app .neo-qc-focus-card.work-required {
+.compass-app .compass-qc-focus-card.work-required {
   border-color: rgba(219, 95, 58, 0.32);
   box-shadow: 0 10px 30px rgba(219, 95, 58, 0.07);
 }
 
-.neo-app .neo-qc-focus-asset {
+.compass-app .compass-qc-focus-asset {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -4770,7 +5372,7 @@
   background: #f4f5f8;
 }
 
-.neo-app .neo-qc-focus-visual {
+.compass-app .compass-qc-focus-visual {
   min-height: 230px;
   display: grid;
   place-items: center;
@@ -4781,12 +5383,12 @@
   background: #e9ebef;
 }
 
-.neo-app .neo-qc-focus-visual .static-preview {
+.compass-app .compass-qc-focus-visual .static-preview {
   width: 100%;
   min-height: 230px;
 }
 
-.neo-app .neo-qc-focus-image {
+.compass-app .compass-qc-focus-image {
   width: auto;
   height: auto;
   max-width: 100%;
@@ -4794,11 +5396,11 @@
   object-fit: contain;
 }
 
-.neo-app .neo-qc-focus-caption {
+.compass-app .compass-qc-focus-caption {
   padding: 11px 2px 4px;
 }
 
-.neo-app .neo-qc-focus-caption > span {
+.compass-app .compass-qc-focus-caption > span {
   display: block;
   margin-bottom: 4px;
   color: var(--faint);
@@ -4808,7 +5410,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-qc-focus-caption p {
+.compass-app .compass-qc-focus-caption p {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
@@ -4819,11 +5421,11 @@
   -webkit-line-clamp: 3;
 }
 
-.neo-app .neo-qc-focus-caption p.expanded {
+.compass-app .compass-qc-focus-caption p.expanded {
   display: block;
 }
 
-.neo-app .neo-qc-focus-caption p.neo-caption-scroll {
+.compass-app .compass-qc-focus-caption p.compass-caption-scroll {
   display: block;
   max-height: 92px;
   overflow-x: hidden;
@@ -4835,44 +5437,44 @@
   -webkit-line-clamp: unset;
 }
 
-.neo-app .neo-qc-focus-caption p.neo-caption-scroll:focus-visible {
+.compass-app .compass-qc-focus-caption p.compass-caption-scroll:focus-visible {
   outline: 2px solid var(--accentLine);
   outline-offset: 3px;
   border-radius: 5px;
 }
 
-.neo-app .neo-qc-focus-caption p.neo-caption-scroll::-webkit-scrollbar {
+.compass-app .compass-qc-focus-caption p.compass-caption-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.neo-app .neo-qc-focus-caption p.neo-caption-scroll::-webkit-scrollbar-thumb {
+.compass-app .compass-qc-focus-caption p.compass-caption-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: #c9cdd7;
 }
 
-.neo-app .neo-qc-focus-caption .fb-see-more {
+.compass-app .compass-qc-focus-caption .fb-see-more {
   margin-top: 4px;
 }
 
-.neo-app .neo-qc-asset-actions {
+.compass-app .compass-qc-asset-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
 }
 
-.neo-app .neo-qc-card-utilities .btn.download-action {
+.compass-app .compass-qc-card-utilities .btn.download-action {
   border-color: var(--line2);
   background: #fff;
   color: var(--ink);
 }
 
-.neo-app .neo-qc-card-utilities .btn.download-action:hover:not(:disabled) {
+.compass-app .compass-qc-card-utilities .btn.download-action:hover:not(:disabled) {
   border-color: #202124;
   background: #f7f8fa;
   color: var(--ink);
 }
 
-.neo-app .neo-qc-focus-content {
+.compass-app .compass-qc-focus-content {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -4880,14 +5482,14 @@
   padding: 20px;
 }
 
-.neo-app .neo-qc-focus-head {
+.compass-app .compass-qc-focus-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
 }
 
-.neo-app .neo-qc-card-role-mark {
+.compass-app .compass-qc-card-role-mark {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -4896,7 +5498,7 @@
   font-weight: 700;
 }
 
-.neo-app .neo-qc-card-role-mark i {
+.compass-app .compass-qc-card-role-mark i {
   width: 27px;
   height: 27px;
   display: grid;
@@ -4909,7 +5511,7 @@
   font-weight: 800;
 }
 
-.neo-app .neo-qc-card-kicker {
+.compass-app .compass-qc-card-kicker {
   display: block;
   margin-top: 16px;
   color: var(--faint);
@@ -4919,7 +5521,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-qc-focus-head h4 {
+.compass-app .compass-qc-focus-head h4 {
   max-width: 560px;
   margin: 5px 0 0;
   color: var(--ink);
@@ -4929,7 +5531,7 @@
   letter-spacing: -0.045em;
 }
 
-.neo-app .neo-qc-state-badge {
+.compass-app .compass-qc-state-badge {
   flex: 0 0 auto;
   min-height: 28px;
   display: inline-flex;
@@ -4943,26 +5545,26 @@
   font-weight: 750;
 }
 
-.neo-app .neo-qc-state-badge.approved {
+.compass-app .compass-qc-state-badge.approved {
   border-color: rgba(22, 129, 90, 0.2);
   background: var(--greenSoft);
   color: var(--green);
 }
 
-.neo-app .neo-qc-state-badge.rejected {
+.compass-app .compass-qc-state-badge.rejected {
   border-color: var(--redLine);
   background: var(--redSoft);
   color: var(--red);
 }
 
-.neo-app .neo-qc-card-meta {
+.compass-app .compass-qc-card-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.neo-app .neo-qc-card-meta span,
-.neo-app .neo-qc-check-chips span {
+.compass-app .compass-qc-card-meta span,
+.compass-app .compass-qc-check-chips span {
   min-height: 27px;
   display: inline-flex;
   align-items: center;
@@ -4974,51 +5576,51 @@
   font-size: 9.5px;
 }
 
-.neo-app .neo-qc-check-box {
+.compass-app .compass-qc-check-box {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 15px;
   background: #fafbfc;
 }
 
-.neo-app .neo-qc-check-box > b {
+.compass-app .compass-qc-check-box > b {
   display: block;
   color: var(--ink);
   font-size: 10.5px;
 }
 
-.neo-app .neo-qc-check-chips {
+.compass-app .compass-qc-check-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 9px 0 0;
 }
 
-.neo-app .neo-qc-work-note {
+.compass-app .compass-qc-work-note {
   padding: 11px 12px;
   border: 1px solid var(--redLine);
   border-radius: 14px;
   background: var(--redSoft);
 }
 
-.neo-app .neo-qc-work-note b,
-.neo-app .neo-qc-work-note p {
+.compass-app .compass-qc-work-note b,
+.compass-app .compass-qc-work-note p {
   margin: 0;
 }
 
-.neo-app .neo-qc-work-note b {
+.compass-app .compass-qc-work-note b {
   color: var(--red);
   font-size: 10.5px;
 }
 
-.neo-app .neo-qc-work-note p {
+.compass-app .compass-qc-work-note p {
   margin-top: 4px;
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.45;
 }
 
-.neo-app .neo-qc-card-actions {
+.compass-app .compass-qc-card-actions {
   min-width: 0;
   display: flex;
   align-items: flex-end;
@@ -5028,21 +5630,21 @@
   padding-top: 4px;
 }
 
-.neo-app .neo-qc-card-utilities {
+.compass-app .compass-qc-card-utilities {
   min-width: 0;
 }
 
-.neo-app .neo-qc-card-utilities .repository-message {
+.compass-app .compass-qc-card-utilities .repository-message {
   margin: 7px 0 0;
 }
 
-.neo-app .neo-qc-decision-actions {
+.compass-app .compass-qc-decision-actions {
   flex: 0 0 auto;
   margin: 0;
   padding: 0;
 }
 
-.neo-app .neo-qc-content-type-badge {
+.compass-app .compass-qc-content-type-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -5053,8 +5655,8 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-qc-content-type-badge i,
-.neo-app .neo-qc-ugc-ownership i {
+.compass-app .compass-qc-content-type-badge i,
+.compass-app .compass-qc-ugc-ownership i {
   display: inline-grid;
   width: 30px;
   height: 30px;
@@ -5066,7 +5668,7 @@
   font-style: normal;
 }
 
-.neo-app .neo-qc-ugc-ownership {
+.compass-app .compass-qc-ugc-ownership {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -5079,7 +5681,7 @@
   font-size: 12px;
 }
 
-.neo-app .neo-qc-mini-trail {
+.compass-app .compass-qc-mini-trail {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -5087,13 +5689,13 @@
   margin-top: 14px;
 }
 
-.neo-app .neo-qc-mini-trail > b {
+.compass-app .compass-qc-mini-trail > b {
   color: #9096a2;
   font-size: 12px;
   font-weight: 600;
 }
 
-.neo-app .neo-qc-mini-trail > span {
+.compass-app .compass-qc-mini-trail > span {
   display: inline-flex;
   min-height: 34px;
   align-items: center;
@@ -5107,27 +5709,27 @@
   font-weight: 700;
 }
 
-.neo-app .neo-qc-mini-trail > span.current {
+.compass-app .compass-qc-mini-trail > span.current {
   border-color: rgba(86, 100, 245, 0.28);
   background: #eef0ff;
   color: #5664f5;
 }
 
-.neo-app .neo-qc-mini-trail > span.done {
+.compass-app .compass-qc-mini-trail > span.done {
   border-color: rgba(22, 129, 90, 0.22);
   background: #e9f8f2;
   color: #16815a;
 }
 
-.neo-app .neo-qc-mini-trail i {
+.compass-app .compass-qc-mini-trail i {
   font-style: normal;
 }
 
-.neo-app .neo-qc-decision-modal {
+.compass-app .compass-qc-decision-modal {
   width: min(540px, calc(100vw - 32px));
 }
 
-.neo-app .neo-qc-decision-meta {
+.compass-app .compass-qc-decision-meta {
   margin-bottom: 12px;
   padding: 10px 12px;
   border: 1px solid #e1e4ec;
@@ -5137,7 +5739,7 @@
   font-size: 12px;
 }
 
-.neo-app .neo-qc-change-type-field > span {
+.compass-app .compass-qc-change-type-field > span {
   display: block;
   margin-bottom: 7px;
   color: #8b92a0;
@@ -5147,13 +5749,13 @@
   text-transform: uppercase;
 }
 
-.neo-app .neo-qc-change-type-field > div {
+.compass-app .compass-qc-change-type-field > div {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
-.neo-app .neo-qc-change-type-field button {
+.compass-app .compass-qc-change-type-field button {
   height: 40px;
   border: 1px solid #dfe2e8;
   border-radius: 11px;
@@ -5161,14 +5763,14 @@
   color: #6d7483;
 }
 
-.neo-app .neo-qc-change-type-field button.on {
+.compass-app .compass-qc-change-type-field button.on {
   border-color: rgba(86, 100, 245, 0.28);
   background: #eef0ff;
   color: #5664f5;
   font-weight: 700;
 }
 
-.neo-app .neo-qc-route-preview {
+.compass-app .compass-qc-route-preview {
   margin: 8px 0 12px;
   padding: 10px 12px;
   border: 1px solid #e1e4ec;
@@ -5179,173 +5781,219 @@
   line-height: 1.45;
 }
 
-.neo-app .neo-qc-reject-modal {
+.compass-app .compass-qc-reject-modal {
   max-width: 480px;
 }
 
 /* Client decisions mirror the reference flow while keeping live output data. */
-.neo-app .neo-stage-client .decision-body {
-  display: grid;
-  gap: 18px;
+.compass-app .compass-stage-client .decision-head {
+  min-height: 102px;
+  padding: 25px 28px 21px;
+  gap: 20px;
 }
 
-.neo-app .neo-client-intro {
-  max-width: 68ch;
-  margin: 0;
-  font-size: 13px;
+.compass-app .compass-stage-client .decision-head h2 {
+  font-size: 31px;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
 }
 
-.neo-app .neo-client-grid {
-  gap: 16px;
+.compass-app .compass-stage-client .decision-body {
+  padding-top: 22px;
+  padding-bottom: 22px;
 }
 
-.neo-app .neo-client-card {
+.compass-app .compass-client-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compass-app .compass-client-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
   border-radius: 20px;
+  border-color: var(--line);
   box-shadow: none;
   transform: none;
 }
 
-.neo-app .neo-client-card:hover {
+.compass-app .compass-client-card:hover {
   transform: none;
 }
 
-.neo-app .neo-client-card.approved {
+.compass-app .compass-client-card.approved {
   border-color: var(--greenLine);
 }
 
-.neo-app .neo-client-card.revision {
+.compass-app .compass-client-card.revision {
   border-color: var(--redLine);
 }
 
-.neo-app .neo-client-preview {
-  min-height: 220px;
-  padding: 18px;
+.compass-app .compass-client-preview {
+  height: 172px;
+  min-height: 172px;
+  padding: 14px;
   cursor: default;
-  background: #f4f5f7;
+  overflow: hidden;
+  background: #f3f5f8;
 }
 
-.neo-app .neo-client-preview:hover {
-  background: #f4f5f7;
+.compass-app .compass-client-preview:hover {
+  background: #f3f5f8;
 }
 
-.neo-app .neo-client-preview .generated-preview {
-  max-width: 250px;
-  border-radius: 14px;
+.compass-app .compass-client-preview .generated-preview {
+  width: auto;
+  height: 144px;
+  max-width: 100%;
+  max-height: 144px;
+  aspect-ratio: auto;
+  border-radius: 10px;
   object-fit: contain;
+  box-shadow: 0 7px 16px rgba(28, 35, 52, 0.14);
 }
 
-.neo-app .neo-client-card-body {
-  display: flex;
+.compass-app .compass-client-preview .static-preview {
+  width: 140px;
+  max-width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 7px 16px rgba(28, 35, 52, 0.14);
+}
+
+.compass-app .compass-client-card-body {
+  display: block;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  padding: 18px;
+  padding: 12px;
+  border-bottom: 0;
 }
 
-.neo-app .neo-client-card-copy {
-  display: grid;
-  gap: 8px;
+.compass-app .compass-client-card-copy {
+  display: block;
 }
 
-.neo-app .neo-client-card-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.neo-app .neo-client-card-heading > span:first-child {
-  color: var(--faint);
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.neo-app .neo-client-card-copy h3 {
+.compass-app .compass-client-card-copy h3 {
   margin: 0;
   color: var(--ink);
-  font-size: 18px;
-  line-height: 1.16;
-  letter-spacing: -0.025em;
-}
-
-.neo-app .neo-client-card-copy p {
-  margin: 0;
-  color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
-.neo-app .neo-client-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: auto;
-  flex-wrap: wrap;
-}
-
-.neo-app .neo-client-card-actions .btn {
-  white-space: nowrap;
-}
-
-.neo-app .neo-client-decision-note {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 9px 10px;
-  background: var(--surface2);
+.compass-app .compass-client-card-copy p {
+  margin: 5px 0 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
-.neo-app .neo-client-card.approved .neo-client-decision-note {
+.compass-app .compass-client-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.compass-app .compass-client-card-actions .btn {
+  white-space: nowrap;
+}
+
+.compass-app .compass-client-decision-note {
+  margin-top: 9px;
+  border-radius: 11px;
+  padding: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.compass-app .compass-client-card.approved .compass-client-decision-note {
   border-color: var(--greenLine);
   background: var(--greenSoft);
   color: var(--green);
 }
 
-.neo-app .neo-client-card.revision .neo-client-decision-note {
+.compass-app .compass-client-card.revision .compass-client-decision-note {
   border-color: var(--redLine);
   background: var(--redSoft);
   color: var(--red);
 }
 
-.neo-app .neo-client-revision-modal {
+.compass-app .compass-client-approve,
+.compass-app .compass-client-approve-all {
+  border-color: #d8eea5;
+  background: #efffca;
+  color: #334021;
+}
+
+.compass-app .compass-client-approve:hover:not(:disabled),
+.compass-app .compass-client-approve-all:hover:not(:disabled) {
+  border-color: #c9e18f;
+  background: #e8ffb2;
+}
+
+.compass-app .compass-stage-client .decision-actions {
+  min-height: 72px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compass-app .compass-client-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compass-app .compass-client-revision-modal {
   max-width: 500px;
 }
 
-.neo-app .neo-qc-work-note.client-request {
+.compass-app .compass-qc-work-note.client-request {
   border-color: var(--redLine);
   background: var(--redSoft);
 }
 
-@media (max-width: 700px) {
-  .neo-app .neo-client-preview {
-    min-height: 190px;
+@media (max-width: 800px) {
+  .compass-app .compass-client-grid {
+    grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-client-card-actions .btn {
-    flex: 1 1 auto;
+  .compass-app .compass-stage-client .decision-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .compass-app .compass-client-footer-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 
-.neo-app .preview-area {
+@media (max-width: 560px) {
+  .compass-app .compass-stage-client .compass-client-footer-actions {
+    flex-direction: row;
+  }
+
+  .compass-app .compass-stage-client .decision-actions .btn,
+  .compass-app .compass-stage-client .compass-client-card-actions .btn {
+    width: auto;
+  }
+}
+
+.compass-app .preview-area {
   background: #f3f5f8;
 }
 
 /* Workboard uses live workspace data only. */
-.neo-app #overviewView {
+.compass-app #overviewView {
   display: grid;
   gap: 18px;
 }
 
-.neo-app .ov-head {
+.compass-app .ov-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -5353,7 +6001,7 @@
   padding: 8px 2px 0;
 }
 
-.neo-app .ov-head h2 {
+.compass-app .ov-head h2 {
   margin: 2px 0 0;
   font-size: clamp(36px, 4vw, 58px);
   font-weight: 520;
@@ -5361,14 +6009,14 @@
   letter-spacing: -0.055em;
 }
 
-.neo-app .ov-head > div > p:last-child {
+.compass-app .ov-head > div > p:last-child {
   max-width: 560px;
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 12.5px;
 }
 
-.neo-app .workboard-access-note {
+.compass-app .workboard-access-note {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -5383,45 +6031,45 @@
   white-space: nowrap;
 }
 
-.neo-app .ov-metrics {
+.compass-app .ov-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
 }
 
-.neo-app .ov-metric,
-.neo-app .ov-board {
+.compass-app .ov-metric,
+.compass-app .ov-board {
   border-color: var(--line);
   border-radius: 22px;
   background: #fff;
   box-shadow: none;
 }
 
-.neo-app .ov-metric {
+.compass-app .ov-metric {
   min-height: 104px;
   padding: 18px;
 }
 
-.neo-app .ov-metric b {
+.compass-app .ov-metric b {
   font-size: 31px;
   line-height: 1;
   color: var(--accent);
 }
 
-.neo-app .ov-metric span {
+.compass-app .ov-metric span {
   margin-top: 9px;
   font-size: 10.5px;
 }
 
-.neo-app .ov-metric.attention b {
+.compass-app .ov-metric.attention b {
   color: var(--orange);
 }
 
-.neo-app .ov-board {
+.compass-app .ov-board {
   overflow: hidden;
 }
 
-.neo-app .workboard-toolbar {
+.compass-app .workboard-toolbar {
   min-height: 70px;
   display: flex;
   align-items: center;
@@ -5431,7 +6079,7 @@
   background: var(--surface2);
 }
 
-.neo-app .workboard-search {
+.compass-app .workboard-search {
   width: min(310px, 34vw);
   min-height: 42px;
   display: flex;
@@ -5444,13 +6092,13 @@
   color: var(--faint);
 }
 
-.neo-app .workboard-search:focus-within {
+.compass-app .workboard-search:focus-within {
   border-color: var(--accent);
   box-shadow: var(--halo);
   color: var(--accent);
 }
 
-.neo-app .workboard-search input {
+.compass-app .workboard-search input {
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -5462,12 +6110,12 @@
   font-size: 11.5px;
 }
 
-.neo-app .workboard-search input::placeholder {
+.compass-app .workboard-search input::placeholder {
   color: var(--faint);
   opacity: 1;
 }
 
-.neo-app .workboard-filters {
+.compass-app .workboard-filters {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -5477,7 +6125,7 @@
   background: #fff;
 }
 
-.neo-app .workboard-filters button {
+.compass-app .workboard-filters button {
   min-height: 32px;
   padding: 0 10px;
   border-radius: 8px;
@@ -5488,26 +6136,26 @@
   transition: color 0.16s var(--ease), background 0.16s var(--ease), transform 0.16s var(--ease);
 }
 
-.neo-app .workboard-filters button:hover,
-.neo-app .workboard-filters button.active {
+.compass-app .workboard-filters button:hover,
+.compass-app .workboard-filters button.active {
   background: var(--ink);
   color: #fff;
 }
 
-.neo-app .workboard-filters button:active,
-.neo-app .workboard-client-action .btn:active {
+.compass-app .workboard-filters button:active,
+.compass-app .workboard-client-action .btn:active {
   transform: translateY(1px);
 }
 
-.neo-app .workboard-result-count {
+.compass-app .workboard-result-count {
   margin-left: auto;
   color: var(--muted);
   font-size: 10px;
   white-space: nowrap;
 }
 
-.neo-app .workboard-table-head,
-.neo-app .workboard-client-row {
+.compass-app .workboard-table-head,
+.compass-app .workboard-client-row {
   display: grid;
   grid-template-columns:
     minmax(210px, 1.35fr)
@@ -5521,7 +6169,7 @@
   align-items: center;
 }
 
-.neo-app .workboard-table-head {
+.compass-app .workboard-table-head {
   min-height: 42px;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
@@ -5533,7 +6181,7 @@
   text-transform: uppercase;
 }
 
-.neo-app .workboard-client-row {
+.compass-app .workboard-client-row {
   min-height: 88px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
@@ -5541,37 +6189,37 @@
   transition: background 0.16s var(--ease), transform 0.16s var(--ease);
 }
 
-.neo-app .workboard-client-row:last-child {
+.compass-app .workboard-client-row:last-child {
   border-bottom: 0;
 }
 
-.neo-app .workboard-client-row:hover {
+.compass-app .workboard-client-row:hover {
   background: #f9fafc;
 }
 
-.neo-app .workboard-client-row.urgent {
+.compass-app .workboard-client-row.urgent {
   background: linear-gradient(90deg, var(--orangeSoft), #fff 34%);
 }
 
-.neo-app .workboard-project-main,
-.neo-app .workboard-client-main,
-.neo-app .workboard-project-owner,
-.neo-app .workboard-project-main > span:last-child,
-.neo-app .workboard-client-main > span:last-child,
-.neo-app .workboard-project-owner > span:last-child,
-.neo-app .workboard-client-status,
-.neo-app .workboard-client-stage {
+.compass-app .workboard-project-main,
+.compass-app .workboard-client-main,
+.compass-app .workboard-project-owner,
+.compass-app .workboard-project-main > span:last-child,
+.compass-app .workboard-client-main > span:last-child,
+.compass-app .workboard-project-owner > span:last-child,
+.compass-app .workboard-client-status,
+.compass-app .workboard-client-stage {
   min-width: 0;
 }
 
-.neo-app .workboard-project-main,
-.neo-app .workboard-client-main {
+.compass-app .workboard-project-main,
+.compass-app .workboard-client-main {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.neo-app .workboard-project-icon {
+.compass-app .workboard-project-icon {
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
@@ -5583,22 +6231,22 @@
   color: var(--accent);
 }
 
-.neo-app .workboard-project-main b,
-.neo-app .workboard-project-main small,
-.neo-app .workboard-client-main b,
-.neo-app .workboard-client-main small,
-.neo-app .workboard-client-status small,
-.neo-app .workboard-project-owner b,
-.neo-app .workboard-project-owner small,
-.neo-app .workboard-client-stage b,
-.neo-app .workboard-client-stage small {
+.compass-app .workboard-project-main b,
+.compass-app .workboard-project-main small,
+.compass-app .workboard-client-main b,
+.compass-app .workboard-client-main small,
+.compass-app .workboard-client-status small,
+.compass-app .workboard-project-owner b,
+.compass-app .workboard-project-owner small,
+.compass-app .workboard-client-stage b,
+.compass-app .workboard-client-stage small {
   display: block;
 }
 
-.neo-app .workboard-project-main b,
-.neo-app .workboard-client-main b,
-.neo-app .workboard-project-owner b,
-.neo-app .workboard-client-stage b {
+.compass-app .workboard-project-main b,
+.compass-app .workboard-client-main b,
+.compass-app .workboard-project-owner b,
+.compass-app .workboard-client-stage b {
   overflow: hidden;
   color: var(--ink);
   font-size: 11.5px;
@@ -5607,10 +6255,10 @@
   white-space: nowrap;
 }
 
-.neo-app .workboard-project-main small,
-.neo-app .workboard-client-main small,
-.neo-app .workboard-project-owner small,
-.neo-app .workboard-client-stage small {
+.compass-app .workboard-project-main small,
+.compass-app .workboard-client-main small,
+.compass-app .workboard-project-owner small,
+.compass-app .workboard-client-stage small {
   margin-top: 3px;
   overflow: hidden;
   color: var(--muted);
@@ -5619,24 +6267,24 @@
   white-space: nowrap;
 }
 
-.neo-app .workboard-project-main b {
+.compass-app .workboard-project-main b {
   font-size: 12px;
   font-weight: 650;
 }
 
-.neo-app .workboard-client-main .ov-av {
+.compass-app .workboard-client-main .ov-av {
   width: 32px;
   height: 32px;
   border-radius: 10px;
 }
 
-.neo-app .workboard-project-owner {
+.compass-app .workboard-project-owner {
   display: flex;
   align-items: center;
   gap: 9px;
 }
 
-.neo-app .workboard-owner-avatar {
+.compass-app .workboard-owner-avatar {
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
@@ -5650,7 +6298,7 @@
   font-weight: 700;
 }
 
-.neo-app .workboard-client-status small {
+.compass-app .workboard-client-status small {
   margin-top: 5px;
   overflow: hidden;
   color: var(--muted);
@@ -5660,7 +6308,7 @@
   white-space: nowrap;
 }
 
-.neo-app .workboard-status {
+.compass-app .workboard-status {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -5674,52 +6322,52 @@
   white-space: nowrap;
 }
 
-.neo-app .workboard-status.ready {
+.compass-app .workboard-status.ready {
   border-color: var(--greenLine);
   background: var(--greenSoft);
   color: var(--green);
 }
 
-.neo-app .workboard-status.active {
+.compass-app .workboard-status.active {
   border-color: var(--accentLine);
   background: var(--accentSoft);
   color: var(--accent);
 }
 
-.neo-app .workboard-status.attention {
+.compass-app .workboard-status.attention {
   border-color: rgba(255, 104, 70, 0.25);
   background: var(--orangeSoft);
   color: #b8472e;
 }
 
-.neo-app .workboard-status.error {
+.compass-app .workboard-status.error {
   border-color: var(--redLine);
   background: var(--redSoft);
   color: var(--red);
 }
 
-.neo-app .workboard-stage-track {
+.compass-app .workboard-stage-track {
   display: grid;
   grid-template-columns: repeat(7, minmax(7px, 1fr));
   gap: 3px;
 }
 
-.neo-app .workboard-stage-track i {
+.compass-app .workboard-stage-track i {
   height: 5px;
   border-radius: 2px;
   background: #e7e9ee;
 }
 
-.neo-app .workboard-stage-track i.complete {
+.compass-app .workboard-stage-track i.complete {
   background: var(--accent);
 }
 
-.neo-app .workboard-client-action {
+.compass-app .workboard-client-action {
   display: flex;
   justify-content: flex-end;
 }
 
-.neo-app .workboard-client-action .btn {
+.compass-app .workboard-client-action .btn {
   min-width: 72px;
   display: inline-flex;
   align-items: center;
@@ -5728,13 +6376,13 @@
   white-space: nowrap;
 }
 
-.neo-app .workboard-empty {
+.compass-app .workboard-empty {
   margin: 0;
   border: 0;
   border-radius: 0;
 }
 
-.neo-app .workboard-load-more {
+.compass-app .workboard-load-more {
   min-height: 62px;
   display: flex;
   align-items: center;
@@ -5745,19 +6393,19 @@
   background: var(--surface2);
 }
 
-.neo-app .workboard-load-more span {
+.compass-app .workboard-load-more span {
   color: var(--muted);
   font-size: 10px;
 }
 
-.neo-app .workboard-skeleton > i {
+.compass-app .workboard-skeleton > i {
   height: 12px;
   border-radius: 5px;
   background: #eceef2;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .neo-app .workboard-skeleton > i {
+  .compass-app .workboard-skeleton > i {
     animation: workboard-skeleton 1.2s ease-in-out infinite alternate;
   }
 }
@@ -5768,7 +6416,7 @@
   }
 }
 
-.neo-app .sr-only {
+.compass-app .sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -5781,16 +6429,16 @@
 }
 
 @media (max-width: 1120px) {
-  .neo-app .workboard-toolbar {
+  .compass-app .workboard-toolbar {
     flex-wrap: wrap;
   }
 
-  .neo-app .workboard-search {
+  .compass-app .workboard-search {
     width: 100%;
   }
 
-  .neo-app .workboard-table-head,
-  .neo-app .workboard-client-row {
+  .compass-app .workboard-table-head,
+  .compass-app .workboard-client-row {
     grid-template-columns:
       minmax(200px, 1.3fr)
       minmax(130px, 0.8fr)
@@ -5800,119 +6448,119 @@
       78px;
   }
 
-  .neo-app .workboard-table-head span:nth-child(6),
-  .neo-app .workboard-stage-track,
-  .neo-app .workboard-skeleton > i:nth-child(6) {
+  .compass-app .workboard-table-head span:nth-child(6),
+  .compass-app .workboard-stage-track,
+  .compass-app .workboard-skeleton > i:nth-child(6) {
     display: none;
   }
 }
 
 @media (max-width: 780px) {
-  .neo-app .ov-head {
+  .compass-app .ov-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .ov-metrics {
+  .compass-app .ov-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .neo-app .ov-metric {
+  .compass-app .ov-metric {
     min-height: 92px;
     padding: 15px;
   }
 
-  .neo-app .workboard-toolbar {
+  .compass-app .workboard-toolbar {
     align-items: stretch;
   }
 
-  .neo-app .workboard-filters {
+  .compass-app .workboard-filters {
     max-width: 100%;
     overflow-x: auto;
   }
 
-  .neo-app .workboard-result-count {
+  .compass-app .workboard-result-count {
     margin: 0 2px 0 auto;
     align-self: center;
   }
 
-  .neo-app .workboard-table-head {
+  .compass-app .workboard-table-head {
     display: none;
   }
 
-  .neo-app .workboard-client-row {
+  .compass-app .workboard-client-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     padding: 15px;
   }
 
-  .neo-app .workboard-project-main {
+  .compass-app .workboard-project-main {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .neo-app .workboard-client-action {
+  .compass-app .workboard-client-action {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .neo-app .workboard-client-main {
+  .compass-app .workboard-client-main {
     grid-column: 1;
     grid-row: 2;
   }
 
-  .neo-app .workboard-project-owner {
+  .compass-app .workboard-project-owner {
     grid-column: 2;
     grid-row: 2;
     justify-self: end;
   }
 
-  .neo-app .workboard-client-status {
+  .compass-app .workboard-client-status {
     grid-column: 1 / -1;
     grid-row: 3;
   }
 
-  .neo-app .workboard-client-stage {
+  .compass-app .workboard-client-stage {
     grid-column: 1;
     grid-row: 4;
   }
 
-  .neo-app .workboard-stage-track {
+  .compass-app .workboard-stage-track {
     display: grid;
     grid-column: 2;
     grid-row: 4;
     width: min(210px, 42vw);
   }
 
-  .neo-app .workboard-client-status small {
+  .compass-app .workboard-client-status small {
     white-space: normal;
   }
 
-  .neo-app .workboard-skeleton > i {
+  .compass-app .workboard-skeleton > i {
     display: block;
   }
 
-  .neo-app .workboard-skeleton > i:nth-child(n + 3) {
+  .compass-app .workboard-skeleton > i:nth-child(n + 3) {
     grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 540px) {
-  .neo-app .workboard-project-owner {
+  .compass-app .workboard-project-owner {
     grid-column: 1 / -1;
     grid-row: 3;
     justify-self: stretch;
   }
 
-  .neo-app .workboard-client-status {
+  .compass-app .workboard-client-status {
     grid-row: 4;
   }
 
-  .neo-app .workboard-client-stage {
+  .compass-app .workboard-client-stage {
     grid-row: 5;
   }
 
-  .neo-app .workboard-stage-track {
+  .compass-app .workboard-stage-track {
     grid-column: 1 / -1;
     grid-row: 6;
     width: 100%;
@@ -5920,58 +6568,58 @@
 }
 
 @media (max-width: 1120px) {
-  .neo-app .neo-qc-workspace {
+  .compass-app .compass-qc-workspace {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-qc-progress-rail {
+  .compass-app .compass-qc-progress-rail {
     position: static;
   }
 
-  .neo-app .neo-qc-role-list {
+  .compass-app .compass-qc-role-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1180px) {
-  .neo-app .journey {
+  .compass-app .journey {
     grid-template-columns: repeat(7, minmax(48px, 1fr));
   }
 
-  .neo-app .journey b {
+  .compass-app .journey b {
     display: none;
   }
 
-  .neo-hero {
+  .compass-hero {
     grid-template-columns: 1fr;
   }
 
-  .neo-hero-signals {
+  .compass-hero-signals {
     min-height: 190px;
   }
 }
 
 @media (max-width: 1150px) {
-  .neo-app .neo-brief-layout {
+  .compass-app .compass-brief-layout {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-context-stack {
+  .compass-app .compass-context-stack {
     position: static;
   }
 }
 
 @media (max-width: 980px) {
-  .neo-app .neo-angle-settings {
+  .compass-app .compass-angle-settings {
     grid-template-columns: 1fr 1fr;
   }
 
-  .neo-app .neo-angle-setting:nth-child(2) {
+  .compass-app .compass-angle-setting:nth-child(2) {
     padding-right: 0;
     border-right: 0;
   }
 
-  .neo-app .neo-angle-size-setting {
+  .compass-app .compass-angle-size-setting {
     grid-column: 1 / -1;
     margin-top: 10px;
     padding: 10px 0 0;
@@ -5980,11 +6628,11 @@
 }
 
 @media (max-width: 800px) {
-  .neo-app {
+  .compass-app {
     padding: 10px 10px 94px;
   }
 
-  .neo-rail {
+  .compass-rail {
     inset: auto 10px 10px;
     width: auto;
     height: 72px;
@@ -5993,166 +6641,195 @@
     border-radius: 22px;
   }
 
-  .neo-logo-button {
+  .compass-logo-button {
     display: none;
   }
 
-  .neo-rail-nav {
+  .compass-rail-nav {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
   }
 
-  .neo-rail-nav button,
-  .neo-rail-create {
+  .compass-rail-nav button,
+  .compass-rail-create {
     min-height: 56px;
   }
 
-  .neo-rail-create {
+  .compass-rail-create {
     width: 58px;
     margin: 0;
   }
 
-  .neo-app .topbar {
+  .compass-app .topbar {
     top: 10px;
   }
 
-  .neo-app .nav {
+  .compass-app .nav {
     min-height: 66px;
     padding: 7px;
   }
 
-  .neo-app .journey {
+  .compass-app .journey {
     gap: 2px;
   }
 
-  .neo-app .journey button {
+  .compass-app .journey button {
     height: 48px;
     padding: 0;
   }
 
-  .neo-app .client-pill {
+  .compass-app .client-pill {
     display: none;
   }
 
-  .neo-app .runs-bar {
+  .compass-app .runs-bar {
     overflow: hidden;
   }
 
-  .neo-app main {
+  .compass-app main {
     padding-top: 12px;
   }
 
-  .neo-app .neo-brief-layout {
+  .compass-app .compass-brief-layout {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-start-grid {
+  .compass-app .compass-start-grid {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-signal-memory-top {
+  .compass-app .compass-signal-memory-top {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .neo-signal-memory-tabs {
+  .compass-app .compass-signal-memory-tabs {
     justify-content: flex-start;
   }
 
-  .neo-app .neo-material-manager-window {
+  .compass-app .compass-brand-snapshot-identity {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .compass-app .compass-brand-snapshot-colors {
+    grid-column: 1 / -1;
+  }
+
+  .compass-app .compass-material-manager-window {
     grid-template-columns: 160px minmax(0, 1fr);
   }
 
-  .neo-app .neo-context-stack {
+  .compass-app .compass-context-stack {
     position: static;
   }
 
-  .neo-app .neo-angle-grid,
-  .neo-app .neo-stage-build .output-grid {
+  .compass-app .compass-angle-grid,
+  .compass-app .compass-stage-build .output-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .neo-app .neo-qc-role-list {
+  .compass-app .compass-qc-role-list {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-qc-role-tabs {
+  .compass-app .compass-qc-role-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .neo-app .neo-qc-role-tab {
+  .compass-app .compass-qc-role-tab {
     grid-template-columns: 30px minmax(0, 1fr);
   }
 
-  .neo-app .neo-qc-role-tab strong {
+  .compass-app .compass-qc-role-tab strong {
     grid-column: 2;
     justify-self: start;
   }
 
-  .neo-app .neo-qc-role-guide {
+  .compass-app .compass-qc-role-guide {
     grid-template-columns: 56px minmax(0, 1fr);
   }
 
-  .neo-app .neo-qc-role-summary {
+  .compass-app .compass-qc-role-summary {
     grid-column: 2;
     justify-self: start;
   }
 
-  .neo-app .neo-qc-focus-card {
+  .compass-app .compass-qc-role-guide-actions {
+    grid-column: 2;
+    justify-items: start;
+    max-width: none;
+  }
+
+  .compass-app .compass-qc-pm-download-note,
+  .compass-app .compass-qc-client-slides-error {
+    max-width: none;
+    text-align: left;
+  }
+
+  .compass-app .compass-qc-focus-card {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-qc-focus-asset {
+  .compass-app .compass-qc-focus-asset {
     border-right: 0;
     border-bottom: 0;
   }
 
-  .neo-app .decision-head,
-  .neo-app .decision-body {
+  .compass-app .decision-head,
+  .compass-app .decision-body {
     padding-left: 20px;
     padding-right: 20px;
   }
 
-  .neo-app .decision-actions {
+  .compass-app .decision-actions {
     align-items: stretch;
   }
 }
 
 @media (max-width: 760px) {
-  .neo-hero {
+  .compass-hero {
     min-height: auto;
     display: block;
   }
 
-  .neo-hero h1 {
+  .compass-hero h1 {
     font-size: 45px;
   }
 }
 
 @media (max-width: 640px) {
-  .neo-app .neo-angle-toolbar {
+  .compass-app .compass-brand-learning-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .compass-app .compass-brand-snapshot-list article {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .compass-app .compass-angle-toolbar {
     align-items: stretch;
   }
 
-  .neo-app .neo-angle-toolbar-actions {
+  .compass-app .compass-angle-toolbar-actions {
     width: 100%;
     flex-wrap: wrap;
   }
 
-  .neo-app .neo-angle-export-pdf {
+  .compass-app .compass-angle-export-pdf {
     flex: 0 0 auto;
   }
 
-  .neo-app .neo-angle-settings {
+  .compass-app .compass-angle-settings {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-angle-setting,
-  .neo-app .neo-angle-setting:first-child,
-  .neo-app .neo-angle-setting:nth-child(2),
-  .neo-app .neo-angle-size-setting {
+  .compass-app .compass-angle-setting,
+  .compass-app .compass-angle-setting:first-child,
+  .compass-app .compass-angle-setting:nth-child(2),
+  .compass-app .compass-angle-size-setting {
     grid-column: auto;
     margin: 0;
     padding: 10px 0;
@@ -6161,47 +6838,47 @@
     border-bottom: 1px solid var(--line);
   }
 
-  .neo-app .neo-angle-setting:first-child {
+  .compass-app .compass-angle-setting:first-child {
     padding-top: 0;
   }
 
-  .neo-app .neo-angle-setting:last-child {
+  .compass-app .compass-angle-setting:last-child {
     padding-bottom: 0;
     border-bottom: 0;
   }
 
-  .neo-app .neo-plan-row {
+  .compass-app .compass-plan-row {
     grid-template-columns: 40px minmax(0, 1fr);
   }
 
-  .neo-app .neo-angle-group-head {
+  .compass-app .compass-angle-group-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .neo-angle-group-head-actions {
+  .compass-app .compass-angle-group-head-actions {
     width: 100%;
     justify-content: space-between;
   }
 
-  .neo-app .neo-angle-group-buttons {
+  .compass-app .compass-angle-group-buttons {
     width: 100%;
   }
 
-  .neo-app .neo-angle-generate-ideas,
-  .neo-app .neo-angle-add-hook {
+  .compass-app .compass-angle-generate-ideas,
+  .compass-app .compass-angle-add-hook {
     flex: 1;
   }
 
-  .neo-app .neo-manual-hook-form {
+  .compass-app .compass-manual-hook-form {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-manual-hook-field.full {
+  .compass-app .compass-manual-hook-field.full {
     grid-column: auto;
   }
 
-  .neo-app .neo-mix-row-controls {
+  .compass-app .compass-mix-row-controls {
     grid-column: 2;
     justify-content: space-between;
   }
@@ -6209,270 +6886,274 @@
 }
 
 @media (max-width: 700px) {
-  .neo-hero {
+  .compass-hero {
     padding: 20px;
     border-radius: 22px;
   }
 
-  .neo-hero-signals {
+  .compass-hero-signals {
     display: none;
   }
 }
 
 @media (max-width: 560px) {
-  .neo-rail-nav button span {
+  .compass-rail-nav button span {
     display: none;
   }
 
-  .neo-app .nav-right {
+  .compass-app .nav-right {
     display: none;
   }
 
-  .neo-app .journey button {
+  .compass-app .journey button {
     height: 44px;
   }
 
-  .neo-app .runs-new {
+  .compass-app .runs-new {
     display: none;
   }
 
-  .neo-app .memory-ribbon {
+  .compass-app .memory-ribbon {
     display: none;
   }
 
-  .neo-hero-signals {
+  .compass-hero-signals {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
 
-  .neo-signal-primary {
+  .compass-signal-primary {
     grid-row: auto;
   }
 
-  .neo-app .decision-head {
+  .compass-app .decision-head {
     min-height: auto;
     flex-direction: column;
   }
 
-  .neo-app .decision-actions {
+  .compass-app .decision-actions {
     flex-direction: column-reverse;
   }
 
-  .neo-app .decision-actions .btn {
+  .compass-app .decision-actions .btn {
     width: 100%;
   }
 
-  .neo-app .neo-signal-stage .decision-actions {
+  .compass-app .compass-signal-stage .decision-actions {
     align-items: stretch;
   }
 
-  .neo-app .neo-signal-footer-actions,
-  .neo-app .neo-signal-footer-actions .btn {
+  .compass-app .compass-signal-footer-actions,
+  .compass-app .compass-signal-footer-actions .btn {
     width: 100%;
   }
 
-  .neo-app .neo-materials-head {
+  .compass-app .compass-materials-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .neo-materials-head-actions {
+  .compass-app .compass-materials-head-actions {
     justify-content: flex-start;
   }
 
-  .neo-app .neo-materials-compact-grid {
+  .compass-app .compass-materials-compact-grid {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-material-compact-row.wide {
+  .compass-app .compass-material-compact-row.wide {
     grid-column: auto;
   }
 
-  .neo-app .brand-colors-section {
+  .compass-app .brand-colors-section {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .brand-colors-section .colors-card + .colors-card {
+  .compass-app .brand-colors-section .colors-card + .colors-card {
     border-top: 1px solid var(--line);
     border-left: 0;
   }
 
-  .neo-app .neo-library-backdrop {
+  .compass-app .compass-library-backdrop {
     padding: 10px;
   }
 
-  .neo-app .neo-material-manager-modal {
+  .compass-app .compass-material-manager-modal {
     width: 100%;
     max-height: calc(100dvh - 20px);
   }
 
-  .neo-app .neo-material-manager-head {
+  .compass-app .compass-material-manager-head {
     padding: 15px;
   }
 
-  .neo-app .neo-material-manager-window {
+  .compass-app .compass-material-manager-window {
     min-height: 0;
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-material-folder-nav {
+  .compass-app .compass-material-folder-nav {
     flex-direction: row;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
-  .neo-app .neo-material-folder-btn {
+  .compass-app .compass-material-folder-btn {
     min-width: 132px;
   }
 
-  .neo-app .neo-material-browser-content {
+  .compass-app .compass-material-browser-content {
     max-height: calc(100dvh - 300px);
   }
 
-  .neo-app .neo-angle-card {
+  .compass-app .compass-angle-card {
     min-height: 0;
   }
 
-  .neo-app .neo-angle-hook-wrap {
+  .compass-app .compass-angle-hook-wrap {
     min-height: 140px;
     padding-top: 14px;
   }
 
-  .neo-app .neo-angle-hook-wrap h3 {
+  .compass-app .compass-angle-hook-wrap h3 {
     font-size: 28px;
   }
 
-  .neo-app .neo-angle-card-foot {
+  .compass-app .compass-angle-card-foot {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .neo-angle-card .direction-card-actions {
+  .compass-app .compass-angle-card .direction-card-actions {
     width: 100%;
     justify-content: flex-start;
   }
 
-  .neo-app .neo-stage-build .output-card {
+  .compass-app .compass-stage-build .output-card {
     min-height: 0;
   }
 
-  .neo-app .neo-create-hook-wrap {
+  .compass-app .compass-create-hook-wrap {
     min-height: 104px;
   }
 
-  .neo-app .neo-create-hook-wrap h3 {
+  .compass-app .compass-create-hook-wrap h3 {
     font-size: 24px;
   }
 
-  .neo-app .neo-module-head,
-  .neo-app .neo-create-intro,
-  .neo-app .neo-create-section-head,
-  .neo-app .neo-qc-section-head {
+  .compass-app .compass-module-head,
+  .compass-app .compass-create-intro,
+  .compass-app .compass-create-section-head,
+  .compass-app .compass-qc-section-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .neo-app .neo-plan-row {
+  .compass-app .compass-plan-row {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-plan-row .neo-type-icon {
+  .compass-app .compass-plan-row .compass-type-icon {
     display: none;
   }
 
-  .neo-app .neo-plan-row .qty {
+  .compass-app .compass-plan-row .qty {
     width: 100%;
     justify-self: stretch;
   }
 
-  .neo-app .neo-mix-row-controls {
+  .compass-app .compass-mix-row-controls {
     grid-template-columns: minmax(0, 1fr) 34px;
   }
 
-  .neo-app .neo-mix-row-controls .qty {
+  .compass-app .compass-mix-row-controls .qty {
     grid-column: 1 / -1;
     grid-row: 2;
   }
 
 
-  .neo-app .neo-angle-grid,
-  .neo-app .neo-stage-build .output-grid {
+  .compass-app .compass-angle-grid,
+  .compass-app .compass-stage-build .output-grid {
     grid-template-columns: 1fr;
   }
 
-  .neo-app .neo-qc-role-tab {
+  .compass-app .compass-qc-role-tab {
     grid-template-columns: 30px minmax(0, 1fr);
   }
 
-  .neo-app .neo-qc-role-tab small {
+  .compass-app .compass-qc-role-tab small {
     display: none;
   }
 
-  .neo-app .neo-qc-role-tab strong {
+  .compass-app .compass-qc-role-tab strong {
     grid-column: 2;
   }
 
-  .neo-app .neo-qc-role-guide {
+  .compass-app .compass-qc-role-guide {
     grid-template-columns: 46px minmax(0, 1fr);
     gap: 10px;
     padding: 12px;
   }
 
-  .neo-app .neo-qc-role-character {
+  .compass-app .compass-qc-client-slides-button {
+    width: 100%;
+  }
+
+  .compass-app .compass-qc-role-character {
     width: 46px;
     height: 46px;
     border-radius: 14px;
   }
 
-  .neo-app .neo-qc-focus-content {
+  .compass-app .compass-qc-focus-content {
     padding: 16px;
   }
 
-  .neo-app .neo-qc-focus-head {
+  .compass-app .compass-qc-focus-head {
     flex-direction: column;
   }
 
-  .neo-app .neo-qc-card-actions {
+  .compass-app .compass-qc-card-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .neo-app .neo-qc-decision-actions {
+  .compass-app .compass-qc-decision-actions {
     flex-direction: column;
   }
 
-  .neo-app .neo-qc-decision-actions .btn {
+  .compass-app .compass-qc-decision-actions .btn {
     width: 100%;
     justify-content: center;
   }
 
-  .neo-app .hook-edit-fields {
+  .compass-app .hook-edit-fields {
     grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .neo-app *,
-  .neo-app *::before,
-  .neo-app *::after {
+  .compass-app *,
+  .compass-app *::before,
+  .compass-app *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
-.neo-app .neo-run-edit-scope {
+.compass-app .compass-run-edit-scope {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.neo-app .neo-run-edit-scope:disabled {
+.compass-app .compass-run-edit-scope:disabled {
   opacity: 0.76;
 }
 
-.neo-app .neo-ownership-bar {
+.compass-app .compass-ownership-bar {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -6484,11 +7165,11 @@
   background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
 }
 
-.neo-app .neo-ownership-bar.viewer {
+.compass-app .compass-ownership-bar.viewer {
   background: color-mix(in srgb, var(--surface) 96%, var(--ink) 4%);
 }
 
-.neo-app .neo-ownership-icon {
+.compass-app .compass-ownership-icon {
   display: grid;
   width: 34px;
   height: 34px;
@@ -6499,54 +7180,54 @@
   background: var(--accent);
 }
 
-.neo-app .neo-ownership-bar.viewer .neo-ownership-icon {
+.compass-app .compass-ownership-bar.viewer .compass-ownership-icon {
   color: var(--muted);
   background: var(--surface3);
 }
 
-.neo-app .neo-ownership-copy {
+.compass-app .compass-ownership-copy {
   display: grid;
   min-width: 0;
   margin-right: auto;
 }
 
-.neo-app .neo-ownership-copy small,
-.neo-app .neo-ownership-version,
-.neo-app .neo-ownership-error,
-.neo-app .neo-ownership-success {
+.compass-app .compass-ownership-copy small,
+.compass-app .compass-ownership-version,
+.compass-app .compass-ownership-error,
+.compass-app .compass-ownership-success {
   color: var(--muted);
   font-size: 11px;
 }
 
-.neo-app .neo-ownership-copy b {
+.compass-app .compass-ownership-copy b {
   overflow: hidden;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.neo-app .neo-ownership-version {
+.compass-app .compass-ownership-version {
   white-space: nowrap;
 }
 
-.neo-app .neo-ownership-error {
+.compass-app .compass-ownership-error {
   color: var(--red);
 }
 
-.neo-app .neo-ownership-success {
+.compass-app .compass-ownership-success {
   color: var(--green);
 }
 
-.neo-app .neo-handoff-backdrop {
+.compass-app .compass-handoff-backdrop {
   z-index: 90;
 }
 
-.neo-app .neo-handoff-modal {
+.compass-app .compass-handoff-modal {
   width: min(520px, calc(100vw - 32px));
   padding: 22px;
 }
 
-.neo-app .neo-handoff-modal label {
+.compass-app .compass-handoff-modal label {
   display: grid;
   gap: 7px;
   margin-top: 16px;
@@ -6555,13 +7236,13 @@
   font-weight: 700;
 }
 
-.neo-app .neo-handoff-modal label small {
+.compass-app .compass-handoff-modal label small {
   color: var(--muted);
   font-weight: 500;
 }
 
-.neo-app .neo-handoff-modal select,
-.neo-app .neo-handoff-modal textarea {
+.compass-app .compass-handoff-modal select,
+.compass-app .compass-handoff-modal textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -6570,18 +7251,18 @@
   font: inherit;
 }
 
-.neo-app .neo-handoff-modal select {
+.compass-app .compass-handoff-modal select {
   min-height: 42px;
   padding: 0 11px;
 }
 
-.neo-app .neo-handoff-modal textarea {
+.compass-app .compass-handoff-modal textarea {
   min-height: 100px;
   padding: 11px;
   resize: vertical;
 }
 
-.neo-app .neo-handoff-modal > p {
+.compass-app .compass-handoff-modal > p {
   margin: 13px 0 0;
   color: var(--muted);
   font-size: 12px;
@@ -6589,12 +7270,12 @@
 }
 
 @media (max-width: 720px) {
-  .neo-app .neo-ownership-bar {
+  .compass-app .compass-ownership-bar {
     align-items: flex-start;
     flex-wrap: wrap;
   }
 
-  .neo-app .neo-ownership-bar .btn {
+  .compass-app .compass-ownership-bar .btn {
     width: 100%;
   }
 }

@@ -28,6 +28,7 @@ export interface EditImageOptions {
   model: string;
   prompt: string;
   size: ArtworkOutputSize;
+  quality?: "low" | "medium" | "high" | "auto";
   referenceImages: readonly ReferenceImageInput[];
   fetchImpl: typeof fetch;
 }
@@ -37,6 +38,7 @@ export async function editImage({
   model,
   prompt,
   size,
+  quality = "medium",
   referenceImages,
   fetchImpl
 }: EditImageOptions): Promise<GeneratedImage> {
@@ -44,6 +46,7 @@ export async function editImage({
   form.set("model", model);
   form.set("prompt", prompt);
   form.set("size", size);
+  form.set("quality", quality);
 
   referenceImages.forEach((reference, index) => {
     const blob = new Blob([reference.bytes as unknown as BlobPart], {

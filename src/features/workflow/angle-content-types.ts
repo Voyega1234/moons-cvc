@@ -29,17 +29,17 @@ const groupDetailsByService: Record<
   { title: string; description: string; initials: string }
 > = {
   "single-static": {
-    title: "Static hooks",
+    title: "STATIC",
     description: "One focused feed creative",
     initials: "Ss"
   },
   "album-post": {
-    title: "Album hooks",
+    title: "ALBUM",
     description: "A swipeable multi-frame story",
     initials: "Ap"
   },
   "ugc-video": {
-    title: "UGC video hooks",
+    title: "UGC VIDEO",
     description: "A creator-led vertical video",
     initials: "Uv"
   },

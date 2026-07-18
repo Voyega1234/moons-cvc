@@ -21,6 +21,14 @@ reconfigure the OpenAI/n8n provider choice above:
 
 1. `standard` — default; uses `agent_prompt/agent_image.md` as the image-agent
    instruction and appends the run's compact campaign input.
+   For `album-post`, Standard mode generates one 2048×2048 master artboard with
+   a fixed landscape-first 2×2 composition: panel 1 spans the top row, while
+   panels 2 and 3 occupy the bottom-left and bottom-right squares. The three
+   format beats map to cover/hook, mechanism/proof, and offer/CTA. Essential
+   content stays inside each crop; only non-essential background flow may cross
+   seams. The backend stores the master for debugging, then deterministically
+   returns one 1920×960 image and two 960×960 images. Other modes and Standard
+   non-album services retain their existing generation path.
 2. `design-system` — loads
    `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and applies
    its brief diagnosis, reference forensics, internal execution-route

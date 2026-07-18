@@ -31,6 +31,18 @@ describe("presentBrandMemoryText", () => {
     });
   });
 
+  it("removes technical source metadata when it was appended inline", () => {
+    expect(
+      presentBrandMemoryText(
+        "Use strong blue gradients. Source: brand_analysis_jobs/job-789 · 12 images"
+      )
+    ).toEqual({
+      text: "Use strong blue gradients.",
+      citationLabel: "AI analysis · 12 images",
+      citationTitle: "Source job job-789"
+    });
+  });
+
   it("leaves manually entered memory unchanged", () => {
     expect(presentBrandMemoryText("Keep the logo clear.")).toEqual({
       text: "Keep the logo clear.",

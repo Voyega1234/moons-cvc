@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildArtworkGenerationRequest,
   buildArtworkGenerationRequests,
+  buildArtworkRegenerationRequest,
+  buildArtworkRevisionRequest,
   normalizeArtworkOutput
 } from "./openai-image-generation";
 import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
@@ -67,6 +69,71 @@ const run: WorkflowState = {
 };
 
 describe("buildArtworkGenerationRequest", () => {
+  it("keeps the legacy full generation request for album regeneration", () => {
+    const direction = run.directions[0];
+    if (!direction) throw new Error("Expected a selected direction fixture.");
+
+    const request = buildArtworkRegenerationRequest({
+      run,
+      direction,
+      sourceImageUrl: "https://example.com/current-artwork.png",
+      extraInstructions: "Fix hierarchy and make the CTA more direct."
+    });
+
+    expect(request.quantity).toBe(1);
+    expect(request.textInputs).toEqual([
+      "Fix hierarchy and make the CTA more direct."
+    ]);
+    expect(request.referenceImages[0]).toEqual({
+      kind: "url",
+      url: "https://example.com/current-artwork.png",
+      label: "Current artwork to revise"
+    });
+  });
+
+  it("builds a minimal current-image plus instructions request for controlled revision", () => {
+    const request = buildArtworkRevisionRequest({
+      run,
+      output: {
+        id: "hook-1-v1",
+        directionId: "hook-1",
+        format: "1:1 Static",
+        status: "ready",
+        clientStatus: "queued",
+        assetUrl: "https://example.com/current-artwork.png",
+        revisionCount: 0,
+        approval: {
+          graphicDesign: null,
+          clientService: null,
+          projectManager: null
+        },
+        approvalComments: {
+          graphicDesign: "",
+          clientService: "",
+          projectManager: ""
+        }
+      },
+      instructions: "  Increase whitespace around the CTA.  "
+    });
+
+    expect(request).toEqual({
+      requestType: "artwork-revision",
+      model: "gpt-image-2",
+      clientId: "flora",
+      runId: "run-1",
+      outputId: "hook-1-v1",
+      directionId: "hook-1",
+      format: "1:1 Static",
+      sourceImageUrl: "https://example.com/current-artwork.png",
+      instructions: "Increase whitespace around the CTA.",
+      output: { size: "1024x1024", format: "png" }
+    });
+    expect(request).not.toHaveProperty("brief");
+    expect(request).not.toHaveProperty("selectedHooks");
+    expect(request).not.toHaveProperty("referenceImages");
+    expect(request).not.toHaveProperty("imagePromptModel");
+  });
+
   it("passes brief, selected hooks, text inputs, and reference images to the backend contract", () => {
     const request = buildArtworkGenerationRequest({
       run,

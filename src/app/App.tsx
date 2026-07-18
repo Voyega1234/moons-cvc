@@ -18,7 +18,6 @@ import {
   NotePencil,
   PaintBrush,
   Plus,
-  ShieldCheck,
   Sparkle,
   SquaresFour,
   Tray,
@@ -147,7 +146,7 @@ export function App() {
 
   return (
     <div
-      className={`app neo-app ${workspace.view === "overview" ? "mode-overview" : ""}`}
+      className={`app compass-app ${workspace.view === "overview" ? "mode-overview" : ""}`}
     >
       <NavigationRail
         workspace={workspace}
@@ -156,7 +155,7 @@ export function App() {
         workspaceDispatch={workspaceDispatch}
         createRun={createRun}
       />
-      <div className="neo-page">
+      <div className="compass-page">
         <Header
           workspace={workspace}
           state={state}
@@ -166,7 +165,7 @@ export function App() {
           canEdit={runCanEdit}
         />
         <main>
-          <div className="shell neo-workspace">
+          <div className="shell compass-workspace">
             {workspace.view === "overview" ? (
               <Overview
                 state={state}
@@ -182,15 +181,16 @@ export function App() {
                 <RunOwnershipBar
                   runId={state.id}
                   completed={state.done}
+                  onCreateProject={() => createRun(true)}
                   busy={
                     state.ideaGenerationStatus === "running" ||
                     state.artworkGenerationStatus === "running"
                   }
                 />
                 {state.stage === "start" ? (
-                  <section className="hero neo-hero">
-                    <div className="neo-hero-copy">
-                      <span className="neo-kicker">
+                  <section className="hero compass-hero">
+                    <div className="compass-hero-copy">
+                      <span className="compass-kicker">
                         <span aria-hidden="true" /> Creative intelligence studio
                       </span>
                       <h1>
@@ -203,32 +203,32 @@ export function App() {
                         creative, and reusable performance memory. Less creative
                         admin. More creative judgment.
                       </p>
-                      <div className="neo-hero-meta">
-                        <span className="neo-status-pill">
+                      <div className="compass-hero-meta">
+                        <span className="compass-status-pill">
                           {state.brand
                             ? `${state.brand.name} workspace ready`
                             : "Waiting for a brand"}
                         </span>
-                        <span className="neo-status-pill">
+                        <span className="compass-status-pill">
                           Signal → idea → evidence
                         </span>
                       </div>
                     </div>
                     <aside
-                      className="neo-hero-signals"
+                      className="compass-hero-signals"
                       aria-label="Creative welcome motion"
                     >
-                      <div className="neo-signal-card neo-signal-primary">
+                      <div className="compass-signal-card compass-signal-primary">
                         <span>Creative playground</span>
-                        <div className="neo-motion-stage" aria-hidden="true">
-                          <div className="neo-spark-lines">
+                        <div className="compass-motion-stage" aria-hidden="true">
+                          <div className="compass-spark-lines">
                             <i />
                             <i />
                             <i />
                             <i />
                             <i />
                           </div>
-                          <div className="neo-motion-stack">
+                          <div className="compass-motion-stack">
                             <i />
                             <i />
                             <i />
@@ -248,9 +248,9 @@ export function App() {
                           </small>
                         </div>
                       </div>
-                      <div className="neo-signal-card neo-signal-lime">
-                        <span>What neo is doing</span>
-                        <div className="neo-orbit-wrap">
+                      <div className="compass-signal-card compass-signal-lime">
+                        <span>What compass is doing</span>
+                        <div className="compass-orbit-wrap">
                           <div>
                             <b>
                               Connecting
@@ -262,15 +262,15 @@ export function App() {
                               context travel with the work.
                             </small>
                           </div>
-                          <div className="neo-orbit" aria-hidden="true">
+                          <div className="compass-orbit" aria-hidden="true">
                             <i />
                             <i />
                             <i />
                           </div>
                         </div>
                       </div>
-                      <div className="neo-signal-card neo-signal-orange">
-                        <div className="neo-flip-words" aria-label="Creative principles">
+                      <div className="compass-signal-card compass-signal-orange">
+                        <div className="compass-flip-words" aria-label="Creative principles">
                           <b>Make it clearer.</b>
                           <b>Make it sharper.</b>
                           <b>Make it memorable.</b>
@@ -279,7 +279,7 @@ export function App() {
                     </aside>
                   </section>
                 ) : null}
-                <fieldset className="neo-run-edit-scope" disabled={!runCanEdit}>
+                <fieldset className="compass-run-edit-scope" disabled={!runCanEdit}>
                   <CurrentStage
                     state={state}
                     dispatch={dispatch}
@@ -297,15 +297,15 @@ export function App() {
           role={visibleToast.tone === "success" ? "status" : "alert"}
           aria-live={visibleToast.tone === "success" ? "polite" : "assertive"}
         >
-          <div className={`toast show neo-action-toast ${visibleToast.tone}`}>
-            <span className="neo-action-toast-icon" aria-hidden="true">
+          <div className={`toast show compass-action-toast ${visibleToast.tone}`}>
+            <span className="compass-action-toast-icon" aria-hidden="true">
               {visibleToast.tone === "success" ? (
                 <Check size={15} weight="bold" />
               ) : (
                 <WarningCircle size={15} weight="fill" />
               )}
             </span>
-            <span className="neo-action-toast-copy">
+            <span className="compass-action-toast-copy">
               <b>{visibleToast.title}</b>
               <span>{visibleToast.message}</span>
             </span>
@@ -338,16 +338,16 @@ export function NavigationRail({
   };
 
   return (
-    <aside className="neo-rail" aria-label="Primary navigation">
+    <aside className="compass-rail" aria-label="Primary navigation">
       <button
-        className="neo-logo-button"
+        className="compass-logo-button"
         type="button"
-        aria-label="Open Neo studio"
+        aria-label="Open Compass studio"
         onClick={() => workspaceDispatch({ type: "set-view", view: "studio" })}
       >
-        neo
+        compass
       </button>
-      <nav className="neo-rail-nav">
+      <nav className="compass-rail-nav">
         <button
           className={workspace.view === "studio" ? "active" : ""}
           type="button"
@@ -386,9 +386,11 @@ export function NavigationRail({
         </button>
       </nav>
       <button
-        className="neo-rail-create"
+        className="compass-rail-create"
         type="button"
-        onClick={() => createRun(true)}
+        aria-label="New project"
+        title="Create a project and choose a client"
+        onClick={() => createRun(false)}
       >
         <Plus size={21} weight="bold" aria-hidden="true" />
         <span>New</span>
@@ -419,7 +421,7 @@ function Header({
           {workspace.view === "studio" ? (
             <Journey state={state} dispatch={dispatch} canEdit={canEdit} />
           ) : (
-            <div className="neo-workboard-label">
+            <div className="compass-workboard-label">
               <Kanban size={20} weight="duotone" aria-hidden="true" />
               <span><b>Workboard</b><small>Live workspace decisions</small></span>
             </div>
@@ -496,9 +498,9 @@ function AccountMenu() {
   }
 
   return (
-    <div className="neo-account-wrap">
+    <div className="compass-account-wrap">
       <button
-        className={`neo-account-button ${open ? "open" : ""}`}
+        className={`compass-account-button ${open ? "open" : ""}`}
         type="button"
         aria-label="Open account menu"
         aria-expanded={open}
@@ -510,8 +512,8 @@ function AccountMenu() {
         <UserCircle size={20} weight="duotone" aria-hidden="true" />
       </button>
       {open ? (
-        <div className="neo-account-popover" role="dialog" aria-label="Account">
-          <div className="neo-account-copy">
+        <div className="compass-account-popover" role="dialog" aria-label="Account">
+          <div className="compass-account-copy">
             <span>Signed in as</span>
             <b>{email}</b>
           </div>
@@ -549,9 +551,9 @@ export function NotificationMailbox({
   }
 
   return (
-    <div className="neo-notification-wrap">
+    <div className="compass-notification-wrap">
       <button
-        className={`neo-notification-button ${open ? "open" : ""}`}
+        className={`compass-notification-button ${open ? "open" : ""}`}
         type="button"
         aria-label={
           unreadNotificationCount
@@ -564,12 +566,12 @@ export function NotificationMailbox({
       >
         <Bell size={18} weight="regular" aria-hidden="true" />
         {unreadNotificationCount ? (
-          <span className="neo-notification-badge" aria-hidden="true" />
+          <span className="compass-notification-badge" aria-hidden="true" />
         ) : null}
       </button>
       {open ? (
         <section
-          className="neo-notification-popover"
+          className="compass-notification-popover"
           role="dialog"
           aria-label="Notifications"
         >
@@ -586,7 +588,7 @@ export function NotificationMailbox({
               <X size={18} weight="bold" aria-hidden="true" />
             </button>
           </header>
-          <div className="neo-notification-list">
+          <div className="compass-notification-list">
             {notifications.length ? (
               notifications.map((notification) => {
                 const brand = brands.find(
@@ -594,7 +596,7 @@ export function NotificationMailbox({
                 );
                 return (
                   <button
-                    className={`neo-notification-item ${notification.status}`}
+                    className={`compass-notification-item ${notification.status}`}
                     type="button"
                     key={notification.id}
                     onClick={() => {
@@ -602,11 +604,11 @@ export function NotificationMailbox({
                       setOpen(false);
                     }}
                   >
-                    <span className="neo-notification-avatar">
+                    <span className="compass-notification-avatar">
                       {brand?.initials ??
                         notification.brandName.slice(0, 2).toUpperCase()}
                     </span>
-                    <span className="neo-notification-copy">
+                    <span className="compass-notification-copy">
                       <b>{notification.title}</b>
                       <span>{notification.message}</span>
                       <small>
@@ -619,7 +621,7 @@ export function NotificationMailbox({
                 );
               })
             ) : (
-              <div className="neo-notification-empty">
+              <div className="compass-notification-empty">
                 <Bell size={22} weight="duotone" aria-hidden="true" />
                 <b>No notifications yet</b>
                 <span>Completed brand setups will appear here.</span>
@@ -782,7 +784,7 @@ function StageIcon({
     case "studio":
       return <PaintBrush size={18} weight="duotone" aria-hidden="true" />;
     case "approval":
-      return <ShieldCheck size={18} weight="duotone" aria-hidden="true" />;
+      return <Check size={18} weight="bold" aria-hidden="true" />;
     case "client":
       return <Users size={18} weight="duotone" aria-hidden="true" />;
     case "summary":

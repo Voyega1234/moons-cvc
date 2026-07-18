@@ -9,8 +9,23 @@ import {
 const responseAnalysis = {
   brandKitEntries: [
     {
-      title: "Visual mood",
-      description: "Fresh, soft, natural product-led visuals."
+      title: "Brand Details",
+      description:
+        "Flora Daily เป็นร้านดอกไม้ที่จัดช่อสำหรับของขวัญตามโอกาสและให้บริการจัดส่งในเมือง"
+    },
+    {
+      title: "Target Audience",
+      description:
+        "Audience: คนที่กำลังหาของขวัญและผู้ซื้อออนไลน์\nPain points: มีเวลาจำกัดและไม่แน่ใจว่าควรเลือกดอกไม้แบบไหน"
+    },
+    {
+      title: "USP",
+      description:
+        "- จัดช่อให้เหมาะกับแต่ละโอกาส\n- ช่วยให้ผู้ซื้อเลือกของขวัญได้ง่ายขึ้น"
+    },
+    {
+      title: "Mood&Tone",
+      description: "อบอุ่น, อ่อนโยน, เป็นธรรมชาติ"
     }
   ],
   learning: [
@@ -133,7 +148,9 @@ describe("OpenAiBrandVisualAnalyzer", () => {
       model: string;
       store: boolean;
       input: { content: unknown[] }[];
-      text: { format: { type: string; strict: boolean } };
+      text: {
+        format: { type: string; strict: boolean; schema?: unknown };
+      };
     };
 
     expect(body.model).toBe("gpt-test");
@@ -154,6 +171,13 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(JSON.stringify(body.input)).toContain("ช่อดอกไม้สดสำหรับของขวัญ");
     expect(JSON.stringify(body.input)).toContain("Brand Name: Flora Daily");
     expect(JSON.stringify(body.input)).toContain("first-party");
+    expect(JSON.stringify(body.input)).toContain(
+      "Brand Details: แบรนด์ทำอะไร"
+    );
+    expect(JSON.stringify(body.input)).toContain(
+      "ใช้รูปแบบ description ให้เหมาะกับข้อมูลของแต่ละหัวข้อ"
+    );
+    expect(JSON.stringify(body.text.format.schema)).toContain("Brand Details");
   });
 
   it("extracts output text from Responses API output content", () => {

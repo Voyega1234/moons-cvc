@@ -74,7 +74,9 @@ describe("generateImagePrompt", () => {
     expect(promptText).not.toContain('"heroVisual"');
     expect(promptText).not.toContain('"visualDirection"');
     expect(promptText).not.toContain('"maximumTextBlocks"');
-    expect(promptText).toContain('"copyDensity": "low"');
+    expect(promptText).not.toContain('"copyDensity"');
+    expect(promptText).not.toContain('"compositionDensity"');
+    expect(promptText).not.toContain('"visualFreedom"');
     expect(promptText).not.toContain('"mustShow"');
     expect(promptText).not.toContain('"mustNotShow"');
     expect(promptText).not.toContain(
@@ -121,6 +123,46 @@ describe("generateImagePrompt", () => {
     expect(promptText).not.toContain('"onImageCopy"');
     expect(promptText).not.toContain('"heroVisual"');
     expect(promptText).not.toContain('"visualDirection"');
+  });
+
+  it("describes the three-panel master grid for Standard album posts", async () => {
+    const calls: { body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>
+      });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({ finalPrompt: "Album master prompt." })
+        }),
+        { status: 200 }
+      );
+    });
+
+    await generateImagePrompt({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input: {
+        ...baseInput,
+        service: "album-post",
+        hook: {
+          ...baseInput.hook,
+          formatBeats: ["Hook", "Proof", "Offer"]
+        }
+      }
+    });
+
+    const promptText = (
+      calls[0]?.body.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(promptText).toContain('"albumMaster"');
+    expect(promptText).toContain(
+      '"grid": "one 2:1 cover across the top; two 1:1 panels below"'
+    );
+    expect(promptText).toContain('"panel2": "Proof"');
+    expect(promptText).toContain(
+      '"cropSafety": "each panel self-contained; no essential element crosses a seam"'
+    );
   });
 
   it("writes a sanitized trace with the exact agent input and returned prompt", async () => {
@@ -183,10 +225,10 @@ describe("generateImagePrompt", () => {
       fetchImpl: fetchMock as unknown as typeof fetch,
       input: {
         ...baseInput,
-        referenceImageLabels: ["Brand campaign"],
+        referenceImageLabels: ["Past work style reference — Luxury campaign"],
         referenceImages: [
           {
-            label: "Brand campaign",
+            label: "Past work style reference — Luxury campaign",
             imageUrl: "data:image/png;base64,cmVmZXJlbmNl"
           }
         ]
@@ -201,55 +243,28 @@ describe("generateImagePrompt", () => {
       image_url: "data:image/png;base64,cmVmZXJlbmNl",
       detail: "high"
     });
-    expect(content?.[0]?.text).toContain('"id": "brand-campaign"');
-    expect(content?.[0]?.text).toContain('"role": "brand-system"');
-    expect(content?.[0]?.text).toContain('"fidelity": "inspired"');
+    expect(content?.[0]?.text).toContain(
+      '"id": "past-work-style-reference-luxury-campaign"'
+    );
+    expect(content?.[0]?.text).toContain('"role": "brand-visual-dna"');
+    expect(content?.[0]?.text).toContain('"fidelity": "style-only"');
     expect(content?.[0]?.text).not.toContain("STYLE SELECTION:");
   });
 
-  it("loads the separate master prompt in design-system mode", async () => {
-    const calls: { body: Record<string, unknown> }[] = [];
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
-      return new Response(
-        JSON.stringify({ output_text: JSON.stringify({ prompt: "Prompt." }) }),
-        { status: 200 }
-      );
-    });
+  it("keeps design-system mode out of the image prompt agent", async () => {
+    const fetchMock = vi.fn();
 
-    await generateImagePrompt({
-      apiKey: "test-key",
-      mode: "design-system",
-      fetchImpl: fetchMock as unknown as typeof fetch,
-      input: {
-        ...baseInput,
-        referenceImageLabels: ["Product packshot"],
-        referenceImages: [
-          {
-            label: "Product packshot",
-            imageUrl: "data:image/png;base64,cHJvZHVjdA=="
-          }
-        ]
-      },
-      loadDesignSystemPrompt: async () =>
-        "# Wrapper\n```text\nMASTER DESIGN SYSTEM\nPASS 1 — BRIEF DIAGNOSIS\n```"
-    });
-
-    const promptText = (
-      calls[0]?.body.input as { content: { text: string }[] }[]
-    )[0]?.content[0]?.text;
-    expect(promptText).toContain("MASTER DESIGN SYSTEM");
-    expect(promptText).not.toContain("# Wrapper");
-    expect(promptText).toContain("RUNTIME EXECUTION CONTRACT — DESIGN-SYSTEM MODE");
-    expect(promptText).toContain("Required headline: Flowers that make the room feel softer");
-    expect(promptText).toContain("Image 1 — Product packshot");
-    expect(promptText).toContain(
-      "Neo does not have a downstream typography or logo compositor"
+    await expect(
+      generateImagePrompt({
+        apiKey: "test-key",
+        mode: "design-system",
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        input: baseInput
+      })
+    ).rejects.toThrow(
+      "Design-system mode sends its thin brief and artifacts directly to GPT Image 2."
     );
-    expect(promptText).toContain("Never request a textless base visual");
-    expect(promptText).toContain(
-      "Approved visual direction: Photographic editorial bouquet scene with tactile grain."
-    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses a compact two-reference contract in reference-library mode", async () => {
@@ -276,6 +291,10 @@ describe("generateImagePrompt", () => {
           {
             label: "Logo",
             imageUrl: "data:image/png;base64,bG9nbw=="
+          },
+          {
+            label: "Past work style reference — Premium launch",
+            imageUrl: "https://example.com/past-work.jpg"
           },
           {
             label: "Moons artwork reference — primary",
@@ -319,6 +338,9 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain('"headline": "Flowers that make the room feel softer"');
     expect(promptText).toContain('"visualDirection": "Photographic editorial bouquet scene with tactile grain."');
     expect(promptText).toContain('"role": "official logo — exact"');
+    expect(promptText).toContain(
+      '"role": "approved past work — infer brand visual DNA only; do not copy its content"'
+    );
     expect(promptText).toContain(
       '"role": "primary artwork — composition and visual medium"'
     );

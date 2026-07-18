@@ -77,7 +77,6 @@ export async function generateImagePrompt({
   input,
   writeTrace,
   loadAgentImagePrompt = defaultLoadAgentImagePrompt,
-  loadDesignSystemPrompt = defaultLoadDesignSystemPrompt,
   loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt
 }: {
   apiKey: string;
@@ -88,9 +87,13 @@ export async function generateImagePrompt({
   input: ImagePromptAgentInput;
   writeTrace?: ImagePromptAgentTraceWriter;
   loadAgentImagePrompt?: () => Promise<string>;
-  loadDesignSystemPrompt?: () => Promise<string>;
   loadReferenceLibraryPrompt?: () => Promise<string>;
 }): Promise<string> {
+  if (mode === "design-system") {
+    throw new Error(
+      "Design-system mode sends its thin brief and artifacts directly to GPT Image 2."
+    );
+  }
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
   const endpoint =
     provider === "openrouter"
@@ -100,16 +103,12 @@ export async function generateImagePrompt({
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const inputText =
-    mode === "design-system"
-      ? renderDesignSystemPrompt(await loadDesignSystemPrompt(), input)
-      : mode === "reference-library"
-        ? renderReferenceLibraryPrompt(
-            await loadReferenceLibraryPrompt(),
-            input
-          )
-        : renderStandardPrompt(await loadAgentImagePrompt(), input);
-  const responseSchema =
-    mode === "design-system" ? imagePromptSchema : standardImagePromptSchema;
+    mode === "reference-library"
+      ? renderReferenceLibraryPrompt(
+          await loadReferenceLibraryPrompt(),
+          input
+        )
+      : renderStandardPrompt(await loadAgentImagePrompt(), input);
 
   try {
     const response = await fetchImpl(endpoint, {
@@ -139,7 +138,7 @@ export async function generateImagePrompt({
             type: "json_schema",
             name: "moons_image_generation_prompt",
             strict: true,
-            schema: responseSchema
+            schema: standardImagePromptSchema
           }
         }
       })
@@ -161,10 +160,7 @@ export async function generateImagePrompt({
       prompt?: unknown;
       finalPrompt?: unknown;
     };
-    const prompt =
-      mode === "design-system"
-        ? parsed.prompt ?? parsed.finalPrompt
-        : parsed.finalPrompt ?? parsed.prompt;
+    const prompt = parsed.finalPrompt ?? parsed.prompt;
 
     if (typeof prompt !== "string" || !prompt.trim()) {
       throw new Error(
@@ -216,17 +212,6 @@ function readableError(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown image prompt agent error.";
 }
 
-async function defaultLoadDesignSystemPrompt(): Promise<string> {
-  return readFile(
-    join(
-      process.cwd(),
-      "graphic-ad-design-system",
-      "03_MASTER_CREATIVE_DIRECTOR_AGENT.md"
-    ),
-    "utf8"
-  );
-}
-
 async function defaultLoadAgentImagePrompt(): Promise<string> {
   return readFile(join(process.cwd(), "agent_prompt", "agent_image.md"), "utf8");
 }
@@ -266,11 +251,19 @@ function renderStandardPrompt(
     ),
     output: {
       service: compactServiceName(input.service),
-      ratio: input.canvasRatio,
-      copyDensity: "low",
-      compositionDensity: "medium-low",
-      visualFreedom: 65
+      ratio: input.canvasRatio
     },
+    ...(input.service === "album-post"
+      ? {
+          albumMaster: {
+            grid: "one 2:1 cover across the top; two 1:1 panels below",
+            panel1: input.hook.formatBeats?.[0] ?? "hook and main visual",
+            panel2: input.hook.formatBeats?.[1] ?? "mechanism or proof",
+            panel3: input.hook.formatBeats?.[2] ?? "offer and CTA",
+            cropSafety: "each panel self-contained; no essential element crosses a seam"
+          }
+        }
+      : {}),
     ...(input.textInputs.length
       ? { revisionInstructions: input.textInputs }
       : {})
@@ -293,6 +286,12 @@ function buildCompactReference(label: string, index: number) {
 
   if (/logo|โลโก้/.test(normalized)) {
     return { id, role: "logo", fidelity: "exact" };
+  }
+  if (/past work style reference/.test(normalized)) {
+    return { id, role: "brand-visual-dna", fidelity: "style-only" };
+  }
+  if (/current artwork to revise/.test(normalized)) {
+    return { id, role: "revision-base", fidelity: "preserve-and-improve" };
   }
   if (/main object|hero\/source object|hero object/.test(normalized)) {
     return { id, role: "source-object", fidelity: "exact" };
@@ -320,22 +319,6 @@ function compactServiceName(service: string): string {
   return service;
 }
 
-function renderDesignSystemPrompt(
-  source: string,
-  input: ImagePromptAgentInput
-): string {
-  return [
-    extractPromptBody(source),
-    "",
-    "RUNTIME EXECUTION CONTRACT — DESIGN-SYSTEM MODE",
-    "Use the complete creative-direction workflow above internally. The selected hook and strategic concept below are already approved; keep them fixed while considering three genuinely distinct visual executions, then select the strongest execution.",
-    "The references are authoritative for the campaign's visual medium and design grammar. A new execution means a new idea and composition inside that medium—not replacing photographic/editorial montage with isometric 3D, toy-like miniatures, generic UI cards, or clean SaaS illustration. Match the references' typography dominance, photographic-versus-illustrative balance, image scale, crop energy, density, texture, grain, and compositing character before applying brand colors.",
-    "Neo does not have a downstream typography or logo compositor in this workflow. The final image prompt must request one fully composed, publication-ready advertisement containing the exact approved headline and CTA. Never request a textless base visual, blank headline zone, empty CTA zone, empty logo zone, or later deterministic assembly.",
-    "Do not return the internal diagnosis, reference analysis, routes, scores, blueprint, or QA notes. Return only one final English GPT Image 2 generation prompt in the required JSON schema field.",
-    buildRuntimeInputBlock(input)
-  ].join("\n");
-}
-
 function renderReferenceLibraryPrompt(
   source: string,
   input: ImagePromptAgentInput
@@ -344,7 +327,7 @@ function renderReferenceLibraryPrompt(
     source.trim(),
     "",
     "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE",
-    "Study the attached images directly. Primary artwork contributes abstract composition grammar; secondary artwork adds only compatible craft and finish. Invent all message-bearing visual content and the background from the approved idea. Client assets remain exact. The final image model will not receive the Moons artwork references, so make finalPrompt fully self-contained and never refer to their image numbers or ask the image model to copy an attached artwork. Apply design principles and an originality/coherence check silently, then leave room for tasteful local decisions.",
+    "Study the attached images directly. Primary artwork contributes abstract composition grammar; secondary artwork adds only compatible craft and finish. Invent all message-bearing visual content and the background from the approved idea. Client assets remain exact. The final image model will receive these same images in the same order. Make finalPrompt self-contained, identify attached images only by their assigned roles, and explicitly direct the image model to study their compatible visual technique without copying recognizable content. Apply design principles and an originality/coherence check silently, then leave room for tasteful local decisions.",
     buildReferenceLibraryRuntimeInputBlock(input)
   ].join("\n");
 }
@@ -408,11 +391,17 @@ function compactStrategyClaim(
 
 function referenceLibraryRole(label: string): string {
   const normalized = label.toLowerCase();
+  if (normalized.includes("current artwork to revise")) {
+    return "current artwork revision base — preserve approved identity and improve only the diagnosed issues";
+  }
   if (normalized.includes("moons artwork reference — primary")) {
     return "primary artwork — composition and visual medium";
   }
   if (normalized.includes("moons artwork reference — secondary")) {
     return "secondary artwork — compatible craft and finish";
+  }
+  if (normalized.includes("past work style reference")) {
+    return "approved past work — infer brand visual DNA only; do not copy its content";
   }
   if (/logo|โลโก้/.test(normalized)) return "official logo — exact";
   if (/product|packshot|สินค้า/.test(normalized)) {
@@ -420,88 +409,6 @@ function referenceLibraryRole(label: string): string {
   }
   return "client reference — use only for its supplied asset role";
 }
-
-function extractPromptBody(source: string): string {
-  const match = source.match(/```text\s*([\s\S]*?)\s*```/);
-  return match?.[1]?.trim() || source.trim();
-}
-
-function buildRuntimeInputBlock(input: ImagePromptAgentInput): string {
-  const brandInformation = [
-    ...input.brandLibrary.brand.map(
-      (item) => `${item.title}: ${item.description}`
-    ),
-    ...input.brandLibrary.products.map(
-      (item) => `${item.title}: ${item.description}`
-    ),
-    ...input.brandLibrary.docs.map(
-      (item) => `${item.title}: ${item.description}`
-    )
-  ];
-  const referenceMap = input.referenceImages.length
-    ? input.referenceImages.map(
-        (image, index) =>
-          `Image ${index + 1} — ${image.label || input.referenceImageLabels[index] || "Reference image"}`
-      )
-    : ["No reference images are attached."];
-
-  return [
-    "",
-    "AUTHORITATIVE RUN INPUT",
-    `Brand: ${input.brand?.name ?? "Unknown"}`,
-    `Category: ${input.brand?.category ?? "Unknown"}`,
-    `Service: ${input.service}`,
-    `Canvas ratio: ${input.canvasRatio}`,
-    "",
-    "Campaign brief:",
-    input.brief || "Not provided.",
-    "",
-    "Approved hook and concept:",
-    `Required headline: ${input.hook.hook}`,
-    `Strategic concept: ${input.hook.concept}`,
-    `Why it works: ${input.hook.why}`,
-    `Approved visual direction: ${input.hook.visual}`,
-    `Supporting detail: ${input.hook.supportingPoints?.[0] ?? "None"}`,
-    `Format-specific sequence: ${input.hook.formatBeats?.length ? input.hook.formatBeats.join(" → ") : "None"}`,
-    `CTA: ${input.hook.cta}`,
-    `Caption context: ${input.hook.caption}`,
-    "",
-    "Creative strategy enrichment from GPT Luna:",
-    input.strategy
-      ? JSON.stringify(input.strategy, null, 2)
-      : "No enrichment was requested for this mode.",
-    "",
-    "Additional user instructions:",
-    input.textInputs.length ? input.textInputs.join("\n") : "None.",
-    "",
-    "Brand and product library:",
-    brandInformation.length ? brandInformation.join("\n") : "Not provided.",
-    "",
-    "Brand reference notes:",
-    input.brandLibrary.refs.length
-      ? input.brandLibrary.refs
-          .map((item) => `${item.title}: ${item.description}`)
-          .join("\n")
-      : "Not provided.",
-    "",
-    "Attached reference map:",
-    ...referenceMap,
-    "Use each image only for the role implied by its label. Do not average all references into one vague style.",
-    "",
-    "Non-negotiable constraints:",
-    "Use supplied Thai copy exactly. Use only verified details or GPT Luna creative-placeholder copy explicitly marked for text review. Do not invent additional logos, real identities, trademarks, certifications, guarantees, or unreadable text.",
-    "Reference images guide design language and asset fidelity; they do not override the approved hook or strategic concept."
-  ].join("\n");
-}
-
-const imagePromptSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    prompt: { type: "string" }
-  },
-  required: ["prompt"]
-} as const;
 
 const standardImagePromptSchema = {
   type: "object",

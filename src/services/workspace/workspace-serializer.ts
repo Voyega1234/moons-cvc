@@ -131,7 +131,7 @@ function parseRun(value: unknown): WorkflowState | null {
   const quantity = parseNumber(value.quantity);
   const successMetric =
     value.successMetric === undefined
-      ? "CTR"
+      ? "CVR"
       : parseMember(value.successMetric, successMetrics);
   const brief = parseString(value.brief, true);
   const attachments = parseStringArray(value.attachments);

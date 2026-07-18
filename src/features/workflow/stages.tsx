@@ -12,6 +12,7 @@ import {
   Bell,
   CheckCircle,
   MagnifyingGlass,
+  PencilSimple,
   Sparkle
 } from "@phosphor-icons/react";
 import {
@@ -44,6 +45,8 @@ import {
   resolveSubheadlineHighlight
 } from "../../domain/subheadline-highlight";
 import {
+  buildQualityRegenerationInstructions,
+  CREATIVE_STRATEGIST_AGENT_NAME,
   CS_QUALITY_CHECKLIST,
   GD_QUALITY_CHECKLIST,
   type CreativeQualityReport
@@ -53,8 +56,15 @@ import { useBrands } from "../../app/providers/brand-provider";
 import { useClientIntakeRepository } from "../../app/providers/client-intake-provider";
 import { useOptionalRunCollaboration } from "../../app/providers/run-collaboration-provider";
 import { departmentLabel } from "../../domain/run-collaboration";
-import { validateFacebookUrl } from "../../domain/client-ingestion";
-import { regenerateOutputImage } from "../../services/artwork-generation/openai-image-generation";
+import {
+  CLIENT_CATEGORY_MAX_LENGTH,
+  validateClientCategory,
+  validateFacebookUrl
+} from "../../domain/client-ingestion";
+import {
+  regenerateOutputImages,
+  reviseOutputImage
+} from "../../services/artwork-generation/openai-image-generation";
 import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
 import { uploadCreativeMaterial } from "../../services/creative-materials/upload-creative-material";
 import {
@@ -84,6 +94,10 @@ import {
   workflowActionBlockReason
 } from "./rules";
 import { presentBrandMemoryText } from "./brand-memory-presentation";
+import {
+  downloadPmApprovedClientSlides,
+  pmApprovedClientSlideItems
+} from "./export-client-slides-pptx";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 import {
   useGenerateHooks,
@@ -181,13 +195,13 @@ export function StartStage({ state, dispatch }: StageProps) {
       helper="Choose a brand to load its voice, visual rules, product truths, approved work, and creative learnings."
       status={state.brand ? "Memory loaded" : "Memory waiting"}
       statusClass={state.brand ? "green" : "blue"}
-      className="neo-signal-stage"
+      className="compass-signal-stage"
       actions={
         <>
-          <span className="pill neo-signal-before-output">
+          <span className="pill compass-signal-before-output">
             Signal before output
           </span>
-          <div className="neo-signal-footer-actions">
+          <div className="compass-signal-footer-actions">
             <button
               className="btn primary"
               type="button"
@@ -201,9 +215,9 @@ export function StartStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <div className="neo-start-grid">
-        <section className="neo-brand-select-card">
-          <span className="neo-card-label">Brand workspace</span>
+      <div className="compass-start-grid">
+        <section className="compass-brand-select-card">
+          <span className="compass-card-label">Brand workspace</span>
           <div className="dropdown">
             <button
               className="select-btn"
@@ -213,7 +227,7 @@ export function StartStage({ state, dispatch }: StageProps) {
               onClick={() => dispatch({ type: "toggle-brand-menu" })}
             >
               <span className="select-left">
-                <span className="avatar neo-brand-select-avatar">
+                <span className="avatar compass-brand-select-avatar">
                   {brandLogoUrl(state.brand) ? (
                     <img src={brandLogoUrl(state.brand)} alt="" />
                   ) : (
@@ -315,7 +329,7 @@ export function StartStage({ state, dispatch }: StageProps) {
                             dispatch({ type: "toggle-brand-menu" });
                           }}
                         >
-                          {canAddMapping ? "Add to Neo" : "Set up brand"}
+                          {canAddMapping ? "Add to Compass" : "Set up brand"}
                         </button>
                       ) : null}
                     </div>
@@ -378,15 +392,15 @@ export function StartStage({ state, dispatch }: StageProps) {
             />
           ) : null}
           {!state.brand ? (
-            <div className="neo-start-blank">
+            <div className="compass-start-blank">
               <b>Brand context is your unfair advantage.</b>
               <p>
-                neo keeps approved references, uploaded brand materials, and
+                compass keeps approved references, uploaded brand materials, and
                 past performance close to every creative decision.
               </p>
             </div>
           ) : (
-            <div className="neo-start-blank">
+            <div className="compass-start-blank">
               <b>{state.brand.name} context is ready.</b>
               <p>
                 Voice, visual rules, products, references, and creative
@@ -440,23 +454,23 @@ function BrandAnalysisQueuedDialog({
   const titleId = useId();
 
   return (
-    <div className="output-modal-backdrop neo-setup-queued-backdrop">
+    <div className="output-modal-backdrop compass-setup-queued-backdrop">
       <section
-        className="output-modal neo-setup-queued-modal"
+        className="output-modal compass-setup-queued-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <div className="neo-setup-queued-status">
+        <div className="compass-setup-queued-status">
           <CheckCircle aria-hidden="true" size={22} weight="fill" />
           <span>Brand analysis started</span>
         </div>
         <h3 id={titleId}>{brandName} is in the queue.</h3>
         <p>
-          Neo usually needs 5-10 minutes to analyze the brand. You can close
+          Compass usually needs 5-10 minutes to analyze the brand. You can close
           this message and continue working.
         </p>
-        <div className="neo-setup-queued-mailbox">
+        <div className="compass-setup-queued-mailbox">
           <Bell aria-hidden="true" size={22} />
           <div>
             <b>We will notify you in Notifications</b>
@@ -466,7 +480,7 @@ function BrandAnalysisQueuedDialog({
             </span>
           </div>
         </div>
-        <div className="neo-setup-queued-actions">
+        <div className="compass-setup-queued-actions">
           <button
             autoFocus
             className="btn primary"
@@ -503,15 +517,15 @@ function BrandMaterialsSummary({
   const total = rows.reduce((sum, [, count]) => sum + count, 0);
 
   return (
-    <section className="neo-material-uploader">
-      <div className="neo-materials-head">
+    <section className="compass-material-uploader">
+      <div className="compass-materials-head">
         <div>
           <b>Brand materials</b>
           <small>
             Keep the source context close without taking over the welcome page.
           </small>
         </div>
-        <div className="neo-materials-head-actions">
+        <div className="compass-materials-head-actions">
           <span className="pill blue">{total} files</span>
           <button
             className="btn small primary"
@@ -523,10 +537,10 @@ function BrandMaterialsSummary({
           </button>
         </div>
       </div>
-      <div className="neo-materials-compact-grid">
+      <div className="compass-materials-compact-grid">
         {rows.map(([label, count, section], index) => (
           <div
-            className={`neo-material-compact-row ${index === rows.length - 1 ? "wide" : ""}`}
+            className={`compass-material-compact-row ${index === rows.length - 1 ? "wide" : ""}`}
             key={label}
           >
             <div>
@@ -595,7 +609,7 @@ function MappingBrandSetupPanel({
       setError(
         error instanceof Error
           ? error.message
-          : "Could not add this client to Neo."
+          : "Could not add this client to Compass."
       );
     } finally {
       setSaving(false);
@@ -605,9 +619,9 @@ function MappingBrandSetupPanel({
   return (
     <section className="client-intake-card">
       <div className="client-intake-heading">
-        <span>Add {brand.name} to Neo</span>
+        <span>Add {brand.name} to Compass</span>
         <small>
-          This client exists in the mapping sheet but has no Neo data yet.
+          This client exists in the mapping sheet but has no Compass data yet.
         </small>
       </div>
       <div className="client-intake-form">
@@ -793,7 +807,7 @@ function BrandSetupSources({
         <legend>Facebook page</legend>
         <p>
           {sourceOptions.length
-            ? "Select the page Neo should analyze. These were found in the client data."
+            ? "Select the page Compass should analyze. These were found in the client data."
             : "No Facebook page was found in the client data. Add one manually."}
         </p>
         <div className="client-source-options">
@@ -890,7 +904,7 @@ function brandFacebookSourceOptions(
     url,
     label: questionnaireUrls.includes(url)
       ? "Found in Questionnaire"
-      : "Current Neo page"
+      : "Current Compass page"
   }));
 }
 
@@ -934,6 +948,12 @@ function AddClientPanel({
     const urlError = validateFacebookUrl(facebookUrl);
     if (urlError) {
       setError(urlError);
+      return;
+    }
+
+    const categoryError = validateClientCategory(category);
+    if (categoryError) {
+      setError(categoryError);
       return;
     }
 
@@ -990,7 +1010,8 @@ function AddClientPanel({
             <input
               value={category}
               disabled={saving}
-              placeholder="Example: Premium restaurant"
+              maxLength={CLIENT_CATEGORY_MAX_LENGTH}
+              placeholder="Example: Leather goods"
               onChange={(event) => setCategory(event.target.value)}
             />
           </label>
@@ -1013,7 +1034,7 @@ function clientDisabledReason(
   brand: NonNullable<WorkflowState["brand"]>
 ): string | null {
   if (brand.existsInSystem === false) {
-    return "This client is in the mapping sheet but has no brand memory in Neo yet.";
+    return "This client is in the mapping sheet but has no brand memory in Compass yet.";
   }
 
   if (!canSelectBrand(brand)) {
@@ -1024,7 +1045,7 @@ function clientDisabledReason(
 }
 
 function clientStatusLabel(brand: NonNullable<WorkflowState["brand"]>): string {
-  if (brand.existsInSystem === false) return "No Neo data yet";
+  if (brand.existsInSystem === false) return "No Compass data yet";
 
   switch (brand.ingestionStatus) {
     case "draft":
@@ -1048,9 +1069,9 @@ function clientStatusLabel(brand: NonNullable<WorkflowState["brand"]>): string {
     case "writing_memory":
       return "Writing Brand Memory";
     case "ready":
-      return `${brand.category} · Ready`;
+      return "Brand memory ready";
     case "needs_review":
-      return `${brand.category} · Needs review`;
+      return "Brand memory ready · Review recommended";
     case "failed":
       return "Ingestion failed";
     default:
@@ -1059,14 +1080,9 @@ function clientStatusLabel(brand: NonNullable<WorkflowState["brand"]>): string {
 }
 
 function clientSubtitle(brand: Brand): string {
-  if (
-    brand.category === "Awaiting brand ingestion" &&
-    (brand.ingestionStatus === "ready" ||
-      brand.ingestionStatus === "needs_review")
-  ) {
-    return brand.ingestionStatus === "needs_review"
-      ? "Brand memory ready · Review recommended"
-      : "Brand memory ready";
+  if (brand.ingestionStatus === "ready") return "Brand memory ready";
+  if (brand.ingestionStatus === "needs_review") {
+    return "Brand memory ready · Review recommended";
   }
 
   return brand.category;
@@ -1089,6 +1105,36 @@ const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["learning", "Brand learning", "What's working and what to avoid"]
 ];
 
+type BrandSnapshotSection = "brand" | "products" | "learning";
+
+const brandSnapshotSections: readonly [
+  BrandSnapshotSection,
+  string
+][] = [
+  ["brand", "Brand system"],
+  ["products", "Product truths"],
+  ["learning", "Creative learnings"]
+];
+
+const brandSystemTopics = [
+  {
+    title: "Brand Details",
+    aliases: ["brand details", "แบรนด์ทำอะไร"]
+  },
+  {
+    title: "Target Audience",
+    aliases: ["target audience", "กลุ่มเป้าหมายและปัญหาที่ต้องการแก้"]
+  },
+  {
+    title: "USP",
+    aliases: ["usp", "จุดยืน จุดแตกต่าง และคุณค่าหลัก"]
+  },
+  {
+    title: "Mood&Tone",
+    aliases: ["mood&tone", "mood & tone", "น้ำเสียงและแนวทางการสื่อสาร"]
+  }
+] as const;
+
 function BrandProfilePanel({
   state,
   section,
@@ -1099,19 +1145,45 @@ function BrandProfilePanel({
   onSectionChange: (section: BrandProfileSection) => void;
 }) {
   const brand = state.brand;
-  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const repository = useBrandMemoryRepository();
+  const [brandRules, setBrandRules] = useState<readonly LibraryItem[]>(
+    brand?.library.brand ?? []
+  );
+  const [products, setProducts] = useState<readonly BrandProduct[]>([]);
+
+  useEffect(() => {
+    if (!brand) return;
+    let active = true;
+    setBrandRules(brand.library.brand);
+    setProducts([]);
+
+    void Promise.all([
+      repository.listBrandRules(brand.id),
+      repository.listProducts(brand.id)
+    ])
+      .then(([rules, nextProducts]) => {
+        if (!active) return;
+        setBrandRules(rules.length ? rules : brand.library.brand);
+        setProducts(nextProducts);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [brand, repository]);
 
   if (!brand) {
     return (
-      <section className="neo-signal-memory-card">
-        <div className="neo-signal-memory-top">
+      <section className="compass-signal-memory-card">
+        <div className="compass-signal-memory-top">
           <div>
             <h3>Brand memory</h3>
             <p>Nothing loaded yet.</p>
           </div>
         </div>
-        <div className="neo-signal-memory-content">
-          <div className="neo-signal-memory-empty">
+        <div className="compass-signal-memory-content">
+          <div className="compass-signal-memory-empty">
             <div>
               <b>No memory loaded.</b>
               <span>Choose a brand to reveal the signal stack.</span>
@@ -1122,59 +1194,183 @@ function BrandProfilePanel({
     );
   }
 
+  const activeSection: BrandSnapshotSection = brandSnapshotSections.some(
+    ([id]) => id === section
+  )
+    ? (section as BrandSnapshotSection)
+    : "brand";
+  const logoRule = brandRules.find(
+    (item) => item.title.trim().toLowerCase() === "logo" && item.assetUrl
+  );
+  const logoUrl = logoRule?.assetUrl ?? brandLogoUrl(brand);
+  const colors = Array.from(
+    new Set([
+      ...extractColorSwatches(findRuleByTitle(brandRules, "Colors")),
+      ...extractColorSwatches(findRuleByTitle(brandRules, "Secondary colors"))
+    ])
+  ).slice(0, 6);
+  const snapshotItems = brandSnapshotItems({
+    brand,
+    brandRules,
+    products,
+    section: activeSection
+  });
+
   return (
-    <aside className="neo-signal-memory-card" aria-label="Brand profile">
-      <div className="neo-signal-memory-top">
+    <aside className="compass-signal-memory-card" aria-label="Brand profile">
+      <div className="compass-signal-memory-top">
         <div>
           <h3>{brand.name} memory</h3>
-          <p>{clientSubtitle(brand)}</p>
+          <p>Logo, colors, and the signals guiding this run.</p>
         </div>
-        <nav className="neo-signal-memory-tabs" aria-label="Brand memory sections">
-          {brandProfileSections.map(([id, label, description]) => (
+      </div>
+      <div className="compass-brand-snapshot">
+        <div className="compass-brand-snapshot-identity">
+          <div className="compass-brand-snapshot-logo">
+            {logoUrl ? <img src={logoUrl} alt={`${brand.name} logo`} /> : brand.initials}
+          </div>
+          <div className="compass-brand-snapshot-name">
+            <b>{brand.name}</b>
+            <span>{brand.category}</span>
+          </div>
+          <div className="compass-brand-snapshot-colors" aria-label="Brand colors">
+            <small>Brand colors</small>
+            <div>
+              {colors.length ? (
+                colors.map((color) => (
+                  <span
+                    key={color}
+                    title={color}
+                    style={{ backgroundColor: color }}
+                  />
+                ))
+              ) : (
+                <em>No colors saved</em>
+              )}
+            </div>
+          </div>
+        </div>
+        <nav className="compass-signal-memory-tabs" aria-label="Brand memory sections">
+          {brandSnapshotSections.map(([id, label]) => (
             <button
               key={id}
-              className={section === id ? "active" : ""}
+              className={activeSection === id ? "active" : ""}
               type="button"
-              title={description}
-              onClick={() => {
-                onSectionChange(id);
-                setMemoryExpanded(false);
-              }}
+              onClick={() => onSectionChange(id)}
             >
               {label}
             </button>
           ))}
         </nav>
-      </div>
-      <div
-        className={`neo-signal-memory-viewport ${memoryExpanded ? "expanded" : "collapsed"}`}
-      >
-        <div className="neo-signal-memory-content">
-          <BrandProfileSectionContent state={state} section={section} />
+        <div
+          className={`compass-brand-snapshot-list ${
+            activeSection === "brand" || activeSection === "learning"
+              ? "is-full"
+              : ""
+          } ${activeSection === "learning" ? "is-learning" : ""}`}
+        >
+          {snapshotItems.length ? (
+            activeSection === "learning" ? (
+              <div className="compass-brand-learning-groups">
+                {(["Working", "Avoid"] as const).map((group) => {
+                  const items = snapshotItems.filter(
+                    (item) => item.title === group
+                  );
+                  if (!items.length) return null;
+
+                  return (
+                    <section
+                      className={`compass-brand-learning-group ${group.toLowerCase()}`}
+                      key={group}
+                    >
+                      <h4>{group}</h4>
+                      <ul>
+                        {items.map((item) => (
+                          <li key={`${group}-${item.detail}`}>{item.detail}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  );
+                })}
+              </div>
+            ) : (
+              snapshotItems.map((item) => (
+                <article key={`${activeSection}-${item.title}-${item.detail}`}>
+                  <b>{item.title}</b>
+                  <p>{item.detail}</p>
+                </article>
+              ))
+            )
+          ) : (
+            <div className="compass-brand-snapshot-empty">
+              No saved signals in this section yet.
+            </div>
+          )}
         </div>
-        {!memoryExpanded ? (
-          <div className="neo-signal-memory-fade">
-            <button
-              type="button"
-              aria-label="See more brand memory"
-              onClick={() => setMemoryExpanded(true)}
-            >
-              See more
-            </button>
-          </div>
-        ) : (
-          <button
-            className="neo-signal-memory-collapse"
-            type="button"
-            aria-label="See less brand memory"
-            onClick={() => setMemoryExpanded(false)}
-          >
-            See less
-          </button>
-        )}
       </div>
     </aside>
   );
+}
+
+function brandSnapshotItems({
+  brand,
+  brandRules,
+  products,
+  section
+}: {
+  brand: Brand;
+  brandRules: readonly LibraryItem[];
+  products: readonly BrandProduct[];
+  section: BrandSnapshotSection;
+}): readonly { title: string; detail: string }[] {
+  if (section === "brand") {
+    return brandSystemTopics.flatMap((topic) => {
+      const item = brandRules.find((rule) =>
+        topic.aliases.some((alias) =>
+          normalizeBrandSystemTitle(rule.title).includes(
+            normalizeBrandSystemTitle(alias)
+          )
+        )
+      );
+      if (!item) return [];
+
+      return [
+        {
+          title: topic.title,
+          detail: presentBrandMemoryText(item.description).text
+        }
+      ];
+    });
+  }
+
+  if (section === "products") {
+    const repositoryProducts = products.map((product) => ({
+      title: product.name,
+      detail:
+        product.keyBenefit || product.offer || product.description || product.audience
+    }));
+    if (repositoryProducts.length) return repositoryProducts;
+
+    return brand.library.products.map((item) => ({
+      title: item.title,
+      detail: presentBrandMemoryText(item.description).text
+    }));
+  }
+
+  return [
+    ...brand.memory.working.map((detail) => ({
+      title: "Working",
+      detail: presentBrandMemoryText(detail).text
+    })),
+    ...brand.memory.avoid.map((detail) => ({
+      title: "Avoid",
+      detail: presentBrandMemoryText(detail).text
+    }))
+  ];
+}
+
+function normalizeBrandSystemTitle(value: string): string {
+  return value.toLocaleLowerCase("th").replace(/[\s&]+/g, "");
 }
 
 function BrandLibraryModal({
@@ -1203,24 +1399,24 @@ function BrandLibraryModal({
     brandProfileSections.find(([id]) => id === section) ?? brandProfileSections[0];
 
   return (
-    <div className="output-modal-backdrop neo-library-backdrop" onClick={onClose}>
+    <div className="output-modal-backdrop compass-library-backdrop" onClick={onClose}>
       <section
-        className="output-modal neo-material-manager-modal"
+        className="output-modal compass-material-manager-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="brand-library-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="neo-material-manager-head">
+        <header className="compass-material-manager-head">
           <div>
             <p className="eyebrow">Brand Library</p>
             <h3 id="brand-library-title">Manage brand materials</h3>
             <p>
-              Search, organize, update, and remove the source memory used by neo.
+              Search, organize, update, and remove the source memory used by compass.
             </p>
           </div>
           <button
-            className="neo-material-close"
+            className="compass-material-close"
             type="button"
             aria-label="Close brand library"
             onClick={onClose}
@@ -1228,23 +1424,23 @@ function BrandLibraryModal({
             ×
           </button>
         </header>
-        <div className="neo-material-manager-toolbar">
+        <div className="compass-material-manager-toolbar">
           <div>
             <b>{brand.name}</b>
             <span>Live Brand Memory</span>
           </div>
           <span className="pill green">Used in creative context</span>
         </div>
-        <div className="neo-material-manager-window">
-          <nav className="neo-material-folder-nav" aria-label="Brand library folders">
+        <div className="compass-material-manager-window">
+          <nav className="compass-material-folder-nav" aria-label="Brand library folders">
             {brandProfileSections.map(([id, label, description], index) => (
               <button
-                className={`neo-material-folder-btn ${section === id ? "active" : ""}`}
+                className={`compass-material-folder-btn ${section === id ? "active" : ""}`}
                 type="button"
                 key={id}
                 onClick={() => onSectionChange(id)}
               >
-                <span className="neo-material-folder-icon" aria-hidden="true">
+                <span className="compass-material-folder-icon" aria-hidden="true">
                   {index + 1}
                 </span>
                 <span>
@@ -1256,8 +1452,8 @@ function BrandLibraryModal({
               </button>
             ))}
           </nav>
-          <section className="neo-material-browser">
-            <div className="neo-material-browser-head">
+          <section className="compass-material-browser">
+            <div className="compass-material-browser-head">
               <div>
                 <b>{activeSection?.[1]}</b>
                 <span>{activeSection?.[2]}</span>
@@ -1266,7 +1462,7 @@ function BrandLibraryModal({
                 {counts[section]} item{counts[section] === 1 ? "" : "s"}
               </span>
             </div>
-            <div className="neo-material-browser-content">
+            <div className="compass-material-browser-content">
               <BrandProfileSectionContent state={state} section={section} />
             </div>
           </section>
@@ -1292,6 +1488,7 @@ function BrandProfileSectionContent({
         <BrandKitMemoryList
           clientId={brand.id}
           initialItems={brand.library.brand}
+          libraryDocuments={brand.library.docs}
         />
       ) : null}
       {section === "products" ? (
@@ -1458,7 +1655,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
           <h4>Products</h4>
           <p>
             Default offers, benefits, audience, and claim notes extracted by
-            Neo. Review and edit before generation.
+            Compass. Review and edit before generation.
           </p>
         </div>
         {!formOpen ? (
@@ -1604,10 +1801,12 @@ function ProductField({ label, value }: { label: string; value: string }) {
 
 function BrandKitMemoryList({
   clientId,
-  initialItems
+  initialItems,
+  libraryDocuments
 }: {
   clientId: string;
   initialItems: readonly LibraryItem[];
+  libraryDocuments: readonly LibraryItem[];
 }) {
   const repository = useBrandMemoryRepository();
   const [items, setItems] = useState<readonly LibraryItem[]>(initialItems);
@@ -1821,6 +2020,11 @@ function BrandKitMemoryList({
     (item) =>
       item !== logoItem && item !== colorsItem && item !== secondaryColorsItem
   );
+  const missingIdentityInputs = missingBrandIdentityInputs(
+    items,
+    libraryDocuments,
+    []
+  );
 
   function renderMemoryItem(item: LibraryItem) {
     const visibleDescription = presentBrandMemoryText(item.description).text;
@@ -1865,7 +2069,6 @@ function BrandKitMemoryList({
           </button>
         ) : null}
         <div className="memory-item-actions">
-          <span>Usable for AI</span>
           <button
             type="button"
             disabled={saving}
@@ -1895,7 +2098,7 @@ function BrandKitMemoryList({
         <div className="memory-actions">
           <label
             className={`btn secondary upload-inline ${analyzingGuideline ? "disabled" : ""}`}
-            title="Upload a PDF or image guideline. Neo will extract tone, style, and brand colors automatically."
+            title="Upload a PDF or image guideline. Compass will extract tone, style, and brand colors automatically."
           >
             {analyzingGuideline ? "Analyzing…" : "Upload guideline"}
             <input
@@ -1930,6 +2133,12 @@ function BrandKitMemoryList({
           ) : null}
         </div>
       </header>
+      {!loading && missingIdentityInputs.includes("Brand CI / Guideline") ? (
+        <p className="compass-quality-note">
+          Optional: without a Brand CI / Guideline, Compass has less context
+          for tone and visual direction.
+        </p>
+      ) : null}
       {guidelineTextOpen ? (
         <div className="memory-form">
           <label>
@@ -2237,6 +2446,12 @@ function ColorsCard({
           </button>
         </div>
       </div>
+      {ruleTitle === "Colors" && colors.length === 0 ? (
+        <p className="compass-quality-note">
+          Optional: without brand colors, artwork may match the brand less
+          accurately.
+        </p>
+      ) : null}
       {error ? <p className="memory-error">{error}</p> : null}
     </div>
   );
@@ -2331,6 +2546,12 @@ function BrandLogoCard({
       <div className="brand-logo-body">
         <b>Logo</b>
         <p>PNG, JPEG, or WEBP. Used across generation and previews.</p>
+        {!logoItem?.assetUrl ? (
+          <p className="compass-quality-note">
+            Optional: without a logo, artwork may feel less consistent with
+            the brand.
+          </p>
+        ) : null}
         {error ? <p className="memory-error">{error}</p> : null}
       </div>
       <label
@@ -2396,7 +2617,6 @@ function MemoryList({
             <article className="memory-item" key={item.id}>
               <b>{item.title}</b>
               <p>{item.description}</p>
-              <span>Usable for AI</span>
             </article>
           ))}
         </div>
@@ -2543,7 +2763,6 @@ function BrandDocumentsMemoryList({
               <article className="memory-item" key={item.id}>
                 <b>{item.title}</b>
                 <p>{item.description}</p>
-                <span>Usable for AI</span>
               </article>
             ))}
           </div>
@@ -2650,7 +2869,7 @@ function PastWorkPreview({
           <h4>Past work</h4>
           <p>
             Facebook posts and Ads Library references appear by default.
-            Delivered Neo work is shown separately when available.
+            Delivered Compass work is shown separately when available.
           </p>
         </div>
         <span className="pill">Reference only</span>
@@ -2673,7 +2892,7 @@ function PastWorkPreview({
       ) : null}
       {delivered ? (
         <>
-          <span className="memory-subhead">Delivered by Neo</span>
+          <span className="memory-subhead">Delivered by Compass</span>
           <div className="memory-item-list">
             {state.outputs.map((output, index) => (
               <article className="memory-item" key={output.id}>
@@ -2808,16 +3027,51 @@ const briefServiceIcons: Partial<Record<ServiceType, string>> = {
   "album-post": "AL"
 };
 
-type BriefMaterialsSection = "uploads" | "references";
+export type BrandIdentityInput =
+  | "Logo"
+  | "Brand CI / Guideline"
+  | "Colors";
 
-const briefMaterialSections: readonly [
-  BriefMaterialsSection,
-  string,
-  string
-][] = [
-  ["uploads", "Working files", "Files attached specifically to this brief"],
-  ["references", "References", "Select visual context from the brand library"]
-];
+export function missingBrandIdentityInputs(
+  rules: readonly LibraryItem[],
+  libraryDocuments: readonly LibraryItem[],
+  documents: readonly Pick<BrandDocument, "title" | "documentType">[]
+): readonly BrandIdentityInput[] {
+  const logoReady = rules.some(
+    (rule) => normalizedTitle(rule) === "logo" && Boolean(rule.assetUrl)
+  );
+  const colorsRule = rules.find(
+    (rule) => normalizedTitle(rule) === "colors"
+  );
+  const colorsReady = extractColorSwatches(colorsRule).length > 0;
+  const explicitGuideline = [...rules, ...libraryDocuments].some((item) =>
+    isCiOrGuidelineTitle(item.title)
+  );
+  const guidelineDocument = documents.some(
+    (document) =>
+      document.documentType === "brand_guideline" ||
+      isCiOrGuidelineTitle(document.title)
+  );
+  const extractedGuideline =
+    colorsReady &&
+    rules.some((rule) => normalizedTitle(rule) === "tone & style");
+
+  return [
+    ...(logoReady ? [] : (["Logo"] as const)),
+    ...(explicitGuideline || guidelineDocument || extractedGuideline
+      ? []
+      : (["Brand CI / Guideline"] as const)),
+    ...(colorsReady ? [] : (["Colors"] as const))
+  ];
+}
+
+function normalizedTitle(item: Pick<LibraryItem, "title">): string {
+  return item.title.trim().toLowerCase();
+}
+
+function isCiOrGuidelineTitle(title: string): boolean {
+  return /\bci\b|\bguidelines?\b/i.test(title.trim());
+}
 
 const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "main-object": "Main object",
@@ -2829,8 +3083,6 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
 export function BriefStage({ state, dispatch }: StageProps) {
   const brandMemoryRepository = useBrandMemoryRepository();
   const [materialsOpen, setMaterialsOpen] = useState(false);
-  const [materialsSection, setMaterialsSection] =
-    useState<BriefMaterialsSection>("uploads");
   const [materialUploadPending, setMaterialUploadPending] = useState(false);
   const [materialUploadError, setMaterialUploadError] = useState<string | null>(
     null
@@ -2918,7 +3170,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
     return () => {
       active = false;
     };
-  }, [brandMemoryRepository, dispatch, state.brand?.id]);
+  }, [brandMemoryRepository, dispatch, state.brand]);
 
   async function handleCreativeMaterialUpload(
     event: ChangeEvent<HTMLInputElement>
@@ -2960,7 +3212,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
       helper="Set the mix, define the objective, and choose the one metric this creative set should move."
       status={state.brand ? `${state.brand.name} context ready` : "Context waiting"}
       statusClass="green"
-      className="neo-stage-brief"
+      className="compass-stage-brief"
       actions={
         <>
           <button
@@ -2984,10 +3236,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
       }
     >
       {error ? <p className="repository-message error">{error}</p> : null}
-      <div className="brief-grid neo-brief-layout">
+      <div className="brief-grid compass-brief-layout">
         <div className="brief-main">
-          <section className="neo-workflow-module brief-setup-module">
-            <div className="neo-module-head">
+          <section className="compass-workflow-module brief-setup-module">
+            <div className="compass-module-head">
               <div>
                 <h3>Creative mix</h3>
                 <p>{totalDeliverables} deliverables planned</p>
@@ -3000,19 +3252,19 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 Use monthly quota
               </button>
             </div>
-            <div className="neo-plan-rows">
+            <div className="compass-plan-rows">
               {fixedMixItems.map((item) => {
                 const label = briefServiceLabel(item.service);
                 return (
-                  <div className="neo-plan-row" key={item.id}>
-                    <span className="neo-type-icon" aria-hidden="true">
+                  <div className="compass-plan-row" key={item.id}>
+                    <span className="compass-type-icon" aria-hidden="true">
                       {briefServiceIcons[item.service]}
                     </span>
-                    <div className="neo-plan-copy">
+                    <div className="compass-plan-copy">
                       <b>{label}</b>
                       <p>{serviceDescriptions[item.service]}</p>
                     </div>
-                    <div className="neo-mix-row-controls">
+                    <div className="compass-mix-row-controls">
                       <div className="qty">
                         <button
                           type="button"
@@ -3063,17 +3315,17 @@ export function BriefStage({ state, dispatch }: StageProps) {
               })}
             </div>
           </section>
-          <section className="neo-workflow-module brief-editor-module">
-            <div className="neo-module-head">
+          <section className="compass-workflow-module brief-editor-module">
+            <div className="compass-module-head">
               <div>
                 <h3>Creative brief</h3>
                 <p>One clear problem. One clear outcome.</p>
               </div>
             </div>
             <div className="textarea-wrap">
-              <label className="neo-brief-field-label" htmlFor="brief">
+              <label className="compass-brief-field-label" htmlFor="brief">
                 <span>Working brief</span>
-                <span className="neo-brief-char-count">
+                <span className="compass-brief-char-count">
                   {state.brief.length} chars
                 </span>
               </label>
@@ -3087,22 +3339,22 @@ export function BriefStage({ state, dispatch }: StageProps) {
             </div>
           </section>
         </div>
-        <aside className="neo-context-stack">
-          <section className="neo-context-card">
+        <aside className="compass-context-stack">
+          <section className="compass-context-card">
             <h3>Signal stack</h3>
-            <div className="neo-signal-list">
+            <div className="compass-signal-list">
               {signalItems.map((item) => (
-                <div className="neo-signal-line" key={item.label}>
+                <div className="compass-signal-line" key={item.label}>
                   <b>{item.label}</b>
                   <span>{item.detail}</span>
                 </div>
               ))}
             </div>
           </section>
-          <section className="neo-context-card">
+          <section className="compass-context-card">
             <h3>Primary success metric</h3>
             <div
-              className="neo-metric-choice"
+              className="compass-metric-choice"
               role="group"
               aria-label="Primary success metric"
             >
@@ -3127,24 +3379,24 @@ export function BriefStage({ state, dispatch }: StageProps) {
               ))}
             </div>
           </section>
-          <section className="neo-context-card neo-principle-card">
+          <section className="compass-context-card compass-principle-card">
             <h3>Creative principle</h3>
             <p>
               Distinctive beats decorative. Each idea should be recognizable in
               one second and arguable in one sentence.
             </p>
           </section>
-          <section className="neo-context-card neo-material-card">
-            <h3>Uploaded materials</h3>
+          <section className="compass-context-card compass-material-card">
+            <h3>Brief materials</h3>
             <button
-              className="neo-material-summary-open"
+              className="compass-material-summary-open"
               type="button"
-              aria-label="Manage uploaded materials"
+              aria-label="Manage brief materials"
               onClick={() => setMaterialsOpen(true)}
             >
-              <span className="neo-material-summary">
+              <span className="compass-material-summary">
                 {materialSummary.map((item) => (
-                  <span className="neo-material-summary-line" key={item.label}>
+                  <span className="compass-material-summary-line" key={item.label}>
                     <b>{item.label}</b>
                     <span>{item.detail}</span>
                   </span>
@@ -3156,154 +3408,222 @@ export function BriefStage({ state, dispatch }: StageProps) {
       </div>
       {materialsOpen ? (
         <div
-          className="output-modal-backdrop neo-library-backdrop"
+          className="output-modal-backdrop compass-library-backdrop"
           onClick={() => setMaterialsOpen(false)}
         >
           <section
-            className="output-modal neo-material-manager-modal neo-brief-material-manager"
+            className="output-modal compass-material-manager-modal compass-brief-material-manager"
             role="dialog"
             aria-modal="true"
             aria-labelledby="brief-materials-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <header className="neo-material-manager-head">
+            <header className="compass-material-manager-head">
               <div>
-                <p className="eyebrow">Brief materials</p>
-                <h3 id="brief-materials-title">Uploaded materials</h3>
+                <h3 id="brief-materials-title">Brief materials</h3>
                 <p>
-                  Manage working files and choose the visual references attached
-                  to this creative brief.
+                  Choose library references and manage files for this brief in one place.
                 </p>
               </div>
               <button
-                className="neo-material-close"
+                className="compass-material-close"
                 type="button"
-                aria-label="Close uploaded materials"
+                aria-label="Close brief materials"
                 onClick={() => setMaterialsOpen(false)}
               >
                 ×
               </button>
             </header>
-            <div className="neo-material-manager-toolbar">
+            <div className="compass-material-manager-toolbar">
               <div>
                 <b>{state.brand?.name ?? "Current brief"}</b>
-                <span>Creative input library</span>
+                <span>Materials included with creative generation</span>
               </div>
-              <span className="pill green">Used in this generation</span>
-            </div>
-            <div className="neo-material-manager-window">
-              <nav
-                className="neo-material-folder-nav"
-                aria-label="Uploaded material folders"
+              <div
+                className="compass-brief-material-totals"
+                aria-label="Brief material counts"
               >
-                {briefMaterialSections.map(([id, label, description], index) => {
-                  const count =
-                    id === "uploads"
-                      ? state.attachments.length + state.uploadedMaterials.length
-                      : state.referenceImages.length;
-                  return (
-                    <button
-                      className={`neo-material-folder-btn ${materialsSection === id ? "active" : ""}`}
-                      type="button"
-                      key={id}
-                      onClick={() => setMaterialsSection(id)}
-                    >
-                      <span className="neo-material-folder-icon" aria-hidden="true">
-                        {index + 1}
-                      </span>
-                      <span>
-                        <b>{label}</b>
-                        <small>
-                          {count} item{count === 1 ? "" : "s"} · {description}
-                        </small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </nav>
-              <section className="neo-material-browser">
-                <div className="neo-material-browser-head">
+                <span>
+                  <b>{state.referenceImages.length}</b> references
+                </span>
+                <span>
+                  <b>
+                    {state.attachments.length + state.uploadedMaterials.length}
+                  </b>{" "}
+                  uploads
+                </span>
+              </div>
+            </div>
+            <div className="compass-brief-materials-workspace">
+              <section
+                className="compass-brief-material-section compass-brief-library-section"
+                aria-labelledby="brief-library-title"
+              >
+                <header className="compass-brief-material-section-head">
                   <div>
-                    <b>
-                      {materialsSection === "uploads"
-                        ? "Working files"
-                        : "References"}
-                    </b>
-                    <span>
-                      {materialsSection === "uploads"
-                        ? "Upload products or client materials and tell Neo how each image should be used."
-                        : "Choose the approved visual context for generation."}
-                    </span>
+                    <h4 id="brief-library-title">Use from library</h4>
+                    <p>Select approved brand assets and visual references.</p>
                   </div>
-                  <span>
-                    {materialsSection === "uploads"
-                      ? state.attachments.length + state.uploadedMaterials.length
-                      : state.referenceImages.length}{" "}
-                    selected
-                  </span>
+                  <span>Brand library</span>
+                </header>
+                <div className="compass-brief-material-section-body">
+                  <ReferenceLibraryPicker state={state} dispatch={dispatch} />
                 </div>
-                <div className="neo-material-browser-content">
-                  {materialsSection === "uploads" ? (
-                    <div className="neo-brief-material-modal-body">
-                      <div className="neo-creative-material-upload-row">
-                      <label className="btn secondary neo-brief-add-files">
-                        {materialUploadPending ? "Uploading…" : "Add product / client images"}
-                        <input
-                          className="file-input"
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          multiple
-                          disabled={materialUploadPending}
-                          onChange={handleCreativeMaterialUpload}
-                        />
-                      </label>
-                      <label className="neo-brief-document-upload">
-                        Attach other files
-                        <input
-                          className="file-input"
-                          type="file"
-                          multiple
-                          onChange={(event) =>
-                            dispatch({
-                              type: "attach-files",
-                              names: getFileNames(event.target.files)
-                            })
-                          }
-                        />
-                      </label>
+              </section>
+              <div className="compass-brief-materials-side">
+                <section
+                  className="compass-brief-material-section compass-brief-selected-section"
+                  aria-labelledby="brief-selected-references-title"
+                >
+                  <header className="compass-brief-material-section-head">
+                    <div>
+                      <h4 id="brief-selected-references-title">
+                        References in Brief materials
+                      </h4>
+                      <p>These images will be sent with this brief.</p>
+                    </div>
+                    <span>{state.referenceImages.length} selected</span>
+                  </header>
+                  <div className="compass-brief-material-section-body">
+                    {state.referenceImages.length ? (
+                      <div className="compass-selected-reference-grid">
+                        {state.referenceImages.map((reference) => (
+                          <article
+                            className="compass-selected-reference"
+                            key={reference.id}
+                          >
+                            <img src={reference.url} alt={reference.label} />
+                            <div>
+                              <b>{reference.label}</b>
+                              <span>Included in generation</span>
+                            </div>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${reference.label} from brief`}
+                              onClick={() =>
+                                dispatch({
+                                  type: "toggle-reference-image",
+                                  item: reference
+                                })
+                              }
+                            >
+                              Remove
+                            </button>
+                          </article>
+                        ))}
                       </div>
-                      <p className="neo-creative-material-helper">
-                        The Hook agent will inspect these images before proposing ideas. The image agent will receive them as source references.
+                    ) : (
+                      <div className="compass-brief-material-empty">
+                        <b>No references selected.</b>
+                        <span>
+                          Choose an image from the library to add it here.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section
+                  className="compass-brief-material-section compass-brief-uploaded-section"
+                  aria-labelledby="brief-uploaded-materials-title"
+                >
+                  <header className="compass-brief-material-section-head">
+                    <div>
+                      <h4 id="brief-uploaded-materials-title">
+                        Uploaded materials
+                      </h4>
+                      <p>
+                        Add product, client, or supporting files for this brief.
+                      </p>
+                    </div>
+                    <span>
+                      {state.attachments.length + state.uploadedMaterials.length} uploaded
+                    </span>
+                  </header>
+                  <div className="compass-brief-material-section-body">
+                    <div className="compass-brief-material-modal-body">
+                      <div className="compass-creative-material-upload-row">
+                        <label className="btn secondary compass-brief-add-files">
+                          {materialUploadPending
+                            ? "Uploading…"
+                            : "Add product / client images"}
+                          <input
+                            className="file-input"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            multiple
+                            disabled={materialUploadPending}
+                            onChange={handleCreativeMaterialUpload}
+                          />
+                        </label>
+                        <label className="compass-brief-document-upload">
+                          Attach other files
+                          <input
+                            className="file-input"
+                            type="file"
+                            multiple
+                            onChange={(event) =>
+                              dispatch({
+                                type: "attach-files",
+                                names: getFileNames(event.target.files)
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <p className="compass-creative-material-helper">
+                        The Hook agent will inspect these images before proposing
+                        ideas. The image agent will receive them as source
+                        references.
                       </p>
                       {materialUploadError ? (
-                        <p className="error-text" role="alert">{materialUploadError}</p>
+                        <p className="error-text" role="alert">
+                          {materialUploadError}
+                        </p>
                       ) : null}
                       {state.uploadedMaterials.length ? (
-                        <div className="neo-creative-material-grid">
+                        <div className="compass-creative-material-grid">
                           {state.uploadedMaterials.map((material) => (
-                            <article className="neo-creative-material-card" key={material.id}>
+                            <article
+                              className="compass-creative-material-card"
+                              key={material.id}
+                            >
                               <img src={material.url} alt={material.name} />
-                              <div className="neo-creative-material-fields">
-                                <div className="neo-creative-material-name">
+                              <div className="compass-creative-material-fields">
+                                <div className="compass-creative-material-name">
                                   <b>{material.name}</b>
                                   <button
                                     type="button"
                                     aria-label={`Remove ${material.name}`}
-                                    onClick={() => dispatch({ type: "remove-uploaded-material", id: material.id })}
-                                  >×</button>
+                                    onClick={() =>
+                                      dispatch({
+                                        type: "remove-uploaded-material",
+                                        id: material.id
+                                      })
+                                    }
+                                  >
+                                    ×
+                                  </button>
                                 </div>
                                 <label>
                                   Use as
                                   <select
                                     value={material.role}
-                                    onChange={(event) => dispatch({
-                                      type: "update-uploaded-material",
-                                      id: material.id,
-                                      changes: { role: event.target.value as CreativeMaterialRole }
-                                    })}
+                                    onChange={(event) =>
+                                      dispatch({
+                                        type: "update-uploaded-material",
+                                        id: material.id,
+                                        changes: {
+                                          role: event.target
+                                            .value as CreativeMaterialRole
+                                        }
+                                      })
+                                    }
                                   >
                                     {creativeMaterialRoles.map((role) => (
-                                      <option value={role} key={role}>{creativeMaterialRoleLabels[role]}</option>
+                                      <option value={role} key={role}>
+                                        {creativeMaterialRoleLabels[role]}
+                                      </option>
                                     ))}
                                   </select>
                                 </label>
@@ -3312,11 +3632,15 @@ export function BriefStage({ state, dispatch }: StageProps) {
                                   <input
                                     value={material.description}
                                     placeholder="e.g. Keep this bottle as the hero object"
-                                    onChange={(event) => dispatch({
-                                      type: "update-uploaded-material",
-                                      id: material.id,
-                                      changes: { description: event.target.value }
-                                    })}
+                                    onChange={(event) =>
+                                      dispatch({
+                                        type: "update-uploaded-material",
+                                        id: material.id,
+                                        changes: {
+                                          description: event.target.value
+                                        }
+                                      })
+                                    }
                                   />
                                 </label>
                               </div>
@@ -3325,7 +3649,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         </div>
                       ) : null}
                       {state.attachments.length ? (
-                        <div className="chips neo-attachment-chips">
+                        <div className="chips compass-attachment-chips">
                           {state.attachments.map((name) => (
                             <span className="chip" key={name}>
                               {name}
@@ -3333,19 +3657,19 @@ export function BriefStage({ state, dispatch }: StageProps) {
                           ))}
                         </div>
                       ) : !state.uploadedMaterials.length ? (
-                        <div className="neo-signal-memory-empty">
+                        <div className="compass-signal-memory-empty">
                           <div>
                             <b>No working files attached.</b>
-                            <span>Add only files that should influence this brief.</span>
+                            <span>
+                              Add only files that should influence this brief.
+                            </span>
                           </div>
                         </div>
                       ) : null}
                     </div>
-                  ) : (
-                    <ReferenceLibraryPicker state={state} dispatch={dispatch} />
-                  )}
-                </div>
-              </section>
+                  </div>
+                </section>
+              </div>
             </div>
           </section>
         </div>
@@ -3509,7 +3833,7 @@ function ReferenceLibraryPicker({
 
   const candidatesByCategory: Record<
     ReferenceLibraryCategory,
-    { id: string; url: string; label: string }[]
+    { id: string; url: string; label: string; displayLabel?: string }[]
   > = {
     guideline: libraryItemsWithImages(brand?.library.docs ?? []),
     logo: logoRule ? libraryItemsWithImages([logoRule]) : [],
@@ -3524,7 +3848,8 @@ function ReferenceLibraryPicker({
         .map((item) => ({
           id: `past-work-${item.id}`,
           url: item.imageUrl,
-          label: item.title || "Past work"
+          label: `Past work style reference — ${item.title || "Untitled"}`,
+          displayLabel: item.title || "Past work"
         }))
     ]
   };
@@ -3595,12 +3920,16 @@ function ReferenceLibraryPicker({
                     onChange={() =>
                       dispatch({
                         type: "toggle-reference-image",
-                        item: candidate
+                        item: {
+                          id: candidate.id,
+                          url: candidate.url,
+                          label: candidate.label
+                        }
                       })
                     }
                   />
                   <img src={candidate.url} alt={candidate.label} />
-                  <span>{candidate.label}</span>
+                  <span>{candidate.displayLabel ?? candidate.label}</span>
                 </label>
               );
             })}
@@ -3670,7 +3999,6 @@ function ReferenceLibraryPicker({
 
   return (
     <div className="source-checks">
-      <h3>Use from library</h3>
       <div className="reference-accordion">
         {REFERENCE_LIBRARY_CATEGORIES.map(([key, label]) => (
           <div className="reference-accordion-row" key={key}>
@@ -3846,16 +4174,16 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       if (review.sections.length === 0) {
         throw new Error("Generate or add at least one hook before exporting.");
       }
-      const { exportNeoIdeasReviewPdf } = await import(
+      const { exportCompassIdeasReviewPdf } = await import(
         "../export-pdf-kit/export-ideas-review-pdf"
       );
-      const brandSlug = (state.brand?.name ?? "neo")
+      const brandSlug = (state.brand?.name ?? "compass")
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      const filename = `${brandSlug || "neo"}-angles.pdf`;
-      await exportNeoIdeasReviewPdf(
+      const filename = `${brandSlug || "compass"}-angles.pdf`;
+      await exportCompassIdeasReviewPdf(
         review.sections,
         filename,
         review.highlightMap,
@@ -3888,10 +4216,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     <DecisionCard
       eyebrow="03 / Angles"
       title="Pick the hooks for this creative mix."
-      helper="neo preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
-      status={`neo picked ${selected} / ${requiredCount}`}
+      helper="compass preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
+      status={`compass picked ${selected} / ${requiredCount}`}
       statusClass={selected === requiredCount ? "green" : "blue"}
-      className="neo-stage-angles"
+      className="compass-stage-angles"
       actions={
         <>
           <button
@@ -3914,11 +4242,11 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <section className="neo-angle-settings" aria-label="Artwork settings">
-        <div className="neo-angle-setting neo-angle-mode-setting">
-          <span className="neo-angle-setting-label">Artwork mode</span>
+      <section className="compass-angle-settings" aria-label="Artwork settings">
+        <div className="compass-angle-setting compass-angle-mode-setting">
+          <span className="compass-angle-setting-label">Artwork mode</span>
           <div
-            className="neo-angle-mode-options"
+            className="compass-angle-mode-options"
             role="group"
             aria-label="Artwork generation mode"
           >
@@ -3962,13 +4290,17 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             </button>
           </div>
         </div>
-        <label className="neo-angle-setting">
-          <span className="neo-angle-setting-label">Image prompt model</span>
+        <label className="compass-angle-setting">
+          <span className="compass-angle-setting-label">
+            {state.artworkMode === "design-system"
+              ? "Generation path"
+              : "Image prompt model"}
+          </span>
           <select
-            className="neo-angle-model-select"
+            className="compass-angle-model-select"
             aria-label="Image prompt model"
             value={state.imagePromptModel}
-            disabled={creating}
+            disabled={creating || state.artworkMode === "design-system"}
             onChange={(event) =>
               dispatch({
                 type: "set-image-prompt-model",
@@ -3976,16 +4308,24 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               })
             }
           >
-            <option value="gpt-5.6-terra">GPT 5.6 (OpenAI)</option>
-            <option value="anthropic/claude-sonnet-4.6">
-              Claude Sonnet 4.6 (OpenRouter)
-            </option>
+            {state.artworkMode === "design-system" ? (
+              <option value={state.imagePromptModel}>
+                Luna treatment → GPT Image 2
+              </option>
+            ) : (
+              <>
+                <option value="gpt-5.6-terra">GPT 5.6 (OpenAI)</option>
+                <option value="anthropic/claude-sonnet-4.6">
+                  Claude Sonnet 4.6 (OpenRouter)
+                </option>
+              </>
+            )}
           </select>
         </label>
-        <label className="neo-angle-setting neo-angle-size-setting">
-          <span className="neo-angle-setting-label">Output size</span>
+        <label className="compass-angle-setting compass-angle-size-setting">
+          <span className="compass-angle-setting-label">Output size</span>
           <select
-            className="neo-angle-model-select"
+            className="compass-angle-model-select"
             aria-label="Output size"
             value={state.outputSize}
             disabled={creating}
@@ -4004,7 +4344,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           </select>
         </label>
       </section>
-      <div className="direction-tools neo-angle-toolbar">
+      <div className="direction-tools compass-angle-toolbar">
         <div>
           <h3>Review hooks</h3>
           <p>
@@ -4012,9 +4352,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             Recommended; the rest stay as Options until deleted.
           </p>
         </div>
-        <div className="neo-angle-toolbar-actions">
+        <div className="compass-angle-toolbar-actions">
           <button
-            className="btn secondary small neo-angle-export-pdf"
+            className="btn secondary small compass-angle-export-pdf"
             type="button"
             disabled={exportingAngles || state.directions.length === 0}
             onClick={() => void handleExportAngles()}
@@ -4023,7 +4363,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             {exportingAngles ? "Exporting…" : "Export PDF"}
           </button>
           <button
-            className="btn secondary small neo-angle-regenerate-all"
+            className="btn secondary small compass-angle-regenerate-all"
             type="button"
             disabled={
               generatingMore ||
@@ -4051,12 +4391,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       {exportAnglesError ? (
         <p className="repository-message error">{exportAnglesError}</p>
       ) : null}
-      <div className="neo-angle-groups">
+      <div className="compass-angle-groups">
         {angleGroups.map((group) => (
-          <section className="neo-angle-group" key={group.service}>
-            <header className="neo-angle-group-head">
-              <div className="neo-angle-group-title">
-                <span className="neo-angle-group-icon" aria-hidden="true">
+          <section className="compass-angle-group" key={group.service}>
+            <header className="compass-angle-group-head">
+              <div className="compass-angle-group-title">
+                <span className="compass-angle-group-icon" aria-hidden="true">
                   {group.initials}
                 </span>
                 <div>
@@ -4066,10 +4406,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </p>
                 </div>
               </div>
-              <div className="neo-angle-group-head-actions">
-                <div className="neo-angle-group-buttons">
+              <div className="compass-angle-group-head-actions">
+                <div className="compass-angle-group-buttons">
                   <button
-                    className="btn secondary small neo-angle-generate-ideas"
+                    className="btn secondary small compass-angle-generate-ideas"
                     type="button"
                     disabled={generatingMore || regeneratingAllHooks}
                     onClick={() => generateMore(group.service)}
@@ -4080,7 +4420,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                       : "Generate more ideas"}
                   </button>
                   <button
-                    className="btn secondary small neo-angle-add-hook"
+                    className="btn secondary small compass-angle-add-hook"
                     type="button"
                     disabled={generatingMore || regeneratingAllHooks}
                     onClick={() =>
@@ -4094,20 +4434,20 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </button>
                 </div>
                 <span
-                  className={`neo-angle-group-progress ${group.selected === group.required ? "complete" : ""}`}
+                  className={`compass-angle-group-progress ${group.selected === group.required ? "complete" : ""}`}
                 >
                   {group.selected}/{group.required} selected
                 </span>
               </div>
             </header>
-            <div className="direction-grid neo-angle-grid">
+            <div className="direction-grid compass-angle-grid">
               {group.directions.map(({ direction, originalIndex }, groupIndex) => (
           <article
-            className={`direction-card neo-angle-card ${direction.selected ? "selected" : ""}`}
+            className={`direction-card compass-angle-card ${direction.selected ? "selected" : ""}`}
             key={direction.id}
           >
             <button
-              className="neo-angle-card-select-surface"
+              className="compass-angle-card-select-surface"
               type="button"
               aria-label={`${direction.selected ? "Deselect" : "Select"} Idea ${originalIndex + 1} card`}
               aria-pressed={direction.selected}
@@ -4115,15 +4455,15 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                 dispatch({ type: "toggle-direction", id: direction.id })
               }
             />
-            <div className="neo-angle-card-top">
+            <div className="compass-angle-card-top">
               <div>
-                <div className="neo-angle-badge-row">
-                  <span className="neo-angle-idea-pill">Idea {groupIndex + 1}</span>
-                  <span className="neo-angle-format-pill">
+                <div className="compass-angle-badge-row">
+                  <span className="compass-angle-idea-pill">Idea {groupIndex + 1}</span>
+                  <span className="compass-angle-format-pill">
                     {group.contentType}
                   </span>
                 </div>
-                <p className="neo-angle-meta-line">
+                <p className="compass-angle-meta-line">
                   {direction.pillar || "Creative concept"}
                   <b>
                     {" · "}
@@ -4132,28 +4472,33 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </b>
                 </p>
               </div>
-              <div className="neo-angle-top-actions">
+              <div className="compass-angle-top-actions">
+                {direction.selected ? (
+                  <span className="compass-angle-pick-tag">Your pick</span>
+                ) : null}
                 <button
-                  className="btn secondary small neo-angle-edit"
+                  className="compass-angle-edit"
                   type="button"
+                  aria-label={`Edit Idea ${originalIndex + 1}`}
+                  title="Edit hook"
                   disabled={regeneratingAllHooks}
                   onClick={() => setEditingDirectionId(direction.id)}
                 >
-                  Edit
+                  <PencilSimple aria-hidden="true" size={16} weight="bold" />
                 </button>
               </div>
             </div>
             {direction.manual ? (
-              <span className="neo-angle-manual-note">Manually added</span>
+              <span className="compass-angle-manual-note">Manually added</span>
             ) : null}
-            <div className="neo-angle-hook-wrap">
-              <span className="neo-angle-card-kicker">
+            <div className="compass-angle-hook-wrap">
+              <span className="compass-angle-card-kicker">
                 {angleHookLabel(group.service)}
               </span>
               <h3>{direction.hook}</h3>
             </div>
-            <div className="neo-angle-copy-block">
-              <span className="neo-angle-card-kicker">
+            <div className="compass-angle-copy-block">
+              <span className="compass-angle-card-kicker">
                 {angleSubheadlineLabel(group.service)}
               </span>
               <AngleSubheadline
@@ -4164,8 +4509,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             {group.service !== "single-static" &&
             group.service !== "resize" &&
             direction.formatBeats?.length ? (
-              <div className="neo-angle-copy-block neo-angle-format-beats">
-                <span className="neo-angle-card-kicker">
+              <div className="compass-angle-copy-block compass-angle-format-beats">
+                <span className="compass-angle-card-kicker">
                   {angleFormatBeatsLabel(group.service)}
                 </span>
                 <ol>
@@ -4178,18 +4523,18 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                 </ol>
               </div>
             ) : null}
-            <div className="neo-angle-copy-block neo-angle-concept-block">
-              <span className="neo-angle-card-kicker">
+            <div className="compass-angle-copy-block compass-angle-concept-block">
+              <span className="compass-angle-card-kicker">
                 {angleConceptLabel(group.service)}
               </span>
               <p>{direction.concept}</p>
             </div>
-            <div className="neo-angle-copy-block">
-              <span className="neo-angle-card-kicker">CTA</span>
-              <p className="neo-angle-cta-text">{direction.cta}</p>
+            <div className="compass-angle-copy-block">
+              <span className="compass-angle-card-kicker">CTA</span>
+              <p className="compass-angle-cta-text">{direction.cta}</p>
             </div>
-            <div className="neo-angle-card-foot">
-              <span className="neo-angle-number-pill">
+            <div className="compass-angle-card-foot">
+              <span className="compass-angle-number-pill">
                 <b>
                   {typeof direction.score === "number"
                     ? Math.round(direction.score)
@@ -4212,7 +4557,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                     : "Rewrite hook"}
                 </button>
                 <button
-                  className="btn secondary small neo-angle-delete"
+                  className="btn secondary small compass-angle-delete"
                   type="button"
                   disabled={
                     regeneratingAllHooks ||
@@ -4573,7 +4918,7 @@ function ManualHookModal({
   return (
     <div className="output-modal-backdrop" onClick={onClose}>
       <div
-        className="output-modal neo-manual-hook-modal"
+        className="output-modal compass-manual-hook-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="manual-hook-title"
@@ -4588,8 +4933,8 @@ function ManualHookModal({
             Close
           </button>
         </div>
-        <div className="neo-manual-hook-form">
-          <label className="neo-manual-hook-field">
+        <div className="compass-manual-hook-form">
+          <label className="compass-manual-hook-field">
             <span>Pillar</span>
             <input
               autoFocus
@@ -4598,7 +4943,7 @@ function ManualHookModal({
               onChange={(event) => setPillar(event.target.value)}
             />
           </label>
-          <label className="neo-manual-hook-field">
+          <label className="compass-manual-hook-field">
             <span>Objective</span>
             <select
               value={objective}
@@ -4620,7 +4965,7 @@ function ManualHookModal({
               ))}
             </select>
           </label>
-          <label className="neo-manual-hook-field full">
+          <label className="compass-manual-hook-field full">
             <span>Hook</span>
             <textarea
               rows={3}
@@ -4629,7 +4974,7 @@ function ManualHookModal({
               onChange={(event) => setHook(event.target.value)}
             />
           </label>
-          <label className="neo-manual-hook-field full">
+          <label className="compass-manual-hook-field full">
             <span>Sub-headline</span>
             <textarea
               rows={3}
@@ -4638,7 +4983,7 @@ function ManualHookModal({
               onChange={(event) => setSubheadline(event.target.value)}
             />
           </label>
-          <label className="neo-manual-hook-field full">
+          <label className="compass-manual-hook-field full">
             <span>CTA</span>
             <input
               value={cta}
@@ -4798,7 +5143,7 @@ function HookRegenerateAllModal({
           />
         </label>
         <p className="hook-regenerate-note">
-          Neo will keep each Hook's original strategy and selection, then
+          Compass will keep each Hook's original strategy and selection, then
           rewrite every Hook and its supporting copy in this tone.
         </p>
         {error ? <p className="repository-message error">{error}</p> : null}
@@ -4847,6 +5192,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
   const readyCount = state.outputs.filter(
     (output) => output.status === "ready" || output.status === "fixed"
   ).length;
+  const creativeCount = reviewCreativeCount(state.outputs);
 
   return (
     <DecisionCard
@@ -4863,7 +5209,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
               : `${readyCount} / ${state.outputs.length} ready`
       }
       statusClass={state.qaComplete && !failedCount ? "green" : ""}
-      className="neo-stage-build"
+      className="compass-stage-build"
       actions={
         <>
           <button
@@ -4899,8 +5245,8 @@ export function StudioStage({ state, dispatch }: StageProps) {
         </>
       }
     >
-      <div className="create-stage-stack neo-build-stage-stack">
-        <section className="neo-create-intro neo-build-intro">
+      <div className="create-stage-stack compass-build-stage-stack">
+        <section className="compass-create-intro compass-build-intro">
           <div>
             <h3>Creative set · {state.brand?.name ?? "Selected brand"}</h3>
             <p>
@@ -4912,13 +5258,13 @@ export function StudioStage({ state, dispatch }: StageProps) {
             </p>
           </div>
           <span className="pill">
-            {state.outputs.length} draft{state.outputs.length === 1 ? "" : "s"}
+            {creativeCount} draft{creativeCount === 1 ? "" : "s"}
           </span>
         </section>
         {qaError ? <p className="repository-message error">{qaError}</p> : null}
         <OutputGrid state={state} dispatch={dispatch} />
         {state.qaComplete ? (
-          <section className={`neo-build-qa-strip ${failedCount ? "needs" : "ready"}`}>
+          <section className={`compass-build-qa-strip ${failedCount ? "needs" : "ready"}`}>
             <div>
               <b>
                 {failedCount
@@ -4959,14 +5305,14 @@ function UgcTemplatePreview({
   compact?: boolean;
 }) {
   return (
-    <div className={`neo-ugc-template ${compact ? "compact" : ""}`}>
-      <div className="neo-ugc-story" aria-hidden="true">
+    <div className={`compass-ugc-template ${compact ? "compact" : ""}`}>
+      <div className="compass-ugc-story" aria-hidden="true">
         <i />
         <i />
         <i />
       </div>
-      <span className="neo-ugc-creator-dot" aria-hidden="true" />
-      <div className="neo-ugc-copy">
+      <span className="compass-ugc-creator-dot" aria-hidden="true" />
+      <div className="compass-ugc-copy">
         <small>Creator-led UGC</small>
         <b>{direction?.hook ?? "UGC hook"}</b>
         <p>{direction ? directionSubheadline(direction) : "Script direction"}</p>
@@ -4979,6 +5325,94 @@ function UgcTemplatePreview({
         ) : null}
         <span>{direction?.cta ?? "See how it works"}</span>
       </div>
+    </div>
+  );
+}
+
+function isAlbumOutput(output: CreativeOutput): boolean {
+  return output.format.trim().toLowerCase() === "album post";
+}
+
+function albumPanelIndex(output: CreativeOutput): number {
+  const match = output.id.match(/-album-(\d+)-v\d+$/i);
+  return match ? Number(match[1]) - 1 : Number.MAX_SAFE_INTEGER;
+}
+
+function sortAlbumOutputs(
+  outputs: readonly CreativeOutput[]
+): readonly CreativeOutput[] {
+  return [...outputs].sort(
+    (left, right) => albumPanelIndex(left) - albumPanelIndex(right)
+  );
+}
+
+function groupOutputsForReview(
+  outputs: readonly CreativeOutput[]
+): readonly (readonly CreativeOutput[])[] {
+  if (!outputs.some(isAlbumOutput)) return outputs.map((output) => [output]);
+
+  const albumGroups = new Map<string, CreativeOutput[]>();
+  outputs.forEach((output) => {
+    const group = albumGroups.get(output.directionId) ?? [];
+    group.push(output);
+    albumGroups.set(output.directionId, group);
+  });
+  return Array.from(albumGroups.values(), sortAlbumOutputs);
+}
+
+function reviewCreativeCount(outputs: readonly CreativeOutput[]): number {
+  const formatGroups = new Map<string, CreativeOutput[]>();
+  outputs.forEach((output) => {
+    const group = formatGroups.get(output.format) ?? [];
+    group.push(output);
+    formatGroups.set(output.format, group);
+  });
+  return Array.from(formatGroups.values()).reduce(
+    (total, group) => total + groupOutputsForReview(group).length,
+    0
+  );
+}
+
+function outputFormatSortRank(format: string): number {
+  const normalized = format.trim().toLowerCase();
+  if (normalized === "1:1 static") return 0;
+  if (normalized === "album post") return 1;
+  if (normalized === "9:16 ugc") return 2;
+  return 3;
+}
+
+function outputSectionTitle(format: string): string {
+  const normalized = format.trim().toLowerCase();
+  if (normalized === "1:1 static") return "STATIC";
+  if (normalized === "album post") return "ALBUM";
+  if (normalized === "9:16 ugc") return "UGC VIDEO";
+  return format;
+}
+
+function AlbumMosaic({
+  outputs,
+  direction
+}: {
+  outputs: readonly CreativeOutput[];
+  direction: WorkflowState["directions"][number] | undefined;
+}) {
+  const panels = sortAlbumOutputs(outputs).slice(0, 3);
+
+  return (
+    <div className="compass-album-mosaic">
+      {panels.map((output, index) =>
+        output.assetUrl ? (
+          <img
+            src={output.assetUrl}
+            alt={`${direction?.hook ?? "Album creative"} panel ${index + 1}`}
+            key={output.id}
+          />
+        ) : (
+          <div className="compass-album-panel-empty" key={output.id}>
+            Panel unavailable
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -5003,6 +5437,17 @@ function OutputGrid({
         (candidate) => candidate.id === previewOutput.directionId
       )
     : undefined;
+  const previewOutputs = previewOutput
+    ? isAlbumOutput(previewOutput)
+      ? sortAlbumOutputs(
+          state.outputs.filter(
+            (output) =>
+              isAlbumOutput(output) &&
+              output.directionId === previewOutput.directionId
+          )
+        )
+      : [previewOutput]
+    : [];
   const regenerateOutput =
     state.outputs.find((output) => output.id === regenerateOutputId) ?? null;
   const regenerateDirection = regenerateOutput
@@ -5010,6 +5455,17 @@ function OutputGrid({
         (candidate) => candidate.id === regenerateOutput.directionId
       )
     : undefined;
+  const regenerateOutputs = regenerateOutput
+    ? isAlbumOutput(regenerateOutput)
+      ? sortAlbumOutputs(
+          state.outputs.filter(
+            (output) =>
+              isAlbumOutput(output) &&
+              output.directionId === regenerateOutput.directionId
+          )
+        )
+      : [regenerateOutput]
+    : [];
   const editOutput = state.outputs.find((output) => output.id === editOutputId);
   const editDirection = state.directions.find(
     (direction) => direction.id === editOutput?.directionId
@@ -5021,6 +5477,9 @@ function OutputGrid({
       groups.set(output.format, group);
       return groups;
     }, new Map<string, CreativeOutput[]>())
+  ).sort(
+    ([leftFormat], [rightFormat]) =>
+      outputFormatSortRank(leftFormat) - outputFormatSortRank(rightFormat)
   );
 
   if (!state.outputs.length) {
@@ -5035,57 +5494,73 @@ function OutputGrid({
   return (
     <>
       <div className="build-sections">
-        {outputGroups.map(([format, outputs]) => (
+        {outputGroups.map(([format, outputs]) => {
+          const reviewGroups = groupOutputsForReview(outputs);
+          return (
           <section className="build-type-section" key={format}>
             <div className="build-section-head">
-              <span className="neo-type-icon" aria-hidden="true">
+              <span className="compass-type-icon" aria-hidden="true">
                 {format.includes("UGC") ? "UG" : "AD"}
               </span>
               <div>
-                <h3>{format} creatives</h3>
+                <h3>{outputSectionTitle(format)}</h3>
                 <p>Review artwork, angle, and caption together.</p>
               </div>
-              <strong>{outputs.length}</strong>
+              <strong>{reviewGroups.length}</strong>
             </div>
             <div className="output-grid">
-              {outputs.map((output) => {
+              {reviewGroups.map((reviewOutputs, reviewIndex) => {
+                const output = reviewOutputs[0];
+                if (!output) return null;
+                const album = isAlbumOutput(output);
                 const index = state.outputs.indexOf(output);
                 const direction = state.directions.find(
                   (candidate) => candidate.id === output.directionId
                 );
                 const qaReport = output.qaReport;
-                const qaScore = qaReport?.score ??
-                  (output.status === "needs-revision" ? 78 : 88);
                 const qaSuggestion = qaReport?.suggestion;
                 return (
                   <article
-                    className={`output-card neo-build-review-card ${output.status === "ready" || output.status === "fixed" ? "ready qa-passed" : ""} ${output.status === "needs-revision" ? "attn qa-attention" : ""}`}
+                    className={`output-card compass-build-review-card ${qaReport && (output.status === "ready" || output.status === "fixed") ? "ready qa-passed" : ""} ${qaReport && output.status === "needs-revision" ? "attn qa-attention" : ""}`}
                     key={output.id}
                   >
-                    <header className="neo-build-card-head">
+                    <header className="compass-build-card-head">
                       <div>
                         <b>Creative {index + 1}</b>
-                        <small>{output.format} execution</small>
+                        <small>
+                          {album
+                            ? `${reviewOutputs.length}-image album execution`
+                            : `${output.format} execution`}
+                        </small>
                       </div>
                       <span
                         className={`pill ${output.status === "ready" || output.status === "fixed" ? "green" : output.status === "needs-revision" ? "amber" : ""}`}
                       >
-                        {output.status === "needs-revision"
+                        {qaReport && output.status === "needs-revision"
                           ? "1 suggestion"
-                          : output.status === "ready" ||
+                          : qaReport && (output.status === "ready" ||
                               output.status === "fixed"
-                            ? "Ready"
+                            ) ? "Ready"
                             : "AI draft"}
                       </span>
                     </header>
-                    <div className="neo-build-asset-pair">
+                    <div className="compass-build-asset-pair">
                       <button
-                        className="preview-area neo-build-preview"
+                        className="preview-area compass-build-preview"
                         type="button"
-                        aria-label={`Open Creative ${index + 1} preview`}
+                        aria-label={
+                          album
+                            ? `Open album creative ${reviewIndex + 1} preview`
+                            : `Open Creative ${index + 1} preview`
+                        }
                         onClick={() => setPreviewOutputId(output.id)}
                       >
-                        {isUgcOutput(output) ? (
+                        {album ? (
+                          <AlbumMosaic
+                            outputs={reviewOutputs}
+                            direction={direction}
+                          />
+                        ) : isUgcOutput(output) ? (
                           <UgcTemplatePreview direction={direction} />
                         ) : output.assetUrl ? (
                           <img
@@ -5116,51 +5591,49 @@ function OutputGrid({
                         />
                       ) : null}
                     </div>
-                    {output.status === "needs-revision" && output.qaNote ? (
-                      <div className="neo-build-qa needs">
-                        <div className="neo-build-qa-head">
+                    {qaReport &&
+                    output.status === "needs-revision" &&
+                    output.qaNote ? (
+                      <div className="compass-build-qa needs">
+                        <div className="compass-build-qa-head">
                           <span aria-hidden="true">
                             <Sparkle size={17} weight="fill" />
                           </span>
                           <div>
-                            <small>Suggested improvement</small>
+                            <small>
+                              {qaReport.agentName || CREATIVE_STRATEGIST_AGENT_NAME}
+                            </small>
                             <b>{qaSuggestion?.title || "Refine this draft"}</b>
                           </div>
-                          <strong>{qaScore}</strong>
+                          <strong>{qaReport.score}</strong>
                         </div>
-                        <p>{qaSuggestion?.detail || output.qaNote}</p>
+                        <QualityActionSummary
+                          text={qaSuggestion?.detail || output.qaNote}
+                        />
                         {qaReport ? (
                           <QualityReportDetails report={qaReport} />
                         ) : null}
-                        <div className="neo-build-qa-suggestion">
-                          <small>
-                            {qaSuggestion?.suggestedHook
-                              ? "Suggested hook"
-                              : "Suggested action"}
-                          </small>
-                          <b>
-                            {qaSuggestion?.suggestedHook ||
-                              qaSuggestion?.detail ||
-                              "Apply this guidance to the draft, or keep the current version."}
-                          </b>
-                        </div>
+                        {qaSuggestion?.suggestedHook ? (
+                          <div className="compass-build-qa-suggestion">
+                            <small>Suggested hook</small>
+                            <b>{qaSuggestion.suggestedHook}</b>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : output.status === "ready" || output.status === "fixed" ? (
-                      <div className="neo-build-qa passed">
+                    ) : qaReport &&
+                      (output.status === "ready" || output.status === "fixed") ? (
+                      <div className="compass-build-qa passed">
                         <div>
-                          <small>Quality check</small>
-                          <b>
-                            {qaReport?.summary ||
-                              "Clear, distinct, and ready for human review."}
-                          </b>
+                          <small>
+                            {qaReport.agentName || CREATIVE_STRATEGIST_AGENT_NAME}
+                          </small>
+                          <b>{qaReport.summary}</b>
                         </div>
-                        <strong>{qaScore}</strong>
-                        {qaReport ? (
-                          <QualityReportDetails report={qaReport} />
-                        ) : null}
+                        <strong>{qaReport.score}</strong>
+                        <QualityReportDetails report={qaReport} />
                       </div>
                     ) : null}
-                    <footer className="neo-build-output-foot">
+                    <footer className="compass-build-output-foot">
                       {output.status === "needs-revision" ? (
                         <>
                           <button
@@ -5171,14 +5644,9 @@ function OutputGrid({
                                 setEditOutputId(output.id);
                               } else {
                                 setQaPrompt(
-                                  [
-                                    qaSuggestion?.detail || output.qaNote,
-                                    qaSuggestion?.suggestedHook
-                                      ? `Suggested hook: ${qaSuggestion.suggestedHook}`
-                                      : ""
-                                  ]
-                                    .filter(Boolean)
-                                    .join("\n")
+                                  qaReport
+                                    ? buildQualityRegenerationInstructions(qaReport)
+                                    : output.qaNote
                                 );
                                 setRegenerateOutputId(output.id);
                               }
@@ -5203,22 +5671,32 @@ function OutputGrid({
                             type="button"
                             onClick={() => setRegenerateOutputId(output.id)}
                           >
-                            Regenerate draft
+                            {album ? "Regenerate album" : "Regenerate draft"}
                           </button>
                           <button
                             className="btn ghost small"
                             type="button"
-                            disabled={output.savedToReferences}
+                            disabled={reviewOutputs.every(
+                              (item) => item.savedToReferences
+                            )}
                             onClick={() =>
-                              dispatch({
-                                type: "save-output-reference",
-                                id: output.id
-                              })
+                              reviewOutputs.forEach((item) =>
+                                dispatch({
+                                  type: "save-output-reference",
+                                  id: item.id
+                                })
+                              )
                             }
                           >
-                            {output.savedToReferences
-                              ? "Reference saved"
-                              : "Save reference"}
+                            {reviewOutputs.every(
+                              (item) => item.savedToReferences
+                            )
+                              ? album
+                                ? "Album saved"
+                                : "Reference saved"
+                              : album
+                                ? "Save album"
+                                : "Save reference"}
                           </button>
                         </>
                       )}
@@ -5228,11 +5706,13 @@ function OutputGrid({
               })}
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
       {previewOutput ? (
         <CreativePreviewModal
           output={previewOutput}
+          outputs={previewOutputs}
           direction={previewDirection}
           index={state.outputs.indexOf(previewOutput)}
           onClose={() => setPreviewOutputId(null)}
@@ -5242,6 +5722,7 @@ function OutputGrid({
         <OutputRegenerateModal
           run={state}
           output={regenerateOutput}
+          outputs={regenerateOutputs}
           direction={regenerateDirection}
           dispatch={dispatch}
           initialPrompt={qaPrompt}
@@ -5294,7 +5775,7 @@ function BuildCaptionEditor({
   }
 
   return (
-    <div className="neo-build-caption">
+    <div className="compass-build-caption">
       <label htmlFor={`build-caption-${output.id}`}>
         {isUgcOutput(output) ? "Script direction" : "Caption"}
       </label>
@@ -5307,7 +5788,7 @@ function BuildCaptionEditor({
           setSaved(false);
         }}
       />
-      <div className="neo-build-caption-actions">
+      <div className="compass-build-caption-actions">
         <span aria-live="polite">{saved ? "Saved" : ""}</span>
         <button
           className="btn primary small"
@@ -5323,48 +5804,77 @@ function BuildCaptionEditor({
 }
 
 function QualityReportDetails({ report }: { report: CreativeQualityReport }) {
+  const priorityIssues = [...report.gd.criteria, ...report.cs.criteria]
+    .filter((criterion) => !criterion.passed)
+    .sort((left, right) => left.score - right.score)
+    .slice(0, 3);
+
   return (
-    <div className="neo-build-qa-details">
-      {([
-        ["GD", report.gd],
-        ["CS", report.cs]
-      ] as const).map(([label, area]) => (
-        <section key={label}>
-          <header>
-            <b>{label} details</b>
+    <div className="compass-build-qa-details">
+      <div className="compass-build-qa-score-grid" aria-label="Quality scores">
+        {([
+          ["GD", report.gd],
+          ["CS", report.cs]
+        ] as const).map(([label, area]) => (
+          <div key={label}>
+            <b>{label}</b>
             <span className={area.passed ? "passed" : "needs"}>
-              {area.score}
+              {area.passed ? "Passed" : "Needs work"}
             </span>
-          </header>
-          <p>{area.summary}</p>
+            <strong>{area.score}</strong>
+          </div>
+        ))}
+      </div>
+      {priorityIssues.length ? (
+        <details>
+          <summary>
+            View {priorityIssues.length} priority issue
+            {priorityIssues.length === 1 ? "" : "s"}
+          </summary>
           <ul>
-            {area.criteria.map((criterion) => (
-              <li className={criterion.passed ? "passed" : "needs"} key={criterion.criterion}>
-                <span aria-hidden="true">{criterion.passed ? "✓" : "!"}</span>
+            {priorityIssues.map((criterion) => (
+              <li key={criterion.criterion}>
+                <span aria-hidden="true">!</span>
                 <div>
                   <b>{criterion.criterion}</b>
-                  <p>{criterion.detail}</p>
-                  {!criterion.passed && criterion.suggestion ? (
-                    <small>{criterion.suggestion}</small>
-                  ) : null}
+                  <p>{criterion.suggestion || criterion.detail}</p>
                 </div>
-                <strong>{criterion.score}</strong>
               </li>
             ))}
           </ul>
-        </section>
-      ))}
+        </details>
+      ) : null}
     </div>
+  );
+}
+
+function QualityActionSummary({ text }: { text: string }) {
+  const items = text
+    .split(/\n+/)
+    .map((item) => item.trim().replace(/^\d+[.)]\s*/, ""))
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (!items.length) return null;
+
+  return (
+    <ol className="compass-build-qa-actions-summary">
+      {items.map((item, index) => (
+        <li key={`${index}-${item}`}>{item}</li>
+      ))}
+    </ol>
   );
 }
 
 function CreativePreviewModal({
   output,
+  outputs,
   direction,
   index,
   onClose
 }: {
   output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
   index: number;
   onClose: () => void;
@@ -5377,14 +5887,17 @@ function CreativePreviewModal({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
 
-  const title = `Creative ${index + 1} preview`;
+  const album = isAlbumOutput(output);
+  const title = album
+    ? "Album creative preview"
+    : `Creative ${index + 1} preview`;
 
   return (
     <div className="output-modal-backdrop" onClick={onClose}>
       <div
         aria-labelledby="build-image-preview-title"
         aria-modal="true"
-        className="output-modal neo-build-image-modal"
+        className={`output-modal compass-build-image-modal ${album ? "compass-album-preview-modal" : ""}`}
         role="dialog"
         onClick={(event) => event.stopPropagation()}
       >
@@ -5398,7 +5911,9 @@ function CreativePreviewModal({
           </button>
         </div>
         <div className="output-modal-image">
-          {isUgcOutput(output) ? (
+          {album ? (
+            <AlbumMosaic outputs={outputs} direction={direction} />
+          ) : isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} />
           ) : output.assetUrl ? (
             <img src={output.assetUrl} alt={direction?.hook ?? title} />
@@ -5421,6 +5936,7 @@ function CreativePreviewModal({
 function OutputRegenerateModal({
   run,
   output,
+  outputs,
   direction,
   dispatch,
   onClose,
@@ -5428,6 +5944,7 @@ function OutputRegenerateModal({
 }: {
   run: WorkflowState;
   output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
   dispatch: Dispatch<WorkflowAction>;
   onClose: () => void;
@@ -5436,6 +5953,7 @@ function OutputRegenerateModal({
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const album = isAlbumOutput(output);
 
   const handleRegenerate = async () => {
     if (!direction) {
@@ -5447,22 +5965,39 @@ function OutputRegenerateModal({
     setError(null);
 
     try {
-      const updated = await regenerateOutputImage({
-        run,
-        direction,
-        extraInstructions: prompt
-      });
-      if (!updated.assetUrl) {
-        throw new Error("Regeneration did not return an image.");
+      const updatedOutputs = album
+        ? await regenerateOutputImages({
+            run,
+            direction,
+            extraInstructions: prompt
+          })
+        : [
+            await reviseOutputImage({
+              run,
+              output,
+              instructions: prompt
+            })
+          ];
+      const orderedUpdated = album
+        ? sortAlbumOutputs(updatedOutputs)
+        : updatedOutputs;
+      if (album && orderedUpdated.length < outputs.length) {
+        throw new Error("Album regeneration did not return every panel.");
       }
-      dispatch({
-        type: "replace-output-asset",
-        id: output.id,
-        assetUrl: updated.assetUrl,
-        ...(updated.assetStoragePath
-          ? { assetStoragePath: updated.assetStoragePath }
-          : {}),
-        ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {})
+      outputs.forEach((currentOutput, index) => {
+        const updated = orderedUpdated[index];
+        if (!updated?.assetUrl) {
+          throw new Error("Regeneration did not return an image.");
+        }
+        dispatch({
+          type: "replace-output-asset",
+          id: currentOutput.id,
+          assetUrl: updated.assetUrl,
+          ...(updated.assetStoragePath
+            ? { assetStoragePath: updated.assetStoragePath }
+            : {}),
+          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {})
+        });
       });
       setPrompt("");
       playGenerationSuccessSound();
@@ -5480,6 +6015,9 @@ function OutputRegenerateModal({
     <div className="output-modal-backdrop" onClick={onClose}>
       <div
         className="output-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={album ? "Regenerate album" : "Regenerate creative"}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="output-modal-head">
@@ -5492,7 +6030,9 @@ function OutputRegenerateModal({
           </button>
         </div>
         <div className="output-modal-image">
-          {isUgcOutput(output) ? (
+          {album ? (
+            <AlbumMosaic outputs={outputs} direction={direction} />
+          ) : isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} />
           ) : output.assetUrl ? (
             <img src={output.assetUrl} alt={direction?.hook ?? "Creative preview"} />
@@ -5508,7 +6048,11 @@ function OutputRegenerateModal({
           )}
         </div>
         <label className="output-modal-prompt-label">
-          <span>Regeneration instructions (optional)</span>
+          <span>
+            {album
+              ? "Regeneration instructions (optional)"
+              : "Revision instructions"}
+          </span>
           <textarea
             value={prompt}
             disabled={regenerating}
@@ -5517,15 +6061,9 @@ function OutputRegenerateModal({
           />
         </label>
         <p className="output-modal-reference-note">
-          {`${artworkModeLabel(run.artworkMode)} mode · ${
-            run.referenceImages.length
-              ? `using ${run.referenceImages.length} reference ${
-                run.referenceImages.length === 1 ? "image" : "images"
-              } from Brief · Use from library: ${run.referenceImages
-                .map((item) => item.label)
-                .join(", ")}`
-              : "no reference images selected. Pick logo or past work in Brief · Use from library."
-          }`}
+          {album
+            ? `${artworkModeLabel(run.artworkMode)} mode · album regeneration uses the selected brief and references.`
+            : "Art Director enhancement · uses the current artwork and these directions to improve the full composition with GPT Image 2."}
         </p>
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="output-modal-actions">
@@ -5540,15 +6078,17 @@ function OutputRegenerateModal({
           <button
             className="btn primary"
             type="button"
-            disabled={regenerating}
+            disabled={regenerating || (!album && !prompt.trim())}
             onClick={() => void handleRegenerate()}
           >
             {regenerating ? <Spinner /> : null}
             {regenerating
-              ? "Regenerating…"
+              ? "Regenerating..."
               : initialPrompt
                 ? "Apply suggestion"
-                : "Regenerate image"}
+                : album
+                  ? "Regenerate album"
+                  : "Regenerate image"}
           </button>
         </div>
       </div>
@@ -5568,7 +6108,7 @@ function OutputCaptionText({
 
   if (scrollable) {
     return (
-      <p className="neo-caption-scroll" tabIndex={0}>
+      <p className="compass-caption-scroll" tabIndex={0}>
         {caption}
       </p>
     );
@@ -5623,7 +6163,7 @@ function CreativeCopyEditModal({
   return (
     <div className="output-modal-backdrop" onClick={onClose}>
       <div
-        className="output-modal neo-copy-edit-modal"
+        className="output-modal compass-copy-edit-modal"
         role="dialog"
         aria-modal="true"
         aria-label={ugc ? "Edit UGC script and flow" : "Edit creative copy"}
@@ -5735,6 +6275,8 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       ? "projectManager"
       : "graphicDesign"
   );
+  const [clientSlidesExporting, setClientSlidesExporting] = useState(false);
+  const [clientSlidesError, setClientSlidesError] = useState<string | null>(null);
   const totalChecks = state.outputs.reduce(
     (total, output) => total + approvalRolesForOutput(output).length,
     0
@@ -5747,11 +6289,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       ).length,
     0
   );
-  const readyAssets = state.outputs.filter((output) =>
-    approvalRolesForOutput(output).every(
-      (role) => output.approval[role] === "approved"
-    )
-  ).length;
+  const readyAssets = pmApprovedClientSlideItems(state).length;
   const activeRoleConfig =
     REVIEW_ROLES.find(({ key }) => key === activeRole) ?? REVIEW_ROLES[0]!;
   const activeRoleOutputs = state.outputs.filter((output) =>
@@ -5764,6 +6302,22 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
   ).length;
   const activeRoleWaiting = activeRoleOutputs.length;
 
+  async function downloadClientSlides() {
+    setClientSlidesExporting(true);
+    setClientSlidesError(null);
+    try {
+      await downloadPmApprovedClientSlides(state);
+    } catch (error) {
+      setClientSlidesError(
+        error instanceof Error
+          ? error.message
+          : "Could not create the client slides. Please try again."
+      );
+    } finally {
+      setClientSlidesExporting(false);
+    }
+  }
+
   return (
     <DecisionCard
       eyebrow="05 / Internal QC"
@@ -5771,7 +6325,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       helper="GD, CS, and PM each pick up only the work they own. Revisions stay inside Internal QC, with the full context attached to the asset."
       status={state.approved ? "Approved" : "Waiting"}
       statusClass={state.approved ? "green" : "blue"}
-      className="neo-stage-qc"
+      className="compass-stage-qc"
       actions={
         <>
           <button
@@ -5788,7 +6342,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
             title={approveAllBlocked ?? undefined}
             onClick={() => dispatch(approveAllAction)}
           >
-            Approve all demo checks
+            Approve all
           </button>
           <button
             className="btn primary"
@@ -5803,12 +6357,12 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       }
     >
       {state.outputs.length ? (
-        <div className="neo-qc-workspace">
-            <aside className="neo-qc-progress-rail">
-              <span className="neo-context-label">Internal QC</span>
+        <div className="compass-qc-workspace">
+            <aside className="compass-qc-progress-rail">
+              <span className="compass-context-label">Internal QC</span>
               <h3>Review progress</h3>
               <p>Track each role's queue before client review.</p>
-              <div className="neo-qc-overall">
+              <div className="compass-qc-overall">
                 <div>
                   <b>
                     {totalChecks
@@ -5821,7 +6375,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   </span>
                 </div>
                 <div
-                  className="neo-qc-progress-track"
+                  className="compass-qc-progress-track"
                   role="progressbar"
                   aria-label="Internal QC progress"
                   aria-valuemin={0}
@@ -5835,7 +6389,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   />
                 </div>
               </div>
-              <div className="neo-qc-role-list">
+              <div className="compass-qc-role-list">
                 {REVIEW_ROLES.map(({ key, label }) => {
                   const eligible = state.outputs.filter((output) =>
                     outputIsEligibleForRole(output, key)
@@ -5847,7 +6401,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                     (output) => currentApprovalRole(output) === key
                   ).length;
                   return (
-                    <div className="neo-qc-role-progress" key={key}>
+                    <div className="compass-qc-role-progress" key={key}>
                       <span className={reviewRoleShort(key).toLowerCase()}>
                         {reviewRoleShort(key)}
                       </span>
@@ -5866,17 +6420,17 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   );
                 })}
               </div>
-              <div className="neo-qc-client-ready">
+              <div className="compass-qc-client-ready">
                 <b>
                   {readyAssets}/{state.outputs.length} client-ready
                 </b>
                 <span>PM-approved assets unlock in Client review.</span>
               </div>
             </aside>
-            <div className="neo-qc-main">
-              <section className="neo-qc-role-focus">
+            <div className="compass-qc-main">
+              <section className="compass-qc-role-focus">
                 <div
-                  className="neo-qc-role-tabs"
+                  className="compass-qc-role-tabs"
                   role="tablist"
                   aria-label="Internal review roles"
                 >
@@ -5896,7 +6450,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                     const waiting = roleQueue.length;
                     return (
                       <button
-                        className={`neo-qc-role-tab ${key === activeRole ? "active" : ""} ${rejected ? "attention" : approvedForRole === eligible.length ? "complete" : ""}`}
+                        className={`compass-qc-role-tab ${key === activeRole ? "active" : ""} ${rejected ? "attention" : approvedForRole === eligible.length ? "complete" : ""}`}
                         type="button"
                         role="tab"
                         aria-selected={key === activeRole}
@@ -5915,25 +6469,48 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                     );
                   })}
                 </div>
-                <div className="neo-qc-role-guide">
+                <div className="compass-qc-role-guide">
                   <span
-                    className={`neo-qc-role-character ${reviewRoleShort(activeRole).toLowerCase()}`}
+                    className={`compass-qc-role-character ${reviewRoleShort(activeRole).toLowerCase()}`}
                     aria-hidden="true"
                   >
                     {reviewRoleShort(activeRole)}
                   </span>
-                  <div className="neo-qc-role-speech">
+                  <div className="compass-qc-role-speech">
                     <b>{activeRoleConfig?.label}</b>
                     <p>{reviewRoleGuide(activeRole)}</p>
                   </div>
-                  <span className="neo-qc-role-summary">
-                    {activeRoleWaiting} to review, {activeRoleApproved} approved
-                  </span>
+                  {activeRole === "projectManager" ? (
+                    <div className="compass-qc-role-guide-actions">
+                      <span className="compass-qc-pm-download-note">
+                        One .pptx with every PM-approved asset, including UGC.
+                      </span>
+                      <button
+                        className="btn primary compass-qc-client-slides-button"
+                        type="button"
+                        disabled={!readyAssets || clientSlidesExporting}
+                        onClick={() => void downloadClientSlides()}
+                      >
+                        {clientSlidesExporting
+                          ? "Creating slides…"
+                          : `Download client slides · ${readyAssets}`}
+                      </button>
+                      {clientSlidesError ? (
+                        <span className="compass-qc-client-slides-error" role="alert">
+                          {clientSlidesError}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="compass-qc-role-summary">
+                      {activeRoleWaiting} to review, {activeRoleApproved} approved
+                    </span>
+                  )}
                 </div>
               </section>
-              <div className="neo-qc-section-head">
+              <div className="compass-qc-section-head">
                 <div>
-                  <span className="neo-context-label">Creative review queue</span>
+                  <span className="compass-context-label">Creative review queue</span>
                   <h3>Assets in {reviewRoleShort(activeRole)} review</h3>
                 </div>
                 <span>
@@ -5941,7 +6518,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                 </span>
               </div>
               {activeRoleOutputs.length ? (
-                <div className="neo-qc-focus-grid">
+                <div className="compass-qc-focus-grid">
                   {activeRoleOutputs.map((output) => (
                     <QcSlide
                       index={state.outputs.indexOf(output)}
@@ -5957,9 +6534,9 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   ))}
                 </div>
               ) : (
-                <div className="neo-qc-queue-clear">
+                <div className="compass-qc-queue-clear">
                   <span
-                    className={`neo-qc-role-character ${reviewRoleShort(activeRole).toLowerCase()}`}
+                    className={`compass-qc-role-character ${reviewRoleShort(activeRole).toLowerCase()}`}
                     aria-hidden="true"
                   >
                     {reviewRoleShort(activeRole)}
@@ -6050,7 +6627,7 @@ function ApprovalDecisionField({
 
   return (
     <>
-      <div className="review-decision-actions neo-qc-decision-actions">
+      <div className="review-decision-actions compass-qc-decision-actions">
         {role === "clientService" ? (
           <button
             className="btn secondary small"
@@ -6078,7 +6655,7 @@ function ApprovalDecisionField({
           onClick={() => setMode(null)}
         >
           <div
-            className="output-modal neo-qc-decision-modal"
+            className="output-modal compass-qc-decision-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby={dialogTitleId}
@@ -6109,11 +6686,11 @@ function ApprovalDecisionField({
                 ? `Marks ${roleShort} approved and sends this creative to ${nextLabel}.`
                 : "Choose the fix owner and add one clear instruction."}
             </p>
-            <div className="neo-qc-decision-meta">
+            <div className="compass-qc-decision-meta">
               <b>{roleShort} approval</b> · {qcContentTypeLabel(output)} · V{output.revisionCount + 1}
             </div>
             {mode === "changes" && !ugc ? (
-              <div className="neo-qc-change-type-field">
+              <div className="compass-qc-change-type-field">
                 <span>What needs to change?</span>
                 <div>
                   {(["artwork", "caption", "both"] as const).map((item) => (
@@ -6130,14 +6707,14 @@ function ApprovalDecisionField({
               </div>
             ) : null}
             {mode === "changes" ? (
-              <div className="neo-qc-route-preview">
+              <div className="compass-qc-route-preview">
                 {ugc || changeType === "caption"
                   ? "Fix owner: CS · Update the hook, script, scenes, creator direction, or caption."
                   : changeType === "artwork"
                     ? "Fix owner: GD · Update and replace the artwork in Internal QC."
                     : changeType === "both"
                       ? "Fix route: GD → CS · Artwork first, then copy."
-                      : "Choose one and Neo will route the revision to the right owner."}
+                      : "Choose one and Compass will route the revision to the right owner."}
               </div>
             ) : null}
             <label className="output-modal-prompt-label">
@@ -6240,15 +6817,15 @@ function QcSlide({
 
   return (
     <article
-      className={`neo-qc-focus-card ${decision === "rejected" || output.status === "needs-revision" ? "work-required" : ""}`}
+      className={`compass-qc-focus-card ${decision === "rejected" || output.status === "needs-revision" ? "work-required" : ""}`}
     >
-      <div className="neo-qc-focus-asset">
-        <div className="neo-qc-focus-visual">
+      <div className="compass-qc-focus-asset">
+        <div className="compass-qc-focus-visual">
           {isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} compact />
           ) : output.assetUrl ? (
             <img
-              className="neo-qc-focus-image"
+              className="compass-qc-focus-image"
               src={output.assetUrl}
               alt={direction?.hook ?? `Creative ${index + 1}`}
             />
@@ -6264,43 +6841,43 @@ function QcSlide({
           )}
         </div>
         {direction?.caption ? (
-          <div className="neo-qc-focus-caption">
+          <div className="compass-qc-focus-caption">
             <span>{isUgcOutput(output) ? "Caption / script direction" : "Caption"}</span>
             <OutputCaptionText caption={direction.caption} scrollable />
           </div>
         ) : null}
       </div>
-      <div className="neo-qc-focus-content">
-        <header className="neo-qc-focus-head">
+      <div className="compass-qc-focus-content">
+        <header className="compass-qc-focus-head">
           <div>
-            <span className="neo-qc-card-role-mark">
+            <span className="compass-qc-card-role-mark">
               <i className={roleShort.toLowerCase()}>{roleShort}</i>
               {roleConfig.label}
             </span>
-            <span className="neo-qc-card-kicker">Creative {index + 1}</span>
-            <span className="neo-qc-content-type-badge">
+            <span className="compass-qc-card-kicker">Creative {index + 1}</span>
+            <span className="compass-qc-content-type-badge">
               <i>{isUgcOutput(output) ? "UG" : output.format.toLowerCase().includes("album") ? "AL" : "ST"}</i>
               {qcContentTypeLabel(output)}
             </span>
             <h4>{direction?.hook ?? `Creative ${index + 1}`}</h4>
           </div>
-          <span className={`neo-qc-state-badge ${decisionClass}`}>
+          <span className={`compass-qc-state-badge ${decisionClass}`}>
             {qcDecisionLabel(decision)}
           </span>
         </header>
-        <div className="neo-qc-card-meta">
+        <div className="compass-qc-card-meta">
           <span>Content type · {qcContentTypeLabel(output)}</span>
           <span>{qcStatusLabel(output.status)}</span>
         </div>
         {isUgcOutput(output) ? (
-          <div className="neo-qc-ugc-ownership">
+          <div className="compass-qc-ugc-ownership">
             <i>UG</i>
             UGC skips GD · CS owns script, scenes, and creator direction
           </div>
         ) : null}
-        <div className="neo-qc-check-box">
+        <div className="compass-qc-check-box">
           <b>{roleShort} checks</b>
-          <div className="neo-qc-check-chips">
+          <div className="compass-qc-check-chips">
             {qcChecklistFor(output, role, roleConfig.checklist).map((check) => (
               <span key={check}>{check}</span>
             ))}
@@ -6309,19 +6886,19 @@ function QcSlide({
         <QcApprovalTrail output={output} />
         {output.clientStatus === "revision" &&
         output.approvalComments.projectManager ? (
-          <div className="neo-qc-work-note client-request">
+          <div className="compass-qc-work-note client-request">
             <b>Client changes requested</b>
             <p>{output.approvalComments.projectManager}</p>
           </div>
         ) : decision === "rejected" && output.approvalComments[role] ? (
-          <div className="neo-qc-work-note">
+          <div className="compass-qc-work-note">
             <b>Changes requested</b>
             <p>{output.approvalComments[role]}</p>
           </div>
         ) : null}
-        <div className="neo-qc-card-actions">
-          <div className="neo-qc-card-utilities">
-            <div className="neo-qc-asset-actions">
+        <div className="compass-qc-card-actions">
+          <div className="compass-qc-card-utilities">
+            <div className="compass-qc-asset-actions">
               {role === "graphicDesign" ? <><button
                 className="btn secondary small download-action"
                 type="button"
@@ -6398,7 +6975,7 @@ function QcApprovalTrail({ output }: { output: CreativeOutput }) {
   );
 
   return (
-    <div className="neo-qc-mini-trail" aria-label="Approval route">
+    <div className="compass-qc-mini-trail" aria-label="Approval route">
       {roles.map((role, index) => {
         const approved = output.approval[role] === "approved";
         const current = role === currentRole;
@@ -6454,7 +7031,7 @@ function downloadFileName(output: CreativeOutput, index: number, blob: Blob): st
       : blob.type === "image/webp"
         ? "webp"
         : "png";
-  return `neo-creative-${index + 1}.${extension}`;
+  return `compass-creative-${index + 1}.${extension}`;
 }
 
 export async function downloadOutputAsset(
@@ -6484,6 +7061,21 @@ async function downloadAllOutputs(outputs: WorkflowState["outputs"]) {
   }
 }
 
+function clientCreativeTitle(output: CreativeOutput, index: number): string {
+  const format = output.format.toLowerCase();
+  const label = format.includes("ugc")
+    ? "UGC"
+    : format.includes("album")
+      ? "Album"
+      : format.includes("motion")
+        ? "Motion"
+        : format.includes("resize")
+          ? "Resize"
+          : "Static";
+
+  return `${label} ${String(index + 1).padStart(2, "0")}`;
+}
+
 export function ClientStage({ state, dispatch }: StageProps) {
   const sendClientAction: WorkflowAction = { type: "send-client" };
   const sendClientBlocked = workflowActionBlockReason(state, sendClientAction);
@@ -6504,6 +7096,12 @@ export function ClientStage({ state, dispatch }: StageProps) {
   const revisionDirection = state.directions.find(
     (direction) => direction.id === revisionOutput?.directionId
   );
+
+  useEffect(() => {
+    if (!state.clientSent && !sendClientBlocked) {
+      dispatch(sendClientAction);
+    }
+  }, [dispatch, sendClientBlocked, state.clientSent]);
 
   function closeRevisionDialog() {
     setRevisionOutputId(null);
@@ -6526,73 +7124,64 @@ export function ClientStage({ state, dispatch }: StageProps) {
     closeRevisionDialog();
   }
 
+  function approveAllClientOutputs() {
+    state.outputs.forEach((output) => {
+      if (output.clientStatus !== "approved") {
+        dispatch({ type: "approve-output", id: output.id });
+      }
+    });
+  }
+
   return (
     <DecisionCard
       eyebrow="06 / Client"
       title="Make feedback easy to act on."
       helper="The client sees the idea, not the production clutter. Every requested change records what needs fixing and routes it correctly."
-      status={
-        allApproved
-          ? "Approved"
-          : state.clientSent
-            ? `${approvedCount}/${state.outputs.length} approved`
-            : "Waiting for review"
-      }
+      status={`${approvedCount} / ${state.outputs.length} approved`}
       statusClass={allApproved ? "green" : "blue"}
-      className="neo-stage-client"
+      className="compass-stage-client"
       actions={
         <>
           <button
-            className="btn secondary download-action"
-            type="button"
-            disabled={!state.outputs.some((output) => output.assetUrl)}
-            onClick={() => void downloadAllOutputs(state.outputs)}
-          >
-            Download all
-          </button>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={state.clientSent || Boolean(sendClientBlocked)}
-            title={sendClientBlocked ?? undefined}
-            onClick={() => dispatch(sendClientAction)}
-          >
-            Send all
-          </button>
-          <button
-            className="btn secondary"
+            className="btn ghost"
             type="button"
             onClick={() => dispatch(backAction)}
           >
             ← Back to Internal QC
           </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled={Boolean(deliverBlocked)}
-            title={deliverBlocked ?? undefined}
-            onClick={() => dispatch(deliverAction)}
-          >
-            Deliver and learn →
-          </button>
+          <div className="compass-client-footer-actions">
+            <button
+              className="btn compass-client-approve-all"
+              type="button"
+              disabled={!state.clientSent}
+              onClick={approveAllClientOutputs}
+            >
+              Approve all demo assets
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={Boolean(deliverBlocked)}
+              title={deliverBlocked ?? undefined}
+              onClick={() => dispatch(deliverAction)}
+            >
+              Deliver and learn →
+            </button>
+          </div>
         </>
       }
     >
-      <p className="client-note neo-client-intro">
-        Send the approved set, then capture the client decision on each
-        creative.
-      </p>
-      <div className="client-grid neo-client-grid">
+      <div className="client-grid compass-client-grid">
         {state.outputs.map((output, index) => {
           const direction = state.directions.find(
             (candidate) => candidate.id === output.directionId
           );
           return (
             <article
-              className={`client-card neo-client-card ${output.clientStatus}`}
+              className={`client-card compass-client-card ${output.clientStatus}`}
               key={output.id}
             >
-              <div className="preview-area neo-client-preview">
+              <div className="preview-area compass-client-preview">
                 {output.assetUrl ? (
                   <img
                     className="generated-preview"
@@ -6610,40 +7199,16 @@ export function ClientStage({ state, dispatch }: StageProps) {
                   </div>
                 )}
               </div>
-              <div className="client-card-body neo-client-card-body">
-                <div className="neo-client-card-copy">
-                  <div className="neo-client-card-heading">
-                    <span>Creative {index + 1}</span>
-                    <span
-                      className={`pill ${output.clientStatus === "approved" ? "green" : output.clientStatus === "revision" ? "red" : ""}`}
-                    >
-                      {output.clientStatus === "revision"
-                        ? "Changes requested"
-                        : output.clientStatus === "approved"
-                          ? "Approved"
-                          : output.clientStatus === "sent"
-                            ? "In review"
-                            : "Pending"}
-                    </span>
-                  </div>
-                  <h3>{direction?.hook ?? `Creative ${index + 1}`}</h3>
-                  <p>{direction ? directionSubheadline(direction) : ""}</p>
+              <div className="client-card-body compass-client-card-body">
+                <div className="compass-client-card-copy">
+                  <h3>{clientCreativeTitle(output, index)}</h3>
+                  <p>{direction?.hook ?? `Creative ${index + 1}`}</p>
                 </div>
-                <div className="neo-client-card-actions">
+                <div className="compass-client-card-actions">
                   <button
-                    className="btn secondary small download-action"
+                    className="btn small"
                     type="button"
-                    disabled={!output.assetUrl}
-                    onClick={() => void downloadOutputAsset(output, index)}
-                  >
-                    Download
-                  </button>
-                  <button
-                    className="btn secondary small"
-                    type="button"
-                    disabled={
-                      !state.clientSent || output.clientStatus === "approved"
-                    }
+                    disabled={!state.clientSent}
                     onClick={() => {
                       setRevisionOutputId(output.id);
                       setRevisionComment("");
@@ -6653,10 +7218,9 @@ export function ClientStage({ state, dispatch }: StageProps) {
                     Request change
                   </button>
                   <button
-                    className="btn primary small"
+                    className="btn small compass-client-approve"
                     type="button"
                     disabled={
-                      output.clientStatus === "approved" ||
                       Boolean(
                         workflowActionBlockReason(state, {
                           type: "approve-output",
@@ -6677,13 +7241,14 @@ export function ClientStage({ state, dispatch }: StageProps) {
                     Approve
                   </button>
                 </div>
-                <div className="neo-client-decision-note">
-                  {output.clientStatus === "approved"
-                    ? "Approved and ready for delivery."
-                    : output.clientStatus === "revision"
-                      ? "Feedback recorded and routed back to Internal QC."
-                      : "Waiting for the client decision."}
-                </div>
+                {output.clientStatus === "approved" ||
+                output.clientStatus === "revision" ? (
+                  <div className="compass-client-decision-note">
+                    {output.clientStatus === "approved"
+                      ? "Approved and ready for delivery."
+                      : "Feedback recorded and routed back to Internal QC."}
+                  </div>
+                ) : null}
               </div>
             </article>
           );
@@ -6692,7 +7257,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
       {revisionOutput ? (
         <div className="output-modal-backdrop" onClick={closeRevisionDialog}>
           <div
-            className="output-modal neo-client-revision-modal"
+            className="output-modal compass-client-revision-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="client-revision-title"
@@ -6913,7 +7478,7 @@ function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {
         <div>
           <h3>Learning suggestions</h3>
           <p>
-            Neo reviews this run's approvals and rejections and proposes
+            Compass reviews this run's approvals and rejections and proposes
             brand learning updates for you to approve.
           </p>
         </div>
@@ -6968,7 +7533,7 @@ function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {
         </div>
       ) : !loading ? (
         <p className="repository-message">
-          Nothing generated yet. Click "Suggest learning" to have Neo
+          Nothing generated yet. Click "Suggest learning" to have Compass
           propose updates from this run's real approval signal.
         </p>
       ) : null}

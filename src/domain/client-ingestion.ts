@@ -1,5 +1,7 @@
 import type { Brand } from "./brand";
 
+export const CLIENT_CATEGORY_MAX_LENGTH = 80;
+
 export interface CreateClientDraftInput {
   name: string;
   facebookUrl: string;
@@ -42,6 +44,14 @@ export function validateFacebookUrl(value: string): string | null {
   return hostname === "facebook.com" || hostname === "fb.com"
     ? null
     : "Enter a Facebook page URL.";
+}
+
+export function validateClientCategory(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length <= CLIENT_CATEGORY_MAX_LENGTH && !/[\r\n]/.test(trimmed)
+    ? null
+    : `Use a short category label (${CLIENT_CATEGORY_MAX_LENGTH} characters or fewer).`;
 }
 
 export function initialsFromClientName(name: string): string {

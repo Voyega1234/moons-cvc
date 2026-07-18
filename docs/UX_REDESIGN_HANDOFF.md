@@ -1,10 +1,10 @@
-# Neo UX/UI redesign handoff
+# Compass UX/UI redesign handoff
 
 Last updated: 2026-07-16 (Asia/Bangkok)
 
 ## Objective
 
-Redesign the Neo React application using the visual language and UX hierarchy
+Redesign the Compass React application using the visual language and UX hierarchy
 from `neo-creative-compass.html`, while preserving the existing backend,
 repositories, API payloads, workflow reducers, persistence format, and async run
 targeting.
@@ -143,7 +143,7 @@ lime/orange semantic accents, soft borders, and medium information density.
   source-style settings strip. On desktop all three controls share one row;
   smaller layouts wrap to two columns and then one without horizontal overflow.
 - Angles card typography deliberately uses the bundled **Sukhumvit Set** family
-  for Thai hooks and supporting copy, with the Neo page font stack only as its
+  for Thai hooks and supporting copy, with the Compass page font stack only as its
   fallback. The hook heading uses the source card's strong 700 weight while
   retaining the more readable 1.08 Thai line height and -0.035em tracking.
 - Angles card density is tightened toward the HTML: 450px minimum height, a
@@ -152,15 +152,15 @@ lime/orange semantic accents, soft borders, and medium information density.
   a user-facing success objective (`Awareness`, `Conversion`, `Efficiency`, or
   `Revenue`) derived from the selected Brief metric without adding prompt input.
 - The Angles review toolbar no longer exposes four competing controls. Only the
-  primary **Let Neo pick** action and a compact overflow trigger remain visible;
+  primary **Let Compass pick** action and a compact overflow trigger remain visible;
   Export PDF, Regenerate all, and Generate more live in the overflow menu.
   Generate more reveals its direction composer only on demand and collapses it
   again after submission or cancellation.
 - The complete Build stage is scoped to the bundled **Sukhumvit Set** family,
   including creative cards, hooks, subheadlines, captions, controls, preview
-  copy, and the artwork detail modal. The Neo page stack remains its fallback.
+  copy, and the artwork detail modal. The Compass page stack remains its fallback.
 - The entire application now uses the bundled **Sukhumvit Set** family through
-  the global Neo `--font` and `--display` tokens. The external Google Sans Flex
+  the global Compass `--font` and `--display` tokens. The external Google Sans Flex
   request was removed, so navigation, stages, cards, dialogs, forms, and review
   surfaces all resolve to the same local font without a font-swap mismatch.
 - Hook generation now creates **two extra candidates per active content type**.
@@ -223,7 +223,7 @@ lime/orange semantic accents, soft borders, and medium information density.
   brand setup. The regular `npm run dev` remains frontend-only; API-backed
   workflow actions are intentionally unsupported in that mode.
 - The browser ingestion trigger now converts a native `Failed to fetch` into an
-  actionable message that tells local developers to start Neo with
+  actionable message that tells local developers to start Compass with
   `npm run dev:full`.
 - Authentication was simplified to passwordless email magic links on
   2026-07-16. The Supabase gate now asks for only a `@convertcake.com` email and
@@ -263,7 +263,7 @@ lime/orange semantic accents, soft borders, and medium information density.
 - Captured the pre-redesign typecheck and test baseline.
 - Created this handoff document.
 - Added `@phosphor-icons/react` as the single frontend icon family.
-- Added the persistent Neo navigation rail, seven-step workflow header,
+- Added the persistent Compass navigation rail, seven-step workflow header,
   responsive welcome hero, live run controls, and Workboard shell.
 - Kept Workboard connected to the existing `overview` workspace view.
 - Kept Library connected to the existing Signal/brand-memory surface.
@@ -376,7 +376,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     footer actions. The whole card is a keyboard-accessible selection target,
     while Edit, Regenerate, and the
     export selector remain independent actions. Regenerate all, Generate
-    more, Let Neo pick, selection quotas, and artwork-mode controls remain
+    more, Let Compass pick, selection quotas, and artwork-mode controls remain
     unchanged.
   - Build now groups outputs by their real `output.format`, adds prototype-style
     format section headers and draft counts, and keeps preview, regenerate,
@@ -423,7 +423,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     inside the card boundary.
   - `stages-redesign.test.tsx` now verifies role-focused rendering and switching
     from the GD queue to the CS queue.
-- Product-facing branding changed from **Moons** to **Neo** across the rail
+- Product-facing branding changed from **Moons** to **Compass** across the rail
   wordmark and accessibility label, document title and metadata, loading and
   authentication states, workflow guidance, action labels, error messages,
   and generation-agent prompt labels.
@@ -431,7 +431,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     `moons-cvc.vercel.app` authentication redirect, n8n webhook URL, package
     identifier, and internal `appId` remain unchanged. These are compatibility
     contracts, not visible brand labels.
-  - Navigation coverage now locks the visible `neo` wordmark and its `Open Neo
+  - Navigation coverage now locks the visible `compass` wordmark and its `Open Compass
     studio` accessible name.
 - Artwork-generation diagnostics now retain a separate sanitized
   `*-image-agent.json` trace for every selected Hook when
@@ -493,7 +493,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     this backend-preserving pass.
   - Notification verification passed on 2026-07-14: 2 focused files / 4 tests,
     TypeScript, prototype reference verification, and the production Vite
-    build. Live visual QA reached the expected Neo authentication gate; the
+    build. Live visual QA reached the expected Compass authentication gate; the
     signed-in header still needs a quick authenticated-browser glance.
 - Brand Profile cleanup now keeps ingestion implementation details out of the
   user-facing memory UI:
@@ -502,7 +502,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     persistence until a user intentionally edits that rule.
   - Past work now loads both saved Facebook posts and Ads Library creatives.
     It groups the two sources clearly, supports text-only Facebook posts, and
-    continues to show delivered Neo work separately.
+    continues to show delivered Compass work separately.
   - The Build reference picker uses the same mixed Past work source, but only
     offers items that have a usable image as visual-generation references.
   - Verification passed on 2026-07-14: 3 focused files / 10 tests, TypeScript,
@@ -568,7 +568,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     and exported bold phrase cannot diverge.
   - Angle PDF review grouping now matches the stakeholder reference. Every
     Angle card has a compact export selector with `Recommended`, `Option`, and
-    `Not selected`. Recommended uses the Neo lime background, Option uses the
+    `Not selected`. Recommended uses the Compass lime background, Option uses the
     soft orange background, and Not selected remains neutral. This export
     grouping is separate from clicking the card, which still controls the
     Create flow. The visible `Adjust bold` control and its modal were removed;
@@ -777,8 +777,8 @@ lime/orange semantic accents, soft borders, and medium information density.
     Mapping rows are now read by header name, including `Questionnaire` and
     `Client Portal`, and invalid Google HTML responses are retried instead of
     being cached as an empty client list. Facebook pages found in a client's
-    Questionnaire appear as preselected source choices in both `Add to Neo`
-    and `Set up brand`; users can still choose the current Neo page or reveal a
+    Questionnaire appear as preselected source choices in both `Add to Compass`
+    and `Set up brand`; users can still choose the current Compass page or reveal a
     manual fallback. Questionnaire content is preselected as optional,
     first-party Brand Kit evidence, sanitized before storage to exclude contact
     sections, persisted as a successful `manual_input` source, and prioritized
@@ -794,10 +794,10 @@ lime/orange semantic accents, soft borders, and medium information density.
     The default fetch dependency is now a wrapper that preserves browser call
     semantics, with a regression test for this exact binding failure. Browser
     verification confirms `Centre Point Group` is searchable again with its
-    `Active · Active` mapping status and `Add to Neo` action. Full verification
+    `Active · Active` mapping status and `Add to Compass` action. Full verification
     passes all 45 test files / 211 tests, TypeScript, and the production build.
   - Brand setup queue feedback was added on 2026-07-15. Manual client creation,
-    `Add to Neo`, and `Set up brand` now lock their submit action with
+    `Add to Compass`, and `Set up brand` now lock their submit action with
     `Starting analysis...` while the backend accepts the request. Once queued,
     Signal shows one accessible confirmation popup with a 5-10 minute estimate
     and tells the user that completion, review, or failure will appear in the
@@ -849,7 +849,7 @@ lime/orange semantic accents, soft borders, and medium information density.
   including tables not directly exposed to the service-role REST client.
   Verification reports zero remaining Jim client rows, jobs, sources, posts,
   ads, visual assets, Brand Kit rows, learning rows, and products. The Google
-  Sheet mapping record remains and should reappear as `Add to Neo`; set up that
+  Sheet mapping record remains and should reappear as `Add to Compass`; set up that
   record again with a manually verified Facebook URL.
 - Power Art Material Past work was audited and repaired on 2026-07-16. The
   verified-empty queued duplicate `power-art-materials-f8255e0a` was deleted,
@@ -945,7 +945,7 @@ lime/orange semantic accents, soft borders, and medium information density.
   mapping through queued ingestion.
 - `src/styles/app.css` - compact Signal source-selection and Questionnaire
   preview styling.
-- `src/styles/neo-redesign.css` - scoped creative-tech visual layer.
+- `src/styles/compass-redesign.css` - scoped creative-tech visual layer.
 - `src/main.tsx` - loads the redesign stylesheet after the legacy stylesheet.
 - `src/config/app.ts` - approved reference metadata.
 - `scripts/verify-prototype.mjs` - verifies the new reference structure.

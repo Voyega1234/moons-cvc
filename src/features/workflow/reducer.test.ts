@@ -56,8 +56,8 @@ describe("workflowReducer", () => {
     expect(updated.outputSize).toBe("3840x2160");
   });
 
-  it("defaults the success metric to CTR and allows a brief-specific choice", () => {
-    expect(initialWorkflowState.successMetric).toBe("CTR");
+  it("defaults the success metric to CVR and allows a brief-specific choice", () => {
+    expect(initialWorkflowState.successMetric).toBe("CVR");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-success-metric",
@@ -556,7 +556,10 @@ describe("workflowReducer", () => {
 
     const updated = state.outputs.find((output) => output.id === first.id);
     expect(updated?.revisionCount).toBe(first.revisionCount + 1);
-    expect(updated?.status).toBe("fixed");
+    expect(updated?.status).toBe("draft");
+    expect(updated?.qaNote).toBeUndefined();
+    expect(updated?.qaReport).toBeUndefined();
+    expect(state.qaComplete).toBe(false);
     expect(updated?.approval).toEqual({
       graphicDesign: null,
       clientService: null,

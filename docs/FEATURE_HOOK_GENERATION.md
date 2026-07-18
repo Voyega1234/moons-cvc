@@ -193,7 +193,7 @@ The harness prompt is adapted from:
 - `agent_prompt/agent_hook.md`
 - `agent_prompt/agent_seasonal.md`
 
-The n8n placeholders from those files are replaced with the current Neo run
+The n8n placeholders from those files are replaced with the current Compass run
 context:
 
 - user brief

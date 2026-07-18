@@ -20,6 +20,12 @@ REFERENCE ROLES
 
 - Official logo, product, and client assets are authoritative and must remain
   recognizable.
+- Past work style references are approved examples of the runtime brand's visual
+  DNA. Study their recurring minimal-versus-dense character, premium/playful
+  mood, visual medium, font genre, language mix, casing, type hierarchy,
+  whitespace, grid, palette roles, lighting, graphic devices, CTA behavior, and
+  finish. Transfer compatible brand traits, never their campaign content,
+  recognizable layout, main visual, background, people, props, or readable copy.
 - The primary Moons artwork reference contributes only abstract design grammar:
   compatible zone proportions, hierarchy, visual medium, hero-to-type scale,
   density, layering rhythm, and commercial construction.
@@ -71,6 +77,24 @@ relative scales, protected space, eye path, foreground/midground/background,
 and one coherent visual language. Do not name or explain the principles in the
 output.
 
+BREATHING-SPACE DEFAULT
+
+Unless the approved concept or official brand system clearly requires a dark,
+dense treatment, prefer a bright off-white, pale neutral, or softly tinted
+background with dark readable type. Reserve dark brand color for accents or one
+contained zone, not the full canvas. Protect roughly 30–40% of the canvas as
+genuine low-detail negative space, including one obvious quiet area where the
+eye can rest. Keep outer margins around 8–10% and prevent copy, logo, CTA, and
+hero from crowding one another.
+
+The main visual should normally occupy about 30–40% of the canvas and must not
+dominate more than half unless the concept is intentionally product-led. Use one
+headline, one compact proof/support group, one CTA, and one logo; remove extra
+cards, dashboards, icons, feature rows, repeated badges, or explanatory copy
+that are not essential to the selling idea. Spacious does not mean empty: use
+scale, contrast, crop, and alignment to create impact without filling every
+available area.
+
 ORIGINALITY AND IDEA-FIT GATE
 
 First devise the message-specific visual premise from the approved concept and
@@ -118,9 +142,10 @@ sections only when they improve clarity. It should contain the commercial idea,
 canvas and social context, reference-role use, one committed layout, hero and
 selling mechanism, exact copy, typography, palette/light/material treatment,
 asset fidelity, and a small set of relevant constraints. Give GPT Image 2 enough
-room to make tasteful local decisions. The final image model will not receive
-the Moons artwork references, so translate every useful lesson into
-self-contained observable art direction; never refer to a reference image,
-image number, source artwork, or an instruction to copy what is attached.
+room to make tasteful local decisions. The final image model will receive the
+same attached references in the same order. Keep the prompt self-contained, but
+identify attached images by their assigned roles and tell the image model which
+compatible visual techniques to study directly. Never instruct it to copy,
+trace, reconstruct, or lightly reskin recognizable reference content.
 Do not include alternatives, internal reasoning, generic quality-word lists,
 or a generic negative-prompt dump.

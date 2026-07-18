@@ -47,15 +47,15 @@ export type ReviewIdeaSection = {
   ideas: IdeaRecommendation[]
 }
 export type ReviewHighlightMap = Record<string, string[]>
-export type NeoReviewPdfItem = {
+export type CompassReviewPdfItem = {
   group: ReviewIdeaGroup
   idea: IdeaRecommendation
   highlightTerms: string[] | undefined
 }
-export type NeoReviewPdfPage = {
+export type CompassReviewPdfPage = {
   contentType: string
   pageIndex: number
-  items: NeoReviewPdfItem[]
+  items: CompassReviewPdfItem[]
 }
 
 async function loadFontAsBase64(url: string) {
@@ -328,11 +328,11 @@ function getCardData(idea: IdeaRecommendation) {
   }
 }
 
-export function buildNeoReviewPdfPages(
+export function buildCompassReviewPdfPages(
   sections: ReviewIdeaSection[],
   highlightMap: ReviewHighlightMap = {},
 ) {
-  const itemsByContentType = new Map<string, NeoReviewPdfItem[]>()
+  const itemsByContentType = new Map<string, CompassReviewPdfItem[]>()
 
   sections.forEach((section) => {
     section.ideas.forEach((idea, index) => {
@@ -347,7 +347,7 @@ export function buildNeoReviewPdfPages(
     })
   })
 
-  const pages: NeoReviewPdfPage[] = []
+  const pages: CompassReviewPdfPage[] = []
   const contentTypeEntries = [...itemsByContentType.entries()].sort(
     ([left], [right]) =>
       contentTypeSortRank(left) - contentTypeSortRank(right) ||
@@ -507,9 +507,9 @@ function drawNeoReviewHeader(
   pdf.line(11, 32, PAGE_WIDTH_MM - 11, 32)
 }
 
-function drawNeoIdeaCard(
+function drawCompassIdeaCard(
   pdf: jsPDF,
-  item: NeoReviewPdfItem,
+  item: CompassReviewPdfItem,
   ideaNumber: number,
   x: number,
   y: number,
@@ -703,13 +703,13 @@ export async function exportIdeasReviewPdf(
   savePdf(pdf, filename)
 }
 
-export async function exportNeoIdeasReviewPdf(
+export async function exportCompassIdeasReviewPdf(
   sections: ReviewIdeaSection[],
   filename: string,
   highlightMap: ReviewHighlightMap = {},
   brandName = "Creative topics",
 ) {
-  const pages = buildNeoReviewPdfPages(sections, highlightMap)
+  const pages = buildCompassReviewPdfPages(sections, highlightMap)
   if (pages.length === 0) return
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" })
@@ -733,7 +733,7 @@ export async function exportNeoIdeasReviewPdf(
     )
 
     page.items.forEach((item, index) => {
-      drawNeoIdeaCard(
+      drawCompassIdeaCard(
         pdf,
         item,
         page.pageIndex * COLUMNS + index + 1,

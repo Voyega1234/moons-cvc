@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { ArrowRight, LockKey, UserSwitch, X } from "@phosphor-icons/react";
+import { ArrowRight, LockKey, Plus, UserSwitch, X } from "@phosphor-icons/react";
 import {
   canEditRun,
   departmentLabel
@@ -9,10 +9,12 @@ import { useWorkspace } from "../../app/providers/workspace-provider";
 
 export function RunOwnershipBar({
   runId,
+  onCreateProject,
   busy = false,
   completed = false
 }: {
   runId: string;
+  onCreateProject: () => void;
   busy?: boolean;
   completed?: boolean;
 }) {
@@ -85,11 +87,11 @@ export function RunOwnershipBar({
 
   return (
     <>
-      <section className={`neo-ownership-bar ${editable ? "owner" : "viewer"}`}>
-        <span className="neo-ownership-icon" aria-hidden="true">
+      <section className={`compass-ownership-bar ${editable ? "owner" : "viewer"}`}>
+        <span className="compass-ownership-icon" aria-hidden="true">
           {editable ? <UserSwitch size={18} /> : <LockKey size={18} />}
         </span>
-        <span className="neo-ownership-copy">
+        <span className="compass-ownership-copy">
           <small>{editable ? "You can edit" : "View only"}</small>
           <b>
             {loading && !ownership
@@ -102,7 +104,18 @@ export function RunOwnershipBar({
           </b>
         </span>
         {ownership ? (
-          <span className="neo-ownership-version">Version {ownership.version}</span>
+          <span className="compass-ownership-version">Version {ownership.version}</span>
+        ) : null}
+        {!editable ? (
+          <button
+            className="btn small"
+            type="button"
+            title="Create a separate project for this client"
+            onClick={onCreateProject}
+          >
+            <Plus size={14} weight="bold" aria-hidden="true" />
+            Create my project
+          </button>
         ) : null}
         {canHandoff && ownership && !completed ? (
           <button
@@ -124,14 +137,14 @@ export function RunOwnershipBar({
             <ArrowRight size={14} weight="bold" aria-hidden="true" />
           </button>
         ) : null}
-        {error ? <small className="neo-ownership-error">Handoff unavailable</small> : null}
-        {success ? <small className="neo-ownership-success">{success}</small> : null}
+        {error ? <small className="compass-ownership-error">Handoff unavailable</small> : null}
+        {success ? <small className="compass-ownership-success">{success}</small> : null}
       </section>
 
       {open ? (
-        <div className="output-modal-backdrop neo-handoff-backdrop" role="presentation">
+        <div className="output-modal-backdrop compass-handoff-backdrop" role="presentation">
           <form
-            className="output-modal neo-handoff-modal"
+            className="output-modal compass-handoff-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="handoff-title"

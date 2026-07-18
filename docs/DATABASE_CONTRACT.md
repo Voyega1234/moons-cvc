@@ -174,7 +174,7 @@ append-only `moons.run_handoffs` audit record in the same transaction.
 Client visibility is prepared through `moons.client_memberships`. A client
 with no membership rows remains visible to every Convert Cake user for the
 current rollout. Once memberships are added for that client, only its members
-and Neo admins can view it.
+and Compass admins can view it.
 
 ## Normalized workflow tables prepared for next slices
 

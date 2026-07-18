@@ -26,7 +26,7 @@ describe("planActiveMappingClientImports", () => {
     expect(rows.map((row) => row.name)).toEqual(["New Active Client"]);
   });
 
-  it("creates a not-started Neo row and carries the first Questionnaire page", () => {
+  it("creates a not-started Compass row and carries the first Questionnaire page", () => {
     const [row] = planActiveMappingClientImports(
       [
         activeClient("New Client", {

@@ -177,7 +177,7 @@ Expected sources:
 - `moons.brand_learning`
 
 The Brand Profile presents Facebook posts and Ads Library creatives as
-reference-only Past work. Delivered Neo work remains a separate group.
+reference-only Past work. Delivered Compass work remains a separate group.
 
 ## Migration
 

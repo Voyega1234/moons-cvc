@@ -98,6 +98,38 @@ export interface ArtworkGenerationResponse {
   outputs: readonly CreativeOutput[];
 }
 
+export interface ArtworkRevisionRequest {
+  requestType: "artwork-revision";
+  model: "gpt-image-2";
+  clientId: string;
+  runId: string;
+  outputId: string;
+  directionId: string;
+  format: string;
+  sourceImageUrl: string;
+  instructions: string;
+  output: {
+    size: ArtworkOutputSize;
+    format: "png";
+  };
+}
+
+type ArtworkRegenerationDirection = Pick<
+  CreativeDirection,
+  | "id"
+  | "hook"
+  | "concept"
+  | "why"
+  | "visual"
+  | "cta"
+  | "supportingPoints"
+  | "formatBeats"
+  | "ctaActionType"
+  | "ctaDestination"
+  | "contactLine"
+  | "caption"
+>;
+
 export async function generateArtworkForSelectedHooks({
   run,
   textInputs = [],
@@ -134,28 +166,14 @@ export async function generateArtworkForSelectedHooks({
   ]);
 }
 
-export async function regenerateOutputImage({
+export async function reviseOutputImage({
   run,
-  direction,
-  extraInstructions
+  output,
+  instructions
 }: {
   run: WorkflowState;
-  direction: Pick<
-    CreativeDirection,
-    | "id"
-    | "hook"
-    | "concept"
-    | "why"
-    | "visual"
-    | "cta"
-    | "supportingPoints"
-    | "formatBeats"
-    | "ctaActionType"
-    | "ctaDestination"
-    | "contactLine"
-    | "caption"
-  >;
-  extraInstructions?: string;
+  output: CreativeOutput;
+  instructions: string;
 }): Promise<CreativeOutput> {
   if (
     env.artworkGenerationMode === "openai" &&
@@ -164,7 +182,115 @@ export async function regenerateOutputImage({
     throw new Error("Artwork generation endpoint is not configured.");
   }
 
+  const request = buildArtworkRevisionRequest({ run, output, instructions });
+  const endpoint = env.artworkGenerationEndpoint;
+  if (!endpoint) {
+    throw new Error("Artwork generation endpoint is not configured.");
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: await buildHeaders(),
+    body: JSON.stringify(request)
+  });
+  const payload = await readJsonResponse<
+    Partial<ArtworkGenerationResponse> & { error?: string }
+  >(response, "Artwork revision");
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? `Artwork revision failed (${response.status}).`);
+  }
+
+  const revised = payload.outputs?.[0];
+  if (!revised) {
+    throw new Error("Artwork revision returned no output.");
+  }
+
+  return normalizeArtworkOutput(revised);
+}
+
+export function buildArtworkRevisionRequest({
+  run,
+  output,
+  instructions
+}: {
+  run: WorkflowState;
+  output: CreativeOutput;
+  instructions: string;
+}): ArtworkRevisionRequest {
+  const sourceImageUrl = output.assetUrl?.trim();
+  if (!sourceImageUrl) {
+    throw new Error("The current artwork image is required for revision.");
+  }
+  const trimmedInstructions = instructions.trim();
+  if (!trimmedInstructions) {
+    throw new Error("Describe the changes you want to apply.");
+  }
+
+  return {
+    requestType: "artwork-revision",
+    model: "gpt-image-2",
+    clientId: run.brand?.id ?? "unbranded",
+    runId: run.id,
+    outputId: output.id,
+    directionId: output.directionId,
+    format: output.format,
+    sourceImageUrl,
+    instructions: trimmedInstructions,
+    output: {
+      size: run.outputSize ?? defaultArtworkOutputSize,
+      format: "png"
+    }
+  };
+}
+
+export async function regenerateOutputImages({
+  run,
+  direction,
+  extraInstructions,
+  sourceImageUrl
+}: {
+  run: WorkflowState;
+  direction: ArtworkRegenerationDirection;
+  extraInstructions?: string;
+  sourceImageUrl?: string;
+}): Promise<readonly CreativeOutput[]> {
+  if (
+    env.artworkGenerationMode === "openai" &&
+    !env.artworkGenerationEndpoint
+  ) {
+    throw new Error("Artwork generation endpoint is not configured.");
+  }
+
+  const request = buildArtworkRegenerationRequest({
+    run,
+    direction,
+    extraInstructions,
+    sourceImageUrl
+  });
+
+  const payload = await requestArtworkGeneration({ request, run });
+  const regenerated = payload.outputs ?? [];
+  if (!regenerated.length) {
+    throw new Error("Artwork regeneration returned no output.");
+  }
+
+  return regenerated.map(normalizeArtworkOutput);
+}
+
+export function buildArtworkRegenerationRequest({
+  run,
+  direction,
+  extraInstructions,
+  sourceImageUrl
+}: {
+  run: WorkflowState;
+  direction: ArtworkRegenerationDirection;
+  extraInstructions?: string;
+  sourceImageUrl?: string;
+}): ArtworkGenerationRequest {
   const trimmedInstructions = extraInstructions?.trim();
+  const trimmedSourceImageUrl = sourceImageUrl?.trim();
   const directionIndex = run.directions.findIndex(
     (item) => item.id === direction.id
   );
@@ -175,7 +301,7 @@ export async function regenerateOutputImage({
   ) {
     throw new Error("UGC uses the editable 9:16 template, not image generation.");
   }
-  const request: ArtworkGenerationRequest = {
+  return {
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
@@ -189,6 +315,15 @@ export async function regenerateOutputImage({
     selectedHooks: [direction],
     textInputs: trimmedInstructions ? [trimmedInstructions] : [],
     referenceImages: [
+      ...(trimmedSourceImageUrl
+        ? [
+            {
+              kind: "url" as const,
+              url: trimmedSourceImageUrl,
+              label: "Current artwork to revise"
+            }
+          ]
+        : []),
       ...referencesForActiveBrand(
         run,
         run.referenceImages.map((item) => ({
@@ -205,15 +340,6 @@ export async function regenerateOutputImage({
       format: "png"
     }
   };
-
-  const payload = await requestArtworkGeneration({ request, run });
-
-  const [regenerated] = payload.outputs ?? [];
-  if (!regenerated) {
-    throw new Error("Artwork regeneration returned no output.");
-  }
-
-  return normalizeArtworkOutput(regenerated);
 }
 
 export function buildArtworkGenerationRequest({
@@ -312,7 +438,7 @@ function buildUgcTemplateOutputs(run: WorkflowState): readonly CreativeOutput[] 
       status: "draft" as const,
       clientStatus: "queued" as const,
       provider: "template",
-      model: "neo-ugc-template",
+      model: "compass-ugc-template",
       revisionCount: 0,
       approval: emptyApprovalGate,
       approvalComments: emptyApprovalComments

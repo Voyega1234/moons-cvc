@@ -315,7 +315,7 @@ describe("workspace serializer", () => {
     });
   });
 
-  it("loads older snapshots without a success metric as CTR", () => {
+  it("loads older snapshots without a success metric as CVR", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -327,7 +327,7 @@ describe("workspace serializer", () => {
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
-    expect(restored?.runsById["run-1"]?.successMetric).toBe("CTR");
+    expect(restored?.runsById["run-1"]?.successMetric).toBe("CVR");
   });
 
   it("loads older snapshots without an image prompt model as GPT 5.6", () => {

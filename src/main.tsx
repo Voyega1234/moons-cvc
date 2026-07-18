@@ -9,7 +9,7 @@ import { ClientIntakeProvider } from "./app/providers/client-intake-provider";
 import { WorkspaceProvider } from "./app/providers/workspace-provider";
 import { RunCollaborationProvider } from "./app/providers/run-collaboration-provider";
 import "./styles/app.css";
-import "./styles/neo-redesign.css";
+import "./styles/compass-redesign.css";
 
 const root = document.getElementById("app");
 

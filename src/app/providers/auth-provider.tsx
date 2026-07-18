@@ -173,13 +173,13 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     <main className="boot-auth">
       <section className="auth-shell">
         <div className="auth-brand-panel" aria-hidden="true">
-          <span className="neo-kicker"><span /> Creative intelligence studio</span>
+          <span className="compass-kicker"><span /> Creative intelligence studio</span>
           <b>Find the idea<br />worth <em>scaling.</em></b>
           <p>One secure account for brand signals, creative decisions, and production memory.</p>
         </div>
         <form className="auth-card" onSubmit={submit}>
           <p className="eyebrow">Convert Cake account</p>
-          <h1>{linkSent ? "Check your email" : "Sign in to Neo"}</h1>
+          <h1>{linkSent ? "Check your email" : "Sign in to Compass"}</h1>
           <p>
             {linkSent
               ? "We sent a secure login link to:"

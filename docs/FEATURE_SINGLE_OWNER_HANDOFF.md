@@ -11,7 +11,7 @@ Every active creative run has one current owner.
 - Completed runs remain viewable but cannot be handed off from the normal UI.
 - Admins can perform the same database handoff when an owner is unavailable.
 
-Neo does not provide simultaneous editing, presence, automatic locks, data
+Compass does not provide simultaneous editing, presence, automatic locks, data
 merging, or multiple editors in this release.
 
 ## Handoff safety
@@ -20,7 +20,7 @@ Before calling the handoff database function, the UI flushes the latest
 workspace save. `moons.handoff_run(...)` then performs one transaction:
 
 1. Lock the run row.
-2. Verify the caller is the owner or a Neo admin.
+2. Verify the caller is the owner or a Compass admin.
 3. Verify the expected version.
 4. Verify the receiving user is active and can view the client.
 5. Change the owner and increment the version.

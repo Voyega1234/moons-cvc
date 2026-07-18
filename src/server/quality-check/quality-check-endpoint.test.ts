@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { GD_CREATIVE_STRATEGIST_CHECKLIST } from "../../domain/quality-check";
 import { handleQualityCheckRequest } from "./quality-check-endpoint";
 
 const requestBody = {
@@ -68,13 +69,14 @@ function qualityAgentResult({
   });
   return {
     outputId: "output-1",
+    agentName: "Creative Strategist",
     score,
     summary,
     gd: {
       passed: gdPassed,
       score: gdScore,
       summary: gdSummary,
-      criteria: Array.from({ length: 4 }, () =>
+      criteria: Array.from({ length: GD_CREATIVE_STRATEGIST_CHECKLIST.length }, () =>
         criterion(gdPassed, gdScore, gdSummary)
       )
     },
@@ -183,6 +185,7 @@ describe("handleQualityCheckRequest", () => {
         reason:
           "GD ต้องแก้: ข้อความในภาพอ่านไม่ชัด\nCS ผ่าน: Key Message และราคาตรงกับ Brief",
         report: expect.objectContaining({
+          agentName: "Creative Strategist",
           score: 81,
           summary: "แนวคิดดี แต่ต้องปรับความชัดของข้อความ",
           suggestion: {
@@ -217,7 +220,15 @@ describe("handleQualityCheckRequest", () => {
       .filter((block) => block.type === "input_text")
       .map((block) => block.text)
       .join("\n");
-    expect(prompt).toContain("ความสวยงาม องค์ประกอบ และจุดนำสายตา");
+    expect(prompt).toContain("ความสวยงาม (Visual Quality)");
+    expect(prompt).toContain("จุดนำสายตา (Visual Hierarchy)");
+    expect(prompt).toContain("Agent name: Creative Strategist");
+    expect(prompt).toContain("first-time scroller");
+    expect(prompt).toContain("Bottom Funnel");
+    expect(prompt).toContain("Claim Accuracy Check");
+    expect(prompt).toContain("ผลลัพธ์สำหรับ UI ต้องสั้นและไม่ซ้ำกัน");
+    expect(prompt).toContain("มีเฉพาะ Top 3 Actionable Recs");
+    expect(prompt).toContain("ข้อความใน Artwork");
     expect(prompt).toContain("Key Message ชัด และตรง Brief / Objective");
     expect(prompt).not.toContain(
       "งานตรง Client Context หรือ Revision Feedback ถ้าเป็นงานแก้"

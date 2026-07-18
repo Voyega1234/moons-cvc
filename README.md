@@ -1,6 +1,6 @@
-# Neo Creative OS
+# Compass Creative OS
 
-Production-oriented TypeScript foundation for the approved Neo prototype.
+Production-oriented TypeScript foundation for the approved Compass prototype.
 
 ## Commands
 
@@ -50,4 +50,4 @@ Supabase client directly.
 In mock mode, unfinished workspace state is stored under the versioned
 `moons.workspace` LocalStorage key. This development adapter is selected only
 from `app/dependencies.ts`.
-# neo-cvc
+# compass-cvc
