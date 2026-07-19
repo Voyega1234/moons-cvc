@@ -24,6 +24,7 @@ import {
   type WorkflowAction,
   type WorkflowState
 } from "./model";
+import { currentApprovalRole } from "./rules";
 
 function assignDirectionsToMix(
   state: WorkflowState,
@@ -132,7 +133,7 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "album-post", quantity: 1 }
     ],
     service: "single-static",
-    artworkMode: "standard",
+    artworkMode: "design-system",
     imagePromptModel: "gpt-5.6-terra",
     outputSize: defaultArtworkOutputSize,
     quantity: 6,
@@ -305,6 +306,11 @@ export function workflowActionToast(
             "Changes requested",
             "The feedback is attached to the correct review owner."
           );
+    case "approve-role":
+      return successToast(
+        "Review queue approved",
+        "The next review queue is ready to open."
+      );
     case "route-output-changes":
       return warningToast(
         "Changes routed",
@@ -746,21 +752,24 @@ export function workflowReducer(
       const resultsByOutputId = new Map(
         action.results.map((result) => [result.outputId, result])
       );
+      const outputs = state.outputs.map((output) => {
+        const result = resultsByOutputId.get(output.id);
+        if (!result) return output;
+        return {
+          ...output,
+          status: result.passed
+            ? ("ready" as const)
+            : ("needs-revision" as const),
+          qaNote: result.reason,
+          qaReport: result.report
+        };
+      });
       return {
         ...state,
-        qaComplete: true,
-        outputs: state.outputs.map((output) => {
-          const result = resultsByOutputId.get(output.id);
-          if (!result) return output;
-          return {
-            ...output,
-            status: result.passed
-              ? ("ready" as const)
-              : ("needs-revision" as const),
-            qaNote: result.reason,
-            qaReport: result.report
-          };
-        })
+        qaComplete: outputs.every(
+          (output) => !output.assetUrl || output.status !== "draft"
+        ),
+        outputs
       };
     }
     case "resolve-qa-output":
@@ -822,6 +831,20 @@ export function workflowReducer(
           projectManager: output.approval.projectManager ?? "approved"
         } as const
       }));
+      return { ...state, outputs, approved: computeApproved(outputs) };
+    }
+    case "approve-role": {
+      const outputs = state.outputs.map((output) =>
+        currentApprovalRole(output) === action.role
+          ? {
+              ...output,
+              approval: {
+                ...output.approval,
+                [action.role]: "approved" as const
+              }
+            }
+          : output
+      );
       return { ...state, outputs, approved: computeApproved(outputs) };
     }
     case "review-output": {

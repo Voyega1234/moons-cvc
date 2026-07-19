@@ -64,7 +64,26 @@ function qualityReport(passed: boolean, score: number): CreativeQualityReport {
       passed,
       score,
       summary: passed ? "GD ผ่านทุกเกณฑ์" : "GD ต้องปรับความชัดของ first frame",
-      criteria: [criterion("ความสวยงาม องค์ประกอบ และจุดนำสายตา")]
+      criteria: [
+        criterion("ความสวยงาม องค์ประกอบ และจุดนำสายตา"),
+        {
+          criterion:
+            "ภาพหยุดสายตาและส่งผลต่อแบรนด์อย่างไร? (Stop-scroll & Brand Impact Audit)",
+          passed: true,
+          score: 90,
+          detail:
+            "Stop-scroll verdict: Strong; Brand perception: Positive เพราะ visual hook ชัดและดูน่าเชื่อถือ",
+          suggestion: ""
+        },
+        {
+          criterion: "งานนี้ดูออกว่าทำจาก AI หรือไม่? (AI-origin Audit)",
+          passed: true,
+          score: 92,
+          detail:
+            "AI-origin verdict: Not obviously AI-generated เพราะแสง เงา และขอบวัตถุต่อเนื่องกัน",
+          suggestion: ""
+        }
+      ]
     },
     cs: {
       passed,
@@ -342,6 +361,66 @@ describe("redesigned workflow stages", () => {
       stage.getByRole("button", { name: "Close brand library" })
     );
     expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
+  });
+
+  it("adds a guideline from the Memory header through file or pasted text", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const analyzeGuideline = vi.spyOn(memoryRepository, "analyzeGuideline");
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={vi.fn()}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Add guideline" }));
+    const dialog = stage.getByRole("dialog", { name: "Add brand guideline" });
+    expect(within(dialog).getByText("Upload file")).toBeTruthy();
+    expect(
+      dialog.querySelector(
+        'input[type="file"][accept="application/pdf,image/png,image/jpeg,image/webp"]'
+      )
+    ).toBeTruthy();
+
+    await user.click(within(dialog).getByRole("button", { name: /Paste text/ }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Guideline text" }),
+      "Use a direct, premium voice with #101828 and #FFFFFF."
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Analyze text" })
+    );
+
+    await waitFor(() =>
+      expect(
+        stage.queryByRole("dialog", { name: "Add brand guideline" })
+      ).toBeNull()
+    );
+    expect(analyzeGuideline).toHaveBeenCalledWith({
+      clientId: state.brand?.id,
+      text: "Use a direct, premium voice with #101828 and #FFFFFF."
+    });
+    expect(
+      stage.getByText(
+        "โทนสงบ หรูหรา ใช้ตัวอักษร sans-serif เรียบง่ายและเว้นพื้นที่ว่างมาก"
+      )
+    ).toBeTruthy();
   });
 
   it("preselects a Questionnaire Facebook page and includes its Brand Kit evidence", async () => {
@@ -1229,6 +1308,8 @@ describe("redesigned workflow stages", () => {
       "Premium features. The difference is visible in one glance."
     );
     expect(failedCard?.textContent).toContain("78");
+    expect(failedCard?.textContent).toContain("Not obviously AI-generated");
+    expect(failedCard?.textContent).toContain("Stop-scroll ready");
     expect(stage.queryByText("Quality check found a fix")).toBeNull();
     await user.click(stage.getByRole("button", { name: "Use suggestion" }));
     const regenerateDialog = stage.getByRole("dialog");
@@ -1258,7 +1339,11 @@ describe("redesigned workflow stages", () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
-    const view = render(<ApprovalStage state={state} dispatch={dispatch} />);
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
     const stage = within(view.container);
     const firstOutput = state.outputs[0];
     if (!firstOutput) throw new Error("Expected a creative output fixture.");
@@ -1284,14 +1369,30 @@ describe("redesigned workflow stages", () => {
         .getAttribute("aria-valuenow")
     ).toBe("0");
     expect(stage.getByRole("heading", { name: "Assets in GD review" })).toBeTruthy();
+    expect(stage.getByRole("button", { name: /Material pack/i })).toBeTruthy();
+    expect(
+      stage.getByRole("button", { name: `Approve all · ${gdOutputCount}` })
+    ).toBeTruthy();
     expect(stage.queryByText("1:1 Static")).toBeNull();
     expect(stage.getAllByText("Static").length).toBeGreaterThan(0);
     expect(
-      stage.getAllByText("ความสวยงาม องค์ประกอบ และจุดนำสายตา")
+      stage.getAllByText(
+        "Visual Quality และ Design Principles ครบถ้วนบนหน้าจอมือถือ"
+      )
     ).toHaveLength(standardGdOutputCount);
     expect(
       stage.getAllByText(
-        "ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ให้ถูกต้อง"
+        "แสง เงา วัสดุ perspective และ contact shadow สมจริงเป็นระบบเดียวกัน"
+      )
+    ).toHaveLength(standardGdOutputCount);
+    expect(
+      stage.getAllByText(
+        "ไม่พบร่องรอย AI-generated ที่พิสูจน์ได้ วัตถุไม่ลอยหรือตัดแปะ"
+      )
+    ).toHaveLength(standardGdOutputCount);
+    expect(
+      stage.getAllByText(
+        "Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ถูกต้อง"
       )
     ).toHaveLength(standardGdOutputCount);
     expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(
@@ -1336,7 +1437,9 @@ describe("redesigned workflow stages", () => {
       comment: ""
     });
     view.rerender(
-      <ApprovalStage state={approvedState} dispatch={dispatch} />
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={approvedState} dispatch={dispatch} />
+      </BrandMemoryProvider>
     );
 
     expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(
@@ -1349,6 +1452,7 @@ describe("redesigned workflow stages", () => {
     await user.click(stage.getByRole("tab", { name: /CS Review/i }));
 
     expect(stage.getByRole("heading", { name: "Assets in CS review" })).toBeTruthy();
+    expect(stage.queryByRole("button", { name: /Material pack/i })).toBeNull();
     expect(stage.queryByText("9:16 UGC")).toBeNull();
     expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
     expect(stage.queryByText("ALBUM")).toBeNull();
@@ -1394,7 +1498,11 @@ describe("redesigned workflow stages", () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
-    const view = render(<ApprovalStage state={state} dispatch={dispatch} />);
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
     const stage = within(view.container);
 
     await user.click(stage.getByRole("tab", { name: /PM Review/i }));
@@ -1408,7 +1516,9 @@ describe("redesigned workflow stages", () => {
 
     const approvedState = workflowReducer(state, { type: "approve-all" });
     view.rerender(
-      <ApprovalStage state={approvedState} dispatch={dispatch} />
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={approvedState} dispatch={dispatch} />
+      </BrandMemoryProvider>
     );
 
     const readyItems = pmApprovedClientSlideItems(approvedState);

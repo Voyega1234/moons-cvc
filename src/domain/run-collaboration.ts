@@ -24,6 +24,21 @@ export interface RunOwnership {
   updatedAt: string;
 }
 
+export const clientMembershipRoles = ["member", "lead", "admin"] as const;
+
+export type ClientMembershipRole = (typeof clientMembershipRoles)[number];
+
+export interface ClientMembership {
+  clientId: string;
+  userId: string;
+  role: ClientMembershipRole;
+}
+
+export interface SetClientPicInput {
+  clientId: string;
+  userId: string;
+}
+
 export interface HandoffRunInput {
   workspaceRunId: string;
   toUserId: string;

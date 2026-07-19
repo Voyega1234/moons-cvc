@@ -43,6 +43,16 @@ export function validateConvertCakeEmail(email: string): string | null {
   return null;
 }
 
+export function shouldRequireAuth({
+  production = import.meta.env.PROD,
+  dataSource = env.dataSource
+}: {
+  production?: boolean;
+  dataSource?: typeof env.dataSource;
+} = {}): boolean {
+  return production || dataSource === "supabase";
+}
+
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);
   if (!value) throw new Error("useAuth must be used inside AuthProvider.");
@@ -50,7 +60,7 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  if (env.dataSource !== "supabase") {
+  if (!shouldRequireAuth()) {
     return (
       <AuthContext.Provider
         value={{ enabled: false, session: null, signOut: async () => undefined }}

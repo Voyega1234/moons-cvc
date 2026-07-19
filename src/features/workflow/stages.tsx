@@ -11,9 +11,12 @@ import {
   ArrowRight,
   Bell,
   CheckCircle,
+  FileArrowUp,
   MagnifyingGlass,
   PencilSimple,
-  Sparkle
+  Sparkle,
+  TextT,
+  X
 } from "@phosphor-icons/react";
 import {
   brandLogoUrl,
@@ -67,6 +70,7 @@ import {
 } from "../../services/artwork-generation/openai-image-generation";
 import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
 import { uploadCreativeMaterial } from "../../services/creative-materials/upload-creative-material";
+import { runQualityCheck } from "../../services/quality-check/run-quality-check";
 import {
   suggestBrandLearning,
   type LearningSuggestion
@@ -87,6 +91,7 @@ import type {
   WorkspaceState
 } from "./model";
 import { creativeMixItems, totalCreativeMixQuantity } from "./model";
+import { WorkflowMaterialPack } from "./material-pack";
 import {
   approvalRolesForOutput,
   currentApprovalRole,
@@ -106,6 +111,7 @@ import {
   useRegenerateHook
 } from "./use-generate-hooks";
 import { useRunQualityCheck } from "./use-run-quality-check";
+import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
 
 interface StageProps {
   state: WorkflowState;
@@ -400,12 +406,31 @@ export function StartStage({ state, dispatch }: StageProps) {
               </p>
             </div>
           ) : (
-            <div className="compass-start-blank">
-              <b>{state.brand.name} context is ready.</b>
-              <p>
-                Voice, visual rules, products, references, and creative
-                learnings are connected to this run.
-              </p>
+            <div
+              className="compass-context-ready"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="compass-context-ready-mark" aria-hidden="true">
+                <span className="compass-context-ready-ring" />
+                <span className="compass-context-ready-core">
+                  <CheckCircle size={29} weight="fill" />
+                </span>
+              </div>
+              <div className="compass-context-ready-copy">
+                <b>{state.brand.name} context is ready.</b>
+                <p>
+                  Voice, visual rules, products, references, and creative
+                  learnings are connected to this run.
+                </p>
+                <div className="compass-context-ready-signal" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              </div>
             </div>
           )}
           <BrandMaterialsSummary
@@ -1131,7 +1156,13 @@ const brandSystemTopics = [
   },
   {
     title: "Mood&Tone",
-    aliases: ["mood&tone", "mood & tone", "น้ำเสียงและแนวทางการสื่อสาร"]
+    aliases: [
+      "mood&tone",
+      "mood & tone",
+      "tone & style",
+      "tone and style",
+      "น้ำเสียงและแนวทางการสื่อสาร"
+    ]
   }
 ] as const;
 
@@ -1150,6 +1181,7 @@ function BrandProfilePanel({
     brand?.library.brand ?? []
   );
   const [products, setProducts] = useState<readonly BrandProduct[]>([]);
+  const [guidelineDialogOpen, setGuidelineDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!brand) return;
@@ -1217,12 +1249,21 @@ function BrandProfilePanel({
   });
 
   return (
-    <aside className="compass-signal-memory-card" aria-label="Brand profile">
+    <>
+      <aside className="compass-signal-memory-card" aria-label="Brand profile">
       <div className="compass-signal-memory-top">
         <div>
           <h3>{brand.name} memory</h3>
           <p>Logo, colors, and the signals guiding this run.</p>
         </div>
+        <button
+          className="btn secondary compass-memory-guideline-button"
+          type="button"
+          onClick={() => setGuidelineDialogOpen(true)}
+        >
+          <FileArrowUp size={16} weight="bold" aria-hidden="true" />
+          Add guideline
+        </button>
       </div>
       <div className="compass-brand-snapshot">
         <div className="compass-brand-snapshot-identity">
@@ -1308,7 +1349,160 @@ function BrandProfilePanel({
           )}
         </div>
       </div>
-    </aside>
+      </aside>
+      {guidelineDialogOpen ? (
+        <GuidelineQuickAddDialog
+          brandName={brand.name}
+          clientId={brand.id}
+          initialItems={brandRules}
+          onSaved={setBrandRules}
+          onClose={() => setGuidelineDialogOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function GuidelineQuickAddDialog({
+  brandName,
+  clientId,
+  initialItems,
+  onSaved,
+  onClose
+}: {
+  brandName: string;
+  clientId: string;
+  initialItems: readonly LibraryItem[];
+  onSaved: (items: readonly LibraryItem[]) => void;
+  onClose: () => void;
+}) {
+  const repository = useBrandMemoryRepository();
+  const [mode, setMode] = useState<"choose" | "text">("choose");
+  const [guidelineText, setGuidelineText] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function analyze(source: GuidelineSource) {
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const items = await analyzeAndSaveBrandGuideline({
+        repository,
+        clientId,
+        items: initialItems,
+        source
+      });
+      onSaved(items);
+      setAnalyzing(false);
+      onClose();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not analyze guideline."
+      );
+      setAnalyzing(false);
+    }
+  }
+
+  return (
+    <div
+      className="output-modal-backdrop compass-guideline-backdrop"
+      onClick={analyzing ? undefined : onClose}
+    >
+      <section
+        className="output-modal compass-guideline-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-guideline-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="output-modal-head compass-guideline-head">
+          <div>
+            <h3 id="quick-guideline-title">Add brand guideline</h3>
+            <p>Connect a file or approved text to {brandName} memory.</p>
+          </div>
+          <button
+            className="compass-guideline-close"
+            type="button"
+            aria-label="Close guideline upload"
+            disabled={analyzing}
+            onClick={onClose}
+          >
+            <X size={18} weight="bold" aria-hidden="true" />
+          </button>
+        </header>
+
+        {mode === "choose" ? (
+          <div className="compass-guideline-choices">
+            <label
+              className={`compass-guideline-choice ${analyzing ? "disabled" : ""}`}
+            >
+              <span className="compass-guideline-choice-icon" aria-hidden="true">
+                <FileArrowUp size={24} weight="duotone" />
+              </span>
+              <b>{analyzing ? "Analyzing file..." : "Upload file"}</b>
+              <small>PDF, PNG, JPEG, or WEBP</small>
+              <input
+                className="file-input"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                disabled={analyzing}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void analyze({ file });
+                }}
+              />
+            </label>
+            <button
+              className="compass-guideline-choice"
+              type="button"
+              disabled={analyzing}
+              onClick={() => setMode("text")}
+            >
+              <span className="compass-guideline-choice-icon" aria-hidden="true">
+                <TextT size={24} weight="duotone" />
+              </span>
+              <b>Paste text</b>
+              <small>Voice, tone, CI, positioning, or colors</small>
+            </button>
+          </div>
+        ) : (
+          <div className="compass-guideline-text-mode">
+            <label className="output-modal-prompt-label">
+              <span>Guideline text</span>
+              <textarea
+                autoFocus
+                value={guidelineText}
+                disabled={analyzing}
+                placeholder="Paste approved brand guideline text here..."
+                rows={7}
+                onChange={(event) => setGuidelineText(event.target.value)}
+              />
+            </label>
+            <div className="output-modal-actions">
+              <button
+                className="btn ghost"
+                type="button"
+                disabled={analyzing}
+                onClick={() => setMode("choose")}
+              >
+                Back
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                disabled={analyzing || !guidelineText.trim()}
+                onClick={() => void analyze({ text: guidelineText })}
+              >
+                {analyzing ? "Analyzing..." : "Analyze text"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error ? <p className="memory-error">{error}</p> : null}
+      </section>
+    </div>
   );
 }
 
@@ -1799,6 +1993,74 @@ function ProductField({ label, value }: { label: string; value: string }) {
   );
 }
 
+type GuidelineSource = { file: File } | { text: string };
+
+function upsertLibraryItem(
+  items: readonly LibraryItem[],
+  saved: LibraryItem
+): readonly LibraryItem[] {
+  return items.some((item) => item.id === saved.id)
+    ? items.map((item) => (item.id === saved.id ? saved : item))
+    : [...items, saved];
+}
+
+async function analyzeAndSaveBrandGuideline({
+  repository,
+  clientId,
+  items,
+  source
+}: {
+  repository: BrandMemoryRepository;
+  clientId: string;
+  items: readonly LibraryItem[];
+  source: GuidelineSource;
+}): Promise<readonly LibraryItem[]> {
+  const analysis = await repository.analyzeGuideline(
+    "file" in source
+      ? { clientId, file: source.file }
+      : { clientId, text: source.text }
+  );
+  let nextItems = items;
+
+  async function saveRule(ruleTitle: string, description: string) {
+    const existing = findRuleByTitle(nextItems, ruleTitle);
+    const saved = existing
+      ? await repository.updateBrandRule({
+          id: existing.id,
+          title: ruleTitle,
+          description
+        })
+      : await repository.createBrandRule({
+          clientId,
+          title: ruleTitle,
+          description
+        });
+    nextItems = upsertLibraryItem(nextItems, saved);
+  }
+
+  if (analysis.summary.trim()) {
+    await saveRule("Tone & Style", analysis.summary.trim());
+  }
+
+  for (const [ruleTitle, newColors] of [
+    ["Colors", analysis.primaryColors],
+    ["Secondary colors", analysis.secondaryColors]
+  ] as const) {
+    if (!newColors.length) continue;
+    const existing = findRuleByTitle(nextItems, ruleTitle);
+    const merged = Array.from(
+      new Set(
+        [...extractColorSwatches(existing), ...newColors].map((value) =>
+          value.toUpperCase()
+        )
+      )
+    );
+    await saveRule(ruleTitle, merged.join(", "));
+  }
+
+  return nextItems;
+}
+
 function BrandKitMemoryList({
   clientId,
   initialItems,
@@ -1908,72 +2170,18 @@ function BrandKitMemoryList({
     }
   }
 
-  async function mergeColorsIntoRule(
-    ruleTitle: string,
-    newColors: readonly string[]
-  ) {
-    if (!newColors.length) return;
-
-    const rule = findRuleByTitle(items, ruleTitle);
-    const existingColors = extractColorSwatches(rule);
-    const merged = Array.from(
-      new Set(
-        [...existingColors, ...newColors].map((value) => value.toUpperCase())
-      )
-    );
-    const saved = rule
-      ? await repository.updateBrandRule({
-          id: rule.id,
-          title: ruleTitle,
-          description: merged.join(", ")
-        })
-      : await repository.createBrandRule({
-          clientId,
-          title: ruleTitle,
-          description: merged.join(", ")
-        });
-    setItems((current) =>
-      current.some((item) => item.id === saved.id)
-        ? current.map((item) => (item.id === saved.id ? saved : item))
-        : [...current, saved]
-    );
-  }
-
-  async function handleAnalyzeGuideline(
-    source: { file: File } | { text: string }
-  ) {
+  async function handleAnalyzeGuideline(source: GuidelineSource) {
     setAnalyzingGuideline(true);
     setGuidelineError(null);
 
     try {
-      const analysis = await repository.analyzeGuideline(
-        "file" in source
-          ? { clientId, file: source.file }
-          : { clientId, text: source.text }
-      );
-
-      if (analysis.summary.trim()) {
-        const existing = findRuleByTitle(items, "Tone & Style");
-        const saved = existing
-          ? await repository.updateBrandRule({
-              id: existing.id,
-              title: "Tone & Style",
-              description: analysis.summary.trim()
-            })
-          : await repository.createBrandRule({
-              clientId,
-              title: "Tone & Style",
-              description: analysis.summary.trim()
-            });
-        setItems((current) =>
-          current.some((item) => item.id === saved.id)
-            ? current.map((item) => (item.id === saved.id ? saved : item))
-            : [...current, saved]
-        );
-      }
-
-      await mergeColorsIntoRule("Colors", analysis.primaryColors);
-      await mergeColorsIntoRule("Secondary colors", analysis.secondaryColors);
+      const nextItems = await analyzeAndSaveBrandGuideline({
+        repository,
+        clientId,
+        items,
+        source
+      });
+      setItems(nextItems);
 
       if ("text" in source) {
         setGuidelineText("");
@@ -3784,6 +3992,14 @@ function ReferenceLibraryPicker({
     );
   }
 
+  function saveLatestLogoReference(saved: LibraryItem) {
+    upsertBrandRule(saved);
+    dispatch({
+      type: "sync-brand-logo-reference",
+      item: libraryItemsWithImages([saved])[0] ?? null
+    });
+  }
+
   async function addColor(hex: string) {
     const trimmed = hex.trim();
     if (!HEX_COLOR_PATTERN.test(trimmed)) {
@@ -3977,7 +4193,7 @@ function ReferenceLibraryPicker({
             <BrandLogoCard
               clientId={clientId}
               logoItem={logoRule}
-              onSaved={upsertBrandRule}
+              onSaved={saveLatestLogoReference}
             />
             <InlineAddForm
               placeholder="#1D1D1F"
@@ -4166,6 +4382,11 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     error: createError
   } = useCreateSelectedHooks(state, dispatch);
 
+  useEffect(() => {
+    if (state.artworkMode === "design-system") return;
+    dispatch({ type: "set-artwork-mode", mode: "design-system" });
+  }, [dispatch, state.artworkMode]);
+
   async function handleExportAngles() {
     setExportingAngles(true);
     setExportAnglesError(null);
@@ -4251,75 +4472,29 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             aria-label="Artwork generation mode"
           >
             <button
-              className={state.artworkMode === "standard" ? "active" : ""}
+              className="active"
               type="button"
               disabled={creating}
-              aria-pressed={state.artworkMode === "standard"}
-              onClick={() =>
-                dispatch({ type: "set-artwork-mode", mode: "standard" })
-              }
-            >
-              Standard
-            </button>
-            <button
-              className={state.artworkMode === "design-system" ? "active" : ""}
-              type="button"
-              disabled={creating}
-              aria-pressed={state.artworkMode === "design-system"}
+              aria-pressed="true"
               onClick={() =>
                 dispatch({ type: "set-artwork-mode", mode: "design-system" })
               }
             >
               Design system
             </button>
-            <button
-              className={
-                state.artworkMode === "reference-library" ? "active" : ""
-              }
-              type="button"
-              disabled={creating}
-              aria-pressed={state.artworkMode === "reference-library"}
-              onClick={() =>
-                dispatch({
-                  type: "set-artwork-mode",
-                  mode: "reference-library"
-                })
-              }
-            >
-              Reference library
-            </button>
           </div>
         </div>
         <label className="compass-angle-setting">
-          <span className="compass-angle-setting-label">
-            {state.artworkMode === "design-system"
-              ? "Generation path"
-              : "Image prompt model"}
-          </span>
+          <span className="compass-angle-setting-label">Generation path</span>
           <select
             className="compass-angle-model-select"
-            aria-label="Image prompt model"
+            aria-label="Generation path"
             value={state.imagePromptModel}
-            disabled={creating || state.artworkMode === "design-system"}
-            onChange={(event) =>
-              dispatch({
-                type: "set-image-prompt-model",
-                model: event.target.value as WorkflowState["imagePromptModel"]
-              })
-            }
+            disabled
           >
-            {state.artworkMode === "design-system" ? (
-              <option value={state.imagePromptModel}>
-                Luna treatment → GPT Image 2
-              </option>
-            ) : (
-              <>
-                <option value="gpt-5.6-terra">GPT 5.6 (OpenAI)</option>
-                <option value="anthropic/claude-sonnet-4.6">
-                  Claude Sonnet 4.6 (OpenRouter)
-                </option>
-              </>
-            )}
+            <option value={state.imagePromptModel}>
+              Luna treatment → GPT Image 2
+            </option>
           </select>
         </label>
         <label className="compass-angle-setting compass-angle-size-setting">
@@ -4722,7 +4897,11 @@ function HookEditModal({
             <p className="eyebrow">Edit hook</p>
             <h3 id="hook-edit-title">Update this creative direction</h3>
           </div>
-          <button className="btn ghost" type="button" onClick={onClose}>
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
@@ -5808,6 +5987,12 @@ function QualityReportDetails({ report }: { report: CreativeQualityReport }) {
     .filter((criterion) => !criterion.passed)
     .sort((left, right) => left.score - right.score)
     .slice(0, 3);
+  const aiOriginAudit = report.gd.criteria.find((criterion) =>
+    criterion.criterion.includes("AI-origin Audit")
+  );
+  const brandImpactAudit = report.gd.criteria.find((criterion) =>
+    criterion.criterion.includes("Stop-scroll & Brand Impact Audit")
+  );
 
   return (
     <div className="compass-build-qa-details">
@@ -5824,6 +6009,28 @@ function QualityReportDetails({ report }: { report: CreativeQualityReport }) {
             <strong>{area.score}</strong>
           </div>
         ))}
+        {aiOriginAudit ? (
+          <div title={aiOriginAudit.detail}>
+            <b>AI-origin</b>
+            <span className={aiOriginAudit.passed ? "passed" : "needs"}>
+              {aiOriginAudit.passed
+                ? "Not obviously AI-generated"
+                : "AI tells found"}
+            </span>
+            <strong>{aiOriginAudit.score}</strong>
+          </div>
+        ) : null}
+        {brandImpactAudit ? (
+          <div title={brandImpactAudit.detail}>
+            <b>Brand impact</b>
+            <span className={brandImpactAudit.passed ? "passed" : "needs"}>
+              {brandImpactAudit.passed
+                ? "Stop-scroll ready"
+                : "Attention / brand risk"}
+            </span>
+            <strong>{brandImpactAudit.score}</strong>
+          </div>
+        ) : null}
       </div>
       {priorityIssues.length ? (
         <details>
@@ -5951,9 +6158,13 @@ function OutputRegenerateModal({
   initialPrompt?: string;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
-  const [regenerating, setRegenerating] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "regenerating" | "checking">(
+    "idle"
+  );
+  const [replacementApplied, setReplacementApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const album = isAlbumOutput(output);
+  const busy = phase !== "idle";
 
   const handleRegenerate = async () => {
     if (!direction) {
@@ -5961,8 +6172,9 @@ function OutputRegenerateModal({
       return;
     }
 
-    setRegenerating(true);
+    setPhase("regenerating");
     setError(null);
+    let imageReplaced = false;
 
     try {
       const updatedOutputs = album
@@ -5984,11 +6196,18 @@ function OutputRegenerateModal({
       if (album && orderedUpdated.length < outputs.length) {
         throw new Error("Album regeneration did not return every panel.");
       }
-      outputs.forEach((currentOutput, index) => {
+      const replacements = outputs.map((currentOutput, index) => {
         const updated = orderedUpdated[index];
-        if (!updated?.assetUrl) {
+        const assetUrl = updated?.assetUrl;
+        if (!updated || !assetUrl) {
           throw new Error("Regeneration did not return an image.");
         }
+        return {
+          currentOutput,
+          updated: { ...updated, assetUrl }
+        };
+      });
+      replacements.forEach(({ currentOutput, updated }) => {
         dispatch({
           type: "replace-output-asset",
           id: currentOutput.id,
@@ -5999,20 +6218,57 @@ function OutputRegenerateModal({
           ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {})
         });
       });
+      setReplacementApplied(true);
+      imageReplaced = true;
+      setPhase("checking");
+
+      const replacementById = new Map(
+        replacements.map(({ currentOutput, updated }) => [
+          currentOutput.id,
+          updated
+        ])
+      );
+      const nextOutputs = run.outputs.map((currentOutput) => {
+        const updated = replacementById.get(currentOutput.id);
+        if (!updated?.assetUrl) return currentOutput;
+        return {
+          ...currentOutput,
+          assetUrl: updated.assetUrl,
+          ...(updated.assetStoragePath
+            ? { assetStoragePath: updated.assetStoragePath }
+            : {}),
+          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {}),
+          status: "draft" as const,
+          qaNote: undefined,
+          qaReport: undefined
+        };
+      });
+      const qaResults = await runQualityCheck(
+        { ...run, outputs: nextOutputs, qaComplete: false },
+        replacements.map(({ currentOutput }) => currentOutput.id)
+      );
+      dispatch({ type: "run-qa", results: qaResults });
       setPrompt("");
       playGenerationSuccessSound();
       onClose();
     } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Could not regenerate image.";
       setError(
-        caught instanceof Error ? caught.message : "Could not regenerate image."
+        imageReplaced
+          ? `Image regenerated, but automatic quality check failed: ${message} Close this window and run Recheck drafts.`
+          : message
       );
     } finally {
-      setRegenerating(false);
+      setPhase("idle");
     }
   };
 
   return (
-    <div className="output-modal-backdrop" onClick={onClose}>
+    <div
+      className="output-modal-backdrop"
+      onClick={busy ? undefined : onClose}
+    >
       <div
         className="output-modal"
         role="dialog"
@@ -6025,7 +6281,12 @@ function OutputRegenerateModal({
             <p className="eyebrow">Creative preview</p>
             <h3>{direction?.hook ?? "Creative"}</h3>
           </div>
-          <button className="btn ghost" type="button" onClick={onClose}>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
@@ -6055,7 +6316,7 @@ function OutputRegenerateModal({
           </span>
           <textarea
             value={prompt}
-            disabled={regenerating}
+            disabled={busy || replacementApplied}
             placeholder="Example: Make the background lighter, remove the text overlay, zoom in on the product."
             onChange={(event) => setPrompt(event.target.value)}
           />
@@ -6070,7 +6331,7 @@ function OutputRegenerateModal({
           <button
             className="btn secondary"
             type="button"
-            disabled={regenerating}
+            disabled={busy}
             onClick={onClose}
           >
             Close
@@ -6078,17 +6339,21 @@ function OutputRegenerateModal({
           <button
             className="btn primary"
             type="button"
-            disabled={regenerating || (!album && !prompt.trim())}
+            disabled={busy || replacementApplied || (!album && !prompt.trim())}
             onClick={() => void handleRegenerate()}
           >
-            {regenerating ? <Spinner /> : null}
-            {regenerating
-              ? "Regenerating..."
-              : initialPrompt
-                ? "Apply suggestion"
-                : album
-                  ? "Regenerate album"
-                  : "Regenerate image"}
+            {busy ? <Spinner /> : null}
+            {phase === "checking"
+              ? "Checking quality..."
+              : phase === "regenerating"
+                ? "Regenerating..."
+                : replacementApplied
+                  ? "Image regenerated"
+                  : initialPrompt
+                    ? "Apply suggestion"
+                    : album
+                      ? "Regenerate album"
+                      : "Regenerate image"}
           </button>
         </div>
       </div>
@@ -6263,11 +6528,6 @@ function outputIsEligibleForRole(
 
 export function ApprovalStage({ state, dispatch }: StageProps) {
   const backAction: WorkflowAction = { type: "set-stage", stage: "studio" };
-  const approveAllAction: WorkflowAction = { type: "approve-all" };
-  const approveAllBlocked = workflowActionBlockReason(
-    state,
-    approveAllAction
-  );
   const clientAction: WorkflowAction = { type: "set-stage", stage: "client" };
   const clientBlocked = workflowActionBlockReason(state, clientAction);
   const [activeRole, setActiveRole] = useState<ApprovalRole>(() =>
@@ -6301,6 +6561,13 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       output.approval[activeRole] === "approved"
   ).length;
   const activeRoleWaiting = activeRoleOutputs.length;
+  const activeRoleIndex = REVIEW_ROLES.findIndex(({ key }) => key === activeRole);
+  const nextRole = REVIEW_ROLES[activeRoleIndex + 1];
+  const approveRoleAction: WorkflowAction = {
+    type: "approve-role",
+    role: activeRole
+  };
+  const approveRoleBlocked = workflowActionBlockReason(state, approveRoleAction);
 
   async function downloadClientSlides() {
     setClientSlidesExporting(true);
@@ -6338,21 +6605,37 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
           <button
             className="btn secondary"
             type="button"
-            disabled={Boolean(approveAllBlocked)}
-            title={approveAllBlocked ?? undefined}
-            onClick={() => dispatch(approveAllAction)}
+            disabled={Boolean(approveRoleBlocked)}
+            title={approveRoleBlocked ?? undefined}
+            onClick={() => dispatch(approveRoleAction)}
           >
-            Approve all
+            Approve all · {activeRoleOutputs.length}
           </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled={Boolean(clientBlocked)}
-            title={clientBlocked ?? undefined}
-            onClick={() => dispatch(clientAction)}
-          >
-            Open Client Review
-          </button>
+          {nextRole ? (
+            <button
+              className="btn primary"
+              type="button"
+              disabled={Boolean(activeRoleOutputs.length)}
+              title={
+                activeRoleOutputs.length
+                  ? `Approve the remaining ${reviewRoleShort(activeRole)} creatives first.`
+                  : undefined
+              }
+              onClick={() => setActiveRole(nextRole.key)}
+            >
+              Open {nextRole.label}
+            </button>
+          ) : (
+            <button
+              className="btn primary"
+              type="button"
+              disabled={Boolean(clientBlocked)}
+              title={clientBlocked ?? undefined}
+              onClick={() => dispatch(clientAction)}
+            >
+              Open Client Review
+            </button>
+          )}
         </>
       }
     >
@@ -6508,6 +6791,9 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   )}
                 </div>
               </section>
+              {activeRole === "graphicDesign" && activeRoleOutputs.length ? (
+                <WorkflowMaterialPack state={state} />
+              ) : null}
               <div className="compass-qc-section-head">
                 <div>
                   <span className="compass-context-label">Creative review queue</span>
@@ -7559,7 +7845,65 @@ interface RunAttention {
   urgent: boolean;
 }
 
-type WorkboardFilter = "all" | "mine" | "attention" | "active" | "unstarted";
+type WorkboardFilter =
+  | "all"
+  | "mine"
+  | "pic"
+  | "attention"
+  | "active"
+  | "unstarted";
+
+function ClientPicControl({ clientId }: { clientId: string }) {
+  const collaboration = useOptionalRunCollaboration();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const currentMember = collaboration?.members.find(
+    (member) => member.userId === collaboration.currentUserId
+  );
+  const clientPic = collaboration?.clientPicByClientId[clientId];
+
+  if (!collaboration?.enabled || !currentMember?.isAdmin) {
+    return (
+      <small className="workboard-client-pic">
+        Client PIC · {clientPic?.displayName ?? "Not assigned"}
+      </small>
+    );
+  }
+
+  return (
+    <label className="workboard-client-pic-control">
+      <span>Client PIC</span>
+      <select
+        aria-label="Client PIC"
+        disabled={saving}
+        value={clientPic?.userId ?? ""}
+        onChange={async (event) => {
+          const userId = event.target.value;
+          if (!userId) return;
+          setSaving(true);
+          setError(null);
+          try {
+            await collaboration.setClientPic({ clientId, userId });
+          } catch (caught) {
+            setError(
+              caught instanceof Error ? caught.message : "Could not update PIC."
+            );
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <option value="" disabled>Choose PIC</option>
+        {collaboration.members.map((member) => (
+          <option key={member.userId} value={member.userId}>
+            {member.displayName} · {departmentLabel(member.department)}
+          </option>
+        ))}
+      </select>
+      {error ? <em title={error}>Update failed</em> : null}
+    </label>
+  );
+}
 const WORKBOARD_PAGE_SIZE = 50;
 
 interface WorkboardProjectState {
@@ -7742,6 +8086,7 @@ export function Overview({
     const ownership = collaboration?.ownershipByRunId[run.id] ?? null;
     const ownerUserId = ownership?.currentOwnerUserId ?? null;
     const owner = ownerUserId ? memberByUserId.get(ownerUserId) ?? null : null;
+    const clientPic = collaboration?.clientPicByClientId[brand.id] ?? null;
     return [
       {
         key: run.id,
@@ -7750,6 +8095,7 @@ export function Overview({
         attention,
         owner,
         ownerUserId,
+        clientPic,
         projectName: workboardProjectName(run),
         projectMeta: workboardProjectMeta(run),
         status: workboardProjectState(brand, run, attention)
@@ -7763,25 +8109,34 @@ export function Overview({
     attention: null,
     owner: null,
     ownerUserId: null,
+    clientPic: collaboration?.clientPicByClientId[brand.id] ?? null,
     projectName: "New creative project",
     projectMeta: "Choose a content type to begin",
     status: workboardProjectState(brand, null, null)
   }));
   const allProjectRows = [...activeProjectRows, ...readyProjectRows];
   const projectRows = allProjectRows
-    .filter(({ brand, projectName, run, attention, owner, ownerUserId }) => {
+    .filter(
+      ({ brand, projectName, run, attention, owner, ownerUserId, clientPic }) => {
       const matchesSearch =
         !normalizedQuery ||
         brand.name.toLocaleLowerCase().includes(normalizedQuery) ||
         brand.category.toLocaleLowerCase().includes(normalizedQuery) ||
         projectName.toLocaleLowerCase().includes(normalizedQuery) ||
-        owner?.displayName.toLocaleLowerCase().includes(normalizedQuery);
+        owner?.displayName.toLocaleLowerCase().includes(normalizedQuery) ||
+        clientPic?.displayName.toLocaleLowerCase().includes(normalizedQuery);
       if (!matchesSearch) return false;
       if (filter === "mine") {
         return Boolean(
           run &&
             collaboration?.currentUserId &&
             ownerUserId === collaboration.currentUserId
+        );
+      }
+      if (filter === "pic") {
+        return Boolean(
+          collaboration?.currentUserId &&
+            clientPic?.userId === collaboration.currentUserId
         );
       }
       if (filter === "attention") return Boolean(attention);
@@ -7808,6 +8163,11 @@ export function Overview({
   ).length;
   const readyClientCount = readyProjectRows.length;
   const attentionProjectCount = attentionItems.length;
+  const picCount = allProjectRows.filter(
+    ({ clientPic }) =>
+      Boolean(collaboration?.currentUserId) &&
+      clientPic?.userId === collaboration?.currentUserId
+  ).length;
 
   function openProject(brand: Brand, run: WorkflowState | null) {
     if (run) {
@@ -7884,6 +8244,7 @@ export function Overview({
               [
                 ["all", "All"],
                 ["mine", `Assigned to me ${mineCount}`],
+                ["pic", `I'm PIC ${picCount}`],
                 ["attention", `Need action ${attentionProjectCount}`],
                 ["active", "Active"],
                 ["unstarted", "Ready"]
@@ -8012,6 +8373,7 @@ export function Overview({
                     <span>
                       <b>{ownerName}</b>
                       <small>{ownerMeta}</small>
+                      <ClientPicControl clientId={brand.id} />
                     </span>
                   </div>
                   <div className="workboard-client-stage">

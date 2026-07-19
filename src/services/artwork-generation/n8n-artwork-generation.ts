@@ -51,14 +51,20 @@ export function buildN8nArtworkGenerationRequest({
   request: ArtworkGenerationRequest;
   brand: Brand | null;
 }): N8nArtworkGenerationRequest {
+  const selectedLogoUrl = request.referenceImages.find(
+    (image) => image.kind === "url" && isLogoReference(image.label)
+  );
+
   return {
     ...request,
     logoUrl:
+      (selectedLogoUrl?.kind === "url" ? selectedLogoUrl.url : null) ??
       brand?.library.brand.find(
         (item) => item.title.trim().toLowerCase() === "logo"
-      )?.assetUrl ?? null,
+      )?.assetUrl ??
+      null,
     referenceImageUrls: request.referenceImages.flatMap((image) =>
-      image.kind === "url"
+      image.kind === "url" && !isLogoReference(image.label)
         ? [
             {
               url: image.url,
@@ -68,6 +74,10 @@ export function buildN8nArtworkGenerationRequest({
         : []
     )
   };
+}
+
+function isLogoReference(label: string | undefined): boolean {
+  return label?.trim().toLowerCase() === "logo";
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

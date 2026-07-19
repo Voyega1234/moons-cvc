@@ -154,6 +154,20 @@ export function workflowActionBlockReason(
       return run.outputs.some((output) => output.status === "needs-revision")
         ? "Resolve every quality suggestion before internal approval."
         : null;
+    case "approve-role":
+      if (!run.outputs.length) return "Create outputs before internal QC.";
+      if (!run.qaComplete) return "Run QA before internal review.";
+      {
+        const roleOutputs = run.outputs.filter(
+          (output) => currentApprovalRole(output) === action.role
+        );
+        if (!roleOutputs.length) {
+          return `No creatives are waiting for ${approvalRoleLabel(action.role)} review.`;
+        }
+        return roleOutputs.some((output) => output.status === "needs-revision")
+          ? "Resolve every quality suggestion in this queue before approval."
+          : null;
+      }
     case "review-output":
       if (!run.qaComplete) return "Run QA before internal review.";
       if (action.decision === "rejected" && !action.comment.trim()) {

@@ -6,7 +6,7 @@ import { DirectionsStage } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
 
 describe("DirectionsStage artwork mode", () => {
-  it("shows Standard by default and dispatches artwork mode selections", async () => {
+  it("shows only Design System and keeps it as the active generation mode", async () => {
     const user = userEvent.setup();
     const dispatch = vi.fn();
     const state = {
@@ -21,37 +21,22 @@ describe("DirectionsStage artwork mode", () => {
     render(<DirectionsStage state={state} dispatch={dispatch} />);
 
     expect(
-      screen.getByRole("button", { name: "Standard" }).getAttribute(
+      screen.getByRole("button", { name: "Design system" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");
+    expect(screen.queryByRole("button", { name: "Standard" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Reference library" })
+    ).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Design system" }));
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "design-system"
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: "Reference library" })
-    );
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "reference-library"
-    });
-
-    const modelSelect = screen.getByRole("combobox", {
-      name: "Image prompt model"
+    const pathSelect = screen.getByRole("combobox", {
+      name: "Generation path"
     }) as HTMLSelectElement;
-    expect(modelSelect.value).toBe("gpt-5.6-terra");
-
-    await user.selectOptions(modelSelect, "anthropic/claude-sonnet-4.6");
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-image-prompt-model",
-      model: "anthropic/claude-sonnet-4.6"
-    });
+    expect(pathSelect.disabled).toBe(true);
+    expect(pathSelect.selectedOptions[0]?.textContent).toBe(
+      "Luna treatment → GPT Image 2"
+    );
 
     const sizeSelect = screen.getByRole("combobox", {
       name: "Output size"
@@ -62,6 +47,26 @@ describe("DirectionsStage artwork mode", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-output-size",
       size: "3840x2160"
+    });
+  });
+
+  it("moves a saved non-visible artwork mode to Design System", () => {
+    const dispatch = vi.fn();
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "reference-library" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    render(<DirectionsStage state={state} dispatch={dispatch} />);
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "design-system"
     });
   });
 
@@ -113,7 +118,7 @@ describe("DirectionsStage artwork mode", () => {
     const stage = within(view.container);
 
     const pathSelect = stage.getByRole("combobox", {
-      name: "Image prompt model"
+      name: "Generation path"
     }) as HTMLSelectElement;
     expect(pathSelect.disabled).toBe(true);
     expect(pathSelect.selectedOptions[0]?.textContent).toBe(

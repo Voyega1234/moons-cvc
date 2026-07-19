@@ -15,9 +15,13 @@ export interface QualityCheckResult {
 }
 
 export async function runQualityCheck(
-  run: WorkflowState
+  run: WorkflowState,
+  outputIds?: readonly string[]
 ): Promise<readonly QualityCheckResult[]> {
-  const checkable = run.outputs.filter((output) => output.assetUrl);
+  const requestedIds = outputIds ? new Set(outputIds) : null;
+  const checkable = run.outputs.filter(
+    (output) => output.assetUrl && (!requestedIds || requestedIds.has(output.id))
+  );
   if (!checkable.length) return [];
 
   const request = {
@@ -70,6 +74,14 @@ export async function runQualityCheck(
 
   if (!Array.isArray(payload.results)) {
     throw new Error("Quality check returned no results.");
+  }
+
+  const returnedIds = new Set(payload.results.map((result) => result.outputId));
+  const missing = checkable.filter((output) => !returnedIds.has(output.id));
+  if (missing.length) {
+    throw new Error(
+      `Quality check did not return ${missing.length} expected ${missing.length === 1 ? "creative" : "creatives"}.`
+    );
   }
 
   return payload.results;

@@ -33,6 +33,8 @@ export default async function handler(
         process.env.OPENROUTER_IMAGE_PROMPT_MODEL,
       ARTWORK_GENERATION_DEBUG_LOG_DIR:
         process.env.ARTWORK_GENERATION_DEBUG_LOG_DIR,
+      CREATIVE_LEARNING_CAPTURE_ENABLED:
+        process.env.CREATIVE_LEARNING_CAPTURE_ENABLED,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     }

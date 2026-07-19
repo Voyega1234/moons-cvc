@@ -1,6 +1,8 @@
 import type {
+  ClientMembership,
   HandoffRunInput,
   RunOwnership,
+  SetClientPicInput,
   TeamDepartment,
   TeamMember
 } from "../../domain/run-collaboration";
@@ -75,6 +77,39 @@ export class SupabaseRunCollaborationRepository
       version: result.version,
       status: "active",
       updatedAt: result.updated_at
+    };
+  }
+
+  async listClientMemberships(): Promise<readonly ClientMembership[]> {
+    const { data, error } = await getSupabaseClient()
+      .schema("moons")
+      .from("client_memberships")
+      .select("client_id,user_id,role")
+      .order("client_id");
+
+    if (error) throw error;
+    return (data ?? []).map((membership) => ({
+      clientId: membership.client_id,
+      userId: membership.user_id,
+      role: membership.role
+    }));
+  }
+
+  async setClientPic(input: SetClientPicInput): Promise<ClientMembership> {
+    const { data, error } = await getSupabaseClient()
+      .schema("moons")
+      .rpc("set_client_pic", {
+        p_client_id: input.clientId,
+        p_user_id: input.userId
+      });
+
+    if (error) throw error;
+    const result = data?.[0];
+    if (!result) throw new Error("The PIC change did not return a membership.");
+    return {
+      clientId: result.client_id,
+      userId: result.user_id,
+      role: result.role
     };
   }
 }

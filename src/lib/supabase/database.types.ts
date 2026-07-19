@@ -574,6 +574,60 @@ export type Database = {
           updated_at?: string;
         }
       >;
+      selected_hook_learning_candidates: TableDefinition<
+        {
+          id: string;
+          client_id: string;
+          workspace_run_id: string;
+          direction_id: string;
+          output_id: string;
+          service: string;
+          artwork_mode: string;
+          hook_text: string;
+          concept: string;
+          rationale: string;
+          visual_direction: string;
+          cta: string;
+          caption: string;
+          hook_payload: Json;
+          image_url: string | null;
+          asset_bucket: string;
+          asset_storage_path: string;
+          provider: string | null;
+          model: string | null;
+          created_by: string | null;
+          selected_at: string;
+          generated_at: string;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: string;
+          client_id: string;
+          workspace_run_id: string;
+          direction_id: string;
+          output_id: string;
+          service: string;
+          artwork_mode: string;
+          hook_text: string;
+          concept?: string;
+          rationale?: string;
+          visual_direction?: string;
+          cta?: string;
+          caption?: string;
+          hook_payload?: Json;
+          image_url?: string | null;
+          asset_bucket: string;
+          asset_storage_path: string;
+          provider?: string | null;
+          model?: string | null;
+          created_by?: string | null;
+          selected_at?: string;
+          generated_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        }
+      >;
       exports: TableDefinition<
         {
           id: string;
@@ -875,6 +929,17 @@ export type Database = {
           current_owner_user_id: string;
           version: number;
           updated_at: string;
+        }[];
+      };
+      set_client_pic: {
+        Args: {
+          p_client_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          client_id: string;
+          user_id: string;
+          role: "member" | "lead" | "admin";
         }[];
       };
       claim_next_brand_analysis_job: {

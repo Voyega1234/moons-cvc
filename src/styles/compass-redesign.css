@@ -333,6 +333,34 @@
 
 .compass-app .client-pill {
   padding: 0 12px;
+  max-width: 270px;
+}
+
+.compass-app .client-pill-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.compass-app .client-pill-copy b,
+.compass-app .client-pill-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .client-pill-copy b {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.compass-app .client-pill-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8.5px;
+  font-weight: 500;
 }
 
 .compass-app .refresh {
@@ -1374,6 +1402,211 @@
   line-height: 1.45;
 }
 
+.compass-app .compass-context-ready {
+  position: relative;
+  isolation: isolate;
+  min-height: 126px;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin-top: 13px;
+  padding: 20px 22px;
+  overflow: hidden;
+  border: 1px solid rgba(86, 100, 245, 0.2);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 7% 50%, rgba(86, 100, 245, 0.085), transparent 28%),
+    #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 10px 28px rgba(28, 35, 52, 0.045);
+  text-align: left;
+}
+
+.compass-app .compass-context-ready::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: -34%;
+  width: 28%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(86, 100, 245, 0.055),
+    transparent
+  );
+  transform: skewX(-16deg);
+}
+
+.compass-app .compass-context-ready-mark {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+}
+
+.compass-app .compass-context-ready-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(86, 100, 245, 0.19);
+  border-radius: 50%;
+}
+
+.compass-app .compass-context-ready-ring::before,
+.compass-app .compass-context-ready-ring::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+
+.compass-app .compass-context-ready-ring::before {
+  inset: 7px;
+  border: 1px dashed rgba(86, 100, 245, 0.24);
+}
+
+.compass-app .compass-context-ready-ring::after {
+  top: -3px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px #fff;
+}
+
+.compass-app .compass-context-ready-core {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(86, 100, 245, 0.16);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--accent);
+  box-shadow: 0 7px 18px rgba(45, 54, 123, 0.1);
+}
+
+.compass-app .compass-context-ready-copy {
+  min-width: 0;
+}
+
+.compass-app .compass-context-ready-copy b {
+  display: block;
+  color: var(--ink);
+  font-size: 13.5px;
+  letter-spacing: -0.015em;
+}
+
+.compass-app .compass-context-ready-copy p {
+  max-width: 58ch;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.compass-app .compass-context-ready-signal {
+  position: relative;
+  width: 126px;
+  height: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 13px;
+}
+
+.compass-app .compass-context-ready-signal::before {
+  content: "";
+  position: absolute;
+  right: 3px;
+  left: 3px;
+  height: 1px;
+  background: rgba(86, 100, 245, 0.2);
+}
+
+.compass-app .compass-context-ready-signal::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 2px 7px rgba(45, 54, 123, 0.2);
+}
+
+.compass-app .compass-context-ready-signal i {
+  position: relative;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #cbd0ff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .compass-app .compass-context-ready::after {
+    animation: compass-context-ready-sweep 5.8s var(--ease) infinite;
+  }
+
+  .compass-app .compass-context-ready-ring {
+    animation: compass-context-ready-orbit 7.5s linear infinite;
+  }
+
+  .compass-app .compass-context-ready-core {
+    animation: compass-context-ready-breathe 3.4s var(--ease) infinite;
+  }
+
+  .compass-app .compass-context-ready-signal::after {
+    animation: compass-context-ready-trace 3.8s var(--ease) infinite;
+  }
+}
+
+@keyframes compass-context-ready-sweep {
+  0%, 18% { transform: translateX(0) skewX(-16deg); opacity: 0; }
+  28% { opacity: 1; }
+  64%, 100% { transform: translateX(490%) skewX(-16deg); opacity: 0; }
+}
+
+@keyframes compass-context-ready-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes compass-context-ready-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.055); }
+}
+
+@keyframes compass-context-ready-trace {
+  0%, 10% { transform: translateX(0); opacity: 0.65; }
+  50% { opacity: 1; }
+  90%, 100% { transform: translateX(117px); opacity: 0.65; }
+}
+
+@media (max-width: 560px) {
+  .compass-app .compass-context-ready {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 13px;
+    min-height: 112px;
+    padding: 17px;
+  }
+
+  .compass-app .compass-context-ready-mark {
+    width: 46px;
+    height: 46px;
+  }
+
+  .compass-app .compass-context-ready-core {
+    width: 30px;
+    height: 30px;
+  }
+}
+
 .compass-app .compass-material-uploader {
   margin-top: 11px;
   padding: 12px;
@@ -1492,6 +1725,153 @@
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.compass-app .compass-memory-guideline-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.compass-app .compass-memory-guideline-button:hover {
+  border-color: rgba(86, 100, 245, 0.34);
+  background: #f8f9ff;
+}
+
+.compass-app .compass-guideline-backdrop {
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.compass-app .compass-guideline-modal {
+  max-width: 560px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 28px 80px rgba(23, 27, 39, 0.2);
+}
+
+.compass-app .compass-guideline-head {
+  margin-bottom: 20px;
+}
+
+.compass-app .compass-guideline-head h3 {
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+
+.compass-app .compass-guideline-head p {
+  max-width: 42ch;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.compass-app .compass-guideline-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.compass-app .compass-guideline-close:hover:not(:disabled) {
+  border-color: var(--line2);
+  background: var(--surface2);
+}
+
+.compass-app .compass-guideline-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compass-app .compass-guideline-choice {
+  min-width: 0;
+  min-height: 154px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 180ms var(--ease),
+    border-color 180ms var(--ease),
+    background 180ms var(--ease),
+    box-shadow 180ms var(--ease);
+}
+
+.compass-app .compass-guideline-choice:hover:not(:disabled),
+.compass-app label.compass-guideline-choice:hover:not(.disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(86, 100, 245, 0.34);
+  background: #fafaff;
+  box-shadow: 0 12px 28px rgba(32, 38, 75, 0.07);
+}
+
+.compass-app .compass-guideline-choice.disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.compass-app .compass-guideline-choice-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: auto;
+  border-radius: 13px;
+  background: #f0f2ff;
+  color: var(--accent);
+}
+
+.compass-app .compass-guideline-choice b {
+  font-size: 13.5px;
+}
+
+.compass-app .compass-guideline-choice small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.compass-app .compass-guideline-text-mode textarea {
+  min-height: 160px;
+}
+
+.compass-app .compass-guideline-modal .memory-error {
+  margin: 14px 0 0;
+}
+
+@media (max-width: 560px) {
+  .compass-app .compass-guideline-modal {
+    padding: 19px;
+  }
+
+  .compass-app .compass-guideline-choices {
+    grid-template-columns: 1fr;
+  }
+
+  .compass-app .compass-guideline-choice {
+    min-height: 128px;
+  }
 }
 
 .compass-app .compass-brand-snapshot {
@@ -4636,7 +5016,7 @@
 
 .compass-app .compass-build-qa-score-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 6px;
 }
 
@@ -6161,7 +6541,7 @@
     minmax(210px, 1.35fr)
     minmax(140px, 0.82fr)
     minmax(165px, 1fr)
-    minmax(140px, 0.82fr)
+    minmax(180px, 0.98fr)
     minmax(105px, 0.62fr)
     minmax(115px, 0.72fr)
     78px;
@@ -6282,6 +6662,57 @@
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+.compass-app .workboard-client-pic {
+  display: block;
+  margin-top: 4px;
+  color: #475569;
+  font-size: 8.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.compass-app .workboard-client-pic-control {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.compass-app .workboard-client-pic-control > span {
+  color: #475569;
+  font-size: 8px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.compass-app .workboard-client-pic-control select {
+  width: 100%;
+  min-width: 0;
+  height: 21px;
+  padding: 0 18px 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.compass-app .workboard-client-pic-control select:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.compass-app .workboard-client-pic-control em {
+  grid-column: 1 / -1;
+  color: #b42318;
+  font-size: 8px;
+  font-style: normal;
 }
 
 .compass-app .workboard-owner-avatar {
@@ -6443,7 +6874,7 @@
       minmax(200px, 1.3fr)
       minmax(130px, 0.8fr)
       minmax(155px, 1fr)
-      minmax(135px, 0.82fr)
+      minmax(170px, 0.9fr)
       minmax(105px, 0.65fr)
       78px;
   }
@@ -7277,5 +7708,295 @@
 
   .compass-app .compass-ownership-bar .btn {
     width: 100%;
+  }
+}
+
+/* Downloadable source files for GD work inside Internal QC. */
+.compass-app .compass-project-material-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+
+.compass-app .compass-stage-qc .compass-project-material-bar {
+  justify-content: stretch;
+  margin: 0;
+}
+
+.compass-app .compass-stage-qc .compass-project-material-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.compass-app .compass-project-material-button {
+  min-width: 270px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--soft);
+  text-align: left;
+}
+
+.compass-app .compass-project-material-button > svg {
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accentSoft);
+}
+
+.compass-app .compass-project-material-button span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.compass-app .compass-project-material-button b {
+  font-size: 13px;
+}
+
+.compass-app .compass-project-material-button small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-project-material-button strong {
+  min-width: 28px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accentSoft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.compass-app .compass-material-pack-backdrop {
+  z-index: 92;
+}
+
+.compass-app .compass-material-pack-modal {
+  width: min(900px, calc(100vw - 32px));
+  max-height: min(820px, calc(100dvh - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.compass-app .compass-material-pack-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compass-app .compass-material-pack-head > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.compass-app .compass-material-pack-head > div:first-child > span {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.compass-app .compass-material-pack-head h3,
+.compass-app .compass-material-pack-head p {
+  margin: 0;
+}
+
+.compass-app .compass-material-pack-head h3 {
+  font-size: 22px;
+}
+
+.compass-app .compass-material-pack-head p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compass-app .compass-material-pack-head > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compass-app .compass-material-pack-head .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.compass-app .compass-material-pack-close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.compass-app .compass-material-pack-body {
+  max-height: calc(min(820px, 100dvh - 32px) - 100px);
+  padding: 20px 24px 26px;
+  overflow: auto;
+}
+
+.compass-app .compass-material-pack-group + .compass-material-pack-group {
+  margin-top: 22px;
+}
+
+.compass-app .compass-material-pack-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.compass-app .compass-material-pack-group h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.compass-app .compass-material-pack-group > header span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compass-app .compass-material-pack-group > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compass-app .compass-material-pack-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.compass-app .compass-material-pack-thumb {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.compass-app .compass-material-pack-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.compass-app .compass-material-pack-item > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-material-pack-item b,
+.compass-app .compass-material-pack-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-material-pack-item b {
+  font-size: 12px;
+}
+
+.compass-app .compass-material-pack-item small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.compass-app .compass-material-pack-item .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.compass-app .compass-material-pack-empty {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.compass-app .compass-material-pack-empty b {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.compass-app .compass-material-pack-empty span {
+  max-width: 390px;
+  font-size: 11px;
+}
+
+.compass-app .compass-material-pack-filename-note {
+  display: grid;
+  gap: 3px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compass-app .compass-material-pack-filename-note b {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.compass-app .compass-material-pack-filename-note small {
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .compass-app .compass-project-material-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .compass-app .compass-material-pack-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .compass-app .compass-material-pack-head > div:last-child .btn {
+    flex: 1;
+  }
+
+  .compass-app .compass-material-pack-group > div {
+    grid-template-columns: 1fr;
   }
 }

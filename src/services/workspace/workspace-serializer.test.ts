@@ -129,7 +129,7 @@ describe("workspace serializer", () => {
     expect(restored?.toast).toBeNull();
   });
 
-  it("loads older snapshots without an artwork mode as standard", () => {
+  it("loads older snapshots without an artwork mode as Design System", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -141,7 +141,7 @@ describe("workspace serializer", () => {
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
-    expect(restored?.runsById["run-1"]?.artworkMode).toBe("standard");
+    expect(restored?.runsById["run-1"]?.artworkMode).toBe("design-system");
   });
 
   it("restores an interrupted generation as retryable after refresh", () => {

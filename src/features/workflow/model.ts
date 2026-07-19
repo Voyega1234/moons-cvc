@@ -161,6 +161,7 @@ export type WorkflowAction =
       decision: NonNullable<ReviewDecision>;
       comment: string;
     }
+  | { type: "approve-role"; role: ApprovalRole }
   | {
       type: "route-output-changes";
       id: string;

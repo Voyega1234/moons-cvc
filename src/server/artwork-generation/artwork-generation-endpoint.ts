@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 import {
@@ -41,6 +41,12 @@ import {
   generateImage,
   type ReferenceImageInput
 } from "./openai-images-client.js";
+import {
+  buildSelectedHookLearningCandidates,
+  isSelectedHookLearningCaptureEnabled,
+  SupabaseSelectedHookLearningCandidateStore,
+  type SelectedHookLearningCandidateStore
+} from "./selected-hook-learning.js";
 
 type FetchLike = typeof fetch;
 type SelectedHook = ArtworkGenerationRequest["selectedHooks"][number];
@@ -59,6 +65,7 @@ export interface ArtworkGenerationEndpointEnv {
   OPENROUTER_API_KEY?: string;
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
   ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
+  CREATIVE_LEARNING_CAPTURE_ENABLED?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -96,6 +103,11 @@ export interface ArtworkGenerationEndpointOptions {
     supabaseAnonKey: string;
     accessToken: string;
   }) => ArtworkStorageClient;
+  createLearningCandidateStore?: (options: {
+    supabaseUrl: string;
+    supabaseAnonKey: string;
+    accessToken: string;
+  }) => SelectedHookLearningCandidateStore;
 }
 
 const ARTWORK_BUCKET = "creative-assets";
@@ -222,7 +234,8 @@ export async function handleArtworkGenerationRequest({
   env,
   fetchImpl = fetch,
   writeDebugLog = writeImageRequestDebugLog,
-  createStorageClient = defaultCreateStorageClient
+  createStorageClient = defaultCreateStorageClient,
+  createLearningCandidateStore = defaultCreateLearningCandidateStore
 }: ArtworkGenerationEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -322,6 +335,25 @@ export async function handleArtworkGenerationRequest({
       fetchImpl
     });
 
+    if (isSelectedHookLearningCaptureEnabled(env.CREATIVE_LEARNING_CAPTURE_ENABLED)) {
+      const candidates = buildSelectedHookLearningCandidates({ input, outputs });
+      if (candidates.length) {
+        try {
+          const candidateStore = createLearningCandidateStore({
+            supabaseUrl,
+            supabaseAnonKey,
+            accessToken: auth.accessToken
+          });
+          await candidateStore.upsertCandidates(candidates);
+        } catch (error) {
+          console.warn(
+            "Could not capture selected hook learning candidates.",
+            error
+          );
+        }
+      }
+    }
+
     return jsonResponse({ ok: true, outputs });
   } catch (error) {
     return jsonResponse({ ok: false, error: readableError(error) }, 500);
@@ -414,11 +446,15 @@ export function buildArtworkRevisionPrompt(instructions: string): string {
     "Image 1 is the source of truth for the core advertising idea and recognizable hero visual, but its current layout and styling are not locked. The result must look visibly more considered, persuasive, and production-ready—not like the same artwork with one small patch.",
     "Treat the following creative review direction as the minimum required improvement, not the limit of what you may enhance:",
     instructions.trim(),
+    "Before editing, perform an anti-AI production audit of Image 1. Look for inconsistent geometry or perspective, conflicting light direction, missing contact shadows, weak ambient occlusion, floating or pasted elements, melted edges, repeated textures, warped text or logos, implausible materials, excessive glow, generic glossy CGI, fake interface details, and decorative clutter without a visual system. Correct every visible issue that applies; do not invent defects that are not present.",
+    "The finished advertisement must not look obviously AI-generated. Make it feel art-directed, composited, retouched, and finished by an experienced designer. Preserve intentional 3D or stylized art when appropriate, but replace synthetic plastic smoothness with believable material texture, controlled imperfection, coherent depth, clean edges, and purposeful graphic construction.",
+    "At mobile-feed size, the revised artwork must earn the intended audience's attention within one second and strengthen rather than weaken brand perception. Create one distinctive visual or typographic hook, immediate message comprehension, recognizable brand character, and a credible reason to keep looking. Eliminate any cheap, generic, cluttered, misleading, or visibly AI-made treatment that could reduce trust; do not use sensational decoration or clickbait as a substitute for art direction.",
+    "Build one plausible lighting system across the full canvas. Keep key light direction, color temperature, reflections, highlights, cast shadows, contact shadows, and ambient occlusion consistent with object position and surface. Correct scale and perspective so every element feels grounded in the same scene.",
     "Preserve the core concept, marketing intent, recognizable main visual or product, correct brand identity, essential headline meaning, and aspect ratio. Do not replace the campaign with an unrelated idea or generic template.",
     "Use professional art-direction judgment across the whole canvas. You may redesign the grid and composition; change font style, weights, line breaks, scale, alignment, and text containers; reposition, resize, crop, or refine existing elements; simplify or rewrite secondary copy; strengthen the CTA; improve lighting, depth, retouching, and graphic layering; and create a clearer visual journey.",
     "You may add relevant supporting elements when they make the advertisement feel more complete: icons, benefit modules, labels, dividers, microcopy, proof or trust strips, platform or partner elements such as Google or Meta, and brand-appropriate graphic accents. Integrate them into one coherent design system instead of pasting them into empty space.",
     "Plausible editable placeholder proof, offer details, or supporting copy may be introduced when useful for a complete social advertisement. Do not duplicate the logo, wordmark, CTA, or the same claim in multiple places, and do not create internally contradictory information.",
-    "Apply hierarchy, balance, contrast, alignment, proximity, repetition, emphasis, white space, scale, rhythm, unity, and grid discipline. Use empty areas intentionally, but keep at least one genuine quiet zone. Avoid tiny unreadable text, excessive decoration, crowded edges, and making every element equally loud.",
+    "Apply Balance, Contrast, Emphasis, Movement, Dominance, Pattern, Rhythm, Unity, Variety, Proportion, Scale, and Space together with hierarchy, alignment, proximity, and grid discipline. Use empty areas intentionally, keep at least one genuine quiet zone, and judge readability at mobile-feed size. Avoid tiny text, excessive decoration, crowded edges, an oversized hero that suffocates the layout, and making every element equally loud.",
     "Make a material improvement in at least three areas such as typography, composition, hierarchy, brand presence, CTA, supporting graphics, lighting, or final finish. Return one polished, high-end, production-ready social media advertisement."
   ].join("\n\n");
 }
@@ -436,6 +472,22 @@ function defaultCreateStorageClient({
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${accessToken}` } }
   });
+}
+
+function defaultCreateLearningCandidateStore({
+  supabaseUrl,
+  supabaseAnonKey,
+  accessToken
+}: {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  accessToken: string;
+}): SelectedHookLearningCandidateStore {
+  const client = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } }
+  });
+  return new SupabaseSelectedHookLearningCandidateStore(client);
 }
 
 async function generateOutputsForSelectedHooks({
@@ -528,9 +580,8 @@ async function generateOutputForHook({
   storage: ArtworkStorageClient;
   fetchImpl: FetchLike;
 }): Promise<readonly ArtworkOutput[]> {
-  const isStandardAlbum =
-    input.artworkMode === "standard" && input.service === "album-post";
-  const generationSize: ArtworkOutputSize = isStandardAlbum
+  const isAlbum = input.service === "album-post";
+  const generationSize: ArtworkOutputSize = isAlbum
     ? "2048x2048"
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
@@ -558,7 +609,7 @@ async function generateOutputForHook({
   const generationReferences = promptReferences;
   const prompt =
     input.artworkMode === "design-system"
-      ? buildDirectDesignSystemPrompt({
+      ? await buildDirectDesignSystemPrompt({
           input,
           hook,
           references: promptReferences,
@@ -579,16 +630,17 @@ async function generateOutputForHook({
           canvasRatio,
           fetchImpl
         });
-  const imagePrompt = (input.artworkMode === "design-system"
-    ? [prompt]
-    : input.artworkMode === "reference-library"
-      ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
-      : [
-          buildReferenceFidelityInstruction(promptReferences, "standard"),
-          buildConceptAlignmentInstruction(hook),
-          prompt,
-          isStandardAlbum ? buildStandardAlbumMasterInstruction(hook) : null
-        ])
+  const promptParts =
+    input.artworkMode === "design-system"
+      ? [prompt]
+      : input.artworkMode === "reference-library"
+        ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
+        : [
+            buildReferenceFidelityInstruction(promptReferences, "standard"),
+            buildConceptAlignmentInstruction(hook),
+            prompt
+          ];
+  const imagePrompt = [...promptParts, isAlbum ? buildAlbumMasterInstruction(hook) : null]
     .filter(Boolean)
     .join("\n\n");
   const imageRequestDebug = buildImageRequestDebugBundle({
@@ -623,7 +675,7 @@ async function generateOutputForHook({
         });
 
   const imageBytes = Buffer.from(image.base64, "base64");
-  if (isStandardAlbum) {
+  if (isAlbum) {
     await persistArtworkOutput({
       input,
       hook: { ...hook, id: `${hook.id}-album-master` },
@@ -637,7 +689,7 @@ async function generateOutputForHook({
       debugLogDirectory,
       writeDebugLog
     });
-    const panels = await splitStandardAlbumMaster(imageBytes);
+    const panels = await splitAlbumMaster(imageBytes);
     return Promise.all(
       panels.map((panel) =>
         persistArtworkOutput({
@@ -674,10 +726,10 @@ async function generateOutputForHook({
   ];
 }
 
-function buildStandardAlbumMasterInstruction(hook: SelectedHook): string {
+function buildAlbumMasterInstruction(hook: SelectedHook): string {
   const beats = hook.formatBeats ?? [];
   return [
-    "STANDARD ALBUM MASTER — overrides any conflicting single-image layout:",
+    "ALBUM MASTER — overrides any conflicting single-image layout regardless of artwork mode:",
     "Create one seamless 1:1 master artboard divided into an exact invisible 2×2 grid. Panel 1 occupies the full top row (2:1). Panel 2 is the bottom-left square. Panel 3 is the bottom-right square. Do not draw borders, gutters, crop marks, panel numbers, or mockup frames.",
     `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, brand recognition, and ${beats[0] ?? "the opening hook"}.`,
     `Panel 2 develops the mechanism or proof using ${beats[1] ?? "one compact supporting point"}.`,
@@ -686,7 +738,7 @@ function buildStandardAlbumMasterInstruction(hook: SelectedHook): string {
   ].join("\n");
 }
 
-async function splitStandardAlbumMaster(
+async function splitAlbumMaster(
   imageBytes: Buffer
 ): Promise<readonly { index: 1 | 2 | 3; bytes: Buffer }[]> {
   const metadata = await sharp(imageBytes).metadata();
@@ -995,7 +1047,7 @@ function buildConceptAlignmentInstruction(hook: SelectedHook): string {
   ].join("\n");
 }
 
-function buildDirectDesignSystemPrompt({
+async function buildDirectDesignSystemPrompt({
   input,
   hook,
   references,
@@ -1007,7 +1059,7 @@ function buildDirectDesignSystemPrompt({
   references: readonly ReferenceImageInput[];
   canvasRatio: string;
   strategy?: CreativeStrategyEnrichment;
-}): string {
+}): Promise<string> {
   const artifactMap = references.map((reference, index) => ({
     image: index + 1,
     role: reference.label ?? "Reference image"
@@ -1018,79 +1070,89 @@ function buildDirectDesignSystemPrompt({
   const additionalRequirements = input.textInputs.length
     ? input.textInputs
     : ["None supplied."];
+  const thickContext = {
+    brand: input.brand,
+    brandMemory: input.brandMemory,
+    brandLibrary: input.brandLibrary,
+    campaignContext: {
+      brief: input.brief,
+      rationale: hook.why,
+      caption: hook.caption
+    },
+    attachedArtifacts: artifactMap
+  };
 
-  return [
-    "THIN CREATIVE INSTRUCTION",
-    "Create one complete, publication-ready social media advertising artwork from the supplied brief and assets.",
-    "Use the references and brand context as the primary source of truth. Select the visual concept and layout that communicate this specific message most effectively.",
-    "Apply strong graphic design judgment, clear hierarchy, readability, balance, spacing, and brand consistency. The result should feel premium, commercially useful, and professionally designed—not templated or obviously AI-generated.",
-    "",
-    "CREATIVE TREATMENT DECISION",
-    `Content type: ${strategy?.commercialStyle ?? "select from the brief and brand context"}`,
-    `Treatment: ${designSystemTreatmentFor(strategy?.commercialStyle)}`,
-    `Selling approach: ${strategy?.sellingMechanism ?? "select the clearest approach for the message"}`,
-    `Audience moment: ${strategy?.audienceMoment ?? "infer conservatively from the supplied context"}`,
-    `Brand-fit reason: ${strategy?.reasonToBelieve ?? "Use the supplied brand context and artifacts as evidence."}`,
-    "Use this decision only to set the appropriate energy, emotional tone, information intensity, and content behavior. It does not prescribe a layout, hero, camera angle, lighting setup, or scene; make those decisions from the brief and artifacts.",
-    "",
-    "MOBILE-FIRST, IMAGE-LED DESIGN PRINCIPLES",
-    "Silently evaluate the composition using all twelve principles below. They are quality criteria, not a fixed template or prescribed layout:",
-    "1. Balance — distribute visual weight intentionally; stability may be symmetrical or asymmetrical according to the idea.",
-    "2. Contrast — separate the focal message from supporting information through meaningful differences in scale, color, tone, form, or focus.",
-    "3. Emphasis — create one unmistakable primary focal point instead of making every element compete.",
-    "4. Movement — guide the eye through a concept-appropriate path without forcing the same reading sequence on every artwork.",
-    "5. Dominance — let one visual idea, image, product, or typographic gesture clearly lead the composition.",
-    "6. Pattern — use repetition only when it creates a useful visual system, never as decorative filler.",
-    "7. Rhythm — vary spacing, scale, crop, and repetition deliberately so the design does not feel mechanically distributed.",
-    "8. Unity — keep imagery, typography, color, lighting, materials, and graphic devices in one coherent visual language.",
-    "9. Variety — introduce enough contrast and surprise to avoid monotony without creating clutter.",
-    "10. Proportion — size elements according to communication importance and their relationship to one another.",
-    "11. Scale — use purposeful scale contrast to create impact, depth, or an unexpected visual idea.",
-    "12. Space — treat negative space as an active compositional element that gives the focal idea room to register.",
-    "The visual concept must carry the message before the viewer reads supporting copy. Design for a mobile feed and judge the artwork at approximately 320–390 px wide: the focal image, exact headline, brand, and CTA must remain immediately clear. Avoid paragraphs, tiny labels, excessive badges, repeated cards, and information that requires zooming. Supporting copy is optional unless marked mandatory; remove it when the image and headline already communicate the point.",
-    "Reject the first generic solution. Do not automatically reuse split-screen comparisons, left-copy/right-hero layouts, centered product stages, stacked feature cards, or the same problem-to-solution story structure. Choose a concept-native composition and storytelling device for this specific message, using a familiar structure only when it is demonstrably the strongest choice.",
-    "",
-    "REAL-OBJECT AND 3D GROUNDING",
-    "Base the artwork on supplied assets, real products, real environments, real materials, and recognizable real-world objects. Never invent a fake product, package, machine, device, dashboard, mascot, certification, partner mark, or proprietary object merely to visualize the concept. When an essential branded object is not supplied, do not fabricate it; use typography, photography, an authentic environment, or a composite of ordinary real objects instead.",
-    "Use 3D only when the brief, brand, product, or references genuinely call for it. Any 3D element must represent a real supplied or commonly existing object and must look art-directed and Photoshop-composited into the scene: physically plausible geometry and materials, consistent camera perspective and scale, grounded contact shadows, ambient occlusion, reflected light, matching sharpness, grain, color temperature, depth, and color grade. It must not look like a floating standalone AI render.",
-    "Avoid toy-like isometric miniatures, glossy plastic on every surface, arbitrary glass UI, floating objects without physical justification, and imaginary machines built only as a metaphor. A surreal arrangement is acceptable only when every component is a recognizable real object and the composite remains visually coherent.",
-    "",
-    "BRIEF",
-    `Brand: ${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
-    `Objective: ${input.brief || hook.why}`,
-    "Audience: Infer conservatively from the supplied objective and campaign context; no separate audience field was supplied.",
-    `Main message: ${hook.concept}`,
-    `Exact headline: ${hook.hook}`,
-    `Supporting copy: ${supportingCopy.join(" | ")}`,
-    `CTA: ${hook.cta}`,
-    `Canvas: ${canvasRatio} ${input.service}`,
-    "Mandatory requirements:",
-    "- Render the exact headline and CTA once, clearly and legibly.",
-    "- Preserve attached official logos, products, packaging, people, and supplied source assets exactly according to their labels.",
-    "- Produce the complete artwork in this generation; there is no downstream typography or logo assembly step.",
-    "- Do not invent official logos, certifications, partner badges, or real identities.",
-    ...additionalRequirements.map((requirement) => `- ${requirement}`),
-    "",
-    "THICK CONTEXT / ARTIFACTS",
-    JSON.stringify(
-      {
-        brand: input.brand,
-        brandMemory: input.brandMemory,
-        brandLibrary: input.brandLibrary,
-        campaignContext: {
-          brief: input.brief,
-          rationale: hook.why,
-          caption: hook.caption
-        },
-        attachedArtifacts: artifactMap
-      },
-      null,
-      2
-    ),
-    "",
-    "Study every attached artifact directly and use it only for the role stated in its label. Brand guidelines and official assets are authoritative. Past work and liked references provide compatible brand/design language; avoid references and brand-memory avoid rules are negative constraints. Do not average conflicting references into a generic style.",
-    "Make the visual concept and layout decisions yourself from this brief and evidence. Do not treat any previous layout as mandatory unless its label explicitly says it must be preserved."
-  ].join("\n");
+  return renderDesignSystemPromptTemplate(await loadDesignSystemPrompt(), {
+    "{{COMMERCIAL_STYLE}}":
+      strategy?.commercialStyle ?? "select from the brief and brand context",
+    "{{TREATMENT}}": designSystemTreatmentFor(strategy?.commercialStyle),
+    "{{SELLING_MECHANISM}}":
+      strategy?.sellingMechanism ??
+      "select the clearest approach for the message",
+    "{{AUDIENCE_MOMENT}}":
+      strategy?.audienceMoment ??
+      "infer conservatively from the supplied context",
+    "{{BRAND_FIT_REASON}}":
+      strategy?.reasonToBelieve ??
+      "Use the supplied brand context and artifacts as evidence.",
+    "{{BRAND_NAME_AND_CATEGORY}}": `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
+    "{{OBJECTIVE}}": input.brief || hook.why,
+    "{{MAIN_MESSAGE}}": hook.concept,
+    "{{EXACT_HEADLINE}}": hook.hook,
+    "{{SUPPORTING_COPY}}": supportingCopy.join(" | "),
+    "{{CTA}}": hook.cta,
+    "{{CANVAS}}": `${canvasRatio} ${input.service}`,
+    "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
+      .map((requirement) => `- ${requirement}`)
+      .join("\n"),
+    "{{THICK_CONTEXT_JSON}}": JSON.stringify(thickContext, null, 2)
+  }, JSON.stringify({
+    ...thickContext,
+    creativeTreatment: {
+      contentType: strategy?.commercialStyle,
+      treatment: designSystemTreatmentFor(strategy?.commercialStyle),
+      sellingApproach: strategy?.sellingMechanism,
+      audienceMoment: strategy?.audienceMoment,
+      brandFitReason: strategy?.reasonToBelieve
+    },
+    requiredCreative: {
+      mainMessage: hook.concept,
+      exactHeadline: hook.hook,
+      supportingCopy,
+      cta: hook.cta,
+      canvas: `${canvasRatio} ${input.service}`,
+      additionalRequirements
+    }
+  }, null, 2));
+}
+
+function loadDesignSystemPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_design_system.md"),
+    "utf8"
+  );
+}
+
+function renderDesignSystemPromptTemplate(
+  source: string,
+  replacements: Readonly<Record<string, string>>,
+  fallbackRuntimeContext: string
+): string {
+  const template = source.trim();
+  if (!template) {
+    throw new Error("agent_design_system.md is empty.");
+  }
+
+  let rendered = template;
+  for (const [marker, content] of Object.entries(replacements)) {
+    rendered = rendered.replaceAll(marker, content);
+  }
+
+  return template.includes("{{THICK_CONTEXT_JSON}}")
+    ? rendered
+    : [rendered, "RUNTIME CONTEXT / ARTIFACTS", fallbackRuntimeContext].join(
+        "\n\n"
+      );
 }
 
 function designSystemTreatmentFor(
@@ -1752,6 +1814,10 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
     supportingPoints: readOptionalStringArray(
       hook.supportingPoints,
       `selectedHooks[${index}].supportingPoints`
+    ),
+    formatBeats: readOptionalStringArray(
+      hook.formatBeats,
+      `selectedHooks[${index}].formatBeats`
     ),
     ...(hook.ctaActionType === undefined
       ? {}

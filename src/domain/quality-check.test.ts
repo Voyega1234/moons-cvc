@@ -62,4 +62,66 @@ describe("buildQualityRegenerationInstructions", () => {
     expect(instructions).not.toContain("เพิ่มมิติให้พื้นที่เล็ก ด้วยพื้นลายก้างปลา");
     expect(instructions).not.toContain("quality score");
   });
+
+  it("adds mandatory production fixes when brand impact, lighting, or AI-origin checks fail", () => {
+    const report: CreativeQualityReport = {
+      agentName: "Creative Strategist",
+      score: 68,
+      summary: "ภาพยังมีร่องรอยงาน Gen AI ที่เห็นได้ชัด",
+      gd: {
+        passed: false,
+        score: 64,
+        summary: "แสงและวัสดุยังไม่เป็นระบบเดียวกัน",
+        criteria: [
+          {
+            criterion:
+              "ภาพหยุดสายตาและส่งผลต่อแบรนด์อย่างไร? (Stop-scroll & Brand Impact Audit)",
+            passed: false,
+            score: 55,
+            detail:
+              "Stop-scroll verdict: Weak; Brand perception: Risk เพราะภาพดู generic และไม่สร้างความน่าเชื่อถือ",
+            suggestion:
+              "สร้าง visual hook ที่เฉพาะกับแบรนด์และลดองค์ประกอบ generic ที่ทำให้งานดูราคาถูก"
+          },
+          {
+            criterion:
+              "แสง เงา วัสดุ และความสมจริง (Lighting, Shadow & Material Realism)",
+            passed: false,
+            score: 62,
+            detail: "เงาสัมผัสพื้นหายและแสงบนวัตถุขัดกัน",
+            suggestion:
+              "จัดทิศทางแสงใหม่และเพิ่ม contact shadow ให้ทุกวัตถุสัมผัสพื้น"
+          },
+          {
+            criterion: "งานนี้ดูออกว่าทำจาก AI หรือไม่? (AI-origin Audit)",
+            passed: false,
+            score: 58,
+            detail:
+              "AI-origin verdict: Looks AI-generated เพราะวัสดุพลาสติกและลายพื้นซ้ำ",
+            suggestion:
+              "ลดผิวพลาสติก แก้ลายซ้ำ และ retouch ขอบวัตถุให้เป็นธรรมชาติ"
+          }
+        ]
+      },
+      cs: {
+        passed: true,
+        score: 90,
+        summary: "สารและ CTA ตรงกับ Brief",
+        criteria: []
+      },
+      suggestion: {
+        title: "ทำให้งานดูผ่านการผลิตจริง",
+        detail: "1. ลดความแน่นขององค์ประกอบ\n2. เพิ่มพื้นที่พักสายตา",
+        suggestedHook: ""
+      }
+    };
+
+    const instructions = buildQualityRegenerationInstructions(report);
+
+    expect(instructions).toContain("Mandatory production finish:");
+    expect(instructions).toContain("visual hook ที่เฉพาะกับแบรนด์");
+    expect(instructions).toContain("contact shadow");
+    expect(instructions).toContain("ลดผิวพลาสติก");
+    expect(instructions).not.toContain("Looks AI-generated");
+  });
 });

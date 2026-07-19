@@ -1,23 +1,28 @@
 export const CREATIVE_STRATEGIST_AGENT_NAME = "Creative Strategist";
 
 export const GD_QUALITY_CHECKLIST = [
-  "ความสวยงาม องค์ประกอบ และจุดนำสายตา",
-  "งาน Final ต้องพัฒนาจาก Mockup ไม่แบนหรือดูเหมือน Template เกินไป",
-  "ภาพ Gen AI ต้องเก็บให้สมูธ ไม่ลอยหรือดูตัดแปะ",
-  "ตรวจ Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ให้ถูกต้อง"
+  "Visual Quality และ Design Principles ครบถ้วนบนหน้าจอมือถือ",
+  "หยุดสายตาลูกค้าและส่งผลบวกต่อภาพลักษณ์แบรนด์ ไม่ดูเป็นงาน AI คุณภาพต่ำ",
+  "แสง เงา วัสดุ perspective และ contact shadow สมจริงเป็นระบบเดียวกัน",
+  "งาน Final ผ่านการ art direct และ retouch ไม่แบนหรือดูเป็น Template",
+  "ไม่พบร่องรอย AI-generated ที่พิสูจน์ได้ วัตถุไม่ลอยหรือตัดแปะ",
+  "Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ถูกต้อง"
 ] as const;
 
 export const GD_CREATIVE_STRATEGIST_CHECKLIST = [
-  "ความสวยงาม (Visual Quality)",
-  "องค์ประกอบ (Composition)",
-  "จุดนำสายตา (Visual Hierarchy)",
-  "งาน Final ต้องพัฒนาจาก Mockup",
-  "งานไม่แบนหรือดูเป็น Template",
-  "ภาพ Gen AI ต้องเก็บให้สมูธ (AI Retouch)",
+  "ความสวยงามและความพร้อมใช้งานจริง (Visual Quality)",
+  "ภาพหยุดสายตาและส่งผลต่อแบรนด์อย่างไร? (Stop-scroll & Brand Impact Audit)",
+  "องค์ประกอบและสมดุล (Composition & Balance)",
+  "จุดนำสายตา การเน้น ความเด่น และการเคลื่อนไหว (Hierarchy, Emphasis, Dominance & Movement)",
+  "ความต่าง การจัดแนว และความใกล้ชิด (Contrast, Alignment & Proximity)",
+  "สัดส่วน ขนาด และพื้นที่ว่าง (Proportion, Scale & Space)",
+  "เอกภาพ ความหลากหลาย รูปแบบ และจังหวะ (Unity, Variety, Pattern & Rhythm)",
+  "แสง เงา วัสดุ และความสมจริง (Lighting, Shadow & Material Realism)",
+  "งาน Final และความไม่เป็น Template (Production Finish)",
+  "งานนี้ดูออกว่าทำจาก AI หรือไม่? (AI-origin Audit)",
   "วัตถุต้องไม่ลอยหรือดูตัดแปะ",
-  "Logo / Brand CI",
-  "ชื่อแบรนด์ / สินค้า",
-  "ข้อความใน Artwork"
+  "Logo / Brand CI และชื่อแบรนด์ / สินค้า",
+  "ข้อความใน Artwork และการอ่านบนมือถือ"
 ] as const;
 
 export const CS_QUALITY_CHECKLIST = [
@@ -61,7 +66,32 @@ export function buildQualityRegenerationInstructions(
 ): string {
   const priorityDirection = report.suggestion.detail.trim();
   if (priorityDirection) {
-    return ["Creative review direction:", priorityDirection].join("\n");
+    const productionRequirements = report.gd.criteria
+      .filter(
+        (criterion) =>
+          !criterion.passed &&
+          (criterion.criterion.includes("Stop-scroll & Brand Impact Audit") ||
+            criterion.criterion.includes("AI-origin Audit") ||
+            criterion.criterion.includes("Lighting, Shadow & Material Realism"))
+      )
+      .map((criterion) => criterion.suggestion.trim() || criterion.detail.trim())
+      .filter(
+        (instruction) =>
+          Boolean(instruction) && !priorityDirection.includes(instruction)
+      );
+
+    return [
+      "Creative review direction:",
+      priorityDirection,
+      ...(productionRequirements.length
+        ? [
+            "Mandatory production finish:",
+            ...productionRequirements.map(
+              (instruction, index) => `${index + 1}. ${instruction}`
+            )
+          ]
+        : [])
+    ].join("\n");
   }
 
   const requiredFixes = [...report.gd.criteria, ...report.cs.criteria].filter(

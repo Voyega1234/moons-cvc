@@ -118,7 +118,7 @@ function parseRun(value: unknown): WorkflowState | null {
   const service = parseMember(value.service, serviceTypes);
   const artworkMode =
     value.artworkMode === undefined
-      ? "standard"
+      ? "design-system"
       : parseMember(value.artworkMode, artworkModes);
   const imagePromptModel =
     value.imagePromptModel === undefined

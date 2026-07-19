@@ -208,6 +208,14 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain("minimum required improvement");
     expect(prompt).toContain("change font style");
     expect(prompt).toContain("Google or Meta");
+    expect(prompt).toContain("anti-AI production audit");
+    expect(prompt).toContain("must not look obviously AI-generated");
+    expect(prompt).toContain("earn the intended audience's attention within one second");
+    expect(prompt).toContain("strengthen rather than weaken brand perception");
+    expect(prompt).toContain("contact shadows");
+    expect(prompt).toContain("one plausible lighting system");
+    expect(prompt).toContain("Balance, Contrast, Emphasis, Movement");
+    expect(prompt).toContain("mobile-feed size");
     expect(prompt).toContain("material improvement in at least three areas");
     expect(prompt).not.toContain(requestBody.brief);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/v1/responses"))).toBe(false);
@@ -265,12 +273,14 @@ describe("handleArtworkGenerationRequest", () => {
     const { client, uploads } = fakeStorage();
     const debugLogs: unknown[] = [];
     const debugAssets: { filename: string; bytes: Buffer }[] = [];
+    const upsertCandidates = vi.fn(async () => undefined);
 
     const response = await handleArtworkGenerationRequest({
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
         ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
+        CREATIVE_LEARNING_CAPTURE_ENABLED: "true",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -279,7 +289,8 @@ describe("handleArtworkGenerationRequest", () => {
         debugLogs.push(entry);
         debugAssets.push(...(assets ?? []));
       },
-      createStorageClient: () => client
+      createStorageClient: () => client,
+      createLearningCandidateStore: () => ({ upsertCandidates })
     });
 
     expect(response.status).toBe(200);
@@ -355,6 +366,17 @@ describe("handleArtworkGenerationRequest", () => {
       expect.objectContaining({
         filename: expect.stringMatching(/-output\.png$/),
         bytes: Buffer.from("fake-png-bytes")
+      })
+    ]);
+    expect(upsertCandidates).toHaveBeenCalledWith([
+      expect.objectContaining({
+        client_id: "flora",
+        workspace_run_id: "run-1",
+        direction_id: "hook-1",
+        output_id: "hook-1-v1",
+        hook_text: "Flowers that make the room feel softer",
+        asset_bucket: "creative-assets",
+        asset_storage_path: "flora/run-1/outputs/hook-1-v1.png"
       })
     ]);
     expect(JSON.stringify(debugLogs)).not.toContain("test-key");
@@ -489,7 +511,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]).toMatchObject({ size: "2048x2048" });
-    expect(imageBodies[0]?.prompt).toContain("STANDARD ALBUM MASTER");
+    expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER");
     expect(imageBodies[0]?.prompt).toContain(
       "Panel 1 occupies the full top row (2:1)"
     );
@@ -509,6 +531,103 @@ describe("handleArtworkGenerationRequest", () => {
       "flora/run-1/outputs/hook-1-album-1-v1.png",
       "flora/run-1/outputs/hook-1-album-2-v1.png",
       "flora/run-1/outputs/hook-1-album-3-v1.png"
+    ]);
+    const panelMetadata = await Promise.all(
+      uploaded.slice(1).map(({ body }) => sharp(body).metadata())
+    );
+    expect(panelMetadata.map(({ width, height }) => [width, height])).toEqual([
+      [1920, 960],
+      [960, 960],
+      [960, 960]
+    ]);
+  });
+
+  it("uses the same three-panel album pipeline in Design System mode", async () => {
+    const master = await sharp({
+      create: {
+        width: 2048,
+        height: 2048,
+        channels: 3,
+        background: { r: 232, g: 238, b: 246 }
+      }
+    })
+      .png()
+      .toBuffer();
+    const imageBodies: Record<string, unknown>[] = [];
+    const uploaded: { path: string; body: Buffer }[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
+      }
+      if (href.includes("/v1/responses")) {
+        return strategyAgentResponse();
+      }
+      if (href.includes("/v1/images/generations")) {
+        imageBodies.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: master.toString("base64") }] }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const { client } = fakeStorage();
+    client.storage.from = () => ({
+      upload: async (path: string, body: Buffer) => {
+        uploaded.push({ path, body });
+        return { error: null };
+      },
+      createSignedUrl: async (path: string) => ({
+        data: { signedUrl: `https://example.com/${path}` },
+        error: null
+      }),
+      download: async () => ({ data: null, error: { message: "Not found" } })
+    });
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system",
+          service: "album-post",
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              formatBeats: ["เปิดปัญหา", "อธิบายหลักฐาน", "ปิดด้วยข้อเสนอ"]
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(imageBodies).toHaveLength(1);
+    expect(imageBodies[0]).toMatchObject({ size: "2048x2048" });
+    expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER");
+    expect(imageBodies[0]?.prompt).toContain("เปิดปัญหา");
+    expect(imageBodies[0]?.prompt).toContain("อธิบายหลักฐาน");
+    expect(imageBodies[0]?.prompt).toContain("ปิดด้วยข้อเสนอ");
+    const payload = (await response.json()) as {
+      outputs: { id: string; format: string }[];
+    };
+    expect(payload.outputs.map((output) => output.id)).toEqual([
+      "hook-1-album-1-v1",
+      "hook-1-album-2-v1",
+      "hook-1-album-3-v1"
     ]);
     const panelMetadata = await Promise.all(
       uploaded.slice(1).map(({ body }) => sharp(body).metadata())
@@ -1178,32 +1297,35 @@ describe("handleArtworkGenerationRequest", () => {
     const prompt = String(editCalls[0]?.get("prompt"));
     expect(prompt).toContain("THIN CREATIVE INSTRUCTION");
     expect(prompt).toContain(
-      "Create one complete, publication-ready social media advertising artwork"
+      "Create ONE complete, publication-ready social media campaign artwork"
     );
     expect(prompt).toContain(
-      "Use the references and brand context as the primary source of truth"
+      "Use the supplied references and artifacts as the primary source of truth"
     );
-    expect(prompt).toContain("MOBILE-FIRST, IMAGE-LED DESIGN PRINCIPLES");
-    expect(prompt).toContain("1. Balance");
-    expect(prompt).toContain("12. Space");
-    expect(prompt).toContain("The visual concept must carry the message");
+    expect(prompt).toContain("CAMPAIGN-STYLE DESIGN TARGET");
+    expect(prompt).toContain("COMPOSITION AND INFORMATION DENSITY");
+    expect(prompt).toContain("one strong visual or typographic idea");
+    expect(prompt).toContain("MOBILE-FIRST QUALITY TEST");
     expect(prompt).toContain("approximately 320–390 px wide");
-    expect(prompt).toContain("Reject the first generic solution");
-    expect(prompt).toContain("split-screen comparisons");
+    expect(prompt).toContain("Reject the first generic advertising solution internally");
+    expect(prompt).toContain("split-screen before and after");
     expect(prompt).toContain("CREATIVE TREATMENT DECISION");
     expect(prompt).toContain("Content type: lifestyle");
     expect(prompt).toContain("Human, natural, and relatable");
     expect(prompt).toContain("Selling approach: desire");
-    expect(prompt).toContain("REAL-OBJECT AND 3D GROUNDING");
-    expect(prompt).toContain("Never invent a fake product");
-    expect(prompt).toContain("Photoshop-composited into the scene");
+    expect(prompt).toContain("PRODUCT AND OBJECT GROUNDING");
+    expect(prompt).toContain("Do not invent:");
+    expect(prompt).toContain("- products");
     expect(prompt).toContain("grounded contact shadows");
-    expect(prompt).toContain("imaginary machines built only as a metaphor");
+    expect(prompt).toContain("imaginary machines used only as metaphors");
     expect(prompt).toContain("Objective: Launch a soft summer bouquet offer.");
     expect(prompt).toContain(
       "Exact headline: Flowers that make the room feel softer"
     );
     expect(prompt).toContain("CTA: Order a bouquet");
+    expect(prompt).toContain(
+      "Do not invent additional copy, claims, prices, features, statistics"
+    );
     expect(prompt).toContain("THICK CONTEXT / ARTIFACTS");
     expect(prompt).toContain('"role": "Logo"');
     expect(prompt).toContain(
@@ -1214,6 +1336,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("Approved visual direction");
     expect(prompt).not.toContain("preferredLayout");
     expect(prompt).not.toContain("preferredHeroType");
+    expect(prompt).not.toContain("{{");
     expect(strategyCalls).toHaveLength(1);
     expect(strategyCalls[0]?.model).toBe("gpt-5.6-luna");
   });

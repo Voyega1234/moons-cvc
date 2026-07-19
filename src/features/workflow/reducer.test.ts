@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { brands } from "../../data/mock-brands";
 import {
+  createInitialWorkflowState,
   initialWorkflowState,
   workflowReducer
 } from "./reducer";
@@ -16,15 +17,79 @@ function passingQaResults(state: WorkflowState) {
 }
 
 describe("workflowReducer", () => {
-  it("keeps standard artwork generation as the default and allows other modes", () => {
-    expect(initialWorkflowState.artworkMode).toBe("standard");
+  it("approves only the current role queue and advances assets in sequence", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(
+      createInitialWorkflowState({
+        id: "run-role-approval",
+        now: "2026-07-18T00:00:00.000Z"
+      }),
+      {
+      type: "select-brand",
+      brand
+      }
+    );
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    state = workflowReducer(state, {
+      type: "run-qa",
+      results: passingQaResults(state)
+    });
+
+    const gdQueue = state.outputs.filter(
+      (output) => !output.format.toUpperCase().includes("UGC")
+    );
+    state = workflowReducer(state, {
+      type: "approve-role",
+      role: "graphicDesign"
+    });
+
+    expect(gdQueue.length).toBeGreaterThan(0);
+    expect(
+      state.outputs
+        .filter((output) => !output.format.toUpperCase().includes("UGC"))
+        .every((output) => output.approval.graphicDesign === "approved")
+    ).toBe(true);
+    expect(
+      state.outputs.every(
+        (output) => output.approval.clientService !== "approved"
+      )
+    ).toBe(true);
+    expect(state.approved).toBe(false);
+
+    state = workflowReducer(state, {
+      type: "approve-role",
+      role: "clientService"
+    });
+    expect(
+      state.outputs.every(
+        (output) => output.approval.clientService === "approved"
+      )
+    ).toBe(true);
+    expect(state.approved).toBe(false);
+
+    state = workflowReducer(state, {
+      type: "approve-role",
+      role: "projectManager"
+    });
+    expect(state.approved).toBe(true);
+  });
+
+  it("uses Design System artwork generation by default and keeps other modes available internally", () => {
+    expect(initialWorkflowState.artworkMode).toBe("design-system");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-artwork-mode",
-      mode: "design-system"
+      mode: "standard"
     });
 
-    expect(updated.artworkMode).toBe("design-system");
+    expect(updated.artworkMode).toBe("standard");
 
     const referenceLibrary = workflowReducer(updated, {
       type: "set-artwork-mode",
@@ -32,6 +97,45 @@ describe("workflowReducer", () => {
     });
 
     expect(referenceLibrary.artworkMode).toBe("reference-library");
+  });
+
+  it("keeps QA incomplete until every regenerated draft has a result", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(
+      createInitialWorkflowState({
+        id: "run-partial-qa",
+        now: "2026-07-19T00:00:00.000Z"
+      }),
+      { type: "select-brand", brand }
+    );
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    state = {
+      ...state,
+      outputs: state.outputs.map((output) => ({
+        ...output,
+        assetUrl: `https://example.com/${output.id}.png`
+      }))
+    };
+    const [first] = state.outputs;
+    if (!first) throw new Error("Expected a creative output.");
+
+    state = workflowReducer(state, {
+      type: "run-qa",
+      results: [{ outputId: first.id, passed: true, reason: "Ready." }]
+    });
+
+    expect(state.outputs.find((output) => output.id === first.id)?.status).toBe(
+      "ready"
+    );
+    expect(state.outputs.some((output) => output.status === "draft")).toBe(true);
+    expect(state.qaComplete).toBe(false);
   });
 
   it("defaults image prompt writing to GPT 5.6 and allows OpenRouter Claude", () => {

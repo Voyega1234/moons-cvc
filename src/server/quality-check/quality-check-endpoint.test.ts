@@ -220,8 +220,18 @@ describe("handleQualityCheckRequest", () => {
       .filter((block) => block.type === "input_text")
       .map((block) => block.text)
       .join("\n");
-    expect(prompt).toContain("ความสวยงาม (Visual Quality)");
-    expect(prompt).toContain("จุดนำสายตา (Visual Hierarchy)");
+    expect(prompt).toContain("ความสวยงามและความพร้อมใช้งานจริง (Visual Quality)");
+    expect(prompt).toContain("Stop-scroll & Brand Impact Audit");
+    expect(prompt).toContain("ภาพนี้ดีพอให้กลุ่มเป้าหมายหยุดดู");
+    expect(prompt).toContain("Stop-scroll verdict: Strong");
+    expect(prompt).toContain("Brand perception: Risk");
+    expect(prompt).toContain("Hierarchy, Emphasis, Dominance & Movement");
+    expect(prompt).toContain("Lighting, Shadow & Material Realism");
+    expect(prompt).toContain("งานนี้ดูออกว่าทำจาก AI หรือไม่?");
+    expect(prompt).toContain("AI-origin verdict: Looks AI-generated");
+    expect(prompt).toContain("contact shadow");
+    expect(prompt).toContain("Balance, Contrast, Emphasis, Movement");
+    expect(prompt).toContain("งานต้อง image-led และอ่านได้บนมือถือ");
     expect(prompt).toContain("Agent name: Creative Strategist");
     expect(prompt).toContain("first-time scroller");
     expect(prompt).toContain("Bottom Funnel");
@@ -236,6 +246,127 @@ describe("handleQualityCheckRequest", () => {
     expect(prompt).toContain("Brand: Petal House");
     expect(prompt).toContain("Caption: Summer bouquet, THB 990.");
     expect(prompt).toContain("Revision Feedback: CS: Keep the price visible.");
+  });
+
+  it("fails GD when any mandatory visual criterion detects an AI tell", async () => {
+    const agentResult = qualityAgentResult({
+      gdPassed: true,
+      gdScore: 84,
+      gdSummary: "ภาพรวมดีแต่มีจุดที่ต้อง retouch",
+      score: 86,
+      summary: "ต้องเก็บ production finish อีกหนึ่งจุด"
+    });
+    const aiOriginIndex = GD_CREATIVE_STRATEGIST_CHECKLIST.findIndex((item) =>
+      item.includes("AI-origin Audit")
+    );
+    if (aiOriginIndex < 0) throw new Error("AI-origin criterion is missing.");
+    agentResult.gd.criteria[aiOriginIndex] = {
+      passed: false,
+      score: 58,
+      detail:
+        "AI-origin verdict: Looks AI-generated เพราะเงาไม่สัมผัสพื้นและวัสดุเป็นพลาสติก",
+      suggestion: "เพิ่ม contact shadow และแก้ผิววัสดุให้สมจริง"
+    };
+
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, _init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("example.com/reference.png")) {
+          return new Response(Buffer.from("reference-image"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        if (href.includes("example.supabase.co/storage")) {
+          return new Response(Buffer.from("creative-image"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({ results: [agentResult] })
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const response = await handleQualityCheckRequest({
+      request: buildRequest(),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+    const payload = (await response.json()) as {
+      results: { gdPassed: boolean; passed: boolean }[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.results[0]).toEqual(
+      expect.objectContaining({ gdPassed: false, passed: false })
+    );
+  });
+
+  it("fails GD when the artwork is weak at stop-scroll or risks brand perception", async () => {
+    const agentResult = qualityAgentResult({
+      gdPassed: true,
+      gdScore: 82,
+      gdSummary: "ภาพอ่านได้แต่ยังไม่สร้างความสนใจหรือความน่าเชื่อถือ",
+      score: 83,
+      summary: "ต้องยกระดับ visual hook และ brand impression"
+    });
+    const brandImpactIndex = GD_CREATIVE_STRATEGIST_CHECKLIST.findIndex((item) =>
+      item.includes("Stop-scroll & Brand Impact Audit")
+    );
+    if (brandImpactIndex < 0) {
+      throw new Error("Stop-scroll & Brand Impact criterion is missing.");
+    }
+    agentResult.gd.criteria[brandImpactIndex] = {
+      passed: false,
+      score: 54,
+      detail:
+        "Stop-scroll verdict: Weak; Brand perception: Risk เพราะภาพดู generic และมีร่องรอย AI ที่ลดความน่าเชื่อถือ",
+      suggestion:
+        "เปลี่ยน visual hook ให้เฉพาะกับแบรนด์และ retouch จุดที่ดูเป็น AI ให้เป็นงาน production จริง"
+    };
+
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, _init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("example.com/reference.png")) {
+          return new Response(Buffer.from("reference-image"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        if (href.includes("example.supabase.co/storage")) {
+          return new Response(Buffer.from("creative-image"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({ results: [agentResult] })
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const response = await handleQualityCheckRequest({
+      request: buildRequest(),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+    const payload = (await response.json()) as {
+      results: { gdPassed: boolean; passed: boolean }[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.results[0]).toEqual(
+      expect.objectContaining({ gdPassed: false, passed: false })
+    );
   });
 
   it("returns no results without calling OpenAI when there are no outputs", async () => {

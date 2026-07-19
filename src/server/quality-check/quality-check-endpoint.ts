@@ -182,6 +182,18 @@ async function buildContent(
         "",
         "กติกาการตรวจ:",
         "- First Impression: ตรวจ Visual Hook, Initial Text Focus และ Desire to Purchase จากสิ่งที่เห็นใน 1 วินาทีแรก",
+        "- Stop-scroll & Brand Impact Audit เป็นข้อบังคับ: ถามตรง ๆ ว่า ‘ภาพนี้ดีพอให้กลุ่มเป้าหมายหยุดดูและทำให้แบรนด์ได้รับความสนใจในทางบวกหรือไม่ หรือเสี่ยงสร้างภาพลบให้แบรนด์?’ ประเมินจากภาพจริงที่ขนาด mobile feed โดยดูความโดดเด่น ความเข้าใจได้ใน 1 วินาที ความเฉพาะของแบรนด์ ความน่าเชื่อถือ ความอยากดูต่อ และความรู้สึกว่าเป็นงานที่ผ่านการออกแบบอย่างตั้งใจ",
+        "- ผล Stop-scroll & Brand Impact Audit ต้องขึ้นต้น detail ด้วย ‘Stop-scroll verdict: Strong’ หรือ ‘Stop-scroll verdict: Weak’ และตามด้วย ‘Brand perception: Positive’, ‘Brand perception: Neutral’ หรือ ‘Brand perception: Risk’ พร้อมหลักฐานที่เห็นจริง; passed=true ได้เฉพาะเมื่อ Stop-scroll เป็น Strong และ Brand perception ไม่เป็น Risk",
+        "- ถ้า Stop-scroll อ่อนหรือเสี่ยงต่อแบรนด์จากงานที่ดู AI, cheap, generic, cluttered, misleading หรือไม่เป็นมืออาชีพ: gd.passed ต้องเป็น false, suggestion ต้องระบุการเปลี่ยน visual hook, hierarchy, crop, typography, branding หรือ production finish ที่แก้ได้จริง และต้องใส่ไว้ใน Top 3 Actionable Recs",
+        "- ห้ามสรุปว่า AI ทำให้แบรนด์เสียหายเพียงเพราะทราบว่าใช้ AI ให้ตัดสินเฉพาะสิ่งที่ผู้ชมมองเห็นได้จริงและผลต่อความน่าเชื่อถือของงาน",
+        "- Design Principle Audit เป็นข้อบังคับ: ตรวจ Balance, Contrast, Emphasis, Movement, Dominance, Pattern, Rhythm, Unity, Variety, Proportion, Scale และ Space รวมถึง hierarchy, alignment, proximity, grid และ quiet zone โดยตัดสินจากภาพจริงบนหน้าจอมือถือ ไม่ใช่จากคำอธิบาย concept",
+        "- Lighting & Material Audit เป็นข้อบังคับ: ตรวจทิศทางและอุณหภูมิแสง, contact shadow, ambient occlusion, reflection, highlight, texture, depth, perspective, edge integration และการตอบสนองของวัสดุให้สัมพันธ์กันทั้งภาพ",
+        "- AI-origin Audit เป็นข้อบังคับ: ถามตรง ๆ ว่า ‘งานนี้ดูออกว่าทำจาก AI หรือไม่?’ แล้วตอบในเกณฑ์ AI-origin Audit โดย passed=true หมายถึงไม่พบร่องรอย AI ที่ชัดเจน และ passed=false หมายถึงเห็นร่องรอยที่พิสูจน์ได้จากภาพ",
+        "- ร่องรอย AI ที่ต้องตรวจ ได้แก่ geometry หรือ perspective ผิดธรรมชาติ, แสงเงาขัดกัน, วัตถุลอย, ขอบละลาย, anatomy ผิด, texture/lายซ้ำ, วัสดุพลาสติกหรือเงาวาวเกินจริง, ข้อความ/โลโก้บิด, fake UI, วัตถุที่ดูถูกมโนขึ้น, generic glossy CGI, glow มากเกินไป และรายละเอียดแน่นแต่ไม่มีระบบ",
+        "- ห้ามตัดสินว่าเป็น AI เพียงเพราะใช้ 3D, illustration หรือภาพ stylized ต้องระบุ visual evidence ที่มองเห็นได้จริงเสมอ",
+        "- ถ้า AI-origin Audit ไม่ผ่าน: gd.passed ต้องเป็น false, detail ต้องขึ้นต้นด้วย ‘AI-origin verdict: Looks AI-generated’ พร้อมหลักฐานสั้น ๆ และ suggestion ต้องระบุวิธี retouch/composite/relight/rebuild ที่แก้ได้จริง โดยใส่ anti-AI fix ไว้ใน Top 3 Actionable Recs",
+        "- ถ้า AI-origin Audit ผ่าน: detail ต้องขึ้นต้นด้วย ‘AI-origin verdict: Not obviously AI-generated’ และอธิบายหลักฐานสั้น ๆ โดย suggestion เป็นสตริงว่าง",
+        "- ถ้างานภาพแน่น อ่านยาก หรือขาด quiet zone ให้เสนอการลด/ย้าย/ย่อองค์ประกอบก่อนเสนอเพิ่มข้อความหรือของตกแต่ง งานต้อง image-led และอ่านได้บนมือถือ",
         "- Bottom Funnel: ตรวจ Target Persona Fit, CTA Clarity, Urgency/Scarcity, Brand Recognition & Trust และความพร้อมให้เกิด action",
         "- Claim Accuracy Check เป็นข้อบังคับ: ตรวจทุกเคลมด้านประโยชน์ ผลลัพธ์ เวลา การเปรียบเทียบ การรับรอง สุขภาพ และตัวเลข เทียบเฉพาะหลักฐานที่ให้มา พร้อมธงเกินจริง กำกวม เสี่ยงนโยบาย หรือควรมี disclaimer",
         "- ถ้าเคลมไม่มีหลักฐาน ให้เสนอหลักฐานที่ควรเพิ่มหรือถ้อยคำที่ปลอดภัยและแม่นยำกว่า ห้ามปฏิเสธลอย ๆ",
@@ -195,10 +207,10 @@ async function buildContent(
         "- เกณฑ์ที่ไม่ผ่าน: detail ระบุปัญหาที่เห็นจริงไม่เกิน 1 ประโยค และ suggestion ระบุวิธีแก้ที่ทำตามได้ทันทีไม่เกิน 1 ประโยค",
         "- summary ระดับ GD, CS และภาพรวมต้องมีเพียง 1 ประโยคสั้น ห้ามสรุปซ้ำกับ suggestion.detail",
         "- ห้ามเขียนบทนำ คำชมยาว เหตุผลซ้ำ หรือย่อหน้าวิเคราะห์เพิ่มเติมในทุก field",
-        "- gdPassed ต้องเป็น true เมื่อไม่มีปัญหา GD ที่พิสูจน์ได้ และ csPassed ต้องเป็น true เมื่อไม่มีปัญหา CS ที่พิสูจน์ได้",
+        "- gd.passed ต้องเป็น true เมื่อไม่มีปัญหา GD ที่พิสูจน์ได้ และ cs.passed ต้องเป็น true เมื่อไม่มีปัญหา CS ที่พิสูจน์ได้",
         "- ให้คะแนนทุกเกณฑ์และคะแนนรวมตั้งแต่ 0-100 โดยอิงหลักฐานที่เห็นจริง",
         `- agentName ต้องเป็น "${CREATIVE_STRATEGIST_AGENT_NAME}" เท่านั้น`,
-        "- ส่งผล GD ตามลำดับ Checklist ทั้ง 10 ข้อ และ CS ทั้ง 3 ข้อเพื่อคงโครงข้อมูล แต่แต่ละข้อใช้ข้อความย่อตามกติกาด้านบน",
+        `- ส่งผล GD ตามลำดับ Checklist ทั้ง ${GD_CREATIVE_STRATEGIST_CHECKLIST.length} ข้อ และ CS ทั้ง ${CS_QUALITY_CHECKLIST.length} ข้อเพื่อคงโครงข้อมูล แต่แต่ละข้อใช้ข้อความย่อตามกติกาด้านบน`,
         "- ถ้างานต้องแก้ ให้ suggestion.title เป็น conversion blocker ที่สำคัญที่สุดแบบสั้น ๆ และ suggestion.detail มีเฉพาะ Top 3 Actionable Recs เรียง 1-3 แยกบรรทัด บรรทัดละ 1 วิธีแก้สั้น ๆ ห้ามอธิบายซ้ำ",
         "- suggestedHook ให้เป็น Hook ที่แข็งแรงที่สุดจาก 3 แนวทาง Pain Point, Desired Result และ Urgency เมื่อปัญหาเกี่ยวกับข้อความ มิฉะนั้นให้เป็นสตริงว่าง",
         "- ถ้างานผ่าน ให้ suggestion.title, suggestion.detail และ suggestion.suggestedHook เป็นสตริงว่าง",
@@ -469,32 +481,35 @@ function parseQualityArea(
     throw new Error(`${field}.criteria must contain ${checklist.length} items.`);
   }
 
+  const declaredPassed = readBoolean(record.passed, `${field}.passed`);
+  const criteria = record.criteria.map((item, index) => {
+    const criterion = readRecord(item, `${field}.criteria[${index}]`);
+    return {
+      criterion: checklist[index]!,
+      passed: readBoolean(
+        criterion.passed,
+        `${field}.criteria[${index}].passed`
+      ),
+      score: readScore(
+        criterion.score,
+        `${field}.criteria[${index}].score`
+      ),
+      detail: readString(
+        criterion.detail,
+        `${field}.criteria[${index}].detail`
+      ),
+      suggestion: readString(
+        criterion.suggestion,
+        `${field}.criteria[${index}].suggestion`
+      )
+    };
+  });
+
   return {
-    passed: readBoolean(record.passed, `${field}.passed`),
+    passed: declaredPassed && criteria.every((criterion) => criterion.passed),
     score: readScore(record.score, `${field}.score`),
     summary: readString(record.summary, `${field}.summary`),
-    criteria: record.criteria.map((item, index) => {
-      const criterion = readRecord(item, `${field}.criteria[${index}]`);
-      return {
-        criterion: checklist[index]!,
-        passed: readBoolean(
-          criterion.passed,
-          `${field}.criteria[${index}].passed`
-        ),
-        score: readScore(
-          criterion.score,
-          `${field}.criteria[${index}].score`
-        ),
-        detail: readString(
-          criterion.detail,
-          `${field}.criteria[${index}].detail`
-        ),
-        suggestion: readString(
-          criterion.suggestion,
-          `${field}.criteria[${index}].suggestion`
-        )
-      };
-    })
+    criteria
   };
 }
 

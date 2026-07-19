@@ -91,6 +91,38 @@ describe("buildArtworkGenerationRequest", () => {
     });
   });
 
+  it("preserves Design System album service and story beats during regeneration", () => {
+    const direction = run.directions[0];
+    if (!direction) throw new Error("Expected a selected direction fixture.");
+    const albumDirection = {
+      ...direction,
+      service: "album-post" as const,
+      formatBeats: ["Cover tension", "Proof mechanism", "Offer close"]
+    };
+
+    const request = buildArtworkRegenerationRequest({
+      run: {
+        ...run,
+        artworkMode: "design-system",
+        service: "album-post",
+        creativeMix: [
+          { id: "album", service: "album-post", quantity: 1 }
+        ],
+        directions: [albumDirection]
+      },
+      direction: albumDirection,
+      extraInstructions: "Strengthen hierarchy across the full album."
+    });
+
+    expect(request.artworkMode).toBe("design-system");
+    expect(request.service).toBe("album-post");
+    expect(request.selectedHooks[0]?.formatBeats).toEqual([
+      "Cover tension",
+      "Proof mechanism",
+      "Offer close"
+    ]);
+  });
+
   it("builds a minimal current-image plus instructions request for controlled revision", () => {
     const request = buildArtworkRevisionRequest({
       run,
@@ -183,7 +215,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.output.size).toBe("2160x3840");
   });
 
-  it("replaces a stale selected logo with the active client's Brand Kit logo", () => {
+  it("keeps the latest selected logo instead of the stale brand snapshot logo", () => {
     const request = buildArtworkGenerationRequest({
       run: {
         ...run,
@@ -195,8 +227,8 @@ describe("buildArtworkGenerationRequest", () => {
               {
                 id: "flora-logo",
                 title: "Logo",
-                description: "Flora Daily logo",
-                assetUrl: "https://example.com/flora-logo.png"
+                description: "Old extracted logo",
+                assetUrl: "https://example.com/extracted-black-white-logo.png"
               }
             ]
           }
@@ -205,7 +237,7 @@ describe("buildArtworkGenerationRequest", () => {
       referenceImages: [
         {
           kind: "url",
-          url: "https://example.com/sleep-happy-logo.png",
+          url: "https://example.com/user-uploaded-color-logo.png",
           label: "Logo"
         },
         {
@@ -219,7 +251,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.referenceImages).toEqual([
       {
         kind: "url",
-        url: "https://example.com/flora-logo.png",
+        url: "https://example.com/user-uploaded-color-logo.png",
         label: "Logo"
       },
       {
@@ -416,8 +448,8 @@ describe("buildArtworkGenerationRequest", () => {
             {
               id: "logo",
               title: "Logo",
-              description: "Primary logo",
-              assetUrl: "https://assets.example.com/flora-logo.png"
+              description: "Old extracted logo",
+              assetUrl: "https://assets.example.com/old-logo.png"
             }
           ]
         }
@@ -426,6 +458,11 @@ describe("buildArtworkGenerationRequest", () => {
     const request = buildArtworkGenerationRequest({
       run: brandedRun,
       referenceImages: [
+        {
+          kind: "url",
+          url: "https://assets.example.com/latest-uploaded-logo.png",
+          label: "Logo"
+        },
         {
           kind: "url",
           url: "https://assets.example.com/reference.png",
@@ -439,7 +476,9 @@ describe("buildArtworkGenerationRequest", () => {
       brand: brandedRun.brand
     });
 
-    expect(n8nRequest.logoUrl).toBe("https://assets.example.com/flora-logo.png");
+    expect(n8nRequest.logoUrl).toBe(
+      "https://assets.example.com/latest-uploaded-logo.png"
+    );
     expect(n8nRequest.referenceImageUrls).toEqual([
       {
         url: "https://assets.example.com/reference.png",

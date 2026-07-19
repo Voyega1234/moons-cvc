@@ -8,8 +8,10 @@ import {
   type ReactNode
 } from "react";
 import type {
+  ClientMembership,
   HandoffRunInput,
   RunOwnership,
+  SetClientPicInput,
   TeamMember
 } from "../../domain/run-collaboration";
 import type { RunCollaborationRepository } from "../../ports/run-collaboration-repository";
@@ -20,10 +22,13 @@ interface RunCollaborationContextValue {
   enabled: boolean;
   currentUserId: string | null;
   members: readonly TeamMember[];
+  clientMemberships: readonly ClientMembership[];
+  clientPicByClientId: Readonly<Record<string, TeamMember>>;
   ownershipByRunId: Readonly<Record<string, RunOwnership>>;
   loading: boolean;
   error: Error | null;
   handoff: (input: HandoffRunInput) => Promise<RunOwnership>;
+  setClientPic: (input: SetClientPicInput) => Promise<ClientMembership>;
   refresh: () => Promise<void>;
 }
 
@@ -40,6 +45,9 @@ export function RunCollaborationProvider({
   const { session } = useAuth();
   const { workspace } = useWorkspace();
   const [members, setMembers] = useState<readonly TeamMember[]>([]);
+  const [clientMemberships, setClientMemberships] = useState<
+    readonly ClientMembership[]
+  >([]);
   const [ownershipByRunId, setOwnershipByRunId] = useState<
     Readonly<Record<string, RunOwnership>>
   >({});
@@ -51,11 +59,13 @@ export function RunCollaborationProvider({
     if (!repository) return;
     setLoading(true);
     try {
-      const [nextMembers, ownerships] = await Promise.all([
+      const [nextMembers, ownerships, memberships] = await Promise.all([
         repository.listTeamMembers(),
-        repository.listOwnerships(workspace.runOrder)
+        repository.listOwnerships(workspace.runOrder),
+        repository.listClientMemberships()
       ]);
       setMembers(nextMembers);
+      setClientMemberships(memberships);
       setOwnershipByRunId(
         Object.fromEntries(
           ownerships.map((ownership) => [ownership.workspaceRunId, ownership])
@@ -93,18 +103,69 @@ export function RunCollaborationProvider({
     [repository]
   );
 
+  const setClientPic = useCallback(
+    async (input: SetClientPicInput) => {
+      if (!repository) throw new Error("Client PIC is not configured.");
+      const membership = await repository.setClientPic(input);
+      setClientMemberships((current) => {
+        const next = current
+          .filter(
+            (item) =>
+              !(
+                item.clientId === membership.clientId &&
+                item.userId === membership.userId
+              )
+          )
+          .map((item) =>
+            item.clientId === membership.clientId && item.role === "lead"
+              ? { ...item, role: "member" as const }
+              : item
+          );
+        return [...next, membership];
+      });
+      return membership;
+    },
+    [repository]
+  );
+
+  const clientPicByClientId = useMemo<Readonly<Record<string, TeamMember>>>(() => {
+    const memberByUserId = new Map(members.map((member) => [member.userId, member]));
+    return Object.fromEntries(
+      clientMemberships.flatMap((membership) => {
+        if (membership.role !== "lead") return [];
+        const member = memberByUserId.get(membership.userId);
+        return member ? [[membership.clientId, member] as const] : [];
+      })
+    );
+  }, [members, clientMemberships]);
+
   const value = useMemo<RunCollaborationContextValue>(
     () => ({
       enabled: Boolean(repository),
       currentUserId: session?.user.id ?? null,
       members,
+      clientMemberships,
+      clientPicByClientId,
       ownershipByRunId,
       loading,
       error,
       handoff,
+      setClientPic,
       refresh
     }),
-    [repository, session?.user.id, members, ownershipByRunId, loading, error, handoff, refresh]
+    [
+      repository,
+      session?.user.id,
+      members,
+      clientMemberships,
+      clientPicByClientId,
+      ownershipByRunId,
+      loading,
+      error,
+      handoff,
+      setClientPic,
+      refresh
+    ]
   );
 
   return (

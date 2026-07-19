@@ -138,4 +138,50 @@ describe("runQualityCheck", () => {
     });
     expect(results[0]?.report?.score).toBe(91);
   });
+
+  it("checks only the regenerated outputs requested by the caller", async () => {
+    const outputs: CreativeOutput[] = ["output-1", "output-2"].map(
+      (id, index) => ({
+        id,
+        directionId: `direction-${index + 1}`,
+        format: "1:1 Static",
+        status: "draft",
+        clientStatus: "queued",
+        assetUrl: `https://example.com/${id}.png`,
+        revisionCount: 1,
+        approval: emptyApprovalGate,
+        approvalComments: emptyApprovalComments
+      })
+    );
+    const run = {
+      ...createInitialWorkflowState({
+        id: "run-targeted-qa",
+        now: "2026-07-19T00:00:00.000Z"
+      }),
+      outputs
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                outputId: "output-2",
+                passed: true,
+                reason: "Ready."
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runQualityCheck(run, ["output-2"]);
+
+    const request = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { outputs: { id: string }[] };
+    expect(request.outputs.map((output) => output.id)).toEqual(["output-2"]);
+  });
 });

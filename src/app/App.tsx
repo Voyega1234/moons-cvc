@@ -414,6 +414,11 @@ function Header({
   createRun: (keepBrand: boolean) => void;
   canEdit: boolean;
 }) {
+  const collaboration = useRunCollaboration();
+  const clientPic = state.brand
+    ? collaboration.clientPicByClientId[state.brand.id]
+    : undefined;
+
   return (
     <header className="topbar">
       <div className="shell">
@@ -447,7 +452,12 @@ function Header({
                   state.brand?.initials ?? "MO"
                 )}
               </span>
-              <span>{state.brand?.name ?? "No client"}</span>
+              <span className="client-pill-copy">
+                <b>{state.brand?.name ?? "No client"}</b>
+                <small>
+                  Client PIC · {clientPic?.displayName ?? "Not assigned"}
+                </small>
+              </span>
             </div>
             <AccountMenu />
             <button
