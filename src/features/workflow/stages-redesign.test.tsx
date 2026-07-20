@@ -994,6 +994,60 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(1);
   });
 
+  it("previews and manages the references used by Angles", async () => {
+    const user = userEvent.setup();
+    const reference = {
+      id: "library-angle-reference-1",
+      url: "https://example.com/angle-reference.jpg",
+      label: "Approved product lifestyle"
+    };
+    const state = {
+      ...buildCreativeState(),
+      stage: "directions" as const,
+      referenceImages: [reference]
+    };
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    expect(
+      stage.getByRole("region", { name: "Selected references" })
+    ).toBeTruthy();
+    expect(stage.getByText("Approved product lifestyle")).toBeTruthy();
+    expect(stage.getByText("1 image")).toBeTruthy();
+
+    await user.click(
+      stage.getByRole("button", { name: "+ Upload or choose" })
+    );
+    const dialog = stage.getByRole("dialog", {
+      name: "Add reference images"
+    });
+    expect(dialog).toBeTruthy();
+    expect(
+      within(dialog)
+        .getByRole("button", { name: "Reference board" })
+        .getAttribute("aria-expanded")
+    ).toBe("true");
+    expect(within(dialog).getByText("Upload reference image")).toBeTruthy();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close reference picker" })
+    );
+    await user.click(
+      stage.getByRole("button", {
+        name: "Remove Approved product lifestyle from selected references"
+      })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "toggle-reference-image",
+      item: reference
+    });
+  });
+
   it("derives Recommended and Option PDF groups from selection and deletion", async () => {
     const base = buildMixedAngleState();
     const state = {

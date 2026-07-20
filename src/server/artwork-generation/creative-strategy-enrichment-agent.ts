@@ -59,11 +59,18 @@ export const preferredHeroTypes = [
   "vehicle"
 ] as const;
 
+export const humanPresencePolicies = [
+  "avoid",
+  "supporting",
+  "essential"
+] as const;
+
 type CommercialStyle = (typeof commercialStyles)[number];
 type SellingMechanism = (typeof sellingMechanisms)[number];
 type PreferredArtworkMode = (typeof preferredArtworkModes)[number];
 type PreferredArtworkLayout = (typeof preferredArtworkLayouts)[number];
 type PreferredHeroType = (typeof preferredHeroTypes)[number];
+type HumanPresencePolicy = (typeof humanPresencePolicies)[number];
 type EvidenceUse = "offer" | "proof" | "differentiator";
 type ClaimSource = "verified" | "creative-placeholder" | "none";
 
@@ -86,6 +93,7 @@ export interface CreativeStrategyEnrichment {
   preferredMode: PreferredArtworkMode;
   preferredLayout: PreferredArtworkLayout;
   preferredHeroType: PreferredHeroType;
+  humanPresence: HumanPresencePolicy;
   audienceMoment: string;
   reasonToBelieve: string;
   visibleProofDirection: string;
@@ -335,6 +343,11 @@ function parseAndValidateStrategy(
       preferredHeroTypes,
       "preferredHeroType"
     ),
+    humanPresence: readEnum(
+      value.humanPresence,
+      humanPresencePolicies,
+      "humanPresence"
+    ),
     audienceMoment: readString(value.audienceMoment, "audienceMoment"),
     reasonToBelieve: readString(value.reasonToBelieve, "reasonToBelieve"),
     visibleProofDirection: readString(
@@ -534,6 +547,7 @@ const enrichmentSchema = {
     preferredMode: { type: "string", enum: preferredArtworkModes },
     preferredLayout: { type: "string", enum: preferredArtworkLayouts },
     preferredHeroType: { type: "string", enum: preferredHeroTypes },
+    humanPresence: { type: "string", enum: humanPresencePolicies },
     audienceMoment: { type: "string" },
     reasonToBelieve: { type: "string" },
     visibleProofDirection: { type: "string" },
@@ -554,6 +568,7 @@ const enrichmentSchema = {
     "preferredMode",
     "preferredLayout",
     "preferredHeroType",
+    "humanPresence",
     "audienceMoment",
     "reasonToBelieve",
     "visibleProofDirection",

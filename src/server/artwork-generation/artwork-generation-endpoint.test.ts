@@ -65,6 +65,7 @@ function strategyAgentResponse(): Response {
         preferredMode: "standard_commercial",
         preferredLayout: "lifestyle_commercial",
         preferredHeroType: "person",
+        humanPresence: "essential",
         audienceMoment: "The customer wants to feel more confident.",
         reasonToBelieve: "Show the desired lived experience directly.",
         visibleProofDirection: "A human-centered beauty result moment.",
@@ -1274,6 +1275,15 @@ describe("handleArtworkGenerationRequest", () => {
           ...requestBody,
           artworkMode: "design-system",
           imagePromptModel: "anthropic/claude-sonnet-4.6",
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              supportingPoints: [
+                "Same-day delivery in Bangkok",
+                "Hand-arranged seasonal stems"
+              ]
+            }
+          ],
           brandMemory: {
             working: [oversizedContext],
             avoid: [oversizedContext]
@@ -1289,6 +1299,11 @@ describe("handleArtworkGenerationRequest", () => {
               kind: "url",
               url: "https://example.com/logo.png",
               label: "Logo"
+            },
+            {
+              kind: "url",
+              url: "https://example.com/logo.png",
+              label: "Past work style reference — Workshop CTA"
             }
           ]
         })
@@ -1304,50 +1319,72 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status).toBe(200);
     expect(editCalls).toHaveLength(1);
-    expect(editCalls[0]?.getAll("image[]")).toHaveLength(1);
+    expect(editCalls[0]?.getAll("image[]")).toHaveLength(2);
+    expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
-    expect(prompt).toContain("THIN CREATIVE INSTRUCTION");
-    expect(prompt).toContain(
-      "Create ONE complete, publication-ready social media campaign artwork"
-    );
-    expect(prompt).toContain(
-      "Use the supplied references and artifacts as the primary source of truth"
-    );
-    expect(prompt).toContain("CAMPAIGN-STYLE DESIGN TARGET");
-    expect(prompt).toContain("COMPOSITION AND INFORMATION DENSITY");
-    expect(prompt).toContain("one strong visual or typographic idea");
-    expect(prompt).toContain("MOBILE-FIRST QUALITY TEST");
-    expect(prompt).toContain("approximately 320–390 px wide");
-    expect(prompt).toContain("Reject the first generic advertising solution internally");
-    expect(prompt).toContain("split-screen before and after");
-    expect(prompt).toContain("CREATIVE TREATMENT DECISION");
+    expect(prompt).toContain("# CONDENSED MASTER PROMPT");
+    expect(prompt).toContain("Communicate through **design intelligence**");
+    expect(prompt).toContain("meaningful negative space");
+    expect(prompt).toContain("320–390 px wide");
+    expect(prompt).toContain("split-screen before-and-after");
     expect(prompt).toContain("Content type: lifestyle");
     expect(prompt).toContain("Human, natural, and relatable");
     expect(prompt).toContain("Selling approach: desire");
-    expect(prompt).toContain("PRODUCT AND OBJECT GROUNDING");
-    expect(prompt).toContain("Do not invent:");
-    expect(prompt).toContain("- products");
-    expect(prompt).toContain("grounded contact shadows");
-    expect(prompt).toContain("imaginary machines used only as metaphors");
+    expect(prompt).toContain("Human presence: essential");
+    expect(prompt).toContain(
+      "The Human presence policy overrides reference subject matter"
+    );
+    expect(prompt).toContain("realistic contact shadows");
     expect(prompt).toContain("Objective: Launch a soft summer bouquet offer.");
     expect(prompt).toContain(
       "Exact headline: Flowers that make the room feel softer"
     );
     expect(prompt).toContain("CTA: Order a bouquet");
-    expect(prompt).toContain(
-      "Do not invent additional copy, claims, prices, features, statistics"
+    expect(prompt).toContain("# TEXT DENSITY");
+    expect(prompt).toContain("zero to three short items in total");
+    expect(prompt).toContain("not a quota");
+    expect(prompt).toContain("do not enforce a one-item limit");
+    expect(prompt).toContain("Identification");
+    expect(prompt).toContain("Persuasion");
+    expect(prompt).toContain("Action");
+    expect(prompt).toContain("Complete the ad unit");
+    expect(prompt).toContain("For paid social or Meta");
+    expect(prompt).toContain("standalone, organic, downloadable");
+    expect(prompt).toContain("Select the smallest useful combination");
+    expect(prompt).toContain("Same-day delivery in Bangkok");
+    expect(prompt).toContain("Hand-arranged seasonal stems");
+    expect(prompt).toContain("LINE: @brandname");
+    expect(prompt).toContain("0XX-XXX-XXXX");
+    expect(prompt).toContain("plausible editable mockup details");
+    expect(prompt).not.toContain(
+      "Choose no more than one short supporting or offer idea"
     );
+    expect(prompt).toContain(
+      "When a layout needs temporary completion copy, you may create a plausible editable placeholder"
+    );
+    expect(prompt).toContain("multi-row bullets, feature cards, icon lists");
     expect(prompt).toContain("THICK CONTEXT / ARTIFACTS");
     expect(prompt).toContain('"role": "Logo"');
     expect(prompt).toContain(
-      "Make the visual concept and layout decisions yourself"
+      '"role": "Past work style reference — Workshop CTA"'
     );
-    expect(prompt).not.toContain("PASS 2 — REFERENCE FORENSICS");
-    expect(prompt).not.toContain("DESIGN-SYSTEM FINAL ARTWORK CONTRACT");
+    expect(prompt).toContain("Freely adapt compatible composition logic");
+    expect(prompt).toContain('"brandMemory"');
+    expect(prompt).toContain('"brandLibrary"');
+    expect(prompt).toContain('"products"');
+    expect(prompt).toContain('"caption"');
+    expect(prompt).toContain("Product truths");
+    expect(prompt).not.toContain('"selectedEvidence"');
+    expect(prompt).not.toContain("Style-only reference — study composition");
+    expect(prompt).toContain(
+      "Make those decisions from the brief, brand context, official assets"
+    );
     expect(prompt).not.toContain("Approved visual direction");
     expect(prompt).not.toContain("preferredLayout");
     expect(prompt).not.toContain("preferredHeroType");
     expect(prompt).not.toContain("{{");
+    expect(prompt).not.toContain("{hook.");
+    expect(prompt).not.toContain("{commercialStyle}");
     expect(prompt.length).toBeLessThanOrEqual(32_000);
     expect(strategyCalls).toHaveLength(1);
     expect(strategyCalls[0]?.model).toBe("gpt-5.6-luna");

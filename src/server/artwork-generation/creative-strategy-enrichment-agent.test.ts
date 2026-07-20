@@ -51,6 +51,7 @@ function strategy(overrides: Record<string, unknown> = {}) {
     preferredMode: "standard_commercial",
     preferredLayout: "lifestyle_commercial",
     preferredHeroType: "product_packshot",
+    humanPresence: "avoid",
     audienceMoment: "A Bangkok customer wants the room to feel softer today.",
     reasonToBelieve: "The offer removes friction while the bouquet proves the mood change.",
     visibleProofDirection: "Show the bouquet transforming a real lived-in room.",
@@ -111,6 +112,7 @@ describe("enrichCreativeStrategy", () => {
       commercialStyle: "promotion",
       sellingMechanism: "offer",
       preferredLayout: "lifestyle_commercial",
+      humanPresence: "avoid",
       offer: {
         text: "20% launch discount",
         evidenceId: "brief:0",

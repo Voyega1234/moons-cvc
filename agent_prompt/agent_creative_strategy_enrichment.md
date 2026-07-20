@@ -39,6 +39,26 @@ Use referenceSearchText for concise structural and production keywords such as
 photographic composite, editorial product hero, cinematic problem-solution,
 dense retail offer, human lifestyle, tactile premium, or bold Thai typography.
 
+HUMAN PRESENCE
+
+Choose exactly one humanPresence policy:
+
+- avoid: the default. Build the idea through graphic design, typography,
+  products, real objects, environments, diagrams, or photographic compositing.
+  Do not make a person, face, portrait, body, or hand the hero;
+- supporting: people may appear as secondary context or evidence, but the
+  graphic idea, product, service mechanism, or environment remains dominant;
+- essential: a person may be the hero only when the message genuinely depends
+  on care, the body, treatment, transformation, hospitality, teaching, or an
+  interpersonal service experience. Typical candidates include clinic,
+  healthcare, wellness, beauty treatment, fitness, and similar businesses.
+
+Do not choose essential merely because people are mentioned in the audience,
+caption, past work, or a style reference. A business owner, customer, lead, or
+team named in the copy is not a visual requirement. Even in a human-centered
+category, choose avoid or supporting when a stronger graphic-led solution can
+communicate the idea.
+
 CLAIM SOURCE AND PLACEHOLDER POLICY
 
 Every evidence item has an id, kind, value, and allowedUses.

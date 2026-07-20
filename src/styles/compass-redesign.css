@@ -3666,7 +3666,7 @@
 
 .compass-app .compass-angle-settings {
   display: grid;
-  grid-template-columns: minmax(260px, 1.05fr) minmax(300px, 1.2fr) minmax(250px, 0.95fr);
+  grid-template-columns: max-content minmax(300px, 1.2fr) minmax(250px, 0.95fr);
   gap: 0;
   margin-bottom: 12px;
   padding: 10px 12px;
@@ -3704,9 +3704,8 @@
 }
 
 .compass-app .compass-angle-mode-options {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: max-content;
+  display: inline-flex;
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--line);
@@ -3715,7 +3714,7 @@
 }
 
 .compass-app .compass-angle-mode-options button {
-  min-width: 0;
+  min-width: 126px;
   min-height: 30px;
   padding: 0 10px;
   border: 0;
@@ -3740,6 +3739,147 @@
 .compass-app .compass-angle-mode-options button[aria-pressed="true"] {
   background: var(--accent);
   color: #fff;
+}
+
+.compass-app .compass-angle-references {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.compass-app .compass-angle-reference-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.compass-app .compass-angle-reference-head h3,
+.compass-app .compass-angle-reference-head p {
+  margin: 0;
+}
+
+.compass-app .compass-angle-reference-head h3 {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compass-app .compass-angle-reference-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.compass-app .compass-angle-reference-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.compass-app .compass-angle-reference-actions > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.compass-app .compass-angle-reference-strip {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.compass-app .compass-angle-reference-item {
+  position: relative;
+  width: 112px;
+  min-width: 112px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fafbfc;
+}
+
+.compass-app .compass-angle-reference-item img {
+  width: 100%;
+  height: 72px;
+  display: block;
+  object-fit: contain;
+  border-radius: 7px;
+  background: #f0f2f6;
+}
+
+.compass-app .compass-angle-reference-item > span {
+  display: block;
+  margin: 6px 2px 1px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-angle-reference-item > button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(28, 35, 52, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(28, 35, 52, 0.1);
+}
+
+.compass-app .compass-angle-reference-empty {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: #fafbfc;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: left;
+}
+
+.compass-app .compass-angle-reference-modal {
+  width: min(760px, 94vw);
+  max-width: none;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.compass-app .compass-angle-reference-picker-body {
+  min-height: 0;
+  flex: 1;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.compass-app .compass-angle-reference-picker-body .source-checks,
+.compass-app .compass-angle-reference-picker-body .reference-accordion,
+.compass-app .compass-angle-reference-picker-body .reference-category-body {
+  max-height: none;
 }
 
 .compass-app .compass-angle-model-select {
@@ -7234,6 +7374,16 @@
   .compass-app .compass-angle-setting:last-child {
     padding-bottom: 0;
     border-bottom: 0;
+  }
+
+  .compass-app .compass-angle-reference-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .compass-app .compass-angle-reference-actions {
+    justify-content: space-between;
   }
 
   .compass-app .compass-plan-row {

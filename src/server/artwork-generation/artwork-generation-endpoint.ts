@@ -650,6 +650,7 @@ async function generateOutputForHook({
     hook,
     prompt: imagePrompt,
     size: generationSize,
+    quality: "medium",
     references: generationReferences
   });
   await writeDebugLog(
@@ -664,6 +665,7 @@ async function generateOutputForHook({
           model,
           prompt: imagePrompt,
           size: generationSize,
+          quality: "medium",
           referenceImages: generationReferences,
           fetchImpl
         })
@@ -1099,53 +1101,60 @@ async function buildDirectDesignSystemPrompt({
   };
 
   const contextJson = JSON.stringify(thickContext, null, 2);
-  const prompt = renderDesignSystemPromptTemplate(await loadDesignSystemPrompt(), {
-    "{{COMMERCIAL_STYLE}}":
-      compactPromptText(
+  const prompt = renderDesignSystemPromptTemplate(
+    await loadDesignSystemPrompt(),
+    {
+      "{{COMMERCIAL_STYLE}}": compactPromptText(
         strategy?.commercialStyle ?? "select from the brief and brand context",
         300
       ),
-    "{{TREATMENT}}": compactPromptText(
-      designSystemTreatmentFor(strategy?.commercialStyle),
-      500
-    ),
-    "{{SELLING_MECHANISM}}":
-      compactPromptText(
+      "{{TREATMENT}}": compactPromptText(
+        designSystemTreatmentFor(strategy?.commercialStyle),
+        500
+      ),
+      "{{SELLING_MECHANISM}}": compactPromptText(
         strategy?.sellingMechanism ??
           "select the clearest approach for the message",
         300
       ),
-    "{{AUDIENCE_MOMENT}}":
-      compactPromptText(
+      "{{HUMAN_PRESENCE}}": compactPromptText(
+        strategy?.humanPresence ?? "avoid",
+        40
+      ),
+      "{{AUDIENCE_MOMENT}}": compactPromptText(
         strategy?.audienceMoment ??
           "infer conservatively from the supplied context",
         500
       ),
-    "{{BRAND_FIT_REASON}}":
-      compactPromptText(
+      "{{BRAND_FIT_REASON}}": compactPromptText(
         strategy?.reasonToBelieve ??
           "Use the supplied brand context and artifacts as evidence.",
         500
       ),
-    "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
-      `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
-      360
-    ),
-    "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
-    "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
-    "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
-    "{{SUPPORTING_COPY}}": compactPromptText(
-      supportingCopy.join(" | "),
-      1_200
-    ),
-    "{{CTA}}": compactPromptText(hook.cta, 300),
-    "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
-    "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
-      .slice(0, 5)
-      .map((requirement) => `- ${compactPromptText(requirement, 500)}`)
-      .join("\n"),
-    "{{THICK_CONTEXT_JSON}}": contextJson
-  }, contextJson);
+      "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
+        `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
+        360
+      ),
+      "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
+      "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
+      "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
+      "{{SUPPORTING_COPY}}": compactPromptText(
+        supportingCopy.join(" | "),
+        1_200
+      ),
+      "{{CTA}}": compactPromptText(hook.cta, 300),
+      "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
+      "{{ON_ARTWORK_COPY_PRIORITY}}": buildDesignSystemCopyPriority(
+        input.service,
+        hook
+      ),
+      "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
+        .slice(0, 5)
+        .map((requirement) => `* ${compactPromptText(requirement, 500)}`)
+        .join("\n"),
+      "{{THICK_CONTEXT_JSON}}": contextJson
+    }
+  );
 
   if (prompt.length > IMAGE_PROMPT_MAX_CHARACTERS) {
     throw new Error(
@@ -1154,6 +1163,31 @@ async function buildDirectDesignSystemPrompt({
   }
 
   return prompt;
+}
+
+function buildDesignSystemCopyPriority(
+  service: ArtworkGenerationRequest["service"],
+  hook: SelectedHook
+): string {
+  const supportingOptions =
+    hook.supportingPoints?.filter((point) => point.trim()) ?? [];
+  const lines = [
+    `Render the exact headline once: “${compactPromptText(hook.hook, 500)}”`,
+    supportingOptions.length
+      ? `Select the smallest useful combination from these evidence-backed supporting options. You may use multiple short items when they make the artwork more complete, but omit anything redundant with the visual: ${compactPromptText(supportingOptions.join(" | "), 1_000)}`
+      : "Create concise supporting or offer copy only when it closes a product-recognition, persuasion, trust, or action gap.",
+    `Use the supplied logo and the CTA “${compactPromptText(hook.cta, 300)}”.`,
+    "Build a cohesive secondary-information group that feels complete without becoming dense. It may combine a product or service descriptor, relevant benefits or proof, and a useful action detail.",
+    "Complete the ad unit rather than filling the image like a standalone poster. Check Identification, Persuasion, and Action; count information already supplied by the visual and surrounding platform UI.",
+    "For paid social or Meta, do not repeat page identity or contact merely because space is available. For standalone, organic, downloadable, or reshared artwork, a compact self-contained contact path may be useful.",
+    "You may add plausible editable mockup details such as a date, price, discount, page name, LINE handle, URL, phone number, urgency note, or contact line when they genuinely complete this ad. Use brand-derived, obviously replaceable contact formats rather than invented real personal details."
+  ];
+  if (service === "album-post" && hook.formatBeats?.length) {
+    lines.push(
+      `Album story beats may be distributed across the three crops: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}`
+    );
+  }
+  return lines.join("\n");
 }
 
 function compactPromptLibrary(
@@ -1195,12 +1229,20 @@ function loadDesignSystemPrompt(): Promise<string> {
 
 function renderDesignSystemPromptTemplate(
   source: string,
-  replacements: Readonly<Record<string, string>>,
-  fallbackRuntimeContext: string
+  replacements: Readonly<Record<string, string>>
 ): string {
   const template = source.trim();
   if (!template) {
     throw new Error("agent_design_system.md is empty.");
+  }
+
+  const missingMarkers = Object.keys(replacements).filter(
+    (marker) => !template.includes(marker)
+  );
+  if (missingMarkers.length) {
+    throw new Error(
+      `agent_design_system.md is missing required markers: ${missingMarkers.join(", ")}`
+    );
   }
 
   let rendered = template;
@@ -1208,11 +1250,16 @@ function renderDesignSystemPromptTemplate(
     rendered = rendered.replaceAll(marker, content);
   }
 
-  return template.includes("{{THICK_CONTEXT_JSON}}")
-    ? rendered
-    : [rendered, "RUNTIME CONTEXT / ARTIFACTS", fallbackRuntimeContext].join(
-        "\n\n"
-      );
+  const unresolvedMarker = rendered.match(
+    /\{\{[^{}]+\}\}|\{(?:brand|hook)\.[^{}]+\}|\{(?:commercialStyle|sellingMechanism|audienceMoment|reasonToBelieve|canvasRatio|service|additional user requirements)[^{}]*\}/
+  )?.[0];
+  if (unresolvedMarker) {
+    throw new Error(
+      `agent_design_system.md contains an unresolved marker: ${unresolvedMarker}`
+    );
+  }
+
+  return rendered;
 }
 
 function designSystemTreatmentFor(
@@ -1232,7 +1279,7 @@ function designSystemTreatmentFor(
     case "social-proof":
       return "Build trust through supplied evidence, authentic human context, or recognizable proof; never invent a real reviewer or certification.";
     case "story":
-      return "Create one specific, emotionally legible moment or transformation that the viewer understands visually without reading a paragraph.";
+      return "Create one specific, visually legible tension or transformation that the viewer understands without reading a paragraph. Do not assume that the story needs a human protagonist.";
     case "playful":
       return "Use expressive color, scale, rhythm, and surprise appropriate to the brand while keeping the focal message unmistakable.";
     default:
