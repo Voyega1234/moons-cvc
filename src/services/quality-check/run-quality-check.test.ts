@@ -139,12 +139,12 @@ describe("runQualityCheck", () => {
     expect(results[0]?.report?.score).toBe(91);
   });
 
-  it("checks only the regenerated outputs requested by the caller", async () => {
+  it("checks only requested image outputs and excludes UGC", async () => {
     const outputs: CreativeOutput[] = ["output-1", "output-2"].map(
       (id, index) => ({
         id,
         directionId: `direction-${index + 1}`,
-        format: "1:1 Static",
+        format: index === 0 ? "9:16 UGC" : "1:1 Static",
         status: "draft",
         clientStatus: "queued",
         assetUrl: `https://example.com/${id}.png`,
@@ -177,7 +177,7 @@ describe("runQualityCheck", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await runQualityCheck(run, ["output-2"]);
+    await runQualityCheck(run, ["output-1", "output-2"]);
 
     const request = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)

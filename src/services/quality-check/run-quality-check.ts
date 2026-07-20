@@ -1,6 +1,7 @@
 import { env } from "../../config/env";
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import type { WorkflowState } from "../../features/workflow/model";
+import { isBuildQualityCheckOutput } from "../../features/workflow/rules";
 import { getSupabaseClient } from "../../lib/supabase/client";
 
 export interface QualityCheckResult {
@@ -20,7 +21,10 @@ export async function runQualityCheck(
 ): Promise<readonly QualityCheckResult[]> {
   const requestedIds = outputIds ? new Set(outputIds) : null;
   const checkable = run.outputs.filter(
-    (output) => output.assetUrl && (!requestedIds || requestedIds.has(output.id))
+    (output) =>
+      isBuildQualityCheckOutput(output) &&
+      output.assetUrl &&
+      (!requestedIds || requestedIds.has(output.id))
   );
   if (!checkable.length) return [];
 

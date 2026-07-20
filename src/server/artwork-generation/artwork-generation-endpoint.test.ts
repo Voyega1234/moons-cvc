@@ -1232,6 +1232,7 @@ describe("handleArtworkGenerationRequest", () => {
   it("sends a thin brief and attached artifacts directly to GPT Image 2 in design-system mode", async () => {
     const editCalls: FormData[] = [];
     const strategyCalls: Record<string, unknown>[] = [];
+    const oversizedContext = "Brand context detail ".repeat(500);
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -1273,6 +1274,16 @@ describe("handleArtworkGenerationRequest", () => {
           ...requestBody,
           artworkMode: "design-system",
           imagePromptModel: "anthropic/claude-sonnet-4.6",
+          brandMemory: {
+            working: [oversizedContext],
+            avoid: [oversizedContext]
+          },
+          brandLibrary: {
+            brand: [{ title: "Brand system", description: oversizedContext }],
+            products: [{ title: "Product truths", description: oversizedContext }],
+            docs: [{ title: "Guideline", description: oversizedContext }],
+            refs: [{ title: "Creative learning", description: oversizedContext }]
+          },
           referenceImages: [
             {
               kind: "url",
@@ -1337,6 +1348,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("preferredLayout");
     expect(prompt).not.toContain("preferredHeroType");
     expect(prompt).not.toContain("{{");
+    expect(prompt.length).toBeLessThanOrEqual(32_000);
     expect(strategyCalls).toHaveLength(1);
     expect(strategyCalls[0]?.model).toBe("gpt-5.6-luna");
   });

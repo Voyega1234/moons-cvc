@@ -95,6 +95,7 @@ import { WorkflowMaterialPack } from "./material-pack";
 import {
   approvalRolesForOutput,
   currentApprovalRole,
+  isBuildQualityCheckOutput,
   selectedDirectionCount,
   workflowActionBlockReason
 } from "./rules";
@@ -5365,13 +5366,9 @@ export function StudioStage({ state, dispatch }: StageProps) {
     state,
     dispatch
   );
-  const failedCount = state.outputs.filter(
-    (output) => output.status === "needs-revision"
-  ).length;
-  const readyCount = state.outputs.filter(
-    (output) => output.status === "ready" || output.status === "fixed"
-  ).length;
   const creativeCount = reviewCreativeCount(state.outputs);
+  const failedCount = reviewGuidedImprovementCount(state.outputs);
+  const readyCount = state.qaComplete ? creativeCount - failedCount : 0;
 
   return (
     <DecisionCard
@@ -5385,7 +5382,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
             ? "Not checked"
             : failedCount
               ? `${readyCount} ready · ${failedCount} suggestion${failedCount === 1 ? "" : "s"}`
-              : `${readyCount} / ${state.outputs.length} ready`
+              : `${readyCount} / ${creativeCount} ready`
       }
       statusClass={state.qaComplete && !failedCount ? "green" : ""}
       className="compass-stage-build"
@@ -5539,17 +5536,50 @@ function groupOutputsForReview(
   return Array.from(albumGroups.values(), sortAlbumOutputs);
 }
 
-function reviewCreativeCount(outputs: readonly CreativeOutput[]): number {
+function reviewCreativeGroups(
+  outputs: readonly CreativeOutput[]
+): readonly (readonly CreativeOutput[])[] {
   const formatGroups = new Map<string, CreativeOutput[]>();
   outputs.forEach((output) => {
     const group = formatGroups.get(output.format) ?? [];
     group.push(output);
     formatGroups.set(output.format, group);
   });
-  return Array.from(formatGroups.values()).reduce(
-    (total, group) => total + groupOutputsForReview(group).length,
-    0
+  return Array.from(formatGroups.values()).flatMap((group) =>
+    groupOutputsForReview(group)
   );
+}
+
+function outputNeedsGuidedImprovement(output: CreativeOutput): boolean {
+  return (
+    isBuildQualityCheckOutput(output) && output.status === "needs-revision"
+  );
+}
+
+function reviewCreativeCount(outputs: readonly CreativeOutput[]): number {
+  return reviewCreativeGroups(outputs).length;
+}
+
+function reviewGroupIsApprovedForRole(
+  outputs: readonly CreativeOutput[],
+  role: ApprovalRole
+): boolean {
+  return outputs.every((output) => output.approval[role] === "approved");
+}
+
+function reviewGroupIsWaitingForRole(
+  outputs: readonly CreativeOutput[],
+  role: ApprovalRole
+): boolean {
+  return outputs.some((output) => currentApprovalRole(output) === role);
+}
+
+function reviewGuidedImprovementCount(
+  outputs: readonly CreativeOutput[]
+): number {
+  return reviewCreativeGroups(outputs).filter((group) =>
+    group.some(outputNeedsGuidedImprovement)
+  ).length;
 }
 
 function outputFormatSortRank(format: string): number {
@@ -5696,11 +5726,18 @@ function OutputGrid({
                 const direction = state.directions.find(
                   (candidate) => candidate.id === output.directionId
                 );
-                const qaReport = output.qaReport;
+                const guidedOutput = reviewOutputs.find(
+                  outputNeedsGuidedImprovement
+                );
+                const hasGuidedImprovement = Boolean(guidedOutput);
+                const qualityOutput = guidedOutput ?? output;
+                const qaReport = isBuildQualityCheckOutput(output)
+                  ? qualityOutput.qaReport
+                  : undefined;
                 const qaSuggestion = qaReport?.suggestion;
                 return (
                   <article
-                    className={`output-card compass-build-review-card ${qaReport && (output.status === "ready" || output.status === "fixed") ? "ready qa-passed" : ""} ${qaReport && output.status === "needs-revision" ? "attn qa-attention" : ""}`}
+                    className={`output-card compass-build-review-card ${qaReport && !hasGuidedImprovement ? "ready qa-passed" : ""} ${qaReport && hasGuidedImprovement ? "attn qa-attention" : ""}`}
                     key={output.id}
                   >
                     <header className="compass-build-card-head">
@@ -5713,13 +5750,11 @@ function OutputGrid({
                         </small>
                       </div>
                       <span
-                        className={`pill ${output.status === "ready" || output.status === "fixed" ? "green" : output.status === "needs-revision" ? "amber" : ""}`}
+                        className={`pill ${qaReport && !hasGuidedImprovement ? "green" : hasGuidedImprovement ? "amber" : ""}`}
                       >
-                        {qaReport && output.status === "needs-revision"
+                        {qaReport && hasGuidedImprovement
                           ? "1 suggestion"
-                          : qaReport && (output.status === "ready" ||
-                              output.status === "fixed"
-                            ) ? "Ready"
+                          : qaReport ? "Ready"
                             : "AI draft"}
                       </span>
                     </header>
@@ -5771,8 +5806,8 @@ function OutputGrid({
                       ) : null}
                     </div>
                     {qaReport &&
-                    output.status === "needs-revision" &&
-                    output.qaNote ? (
+                    hasGuidedImprovement &&
+                    qualityOutput.qaNote ? (
                       <div className="compass-build-qa needs">
                         <div className="compass-build-qa-head">
                           <span aria-hidden="true">
@@ -5787,7 +5822,7 @@ function OutputGrid({
                           <strong>{qaReport.score}</strong>
                         </div>
                         <QualityActionSummary
-                          text={qaSuggestion?.detail || output.qaNote}
+                          text={qaSuggestion?.detail || qualityOutput.qaNote}
                         />
                         {qaReport ? (
                           <QualityReportDetails report={qaReport} />
@@ -5799,8 +5834,7 @@ function OutputGrid({
                           </div>
                         ) : null}
                       </div>
-                    ) : qaReport &&
-                      (output.status === "ready" || output.status === "fixed") ? (
+                    ) : qaReport && !hasGuidedImprovement ? (
                       <div className="compass-build-qa passed">
                         <div>
                           <small>
@@ -5813,7 +5847,7 @@ function OutputGrid({
                       </div>
                     ) : null}
                     <footer className="compass-build-output-foot">
-                      {output.status === "needs-revision" ? (
+                      {hasGuidedImprovement ? (
                         <>
                           <button
                             className="btn primary small"
@@ -5837,7 +5871,14 @@ function OutputGrid({
                             className="btn ghost small"
                             type="button"
                             onClick={() =>
-                              dispatch({ type: "resolve-qa-output", id: output.id })
+                              reviewOutputs
+                                .filter(outputNeedsGuidedImprovement)
+                                .forEach((item) =>
+                                  dispatch({
+                                    type: "resolve-qa-output",
+                                    id: item.id
+                                  })
+                                )
                             }
                           >
                             Keep current
@@ -5987,70 +6028,28 @@ function QualityReportDetails({ report }: { report: CreativeQualityReport }) {
     .filter((criterion) => !criterion.passed)
     .sort((left, right) => left.score - right.score)
     .slice(0, 3);
-  const aiOriginAudit = report.gd.criteria.find((criterion) =>
-    criterion.criterion.includes("AI-origin Audit")
-  );
-  const brandImpactAudit = report.gd.criteria.find((criterion) =>
-    criterion.criterion.includes("Stop-scroll & Brand Impact Audit")
-  );
+
+  if (!priorityIssues.length) return null;
 
   return (
     <div className="compass-build-qa-details">
-      <div className="compass-build-qa-score-grid" aria-label="Quality scores">
-        {([
-          ["GD", report.gd],
-          ["CS", report.cs]
-        ] as const).map(([label, area]) => (
-          <div key={label}>
-            <b>{label}</b>
-            <span className={area.passed ? "passed" : "needs"}>
-              {area.passed ? "Passed" : "Needs work"}
-            </span>
-            <strong>{area.score}</strong>
-          </div>
-        ))}
-        {aiOriginAudit ? (
-          <div title={aiOriginAudit.detail}>
-            <b>AI-origin</b>
-            <span className={aiOriginAudit.passed ? "passed" : "needs"}>
-              {aiOriginAudit.passed
-                ? "Not obviously AI-generated"
-                : "AI tells found"}
-            </span>
-            <strong>{aiOriginAudit.score}</strong>
-          </div>
-        ) : null}
-        {brandImpactAudit ? (
-          <div title={brandImpactAudit.detail}>
-            <b>Brand impact</b>
-            <span className={brandImpactAudit.passed ? "passed" : "needs"}>
-              {brandImpactAudit.passed
-                ? "Stop-scroll ready"
-                : "Attention / brand risk"}
-            </span>
-            <strong>{brandImpactAudit.score}</strong>
-          </div>
-        ) : null}
-      </div>
-      {priorityIssues.length ? (
-        <details>
-          <summary>
-            View {priorityIssues.length} priority issue
-            {priorityIssues.length === 1 ? "" : "s"}
-          </summary>
-          <ul>
-            {priorityIssues.map((criterion) => (
-              <li key={criterion.criterion}>
-                <span aria-hidden="true">!</span>
-                <div>
-                  <b>{criterion.criterion}</b>
-                  <p>{criterion.suggestion || criterion.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+      <details>
+        <summary>
+          View {priorityIssues.length} priority issue
+          {priorityIssues.length === 1 ? "" : "s"}
+        </summary>
+        <ul>
+          {priorityIssues.map((criterion) => (
+            <li key={criterion.criterion}>
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>{criterion.criterion}</b>
+                <p>{criterion.suggestion || criterion.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -6537,30 +6536,33 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
   );
   const [clientSlidesExporting, setClientSlidesExporting] = useState(false);
   const [clientSlidesError, setClientSlidesError] = useState<string | null>(null);
-  const totalChecks = state.outputs.reduce(
-    (total, output) => total + approvalRolesForOutput(output).length,
+  const reviewGroups = reviewCreativeGroups(state.outputs);
+  const totalChecks = reviewGroups.reduce(
+    (total, outputs) =>
+      total + approvalRolesForOutput(outputs[0]!).length,
     0
   );
-  const approvedChecks = state.outputs.reduce(
+  const approvedChecks = reviewGroups.reduce(
     (total, output) =>
       total +
-      approvalRolesForOutput(output).filter(
-        (role) => output.approval[role] === "approved"
+      approvalRolesForOutput(output[0]!).filter((role) =>
+        reviewGroupIsApprovedForRole(output, role)
       ).length,
     0
   );
   const readyAssets = pmApprovedClientSlideItems(state).length;
+  const totalClientCreatives = reviewCreativeCount(state.outputs);
   const activeRoleConfig =
     REVIEW_ROLES.find(({ key }) => key === activeRole) ?? REVIEW_ROLES[0]!;
-  const activeRoleOutputs = state.outputs.filter((output) =>
-    currentApprovalRole(output) === activeRole
+  const activeRoleGroups = reviewGroups.filter((outputs) =>
+    reviewGroupIsWaitingForRole(outputs, activeRole)
   );
-  const activeRoleApproved = state.outputs.filter(
-    (output) =>
-      outputIsEligibleForRole(output, activeRole) &&
-      output.approval[activeRole] === "approved"
+  const activeRoleApproved = reviewGroups.filter(
+    (outputs) =>
+      outputIsEligibleForRole(outputs[0]!, activeRole) &&
+      reviewGroupIsApprovedForRole(outputs, activeRole)
   ).length;
-  const activeRoleWaiting = activeRoleOutputs.length;
+  const activeRoleWaiting = activeRoleGroups.length;
   const activeRoleIndex = REVIEW_ROLES.findIndex(({ key }) => key === activeRole);
   const nextRole = REVIEW_ROLES[activeRoleIndex + 1];
   const approveRoleAction: WorkflowAction = {
@@ -6609,15 +6611,15 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
             title={approveRoleBlocked ?? undefined}
             onClick={() => dispatch(approveRoleAction)}
           >
-            Approve all · {activeRoleOutputs.length}
+            Approve all · {activeRoleGroups.length}
           </button>
           {nextRole ? (
             <button
               className="btn primary"
               type="button"
-              disabled={Boolean(activeRoleOutputs.length)}
+              disabled={Boolean(activeRoleGroups.length)}
               title={
-                activeRoleOutputs.length
+                activeRoleGroups.length
                   ? `Approve the remaining ${reviewRoleShort(activeRole)} creatives first.`
                   : undefined
               }
@@ -6674,14 +6676,14 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
               </div>
               <div className="compass-qc-role-list">
                 {REVIEW_ROLES.map(({ key, label }) => {
-                  const eligible = state.outputs.filter((output) =>
-                    outputIsEligibleForRole(output, key)
+                  const eligible = reviewGroups.filter((outputs) =>
+                    outputIsEligibleForRole(outputs[0]!, key)
                   );
-                  const approvedForRole = eligible.filter(
-                    (output) => output.approval[key] === "approved"
+                  const approvedForRole = eligible.filter((outputs) =>
+                    reviewGroupIsApprovedForRole(outputs, key)
                   ).length;
-                  const waitingForRole = state.outputs.filter(
-                    (output) => currentApprovalRole(output) === key
+                  const waitingForRole = reviewGroups.filter((outputs) =>
+                    reviewGroupIsWaitingForRole(outputs, key)
                   ).length;
                   return (
                     <div className="compass-qc-role-progress" key={key}>
@@ -6705,7 +6707,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
               </div>
               <div className="compass-qc-client-ready">
                 <b>
-                  {readyAssets}/{state.outputs.length} client-ready
+                  {readyAssets}/{totalClientCreatives} client-ready
                 </b>
                 <span>PM-approved assets unlock in Client review.</span>
               </div>
@@ -6718,17 +6720,19 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   aria-label="Internal review roles"
                 >
                   {REVIEW_ROLES.map(({ key, label, summary }) => {
-                    const eligible = state.outputs.filter((output) =>
-                      outputIsEligibleForRole(output, key)
+                    const eligible = reviewGroups.filter((outputs) =>
+                      outputIsEligibleForRole(outputs[0]!, key)
                     );
-                    const roleQueue = state.outputs.filter(
-                      (output) => currentApprovalRole(output) === key
+                    const roleQueue = reviewGroups.filter((outputs) =>
+                      reviewGroupIsWaitingForRole(outputs, key)
                     );
-                    const rejected = roleQueue.filter(
-                      (output) => output.approval[key] === "rejected"
+                    const rejected = roleQueue.filter((outputs) =>
+                      outputs.some(
+                        (output) => output.approval[key] === "rejected"
+                      )
                     ).length;
-                    const approvedForRole = eligible.filter(
-                      (output) => output.approval[key] === "approved"
+                    const approvedForRole = eligible.filter((outputs) =>
+                      reviewGroupIsApprovedForRole(outputs, key)
                     ).length;
                     const waiting = roleQueue.length;
                     return (
@@ -6791,7 +6795,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   )}
                 </div>
               </section>
-              {activeRole === "graphicDesign" && activeRoleOutputs.length ? (
+              {activeRole === "graphicDesign" && activeRoleGroups.length ? (
                 <WorkflowMaterialPack state={state} />
               ) : null}
               <div className="compass-qc-section-head">
@@ -6800,24 +6804,28 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   <h3>Assets in {reviewRoleShort(activeRole)} review</h3>
                 </div>
                 <span>
-                  {activeRoleOutputs.length} {pluralize(activeRoleOutputs.length, "creative")}
+                  {activeRoleGroups.length} {pluralize(activeRoleGroups.length, "creative")}
                 </span>
               </div>
-              {activeRoleOutputs.length ? (
+              {activeRoleGroups.length ? (
                 <div className="compass-qc-focus-grid">
-                  {activeRoleOutputs.map((output) => (
-                    <QcSlide
-                      index={state.outputs.indexOf(output)}
-                      output={output}
-                      direction={state.directions.find(
-                        (candidate) => candidate.id === output.directionId
-                      )}
-                      run={state}
-                      role={activeRole}
-                      dispatch={dispatch}
-                      key={output.id}
-                    />
-                  ))}
+                  {activeRoleGroups.map((outputs) => {
+                    const output = outputs[0]!;
+                    return (
+                      <QcSlide
+                        index={reviewGroups.indexOf(outputs)}
+                        output={output}
+                        outputs={outputs}
+                        direction={state.directions.find(
+                          (candidate) => candidate.id === output.directionId
+                        )}
+                        run={state}
+                        role={activeRole}
+                        dispatch={dispatch}
+                        key={output.id}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="compass-qc-queue-clear">
@@ -6851,10 +6859,12 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
 
 function ApprovalDecisionField({
   output,
+  outputs,
   role,
   dispatch
 }: {
   output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
   role: ApprovalRole;
   dispatch: Dispatch<WorkflowAction>;
 }) {
@@ -6876,14 +6886,19 @@ function ApprovalDecisionField({
   }, [role, output.id]);
 
   function submit() {
+    const actionableOutputs = outputs.filter(
+      (candidate) => currentApprovalRole(candidate) === role
+    );
     if (mode === "approve") {
-      dispatch({
-        type: "review-output",
-        id: output.id,
-        role,
-        decision: "approved",
-        comment: draft.trim()
-      });
+      actionableOutputs.forEach((candidate) =>
+        dispatch({
+          type: "review-output",
+          id: candidate.id,
+          role,
+          decision: "approved",
+          comment: draft.trim()
+        })
+      );
       setMode(null);
       return;
     }
@@ -6894,13 +6909,15 @@ function ApprovalDecisionField({
     }
     const targetRole: ApprovalRole =
       ugc || resolvedType === "caption" ? "clientService" : "graphicDesign";
-    dispatch({
-      type: "route-output-changes",
-      id: output.id,
-      requestedBy: role,
-      targetRole,
-      comment: draft.trim()
-    });
+    actionableOutputs.forEach((candidate) =>
+      dispatch({
+        type: "route-output-changes",
+        id: candidate.id,
+        requestedBy: role,
+        targetRole,
+        comment: draft.trim()
+      })
+    );
     setMode(null);
   }
 
@@ -7040,6 +7057,7 @@ function ApprovalDecisionField({
 function QcSlide({
   index,
   output,
+  outputs,
   direction,
   run,
   role,
@@ -7047,6 +7065,7 @@ function QcSlide({
 }: {
   index: number;
   output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
   run: WorkflowState;
   role: ApprovalRole;
@@ -7059,23 +7078,47 @@ function QcSlide({
   const roleConfig =
     REVIEW_ROLES.find(({ key }) => key === role) ?? REVIEW_ROLES[0]!;
   const roleShort = reviewRoleShort(role);
-  const decision = output.approval[role];
+  const album = isAlbumOutput(output) && outputs.length > 1;
+  const orderedOutputs = album ? sortAlbumOutputs(outputs) : outputs;
+  const decision = reviewGroupIsApprovedForRole(outputs, role)
+    ? "approved"
+    : outputs.some((candidate) => candidate.approval[role] === "rejected")
+      ? "rejected"
+      : null;
   const decisionClass = decision ?? "pending";
 
   const handleReplace = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []).sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, {
+        numeric: true,
+        sensitivity: "base"
+      })
+    );
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
+    if (album && files.length !== orderedOutputs.length) {
+      setUploadError(`Choose exactly ${orderedOutputs.length} album panels in order.`);
+      return;
+    }
 
     setUploading(true);
     setUploadError(null);
     try {
-      const replacement = await uploadReplacementAsset({ run, output, file });
-      dispatch({
-        type: "replace-output-asset",
-        id: output.id,
-        ...replacement
-      });
+      const targets = album ? orderedOutputs : [output];
+      for (const [panelIndex, target] of targets.entries()) {
+        const file = files[panelIndex];
+        if (!file) continue;
+        const replacement = await uploadReplacementAsset({
+          run,
+          output: target,
+          file
+        });
+        dispatch({
+          type: "replace-output-asset",
+          id: target.id,
+          ...replacement
+        });
+      }
     } catch (caught) {
       setUploadError(
         caught instanceof Error
@@ -7091,7 +7134,9 @@ function QcSlide({
     setDownloading(true);
     setUploadError(null);
     try {
-      await downloadOutputAsset(output, index);
+      for (const target of orderedOutputs) {
+        await downloadOutputAsset(target, run.outputs.indexOf(target));
+      }
     } catch (caught) {
       setUploadError(
         caught instanceof Error ? caught.message : "Could not download artwork."
@@ -7103,12 +7148,14 @@ function QcSlide({
 
   return (
     <article
-      className={`compass-qc-focus-card ${decision === "rejected" || output.status === "needs-revision" ? "work-required" : ""}`}
+      className={`compass-qc-focus-card ${decision === "rejected" || outputs.some((candidate) => candidate.status === "needs-revision") ? "work-required" : ""}`}
     >
       <div className="compass-qc-focus-asset">
         <div className="compass-qc-focus-visual">
           {isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} compact />
+          ) : album ? (
+            <AlbumMosaic outputs={orderedOutputs} direction={direction} />
           ) : output.assetUrl ? (
             <img
               className="compass-qc-focus-image"
@@ -7169,7 +7216,7 @@ function QcSlide({
             ))}
           </div>
         </div>
-        <QcApprovalTrail output={output} />
+        <QcApprovalTrail output={output} outputs={outputs} />
         {output.clientStatus === "revision" &&
         output.approvalComments.projectManager ? (
           <div className="compass-qc-work-note client-request">
@@ -7188,19 +7235,29 @@ function QcSlide({
               {role === "graphicDesign" ? <><button
                 className="btn secondary small download-action"
                 type="button"
-                disabled={!output.assetUrl || downloading}
+                disabled={orderedOutputs.some((candidate) => !candidate.assetUrl) || downloading}
                 onClick={() => void handleDownload()}
               >
-                {downloading ? "Downloading…" : "Download Image"}
+                {downloading
+                  ? "Downloading…"
+                  : album
+                    ? "Download Album"
+                    : "Download Image"}
               </button>
               <label
                 className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
+                title={album ? `Choose ${orderedOutputs.length} panel files in order.` : undefined}
               >
-                {uploading ? "Uploading…" : "Upload replacement"}
+                {uploading
+                  ? "Uploading…"
+                  : album
+                    ? `Upload ${orderedOutputs.length} panels`
+                    : "Upload replacement"}
                 <input
                   className="file-input"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  multiple={album}
                   disabled={uploading}
                   onChange={handleReplace}
                 />
@@ -7217,6 +7274,7 @@ function QcSlide({
           </div>
           <ApprovalDecisionField
             output={output}
+            outputs={outputs}
             role={role}
             dispatch={dispatch}
           />
@@ -7251,19 +7309,25 @@ function qcChecklistFor(
   return fallback;
 }
 
-function QcApprovalTrail({ output }: { output: CreativeOutput }) {
+function QcApprovalTrail({
+  output,
+  outputs
+}: {
+  output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
+}) {
   const roles = approvalRolesForOutput(output);
   const currentRole = roles.find(
-    (role) => output.approval[role] !== "approved"
+    (role) => !reviewGroupIsApprovedForRole(outputs, role)
   );
   const internallyApproved = roles.every(
-    (role) => output.approval[role] === "approved"
+    (role) => reviewGroupIsApprovedForRole(outputs, role)
   );
 
   return (
     <div className="compass-qc-mini-trail" aria-label="Approval route">
       {roles.map((role, index) => {
-        const approved = output.approval[role] === "approved";
+        const approved = reviewGroupIsApprovedForRole(outputs, role);
         const current = role === currentRole;
         const short = reviewRoleShort(role);
         return (

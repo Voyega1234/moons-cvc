@@ -5009,49 +5009,7 @@
 
 .compass-app .compass-build-qa-details {
   width: 100%;
-  display: grid;
-  gap: 6px;
   margin-top: 8px;
-}
-
-.compass-app .compass-build-qa-score-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 6px;
-}
-
-.compass-app .compass-build-qa-score-grid > div {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
-  border: 1px solid rgba(28, 35, 52, 0.1);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.compass-app .compass-build-qa-score-grid b {
-  margin: 0;
-  font-size: 9px;
-}
-
-.compass-app .compass-build-qa-score-grid span {
-  color: var(--green);
-  font-size: 8.5px;
-}
-
-.compass-app .compass-build-qa-score-grid span.needs {
-  color: #936000;
-}
-
-.compass-app .compass-build-qa-score-grid strong {
-  width: auto;
-  height: auto;
-  background: transparent;
-  color: var(--ink);
-  font-size: 9.5px;
 }
 
 .compass-app .compass-build-qa-details details {

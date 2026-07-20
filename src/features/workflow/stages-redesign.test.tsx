@@ -23,7 +23,10 @@ import {
 } from "./stages";
 import { buildDirectionFixtures } from "./test-fixtures";
 import { buildAngleExportReview } from "./angle-content-types";
-import { pmApprovedClientSlideItems } from "./export-client-slides-pptx";
+import {
+  buildPmApprovedClientSlidesPptx,
+  pmApprovedClientSlideItems
+} from "./export-client-slides-pptx";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -1198,7 +1201,9 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       firstCard?.querySelector(".compass-build-qa-score-grid")
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(firstCard?.textContent).not.toContain("AI-origin");
+    expect(firstCard?.textContent).not.toContain("Brand impact");
     expect(firstCard?.textContent).not.toContain("GD Checklist Review");
     expect(firstCard?.textContent).not.toContain("CS Checklist Review");
     expect(firstCard?.textContent).not.toContain("88");
@@ -1308,8 +1313,10 @@ describe("redesigned workflow stages", () => {
       "Premium features. The difference is visible in one glance."
     );
     expect(failedCard?.textContent).toContain("78");
-    expect(failedCard?.textContent).toContain("Not obviously AI-generated");
-    expect(failedCard?.textContent).toContain("Stop-scroll ready");
+    expect(failedCard?.textContent).not.toContain("Not obviously AI-generated");
+    expect(failedCard?.textContent).not.toContain("Stop-scroll ready");
+    expect(failedCard?.textContent).not.toContain("AI-origin");
+    expect(failedCard?.textContent).not.toContain("Brand impact");
     expect(stage.queryByText("Quality check found a fix")).toBeNull();
     await user.click(stage.getByRole("button", { name: "Use suggestion" }));
     const regenerateDialog = stage.getByRole("dialog");
@@ -1333,6 +1340,61 @@ describe("redesigned workflow stages", () => {
     );
     await user.click(stage.getByRole("button", { name: "Keep current" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
+  });
+
+  it("resolves every hidden album panel when keeping the grouped creative", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const source = base.outputs[0];
+    if (!source) throw new Error("Expected a creative output fixture.");
+    const albumOutputs = [1, 2, 3].map((panel) => ({
+      ...source,
+      id: `album-direction-album-${panel}-v1`,
+      directionId: source.directionId,
+      format: "Album post",
+      status: "needs-revision" as const,
+      assetUrl: `https://example.com/album-${panel}.png`,
+      qaNote: `Panel ${panel} needs refinement.`,
+      qaReport: qualityReport(false, 78)
+    }));
+    const state = { ...base, qaComplete: true, outputs: albumOutputs };
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    expect(stage.getByText("1 guided improvement to review.")).toBeTruthy();
+    expect(stage.getAllByRole("button", { name: "Keep current" })).toHaveLength(1);
+
+    await user.click(stage.getByRole("button", { name: "Keep current" }));
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
+      albumOutputs.map((output) => ({
+        type: "resolve-qa-output",
+        id: output.id
+      }))
+    );
+  });
+
+  it("does not count UGC as a guided image improvement", () => {
+    const base = buildCreativeState();
+    const ugcOutputs = base.outputs.slice(0, 2).map((output, index) => ({
+      ...output,
+      id: `ugc-${index + 1}`,
+      format: "9:16 UGC",
+      status: "needs-revision" as const,
+      qaNote: "Legacy image-QA note.",
+      qaReport: qualityReport(false, 78)
+    }));
+    const state = { ...base, qaComplete: true, outputs: ugcOutputs };
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+    const sendButton = stage.getByRole("button", {
+      name: "Send to Internal QC →"
+    }) as HTMLButtonElement;
+
+    expect(stage.getByText("Quality check complete.")).toBeTruthy();
+    expect(stage.queryByText(/guided improvement.*to review/i)).toBeNull();
+    expect(sendButton.disabled).toBe(false);
   });
 
   it("presents Internal QC as a role-focused asset review queue", async () => {
@@ -1494,6 +1556,51 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("reviews and counts a three-panel album as one QC creative", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const source = base.outputs[0];
+    if (!source) throw new Error("Expected a creative output fixture.");
+    const albumOutputs = [1, 2, 3].map((panel) => ({
+      ...source,
+      id: `${source.directionId}-album-${panel}-v1`,
+      format: "Album post",
+      status: "ready" as const,
+      assetUrl: `https://example.com/album-${panel}.png`
+    }));
+    const state = { ...base, qaComplete: true, outputs: albumOutputs };
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(1);
+    expect(view.container.querySelectorAll(".compass-album-mosaic img")).toHaveLength(3);
+    expect(stage.getByRole("button", { name: "Approve all · 1" })).toBeTruthy();
+    expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(1);
+    expect(
+      stage
+        .getByRole("progressbar", { name: "Internal QC progress" })
+        .getAttribute("aria-valuemax")
+    ).toBe("3");
+
+    await user.click(stage.getByRole("button", { name: "Approve → CS" }));
+    await user.click(stage.getByRole("button", { name: "Mark ✓ GD approved" }));
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
+      albumOutputs.map((output) => ({
+        type: "review-output",
+        id: output.id,
+        role: "graphicDesign",
+        decision: "approved",
+        comment: ""
+      }))
+    );
+  });
+
   it("offers one client deck from PM Review when approved assets are ready", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -1530,6 +1637,65 @@ describe("redesigned workflow stages", () => {
       name: `Download client slides · ${approvedState.outputs.length}`
     }) as HTMLButtonElement;
     expect(readyDownload.disabled).toBe(false);
+  });
+
+  it("exports approved album panels as one composed client slide", async () => {
+    const base = buildCreativeState();
+    const source = base.outputs[0];
+    if (!source) throw new Error("Expected a creative output fixture.");
+    const albumState = workflowReducer(
+      {
+        ...base,
+        outputs: [3, 1, 2].map((panel) => ({
+          ...source,
+          id: `${source.directionId}-album-${panel}-v1`,
+          format: "Album post",
+          assetUrl: `https://example.com/album-${panel}.png`
+        }))
+      },
+      { type: "approve-all" }
+    );
+
+    const items = pmApprovedClientSlideItems(albumState);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.outputs.map((output) => output.id)).toEqual([
+      `${source.directionId}-album-1-v1`,
+      `${source.directionId}-album-2-v1`,
+      `${source.directionId}-album-3-v1`
+    ]);
+
+    const imageData =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
+    const pptx = await buildPmApprovedClientSlidesPptx(
+      albumState,
+      vi.fn().mockResolvedValue(imageData)
+    );
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            options: { x: number; y: number; w: number; h: number };
+          }>;
+        }>;
+      }
+    )._slides;
+    const artwork = slides[0]?._slideObjects
+      .filter((object) => object._type === "image")
+      .map(({ options }) => ({
+        x: Number(options.x.toFixed(3)),
+        y: Number(options.y.toFixed(3)),
+        w: Number(options.w.toFixed(3)),
+        h: Number(options.h.toFixed(3))
+      }));
+
+    expect(slides).toHaveLength(1);
+    expect(artwork).toEqual([
+      { x: 0.65, y: 0.83, w: 5.85, h: 2.925 },
+      { x: 0.65, y: 3.755, w: 2.925, h: 2.925 },
+      { x: 3.575, y: 3.755, w: 2.925, h: 2.925 }
+    ]);
   });
 
   it("requires client feedback before routing a creative to Internal QC", async () => {

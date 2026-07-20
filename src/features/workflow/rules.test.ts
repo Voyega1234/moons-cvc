@@ -154,6 +154,42 @@ describe("workflow rules", () => {
     ).toBeNull();
   });
 
+  it("does not let UGC image-QA state block Internal QC", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let run = createInitialWorkflowState({
+      id: "run-ugc-quality",
+      now: "2026-07-20T00:00:00.000Z"
+    });
+    run = workflowReducer(run, { type: "select-brand", brand });
+    run = workflowReducer(run, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    run = workflowReducer(run, { type: "auto-select-directions" });
+    run = workflowReducer(run, { type: "create-outputs" });
+    const output = run.outputs[0];
+    if (!output) throw new Error("Expected a generated output.");
+
+    run = {
+      ...run,
+      qaComplete: true,
+      outputs: [
+        {
+          ...output,
+          format: "9:16 UGC",
+          status: "needs-revision"
+        }
+      ]
+    };
+
+    expect(isStageComplete(run, "studio")).toBe(true);
+    expect(
+      workflowActionBlockReason(run, { type: "set-stage", stage: "approval" })
+    ).toBeNull();
+  });
+
   it("requires client change requests to include feedback", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

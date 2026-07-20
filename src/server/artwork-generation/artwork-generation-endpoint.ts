@@ -113,6 +113,7 @@ export interface ArtworkGenerationEndpointOptions {
 const ARTWORK_BUCKET = "creative-assets";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const ARTWORK_GENERATION_CONCURRENCY = 2;
+const IMAGE_PROMPT_MAX_CHARACTERS = 32_000;
 
 interface ImageRequestDebugLog {
   createdAt: string;
@@ -1062,7 +1063,7 @@ async function buildDirectDesignSystemPrompt({
 }): Promise<string> {
   const artifactMap = references.map((reference, index) => ({
     image: index + 1,
-    role: reference.label ?? "Reference image"
+    role: compactPromptText(reference.label ?? "Reference image", 180)
   }));
   const supportingCopy = hook.supportingPoints?.length
     ? hook.supportingPoints
@@ -1071,59 +1072,118 @@ async function buildDirectDesignSystemPrompt({
     ? input.textInputs
     : ["None supplied."];
   const thickContext = {
-    brand: input.brand,
-    brandMemory: input.brandMemory,
-    brandLibrary: input.brandLibrary,
-    campaignContext: {
-      brief: input.brief,
-      rationale: hook.why,
-      caption: hook.caption
+    brand: input.brand
+      ? {
+          id: compactPromptText(input.brand.id, 120),
+          name: compactPromptText(input.brand.name, 180),
+          category: compactPromptText(input.brand.category, 180),
+          personality: compactPromptList(input.brand.personality, 8, 120),
+          colors: compactPromptList(input.brand.colors, 12, 40)
+        }
+      : null,
+    brandMemory: {
+      working: compactPromptList(input.brandMemory.working, 8, 240),
+      avoid: compactPromptList(input.brandMemory.avoid, 8, 240)
     },
-    attachedArtifacts: artifactMap
+    brandLibrary: {
+      brand: compactPromptLibrary(input.brandLibrary.brand, 6, 400),
+      products: compactPromptLibrary(input.brandLibrary.products, 8, 500),
+      docs: compactPromptLibrary(input.brandLibrary.docs, 4, 280),
+      refs: compactPromptLibrary(input.brandLibrary.refs, 6, 280)
+    },
+    campaignContext: {
+      rationale: compactPromptText(hook.why, 1_000),
+      caption: compactPromptText(hook.caption, 1_500)
+    },
+    attachedArtifacts: artifactMap.slice(0, 16)
   };
 
-  return renderDesignSystemPromptTemplate(await loadDesignSystemPrompt(), {
+  const contextJson = JSON.stringify(thickContext, null, 2);
+  const prompt = renderDesignSystemPromptTemplate(await loadDesignSystemPrompt(), {
     "{{COMMERCIAL_STYLE}}":
-      strategy?.commercialStyle ?? "select from the brief and brand context",
-    "{{TREATMENT}}": designSystemTreatmentFor(strategy?.commercialStyle),
+      compactPromptText(
+        strategy?.commercialStyle ?? "select from the brief and brand context",
+        300
+      ),
+    "{{TREATMENT}}": compactPromptText(
+      designSystemTreatmentFor(strategy?.commercialStyle),
+      500
+    ),
     "{{SELLING_MECHANISM}}":
-      strategy?.sellingMechanism ??
-      "select the clearest approach for the message",
+      compactPromptText(
+        strategy?.sellingMechanism ??
+          "select the clearest approach for the message",
+        300
+      ),
     "{{AUDIENCE_MOMENT}}":
-      strategy?.audienceMoment ??
-      "infer conservatively from the supplied context",
+      compactPromptText(
+        strategy?.audienceMoment ??
+          "infer conservatively from the supplied context",
+        500
+      ),
     "{{BRAND_FIT_REASON}}":
-      strategy?.reasonToBelieve ??
-      "Use the supplied brand context and artifacts as evidence.",
-    "{{BRAND_NAME_AND_CATEGORY}}": `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
-    "{{OBJECTIVE}}": input.brief || hook.why,
-    "{{MAIN_MESSAGE}}": hook.concept,
-    "{{EXACT_HEADLINE}}": hook.hook,
-    "{{SUPPORTING_COPY}}": supportingCopy.join(" | "),
-    "{{CTA}}": hook.cta,
-    "{{CANVAS}}": `${canvasRatio} ${input.service}`,
+      compactPromptText(
+        strategy?.reasonToBelieve ??
+          "Use the supplied brand context and artifacts as evidence.",
+        500
+      ),
+    "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
+      `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
+      360
+    ),
+    "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
+    "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
+    "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
+    "{{SUPPORTING_COPY}}": compactPromptText(
+      supportingCopy.join(" | "),
+      1_200
+    ),
+    "{{CTA}}": compactPromptText(hook.cta, 300),
+    "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
     "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
-      .map((requirement) => `- ${requirement}`)
+      .slice(0, 5)
+      .map((requirement) => `- ${compactPromptText(requirement, 500)}`)
       .join("\n"),
-    "{{THICK_CONTEXT_JSON}}": JSON.stringify(thickContext, null, 2)
-  }, JSON.stringify({
-    ...thickContext,
-    creativeTreatment: {
-      contentType: strategy?.commercialStyle,
-      treatment: designSystemTreatmentFor(strategy?.commercialStyle),
-      sellingApproach: strategy?.sellingMechanism,
-      audienceMoment: strategy?.audienceMoment,
-      brandFitReason: strategy?.reasonToBelieve
-    },
-    requiredCreative: {
-      mainMessage: hook.concept,
-      exactHeadline: hook.hook,
-      supportingCopy,
-      cta: hook.cta,
-      canvas: `${canvasRatio} ${input.service}`,
-      additionalRequirements
-    }
-  }, null, 2));
+    "{{THICK_CONTEXT_JSON}}": contextJson
+  }, contextJson);
+
+  if (prompt.length > IMAGE_PROMPT_MAX_CHARACTERS) {
+    throw new Error(
+      `Design System prompt is too long (${prompt.length}/${IMAGE_PROMPT_MAX_CHARACTERS}).`
+    );
+  }
+
+  return prompt;
+}
+
+function compactPromptLibrary(
+  items: readonly { title: string; description: string }[],
+  maxItems: number,
+  maxDescriptionCharacters: number
+) {
+  return items.slice(0, maxItems).map((item) => ({
+    title: compactPromptText(item.title, 140),
+    description: compactPromptText(
+      item.description,
+      maxDescriptionCharacters
+    )
+  }));
+}
+
+function compactPromptList(
+  values: readonly string[],
+  maxItems: number,
+  maxCharacters: number
+): readonly string[] {
+  return values
+    .slice(0, maxItems)
+    .map((value) => compactPromptText(value, maxCharacters));
+}
+
+function compactPromptText(value: string, maxCharacters: number): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxCharacters) return clean;
+  return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
 }
 
 function loadDesignSystemPrompt(): Promise<string> {

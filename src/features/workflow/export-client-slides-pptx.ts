@@ -3,11 +3,13 @@ import type {
   CreativeDirection,
   CreativeOutput
 } from "../../domain/creative-run";
+import { directionSubheadline } from "../../domain/subheadline-highlight";
 import type { WorkflowState } from "./model";
 import { approvalRolesForOutput } from "./rules";
 
 export interface ClientSlideItem {
   output: CreativeOutput;
+  outputs: readonly CreativeOutput[];
   direction: CreativeDirection | undefined;
 }
 
@@ -28,22 +30,54 @@ const COLORS = {
 export function pmApprovedClientSlideItems(
   state: Pick<WorkflowState, "outputs" | "directions">
 ): readonly ClientSlideItem[] {
-  return state.outputs
-    .filter((output) =>
-      approvalRolesForOutput(output).every(
-        (role) => output.approval[role] === "approved"
-      )
-    )
-    .map((output) => ({
-      output,
-      direction: state.directions.find(
-        (direction) => direction.id === output.directionId
-      )
-    }));
+  const approved = (output: CreativeOutput) =>
+    approvalRolesForOutput(output).every(
+      (role) => output.approval[role] === "approved"
+    );
+  const albumGroups = new Map<string, CreativeOutput[]>();
+  state.outputs.filter(isAlbumOutput).forEach((output) => {
+    const group = albumGroups.get(output.directionId) ?? [];
+    group.push(output);
+    albumGroups.set(output.directionId, group);
+  });
+  const emittedAlbums = new Set<string>();
+
+  return state.outputs.flatMap((output) => {
+    const direction = state.directions.find(
+      (candidate) => candidate.id === output.directionId
+    );
+    if (!isAlbumOutput(output)) {
+      return approved(output) ? [{ output, outputs: [output], direction }] : [];
+    }
+    if (emittedAlbums.has(output.directionId)) return [];
+    emittedAlbums.add(output.directionId);
+    const outputs = sortAlbumOutputs(
+      albumGroups.get(output.directionId) ?? [output]
+    );
+    if (!outputs.every(approved)) return [];
+    return [{ output: outputs[0] ?? output, outputs, direction }];
+  });
 }
 
 function isUgcOutput(output: CreativeOutput): boolean {
   return output.format.toUpperCase().includes("UGC");
+}
+
+function isAlbumOutput(output: CreativeOutput): boolean {
+  return output.format.trim().toLowerCase() === "album post";
+}
+
+function albumPanelIndex(output: CreativeOutput): number {
+  const match = output.id.match(/-album-(\d+)-v\d+$/i);
+  return match ? Number(match[1]) - 1 : Number.MAX_SAFE_INTEGER;
+}
+
+function sortAlbumOutputs(
+  outputs: readonly CreativeOutput[]
+): readonly CreativeOutput[] {
+  return [...outputs].sort(
+    (left, right) => albumPanelIndex(left) - albumPanelIndex(right)
+  );
 }
 
 function cleanText(value: string | undefined, fallback = "—"): string {
@@ -253,6 +287,30 @@ function addArtworkPreview(
   });
 }
 
+function addAlbumArtworkPreview(
+  slide: PptxGenJS.Slide,
+  imageData: readonly string[],
+  brandName: string
+) {
+  const box = { x: 0.65, y: 0.83, w: 5.85 };
+  const half = box.w / 2;
+  const placements = [
+    { x: box.x, y: box.y, w: box.w, h: half },
+    { x: box.x, y: box.y + half, w: half, h: half },
+    { x: box.x + half, y: box.y + half, w: half, h: half }
+  ];
+
+  imageData.slice(0, 3).forEach((data, index) => {
+    const placement = placements[index];
+    if (!placement) return;
+    slide.addImage({
+      data,
+      ...placement,
+      altText: `${brandName} album panel ${index + 1}`
+    });
+  });
+}
+
 function addClientSlide(
   pptx: PptxGenJS,
   item: ClientSlideItem,
@@ -260,7 +318,7 @@ function addClientSlide(
   slideNumber: number,
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
-  imageData?: string
+  imageData: readonly string[] = []
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
@@ -277,10 +335,12 @@ function addClientSlide(
   });
   if (isUgcOutput(output)) {
     addUgcPreview(pptx, slide, direction);
-  } else if (imageData) {
+  } else if (isAlbumOutput(output) && imageData.length > 1) {
+    addAlbumArtworkPreview(slide, imageData, brandName);
+  } else if (imageData[0]) {
     addArtworkPreview(
       slide,
-      imageData,
+      imageData[0],
       outputSize,
       `${brandName} ${output.format} creative artwork`
     );
@@ -336,8 +396,12 @@ function addClientSlide(
   });
   addTextBlock(
     slide,
-    isUgcOutput(output) ? "Script direction" : "Caption",
-    direction?.caption,
+    isUgcOutput(output) ? "Script direction" : "Sub-headline",
+    isUgcOutput(output)
+      ? direction?.caption
+      : direction
+        ? directionSubheadline(direction)
+        : undefined,
     2.95,
     1.25,
     320
@@ -391,14 +455,18 @@ export async function buildPmApprovedClientSlidesPptx(
   };
 
   for (const [index, item] of items.entries()) {
-    let imageData: string | undefined;
+    let imageData: readonly string[] = [];
     if (!isUgcOutput(item.output)) {
-      if (!item.output.assetUrl) {
-        throw new Error(
-          `Approved asset ${index + 1} does not have an artwork file yet.`
-        );
-      }
-      imageData = await resolveImage(item.output.assetUrl);
+      imageData = await Promise.all(
+        item.outputs.map((output, panelIndex) => {
+          if (!output.assetUrl) {
+            throw new Error(
+              `Approved asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
+            );
+          }
+          return resolveImage(output.assetUrl);
+        })
+      );
     }
     addClientSlide(
       pptx,

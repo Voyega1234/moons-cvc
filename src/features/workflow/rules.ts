@@ -14,6 +14,12 @@ export function isClientReviewComplete(run: WorkflowState): boolean {
   );
 }
 
+export function isBuildQualityCheckOutput(
+  output: WorkflowState["outputs"][number]
+): boolean {
+  return !output.format.toUpperCase().includes("UGC");
+}
+
 export function isStageComplete(
   run: WorkflowState,
   stageId: WorkflowState["stage"]
@@ -28,7 +34,11 @@ export function isStageComplete(
     case "studio":
       return (
         run.qaComplete &&
-        run.outputs.every((output) => output.status !== "needs-revision")
+        run.outputs.every(
+          (output) =>
+            !isBuildQualityCheckOutput(output) ||
+            output.status !== "needs-revision"
+        )
       );
     case "approval":
       return run.approved;
