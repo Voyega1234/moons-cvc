@@ -120,7 +120,7 @@ function parseRun(value: unknown): WorkflowState | null {
   const stage = parseMember(value.stage, creativeStages);
   const service = parseMember(value.service, serviceTypes);
   const hookIdeaMode =
-    value.hookIdeaMode === undefined
+    value.hookIdeaMode === undefined || value.hookIdeaMode === "fresh-research"
       ? "standard"
       : parseMember(value.hookIdeaMode, hookIdeaModes);
   const artworkMode =

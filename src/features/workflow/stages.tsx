@@ -42,7 +42,6 @@ import {
   type ArtworkMode,
   type CreativeOutput,
   type CreativeMaterialRole,
-  type HookIdeaMode,
   type ReferenceImageRole,
   type ReferenceImageSelection,
   type ServiceType
@@ -139,11 +138,9 @@ function artworkModeLabel(mode: ArtworkMode): string {
 }
 
 function HookIdeaModeToggle({
-  mode,
   disabled,
   dispatch
 }: {
-  mode: HookIdeaMode;
   disabled: boolean;
   dispatch: Dispatch<WorkflowAction>;
 }) {
@@ -154,26 +151,15 @@ function HookIdeaModeToggle({
       aria-label="Hook idea mode"
     >
       <button
-        className={mode === "standard" ? "active" : ""}
+        className="active"
         type="button"
         disabled={disabled}
-        aria-pressed={mode === "standard"}
+        aria-pressed="true"
         onClick={() =>
           dispatch({ type: "set-hook-idea-mode", mode: "standard" })
         }
       >
         Standard
-      </button>
-      <button
-        className={mode === "fresh-research" ? "active" : ""}
-        type="button"
-        disabled={disabled}
-        aria-pressed={mode === "fresh-research"}
-        onClick={() =>
-          dispatch({ type: "set-hook-idea-mode", mode: "fresh-research" })
-        }
-      >
-        Fresh research
       </button>
     </div>
   );
@@ -3743,7 +3729,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
           </button>
           <div className="compass-brief-generate-actions">
             <HookIdeaModeToggle
-              mode={state.hookIdeaMode}
               disabled={loading}
               dispatch={dispatch}
             />
@@ -4870,7 +4855,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         </div>
         <div className="compass-angle-toolbar-actions">
           <HookIdeaModeToggle
-            mode={state.hookIdeaMode}
             disabled={
               generatingMore ||
               regeneratingAllHooks ||

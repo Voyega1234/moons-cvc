@@ -75,13 +75,6 @@ interface HookResearch {
   limitations: string;
 }
 
-const STANDARD_MODE_RESEARCH: HookResearch = {
-  overallFinding: "Standard mode uses only the supplied brief and brand context.",
-  references: [],
-  searchQueriesUsed: [],
-  limitations: "Live web research was not requested for this generation."
-};
-
 interface GeneratedDirection extends RawDirection {
   id: string;
   service: ServiceType;
@@ -149,15 +142,12 @@ export async function handleHookGenerationHarnessRequest({
       createPastPostsClient
     });
     const agentHookPrompt = await loadAgentHookPrompt();
-    const research =
-      input.hookIdeaMode === "fresh-research"
-        ? await runResearchStep({
-            input,
-            apiKey,
-            model: supportModel,
-            fetchImpl
-          })
-        : STANDARD_MODE_RESEARCH;
+    const research = await runResearchStep({
+      input,
+      apiKey,
+      model: supportModel,
+      fetchImpl
+    });
     const generationBatches = buildHookGenerationBatches(input);
     const batchResults = await mapWithConcurrency(
       generationBatches,

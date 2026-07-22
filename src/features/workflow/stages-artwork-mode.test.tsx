@@ -33,11 +33,9 @@ describe("DirectionsStage artwork mode", () => {
         .getByRole("button", { name: "Standard" })
         .getAttribute("aria-pressed")
     ).toBe("true");
-    await user.click(hookMode.getByRole("button", { name: "Fresh research" }));
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-hook-idea-mode",
-      mode: "fresh-research"
-    });
+    expect(
+      hookMode.queryByRole("button", { name: "Fresh research" })
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Reference library" })
     ).toBeNull();

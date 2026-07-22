@@ -281,9 +281,22 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
   });
 
-  it("skips web search in Standard mode", async () => {
+  it("runs web research in Standard mode", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "A current category signal is relevant.",
+              references: [],
+              searchQueriesUsed: ["current category signal"],
+              limitations: "Use as supporting context only."
+            })
+          }),
+          { status: 200 }
+        )
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -321,14 +334,11 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const generationBody = JSON.parse(
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { tools?: unknown[]; input: unknown };
-    expect(generationBody.tools).toBeUndefined();
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "Standard mode uses only the supplied brief and brand context."
-    );
+    expect(researchBody.tools).toEqual([{ type: "web_search_preview" }]);
   });
 
   it("includes real past post captions as a style reference for caption writing", async () => {
