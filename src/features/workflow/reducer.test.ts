@@ -897,15 +897,6 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
-  it("stores the artwork brief used by image generation", () => {
-    const state = workflowReducer(initialWorkflowState, {
-      type: "set-artwork-brief",
-      brief: "Use real guests and natural light."
-    });
-
-    expect(state.artworkBrief).toBe("Use real guests and natural light.");
-  });
-
   it("assigns reference roles and keeps only one primary reference", () => {
     const first = {
       id: "reference-1",

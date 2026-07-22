@@ -38,9 +38,6 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   creativeMaterialRoles,
-  inferredReferenceImageRole,
-  referenceImageRoleLabels,
-  referenceImageRoles,
   type ApprovalRole,
   type ArtworkMode,
   type CreativeOutput,
@@ -4674,8 +4671,6 @@ function InlineUploadForm({
   );
 }
 
-const ARTWORK_BRIEF_MAX_LENGTH = 2_000;
-
 export function DirectionsStage({ state, dispatch }: StageProps) {
   const selected = selectedDirectionCount(state);
   const requiredCount = totalCreativeMixQuantity(state);
@@ -4699,7 +4694,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     service: ServiceType;
     title: string;
   } | null>(null);
-  const [referencePickerOpen, setReferencePickerOpen] = useState(false);
   const [exportingAngles, setExportingAngles] = useState(false);
   const [exportAnglesError, setExportAnglesError] = useState<string | null>(null);
   const {
@@ -4865,141 +4859,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             ))}
           </select>
         </label>
-      </section>
-      <section
-        className="compass-angle-ai-brief"
-        aria-labelledby="angle-artwork-brief-title"
-      >
-        <div className="compass-angle-ai-brief-copy">
-          <div className="compass-angle-ai-brief-title-row">
-            <TextT size={18} weight="bold" aria-hidden="true" />
-            <h3 id="angle-artwork-brief-title">Artwork brief for AI</h3>
-          </div>
-          <p>
-            Add visual requirements for this run. This instruction is included
-            in every image generation and regeneration prompt.
-          </p>
-        </div>
-        <label className="compass-angle-ai-brief-field">
-          <span className="sr-only">Artwork brief for AI</span>
-          <textarea
-            aria-label="Artwork brief for AI"
-            value={state.artworkBrief}
-            maxLength={ARTWORK_BRIEF_MAX_LENGTH}
-            rows={3}
-            disabled={creating}
-            placeholder="Example: Use a bright hotel lifestyle scene, prioritize real guests and natural light, keep the layout spacious, and avoid heavy gradients."
-            onChange={(event) =>
-              dispatch({
-                type: "set-artwork-brief",
-                brief: event.target.value
-              })
-            }
-          />
-          <span className="compass-angle-ai-brief-meta">
-            <span>{state.artworkBrief.trim() ? "Included in prompt" : "Optional"}</span>
-            <span>
-              {state.artworkBrief.length}/{ARTWORK_BRIEF_MAX_LENGTH}
-            </span>
-          </span>
-        </label>
-      </section>
-      <section
-        className="compass-angle-references"
-        aria-labelledby="angle-selected-references-title"
-      >
-        <header className="compass-angle-reference-head">
-          <div>
-            <h3 id="angle-selected-references-title">Selected references</h3>
-            <p>Included as visual context when Compass generates the artwork.</p>
-          </div>
-          <div className="compass-angle-reference-actions">
-            <span>
-              {state.referenceImages.length}{" "}
-              {state.referenceImages.length === 1 ? "image" : "images"}
-            </span>
-            <button
-              className="btn secondary small"
-              type="button"
-              disabled={creating}
-              onClick={() => setReferencePickerOpen(true)}
-            >
-              + Upload or choose
-            </button>
-          </div>
-        </header>
-        {state.referenceImages.length ? (
-          <div className="compass-angle-reference-strip">
-            {state.referenceImages.map((reference) => (
-              <article
-                className={`compass-angle-reference-item ${reference.primary ? "primary" : ""}`}
-                key={reference.id}
-              >
-                <div className="compass-angle-reference-image-wrap">
-                  <img src={reference.url} alt="" />
-                  {reference.primary ? <b>Primary</b> : null}
-                </div>
-                <span title={reference.label}>{reference.label}</span>
-                <label>
-                  <span>Use as</span>
-                  <select
-                    aria-label={`Reference role for ${reference.label}`}
-                    value={inferredReferenceImageRole(reference)}
-                    disabled={creating}
-                    onChange={(event) =>
-                      dispatch({
-                        type: "set-reference-image-role",
-                        id: reference.id,
-                        role: event.target.value as ReferenceImageRole
-                      })
-                    }
-                  >
-                    {referenceImageRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {referenceImageRoleLabels[role]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="compass-angle-reference-primary"
-                  type="button"
-                  aria-pressed={Boolean(reference.primary)}
-                  disabled={creating}
-                  onClick={() =>
-                    dispatch({
-                      type: "set-primary-reference-image",
-                      id: reference.primary ? null : reference.id
-                    })
-                  }
-                >
-                  {reference.primary ? "★ Primary" : "☆ Make primary"}
-                </button>
-                <button
-                  className="compass-angle-reference-remove"
-                  type="button"
-                  aria-label={`Remove ${reference.label} from selected references`}
-                  disabled={creating}
-                  onClick={() =>
-                    dispatch({ type: "toggle-reference-image", item: reference })
-                  }
-                >
-                  ×
-                </button>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <button
-            className="compass-angle-reference-empty"
-            type="button"
-            disabled={creating}
-            onClick={() => setReferencePickerOpen(true)}
-          >
-            No reference images selected. Add product shots, past work, or visual
-            inspiration.
-          </button>
-        )}
       </section>
       <div className="direction-tools compass-angle-toolbar">
         <div>
@@ -5294,45 +5153,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             if (succeeded) setRegeneratingAll(false);
           }}
         />
-      ) : null}
-      {referencePickerOpen ? (
-        <div
-          className="output-modal-backdrop compass-library-backdrop"
-          onClick={() => setReferencePickerOpen(false)}
-        >
-          <section
-            className="output-modal compass-angle-reference-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="angle-reference-picker-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="compass-material-manager-head">
-              <div>
-                <h3 id="angle-reference-picker-title">Add reference images</h3>
-                <p>
-                  Upload a new image or choose approved references from this
-                  brand library.
-                </p>
-              </div>
-              <button
-                className="compass-material-close"
-                type="button"
-                aria-label="Close reference picker"
-                onClick={() => setReferencePickerOpen(false)}
-              >
-                ×
-              </button>
-            </header>
-            <div className="compass-angle-reference-picker-body">
-              <ReferenceLibraryPicker
-                state={state}
-                dispatch={dispatch}
-                initialOpenCategory="reference"
-              />
-            </div>
-          </section>
-        </div>
       ) : null}
     </DecisionCard>
   );

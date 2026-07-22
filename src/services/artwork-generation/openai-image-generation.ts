@@ -377,10 +377,7 @@ export function buildArtworkRegenerationRequest({
     quantity: 1,
     brief: run.brief,
     selectedHooks: [direction],
-    textInputs: artworkPromptInputs(
-      run,
-      trimmedInstructions ? [trimmedInstructions] : []
-    ),
+    textInputs: trimmedInstructions ? [trimmedInstructions] : [],
     referenceImages: [
       ...(trimmedSourceImageUrl
         ? [
@@ -561,7 +558,7 @@ function buildArtworkRequest({
     quantity,
     brief: run.brief,
     selectedHooks,
-    textInputs: artworkPromptInputs(run, textInputs),
+    textInputs,
     referenceImages: [
       ...referenceImages,
       ...brandGuidelineReferences(run),
@@ -573,14 +570,6 @@ function buildArtworkRequest({
       format: "png"
     }
   };
-}
-
-function artworkPromptInputs(
-  run: WorkflowState,
-  additionalInputs: readonly string[]
-): readonly string[] {
-  return [run.artworkBrief?.trim(), ...additionalInputs.map((item) => item.trim())]
-    .filter((item): item is string => Boolean(item));
 }
 
 function nextArtworkAssetVersion(run: WorkflowState): number {

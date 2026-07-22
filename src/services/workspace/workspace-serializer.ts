@@ -141,10 +141,6 @@ function parseRun(value: unknown): WorkflowState | null {
       ? "CVR"
       : parseMember(value.successMetric, successMetrics);
   const brief = parseString(value.brief, true);
-  const artworkBrief =
-    value.artworkBrief === undefined
-      ? ""
-      : parseString(value.artworkBrief, true);
   const attachments = parseStringArray(value.attachments);
   const uploadedMaterials = parseUploadedMaterials(value.uploadedMaterials);
   const persistedIdeaGenerationStatus =
@@ -186,7 +182,6 @@ function parseRun(value: unknown): WorkflowState | null {
     !successMetric ||
     quantity === null ||
     brief === null ||
-    artworkBrief === null ||
     !attachments ||
     !uploadedMaterials ||
     !persistedIdeaGenerationStatus ||
@@ -268,7 +263,6 @@ function parseRun(value: unknown): WorkflowState | null {
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
     brief,
-    artworkBrief,
     attachments,
     uploadedMaterials,
     referenceImages,

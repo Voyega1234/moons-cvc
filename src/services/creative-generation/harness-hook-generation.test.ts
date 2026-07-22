@@ -44,7 +44,6 @@ const run: WorkflowState = {
   quantity: 3,
   successMetric: "CTR",
   brief: "Generate hooks for AI SEO webinar.",
-  artworkBrief: "",
   attachments: ["brief.pdf"],
   uploadedMaterials: [
     {

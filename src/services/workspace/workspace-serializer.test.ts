@@ -111,15 +111,6 @@ describe("workspace serializer", () => {
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
       runId: workspace.activeRunId,
-      now: "2026-06-23T10:05:15.000Z",
-      action: {
-        type: "set-artwork-brief",
-        brief: "Use real guests and natural light."
-      }
-    });
-    workspace = workspaceReducer(workspace, {
-      type: "apply-run-action",
-      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:30.000Z",
       action: { type: "set-hook-idea-mode", mode: "fresh-research" }
     });
@@ -180,9 +171,6 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["album-run"]?.brief).toBe(
       "Album persisted brief"
     );
-    expect(restored?.runsById["album-run"]?.artworkBrief).toBe(
-      "Use real guests and natural light."
-    );
     expect(restored?.runsById["album-run"]?.artworkMode).toBe(
       "reference-library"
     );
@@ -221,21 +209,6 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.artworkMode).toBe("design-system");
-  });
-
-  it("loads older snapshots without an artwork brief as empty", () => {
-    const workspace = createInitialWorkspaceState({
-      runId: "run-1",
-      now: "2026-06-23T10:00:00.000Z"
-    });
-    const parsed = JSON.parse(
-      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
-    ) as { data: { runsById: Record<string, { artworkBrief?: string }> } };
-    delete parsed.data.runsById["run-1"]?.artworkBrief;
-
-    const restored = deserializeWorkspace(JSON.stringify(parsed));
-
-    expect(restored?.runsById["run-1"]?.artworkBrief).toBe("");
   });
 
   it("restores an interrupted generation as retryable after refresh", () => {

@@ -141,7 +141,6 @@ export function createInitialWorkflowState({
     quantity: 6,
     successMetric: "CVR",
     brief: defaultBrief,
-    artworkBrief: "",
     attachments: [],
     uploadedMaterials: [],
     referenceImages: [],
@@ -485,8 +484,6 @@ export function workflowReducer(
       return { ...state, successMetric: action.metric };
     case "set-brief":
       return { ...state, brief: action.brief };
-    case "set-artwork-brief":
-      return { ...state, artworkBrief: action.brief };
     case "attach-files":
       return { ...state, attachments: action.names };
     case "add-uploaded-materials":

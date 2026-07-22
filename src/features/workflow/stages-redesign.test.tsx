@@ -1162,101 +1162,29 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(1);
   });
 
-  it("previews and manages the references used by Angles", async () => {
-    const user = userEvent.setup();
-    const reference = {
-      id: "library-angle-reference-1",
-      url: "https://example.com/angle-reference.jpg",
-      label: "Approved product lifestyle"
-    };
+  it("keeps artwork inputs out of the Angles UI", () => {
     const state = {
       ...buildCreativeState(),
       stage: "directions" as const,
-      referenceImages: [reference]
+      referenceImages: [
+        {
+          id: "library-angle-reference-1",
+          url: "https://example.com/angle-reference.jpg",
+          label: "Approved product lifestyle"
+        }
+      ]
     };
-    const dispatch = vi.fn();
     const view = render(
       <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
-        <DirectionsStage state={state} dispatch={dispatch} />
+        <DirectionsStage state={state} dispatch={vi.fn()} />
       </BrandMemoryProvider>
     );
     const stage = within(view.container);
 
-    expect(
-      stage.getByRole("region", { name: "Selected references" })
-    ).toBeTruthy();
-    expect(stage.getByText("Approved product lifestyle")).toBeTruthy();
-    expect(stage.getByText("1 image")).toBeTruthy();
-    await user.selectOptions(
-      stage.getByRole("combobox", {
-        name: "Reference role for Approved product lifestyle"
-      }),
-      "product"
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-reference-image-role",
-      id: reference.id,
-      role: "product"
-    });
-    await user.click(stage.getByRole("button", { name: "☆ Make primary" }));
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-primary-reference-image",
-      id: reference.id
-    });
-
-    await user.click(
-      stage.getByRole("button", { name: "+ Upload or choose" })
-    );
-    const dialog = stage.getByRole("dialog", {
-      name: "Add reference images"
-    });
-    expect(dialog).toBeTruthy();
-    expect(
-      within(dialog)
-        .getByRole("button", { name: "Reference board" })
-        .getAttribute("aria-expanded")
-    ).toBe("true");
-    expect(within(dialog).getByText("Upload reference image")).toBeTruthy();
-
-    await user.click(
-      within(dialog).getByRole("button", { name: "Close reference picker" })
-    );
-    await user.click(
-      stage.getByRole("button", {
-        name: "Remove Approved product lifestyle from selected references"
-      })
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "toggle-reference-image",
-      item: reference
-    });
-  });
-
-  it("captures an artwork brief for every image prompt from Angles", async () => {
-    const state = {
-      ...buildCreativeState(),
-      stage: "directions" as const,
-      artworkBrief: "Keep the layout spacious."
-    };
-    const dispatch = vi.fn();
-    const view = render(<DirectionsStage state={state} dispatch={dispatch} />);
-    const stage = within(view.container);
-    const field = stage.getByRole("textbox", {
-      name: "Artwork brief for AI"
-    });
-
-    expect(field.getAttribute("maxlength")).toBe("2000");
-    expect((field as HTMLTextAreaElement).value).toBe(
-      "Keep the layout spacious."
-    );
-    fireEvent.change(field, {
-      target: { value: "Use real guests and natural light." }
-    });
-
-    expect(dispatch).toHaveBeenLastCalledWith({
-      type: "set-artwork-brief",
-      brief: "Use real guests and natural light."
-    });
+    expect(stage.queryByText("Artwork brief for AI")).toBeNull();
+    expect(stage.queryByText("Selected references")).toBeNull();
+    expect(stage.queryByText("Approved product lifestyle")).toBeNull();
+    expect(stage.queryByRole("button", { name: "+ Upload or choose" })).toBeNull();
   });
 
   it("derives Recommended and Option PDF groups from selection and deletion", async () => {

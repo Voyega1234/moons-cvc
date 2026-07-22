@@ -64,7 +64,6 @@ export interface WorkflowState {
   quantity: number;
   successMetric: SuccessMetric;
   brief: string;
-  artworkBrief: string;
   attachments: readonly string[];
   uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
@@ -99,7 +98,6 @@ export type WorkflowAction =
   | { type: "set-creative-mix-quantity"; id: string; quantity: number }
   | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
-  | { type: "set-artwork-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
   | { type: "add-uploaded-materials"; items: readonly UploadedCreativeMaterial[] }
   | {

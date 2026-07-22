@@ -34,7 +34,6 @@ const run: WorkflowState = {
   quantity: 1,
   successMetric: "CTR",
   brief: "Launch a soft summer bouquet offer.",
-  artworkBrief: "",
   attachments: [],
   uploadedMaterials: [],
   referenceImages: [],
@@ -108,10 +107,7 @@ describe("buildArtworkGenerationRequest", () => {
     if (!direction) throw new Error("Expected a selected direction fixture.");
 
     const request = buildArtworkRegenerationRequest({
-      run: {
-        ...run,
-        artworkBrief: "Use real guests and natural light."
-      },
+      run,
       direction,
       sourceImageUrl: "https://example.com/current-artwork.png",
       extraInstructions: "Fix hierarchy and make the CTA more direct."
@@ -119,7 +115,6 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request.quantity).toBe(1);
     expect(request.textInputs).toEqual([
-      "Use real guests and natural light.",
       "Fix hierarchy and make the CTA more direct."
     ]);
     expect(request.referenceImages[0]).toEqual({
@@ -207,10 +202,7 @@ describe("buildArtworkGenerationRequest", () => {
 
   it("passes brief, selected hooks, text inputs, and reference images to the backend contract", () => {
     const request = buildArtworkGenerationRequest({
-      run: {
-        ...run,
-        artworkBrief: "Use real guests and natural light."
-      },
+      run,
       textInputs: ["Keep it calm and premium."],
       referenceImages: [
         {
@@ -229,10 +221,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.selectedHooks[0]?.hook).toBe(
       "Flowers that make the room feel softer"
     );
-    expect(request.textInputs).toEqual([
-      "Use real guests and natural light.",
-      "Keep it calm and premium."
-    ]);
+    expect(request.textInputs).toEqual(["Keep it calm and premium."]);
     expect(request.referenceImages[0]).toMatchObject({
       kind: "url",
       url: "https://example.com/reference.png"
