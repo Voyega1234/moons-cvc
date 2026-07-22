@@ -21,6 +21,7 @@ type AnalyzeGuidelineRequest =
 
 interface GuidelineAnalysis {
   summary: string;
+  generationContext: string;
   primaryColors: readonly string[];
   secondaryColors: readonly string[];
 }
@@ -66,6 +67,7 @@ export async function handleAnalyzeGuidelineRequest({
     return jsonResponse({
       ok: true,
       summary: analysis.summary,
+      generationContext: analysis.generationContext,
       primaryColors: analysis.primaryColors,
       secondaryColors: analysis.secondaryColors
     });
@@ -165,10 +167,11 @@ function buildPrompt(): string {
   return [
     "You are a brand designer analyzing an uploaded brand guideline — a document, image, or pasted text.",
     "",
-    "Extract three things:",
+    "Extract four things:",
     "1. A concise summary (2-4 sentences, in Thai) of the brand's mood, tone, and visual style — suitable to store as a single Brand Kit rule describing how the brand should look and feel. Write it in natural, polished Thai, not a translated feel. Brand names, product names, and technical terms may stay in English.",
-    "2. The brand's primary colors as hex codes — the main, dominant brand colors (usually 1-3). Only include colors that are clearly established brand colors, not incidental background, photo, or shadow colors, and do not invent colors that aren't stated or shown.",
-    "3. The brand's secondary colors as hex codes — supporting or accent colors used alongside the primary colors (can be empty if none are clearly established).",
+    "2. A generation-ready Brand CI context in Thai. Preserve exact brand names, font names, measurements, color codes, and English terminology from the source. Include only evidenced guidance that can change an artwork: logo use and safe space, typography, color roles, layout/grid/spacing, photography or illustration style, graphic elements/iconography, imagery treatment, tone, and explicit do/don't rules. Omit missing categories instead of guessing. Keep it structured, specific, and concise enough to pass directly to an image-generation model (normally 300-900 words).",
+    "3. The brand's primary colors as hex codes — the main, dominant brand colors (usually 1-3). Only include colors that are clearly established brand colors, not incidental background, photo, or shadow colors, and do not invent colors that aren't stated or shown.",
+    "4. The brand's secondary colors as hex codes — supporting or accent colors used alongside the primary colors (can be empty if none are clearly established).",
     "",
     "Return each color as a full 6-digit hex code like #1A2B3C.",
     "",
@@ -183,6 +186,7 @@ const analysisSchema = {
   additionalProperties: false,
   properties: {
     summary: { type: "string" },
+    generationContext: { type: "string" },
     primaryColors: {
       type: "array",
       items: { type: "string" }
@@ -192,13 +196,22 @@ const analysisSchema = {
       items: { type: "string" }
     }
   },
-  required: ["summary", "primaryColors", "secondaryColors"]
+  required: [
+    "summary",
+    "generationContext",
+    "primaryColors",
+    "secondaryColors"
+  ]
 } as const;
 
 function parseAnalysis(text: string): GuidelineAnalysis {
   const parsed = JSON.parse(text) as unknown;
   const value = readRecord(parsed, "guideline analysis payload");
   const summary = readString(value.summary, "summary");
+  const generationContext = readString(
+    value.generationContext,
+    "generationContext"
+  );
 
   if (!Array.isArray(value.primaryColors)) {
     throw new Error("primaryColors must be an array.");
@@ -215,6 +228,7 @@ function parseAnalysis(text: string): GuidelineAnalysis {
 
   return {
     summary,
+    generationContext,
     primaryColors: filterHex(value.primaryColors),
     secondaryColors: filterHex(value.secondaryColors)
   };

@@ -23,9 +23,11 @@ export function RunOwnershipBar({
     currentUserId,
     members,
     ownershipByRunId,
+    ownershipReady,
     loading,
     error,
-    handoff
+    handoff,
+    refresh
   } = useRunCollaboration();
   const { flush } = useWorkspace();
   const [open, setOpen] = useState(false);
@@ -35,14 +37,15 @@ export function RunOwnershipBar({
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const ownership = ownershipByRunId[runId] ?? null;
-  const editable = canEditRun(ownership, currentUserId);
+  const editable = ownershipReady && canEditRun(ownership, currentUserId);
   const owner = members.find(
     (member) => member.userId === ownership?.currentOwnerUserId
   );
   const currentMember = members.find(
     (member) => member.userId === currentUserId
   );
-  const canHandoff = editable || Boolean(currentMember?.isAdmin);
+  const canHandoff =
+    ownershipReady && (editable || Boolean(currentMember?.isAdmin));
   const availableMembers = useMemo(
     () =>
       members.filter(
@@ -64,10 +67,14 @@ export function RunOwnershipBar({
     setSuccess(null);
     try {
       await flush();
+      const latestOwnerships = await refresh();
+      const latestOwnership =
+        latestOwnerships.find((item) => item.workspaceRunId === runId) ??
+        ownership;
       await handoff({
         workspaceRunId: runId,
         toUserId,
-        expectedVersion: ownership.version,
+        expectedVersion: latestOwnership.version,
         note
       });
       setSuccess(
@@ -94,7 +101,11 @@ export function RunOwnershipBar({
         <span className="compass-ownership-copy">
           <small>{editable ? "You can edit" : "View only"}</small>
           <b>
-            {loading && !ownership
+            {!ownershipReady
+              ? loading
+                ? "Loading project owner"
+                : "Project ownership unavailable"
+              : loading && !ownership
               ? "Loading project owner"
               : owner
                 ? `${owner.displayName} · ${departmentLabel(owner.department)}`
@@ -106,7 +117,7 @@ export function RunOwnershipBar({
         {ownership ? (
           <span className="compass-ownership-version">Version {ownership.version}</span>
         ) : null}
-        {!editable ? (
+        {ownershipReady && !editable ? (
           <button
             className="btn small"
             type="button"

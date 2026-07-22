@@ -34,6 +34,8 @@ describe("handleAnalyzeGuidelineRequest", () => {
         JSON.stringify({
           output_text: JSON.stringify({
             summary: "สงบ หรูหรา เรียบง่าย",
+            generationContext:
+              "Typography: ใช้ Sans Serif\nLayout: เว้นพื้นที่ว่างมาก\nLogo: รักษา clear space",
             primaryColors: ["#1A2B3C", "#FFFFFF", "not-a-color"],
             secondaryColors: ["#00FF00"]
           })
@@ -55,11 +57,13 @@ describe("handleAnalyzeGuidelineRequest", () => {
     const payload = (await response.json()) as {
       ok: boolean;
       summary: string;
+      generationContext: string;
       primaryColors: string[];
       secondaryColors: string[];
     };
     expect(payload.ok).toBe(true);
     expect(payload.summary).toBe("สงบ หรูหรา เรียบง่าย");
+    expect(payload.generationContext).toContain("รักษา clear space");
     expect(payload.primaryColors).toEqual(["#1A2B3C", "#FFFFFF"]);
     expect(payload.secondaryColors).toEqual(["#00FF00"]);
 
@@ -79,6 +83,7 @@ describe("handleAnalyzeGuidelineRequest", () => {
         JSON.stringify({
           output_text: JSON.stringify({
             summary: "สดใส สนุกสนาน",
+            generationContext: "ใช้สีสดและภาพถ่ายที่เป็นธรรมชาติ",
             primaryColors: [],
             secondaryColors: []
           })
@@ -113,6 +118,8 @@ describe("handleAnalyzeGuidelineRequest", () => {
         JSON.stringify({
           output_text: JSON.stringify({
             summary: "ตรงไปตรงมา ไม่อ้อมค้อม",
+            generationContext:
+              "Tone: direct and premium\nDo not use jargon.",
             primaryColors: [],
             secondaryColors: []
           })
@@ -128,8 +135,12 @@ describe("handleAnalyzeGuidelineRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    const payload = (await response.json()) as { summary: string };
+    const payload = (await response.json()) as {
+      summary: string;
+      generationContext: string;
+    };
     expect(payload.summary).toBe("ตรงไปตรงมา ไม่อ้อมค้อม");
+    expect(payload.generationContext).toContain("Do not use jargon");
 
     const content = (calls[0]?.body.input as { content: unknown[] }[])[0]
       ?.content as Record<string, unknown>[];

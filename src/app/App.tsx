@@ -75,16 +75,23 @@ export function App() {
   const {
     workspace,
     dispatch: workspaceDispatch,
-    persistenceError
+    persistenceError,
+    persistenceStatus,
+    lastSavedAt
   } = useWorkspace();
   const state = getActiveRun(workspace);
   const collaboration = useRunCollaboration();
   const ownership = collaboration.ownershipByRunId[state.id] ?? null;
+  const ownershipVerified =
+    !collaboration.enabled || collaboration.ownershipReady;
   const runCanEdit =
     !collaboration.enabled ||
-    canEditRun(ownership, collaboration.currentUserId);
+    (collaboration.ownershipReady &&
+      canEditRun(ownership, collaboration.currentUserId));
   const canEditRef = useRef(runCanEdit);
+  const ownershipVerifiedRef = useRef(ownershipVerified);
   canEditRef.current = runCanEdit;
+  ownershipVerifiedRef.current = ownershipVerified;
   const [editWarning, setEditWarning] = useState<string | null>(null);
   const visibleToast = persistenceError
     ? {
@@ -111,7 +118,9 @@ export function App() {
     (action) => {
       if (!canEditRef.current) {
         setEditWarning(
-          "Only the current owner can make changes. Ask them to hand the project to you."
+          ownershipVerifiedRef.current
+            ? "Only the current owner can make changes. Ask them to hand the project to you."
+            : "Project ownership could not be verified. Reload before editing."
         );
         return;
       }
@@ -163,6 +172,8 @@ export function App() {
           workspaceDispatch={workspaceDispatch}
           createRun={createRun}
           canEdit={runCanEdit}
+          persistenceStatus={persistenceStatus}
+          lastSavedAt={lastSavedAt}
         />
         <main>
           <div className="shell compass-workspace">
@@ -405,7 +416,9 @@ function Header({
   dispatch,
   workspaceDispatch,
   createRun,
-  canEdit
+  canEdit,
+  persistenceStatus,
+  lastSavedAt
 }: {
   workspace: WorkspaceState;
   state: WorkflowState;
@@ -413,6 +426,8 @@ function Header({
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
   canEdit: boolean;
+  persistenceStatus: "idle" | "saving" | "saved" | "error";
+  lastSavedAt: string | null;
 }) {
   const collaboration = useRunCollaboration();
   const clientPic = state.brand
@@ -432,6 +447,10 @@ function Header({
             </div>
           )}
           <div className="nav-right">
+            <WorkspaceSaveStatus
+              status={persistenceStatus}
+              lastSavedAt={lastSavedAt}
+            />
             <NotificationMailbox
               onOpenNotification={(notification, brand) => {
                 workspaceDispatch({ type: "set-view", view: "studio" });
@@ -484,6 +503,146 @@ function Header({
       </div>
     </header>
   );
+}
+
+function WorkspaceSaveStatus({
+  status,
+  lastSavedAt
+}: {
+  status: "idle" | "saving" | "saved" | "error";
+  lastSavedAt: string | null;
+}) {
+  const {
+    checkpoints,
+    checkpointError,
+    checkpointBusy,
+    refreshCheckpoints,
+    restoreCheckpoint,
+    workspace
+  } = useWorkspace();
+  const { session } = useAuth();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const label =
+    status === "saving"
+      ? "Saving…"
+      : status === "saved"
+        ? "Saved"
+        : status === "error"
+          ? "Save failed"
+          : "Autosave";
+  const savedTime = lastSavedAt
+    ? new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(lastSavedAt))
+    : null;
+  const profileName = session?.user.user_metadata?.full_name;
+  const savedBy =
+    (typeof profileName === "string" && profileName.trim()
+      ? profileName
+      : session?.user.email) ?? "This browser";
+
+  const openHistory = () => {
+    const nextOpen = !historyOpen;
+    setHistoryOpen(nextOpen);
+    if (nextOpen) void refreshCheckpoints(workspace.activeRunId);
+  };
+
+  return (
+    <div className="compass-save-status-wrap">
+      <button
+        className={`compass-save-status ${status}`}
+        type="button"
+        aria-expanded={historyOpen}
+        aria-haspopup="dialog"
+        onClick={openHistory}
+        title="Open project recovery points"
+      >
+        <span aria-hidden="true" />
+        <span className="compass-save-status-copy">
+          <b role="status" aria-live="polite">{label}</b>
+          {savedTime ? <small>{savedBy} · {savedTime}</small> : null}
+        </span>
+      </button>
+      {historyOpen ? (
+        <section
+          className="compass-recovery-menu"
+          role="dialog"
+          aria-label="Project recovery points"
+        >
+          <header>
+            <div>
+              <b>Recent recovery points</b>
+              <small>Latest 3 checkpoints for this project</small>
+            </div>
+            <button type="button" onClick={() => setHistoryOpen(false)}>
+              Close
+            </button>
+          </header>
+          {checkpointError ? (
+            <p className="compass-recovery-error">{checkpointError.message}</p>
+          ) : null}
+          {checkpoints.length ? (
+            <div className="compass-recovery-list">
+              {checkpoints.map((checkpoint) => (
+                <article key={checkpoint.id}>
+                  <div>
+                    <b>{checkpointReasonLabel(checkpoint.reason)}</b>
+                    <small>
+                      {checkpoint.createdBy} · {formatCheckpointTime(checkpoint.createdAt)}
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={checkpointBusy}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          "Restore this recovery point? Current unsaved changes will be replaced."
+                        )
+                      ) {
+                        return;
+                      }
+                      void restoreCheckpoint(
+                        checkpoint.id,
+                        checkpoint.runId
+                      )
+                        .then(() => setHistoryOpen(false))
+                        .catch(() => undefined);
+                    }}
+                  >
+                    {checkpointBusy ? "Restoring…" : "Restore"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : checkpointError ? null : (
+            <p className="compass-recovery-empty">
+              No recovery points yet. Compass creates one before regeneration,
+              image replacement, and Internal QC.
+            </p>
+          )}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function checkpointReasonLabel(
+  reason: "regenerate" | "replace-image" | "send-to-qc"
+): string {
+  if (reason === "replace-image") return "Before image replacement";
+  if (reason === "send-to-qc") return "Before Internal QC";
+  return "Before regeneration";
+}
+
+function formatCheckpointTime(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function AccountMenu() {

@@ -1,6 +1,7 @@
 import {
   defaultArtworkOutputSize,
   emptyApprovalGate,
+  inferredReferenceImageRole,
   normalizeFormatBeatsForService,
   type ApprovalRole
 } from "../../domain/creative-run";
@@ -133,12 +134,14 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "album-post", quantity: 1 }
     ],
     service: "single-static",
+    hookIdeaMode: "standard",
     artworkMode: "design-system",
     imagePromptModel: "gpt-5.6-terra",
     outputSize: defaultArtworkOutputSize,
     quantity: 6,
     successMetric: "CVR",
     brief: defaultBrief,
+    artworkBrief: "",
     attachments: [],
     uploadedMaterials: [],
     referenceImages: [],
@@ -211,6 +214,15 @@ export function workflowActionToast(
             `${action.item.label} is no longer attached to this run.`
           );
     }
+    case "set-reference-image-role":
+      return null;
+    case "set-primary-reference-image":
+      return action.id
+        ? successToast(
+            "Primary reference updated",
+            "Compass will treat this image as the main visual source."
+          )
+        : null;
     case "generate-directions":
       return successToast(
         "Fresh ideas generated",
@@ -387,6 +399,26 @@ export function workflowReducer(
       };
     case "set-library-section":
       return { ...state, librarySection: action.section };
+    case "sync-brand-rules":
+      return state.brand
+        ? {
+            ...state,
+            brand: {
+              ...state.brand,
+              library: { ...state.brand.library, brand: action.items }
+            }
+          }
+        : state;
+    case "sync-brand-guidelines":
+      return state.brand
+        ? {
+            ...state,
+            brand: {
+              ...state.brand,
+              library: { ...state.brand.library, docs: action.items }
+            }
+          }
+        : state;
     case "set-service":
       return withCreativeMix(state, [
         {
@@ -394,6 +426,8 @@ export function workflowReducer(
           service: action.service
         }
       ]);
+    case "set-hook-idea-mode":
+      return { ...state, hookIdeaMode: action.mode };
     case "set-artwork-mode":
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":
@@ -431,21 +465,17 @@ export function workflowReducer(
     }
     case "set-creative-mix-quantity": {
       const current = creativeMixItems(state);
-      const otherTotal = current.reduce(
-        (total, item) => total + (item.id === action.id ? 0 : item.quantity),
-        0
-      );
-      const maximum = Math.max(
-        QUANTITY_LIMITS.minimum,
-        QUANTITY_LIMITS.maximum - otherTotal
-      );
       return withCreativeMix(
         state,
         current.map((item) =>
           item.id === action.id
             ? {
                 ...item,
-                quantity: clamp(action.quantity, QUANTITY_LIMITS.minimum, maximum)
+                quantity: clamp(
+                  action.quantity,
+                  QUANTITY_LIMITS.minimum,
+                  QUANTITY_LIMITS.maximum
+                )
               }
             : item
         )
@@ -455,6 +485,8 @@ export function workflowReducer(
       return { ...state, successMetric: action.metric };
     case "set-brief":
       return { ...state, brief: action.brief };
+    case "set-artwork-brief":
+      return { ...state, artworkBrief: action.brief };
     case "attach-files":
       return { ...state, attachments: action.names };
     case "add-uploaded-materials":
@@ -484,13 +516,23 @@ export function workflowReducer(
             referenceImages: [...state.referenceImages, action.item]
           };
     case "sync-brand-logo-reference": {
+      const previousLogo = state.referenceImages.find(
+        (item) => inferredReferenceImageRole(item) === "logo"
+      );
       const nonLogoReferences = state.referenceImages.filter(
-        (item) => item.label.trim().toLowerCase() !== "logo"
+        (item) => inferredReferenceImageRole(item) !== "logo"
       );
       return {
         ...state,
         referenceImages: action.item
-          ? [...nonLogoReferences, action.item]
+          ? [
+              ...nonLogoReferences,
+              {
+                ...action.item,
+                role: "logo",
+                ...(previousLogo?.primary ? { primary: true } : {})
+              }
+            ]
           : nonLogoReferences
       };
     }
@@ -505,6 +547,21 @@ export function workflowReducer(
           : [...state.referenceImages, action.item]
       };
     }
+    case "set-reference-image-role":
+      return {
+        ...state,
+        referenceImages: state.referenceImages.map((item) =>
+          item.id === action.id ? { ...item, role: action.role } : item
+        )
+      };
+    case "set-primary-reference-image":
+      return {
+        ...state,
+        referenceImages: state.referenceImages.map((item) => ({
+          ...item,
+          primary: action.id !== null && item.id === action.id
+        }))
+      };
     case "start-idea-generation":
       return {
         ...state,
@@ -731,7 +788,11 @@ export function workflowReducer(
       return {
         ...state,
         artworkGenerationStatus: "running",
-        artworkGenerationError: null
+        artworkGenerationError: null,
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
       };
     case "fail-artwork-generation":
       return {
@@ -739,6 +800,20 @@ export function workflowReducer(
         artworkGenerationStatus: "failed",
         artworkGenerationError: action.message
       };
+    case "append-artwork-generation-outputs": {
+      const completedDirectionIds = new Set(
+        action.outputs.map((output) => output.directionId)
+      );
+      return {
+        ...state,
+        outputs: [
+          ...state.outputs.filter(
+            (output) => !completedDirectionIds.has(output.directionId)
+          ),
+          ...action.outputs
+        ]
+      };
+    }
     case "create-outputs":
       return {
         ...state,
@@ -746,7 +821,10 @@ export function workflowReducer(
         artworkGenerationError: null,
         outputs: action.outputs ?? generateMockOutputs(state),
         stage: "studio",
-        qaComplete: false
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
       };
     case "run-qa": {
       const resultsByOutputId = new Map(

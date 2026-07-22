@@ -26,6 +26,18 @@ export interface UpdateBrandRuleInput {
   assetFile?: File;
 }
 
+export interface SaveGuidelineInput {
+  clientId: string;
+  title: string;
+  description: string;
+}
+
+export interface UpdateGuidelineInput {
+  id: string;
+  title: string;
+  description: string;
+}
+
 export interface SaveBrandProductInput {
   clientId: string;
   name: string;
@@ -60,6 +72,7 @@ export type AnalyzeGuidelineInput =
 
 export interface GuidelineAnalysisResult {
   summary: string;
+  generationContext: string;
   primaryColors: readonly string[];
   secondaryColors: readonly string[];
 }
@@ -69,6 +82,10 @@ export interface BrandMemoryRepository {
   createBrandRule(input: SaveBrandRuleInput): Promise<LibraryItem>;
   updateBrandRule(input: UpdateBrandRuleInput): Promise<LibraryItem>;
   deleteBrandRule(id: string): Promise<void>;
+  listGuidelines(clientId: string): Promise<readonly LibraryItem[]>;
+  createGuideline(input: SaveGuidelineInput): Promise<LibraryItem>;
+  updateGuideline(input: UpdateGuidelineInput): Promise<LibraryItem>;
+  deleteGuideline(id: string): Promise<void>;
   listProducts(clientId: string): Promise<readonly BrandProduct[]>;
   createProduct(input: SaveBrandProductInput): Promise<BrandProduct>;
   updateProduct(input: UpdateBrandProductInput): Promise<BrandProduct>;

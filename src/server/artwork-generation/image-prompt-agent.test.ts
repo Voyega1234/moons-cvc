@@ -225,10 +225,12 @@ describe("generateImagePrompt", () => {
       fetchImpl: fetchMock as unknown as typeof fetch,
       input: {
         ...baseInput,
-        referenceImageLabels: ["Past work style reference — Luxury campaign"],
+        referenceImageLabels: [
+          "Primary reference · Style · Product packshot"
+        ],
         referenceImages: [
           {
-            label: "Past work style reference — Luxury campaign",
+            label: "Primary reference · Style · Product packshot",
             imageUrl: "data:image/png;base64,cmVmZXJlbmNl"
           }
         ]
@@ -244,10 +246,10 @@ describe("generateImagePrompt", () => {
       detail: "high"
     });
     expect(content?.[0]?.text).toContain(
-      '"id": "past-work-style-reference-luxury-campaign"'
+      '"id": "primary-reference-style-product-packshot"'
     );
-    expect(content?.[0]?.text).toContain('"role": "brand-visual-dna"');
-    expect(content?.[0]?.text).toContain('"fidelity": "style-only"');
+    expect(content?.[0]?.text).toContain('"role": "primary-style"');
+    expect(content?.[0]?.text).toContain('"fidelity": "inspired"');
     expect(content?.[0]?.text).not.toContain("STYLE SELECTION:");
   });
 

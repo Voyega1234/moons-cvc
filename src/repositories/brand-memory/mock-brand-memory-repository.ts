@@ -11,15 +11,18 @@ import type {
   CreateReferenceImageInput,
   GuidelineAnalysisResult,
   SaveBrandRuleInput,
+  SaveGuidelineInput,
   SaveBrandProductInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
+  UpdateGuidelineInput,
   UploadBrandDocumentInput
 } from "../../ports/brand-memory-repository";
 import { createId, nowIso } from "../../shared/utils/id";
 
 export class MockBrandMemoryRepository implements BrandMemoryRepository {
   private readonly brandRulesByClient = new Map<string, LibraryItem[]>();
+  private readonly guidelinesByClient = new Map<string, LibraryItem[]>();
   private readonly productsByClient = new Map<string, BrandProduct[]>();
   private readonly documentsByClient = new Map<string, BrandDocument[]>();
 
@@ -79,6 +82,52 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
       this.brandRulesByClient.set(
         clientId,
         rules.filter((rule) => rule.id !== id)
+      );
+    }
+  }
+
+  async listGuidelines(clientId: string): Promise<readonly LibraryItem[]> {
+    return this.guidelinesByClient.get(clientId) ?? [];
+  }
+
+  async createGuideline({
+    clientId,
+    title,
+    description
+  }: SaveGuidelineInput): Promise<LibraryItem> {
+    const guideline = { id: createId("guideline"), title, description };
+    this.guidelinesByClient.set(clientId, [
+      ...(this.guidelinesByClient.get(clientId) ?? []),
+      guideline
+    ]);
+    return guideline;
+  }
+
+  async updateGuideline({
+    id,
+    title,
+    description
+  }: UpdateGuidelineInput): Promise<LibraryItem> {
+    for (const [clientId, guidelines] of this.guidelinesByClient) {
+      const existing = guidelines.find((guideline) => guideline.id === id);
+      if (!existing) continue;
+      const updated = { ...existing, title, description };
+      this.guidelinesByClient.set(
+        clientId,
+        guidelines.map((guideline) =>
+          guideline.id === id ? updated : guideline
+        )
+      );
+      return updated;
+    }
+    throw new Error("Guideline not found.");
+  }
+
+  async deleteGuideline(id: string): Promise<void> {
+    for (const [clientId, guidelines] of this.guidelinesByClient) {
+      this.guidelinesByClient.set(
+        clientId,
+        guidelines.filter((guideline) => guideline.id !== id)
       );
     }
   }
@@ -217,6 +266,8 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
 
     return {
       summary: "โทนสงบ หรูหรา ใช้ตัวอักษร sans-serif เรียบง่ายและเว้นพื้นที่ว่างมาก",
+      generationContext:
+        "Typography: ใช้ sans-serif ที่เรียบและอ่านง่าย\nLayout: เว้นพื้นที่ว่างมาก รักษาความรู้สึกสงบและพรีเมียม\nColor: ใช้สีหลักและสีรองตาม Brand CI เท่านั้น",
       primaryColors: ["#1D1D1F", "#6E6E73"],
       secondaryColors: ["#0A84FF"]
     };

@@ -1,4 +1,4 @@
-import type { Brand, LibrarySection } from "../../domain/brand";
+import type { Brand, LibraryItem, LibrarySection } from "../../domain/brand";
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import type {
   ApprovalRole,
@@ -8,10 +8,12 @@ import type {
   CreativeOutput,
   CreativeStage,
   ReferenceImageSelection,
+  ReferenceImageRole,
   UploadedCreativeMaterial,
   ReviewDecision,
   ServiceType,
   ArtworkOutputSize,
+  HookIdeaMode,
   ImagePromptModel
 } from "../../domain/creative-run";
 
@@ -54,6 +56,7 @@ export interface WorkflowState {
   creativeMix?: readonly CreativeMixItem[];
   /** Compatibility alias for the first creative-mix item. */
   service: ServiceType;
+  hookIdeaMode: HookIdeaMode;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
   outputSize: ArtworkOutputSize;
@@ -61,6 +64,7 @@ export interface WorkflowState {
   quantity: number;
   successMetric: SuccessMetric;
   brief: string;
+  artworkBrief: string;
   attachments: readonly string[];
   uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
@@ -83,7 +87,10 @@ export type WorkflowAction =
   | { type: "search-brands"; value: string }
   | { type: "select-brand"; brand: Brand }
   | { type: "set-library-section"; section: LibrarySection }
+  | { type: "sync-brand-rules"; items: readonly LibraryItem[] }
+  | { type: "sync-brand-guidelines"; items: readonly LibraryItem[] }
   | { type: "set-service"; service: ServiceType }
+  | { type: "set-hook-idea-mode"; mode: HookIdeaMode }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-output-size"; size: ArtworkOutputSize }
@@ -92,6 +99,7 @@ export type WorkflowAction =
   | { type: "set-creative-mix-quantity"; id: string; quantity: number }
   | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
+  | { type: "set-artwork-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
   | { type: "add-uploaded-materials"; items: readonly UploadedCreativeMaterial[] }
   | {
@@ -106,6 +114,12 @@ export type WorkflowAction =
       item: ReferenceImageSelection | null;
     }
   | { type: "toggle-reference-image"; item: ReferenceImageSelection }
+  | {
+      type: "set-reference-image-role";
+      id: string;
+      role: ReferenceImageRole;
+    }
+  | { type: "set-primary-reference-image"; id: string | null }
   | { type: "start-idea-generation" }
   | { type: "fail-idea-generation"; message: string }
   | { type: "generate-directions"; directions: readonly CreativeDirection[] }
@@ -134,6 +148,10 @@ export type WorkflowAction =
   | { type: "auto-select-directions" }
   | { type: "start-artwork-generation" }
   | { type: "fail-artwork-generation"; message: string }
+  | {
+      type: "append-artwork-generation-outputs";
+      outputs: readonly CreativeOutput[];
+    }
   | { type: "create-outputs"; outputs?: readonly CreativeOutput[] }
   | {
       type: "run-qa";

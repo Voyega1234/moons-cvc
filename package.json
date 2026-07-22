@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "dev:full": "vercel dev --listen 3000",
+    "dev:full": "npx --yes vercel@56.4.1 dev --listen 3000",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "references:build": "node ./node_modules/vite-node/vite-node.mjs scripts/build-artwork-reference-catalog.ts",

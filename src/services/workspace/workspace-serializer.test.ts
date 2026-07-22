@@ -12,6 +12,64 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("round-trips high-volume mixes with up to 50 items per content type", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "high-volume-run",
+      now: "2026-07-21T12:00:00.000Z"
+    });
+    for (const id of ["creative-mix-1", "creative-mix-2", "creative-mix-3"]) {
+      workspace = workspaceReducer(workspace, {
+        type: "apply-run-action",
+        runId: workspace.activeRunId,
+        now: "2026-07-21T12:01:00.000Z",
+        action: { type: "set-creative-mix-quantity", id, quantity: 50 }
+      });
+    }
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-21T12:02:00.000Z")
+    );
+    const run = restored?.runsById[restored.activeRunId];
+
+    expect(run?.creativeMix?.map((item) => item.quantity)).toEqual([50, 50, 50]);
+    expect(run?.quantity).toBe(150);
+  });
+
+  it("preserves reference role and primary selection", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "reference-run",
+      now: "2026-07-20T12:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-20T12:01:00.000Z",
+      action: {
+        type: "toggle-reference-image",
+        item: {
+          id: "reference-product",
+          url: "https://example.com/product.png",
+          label: "Product packshot",
+          role: "product",
+          primary: true
+        }
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-20T12:02:00.000Z")
+    );
+    expect(restored?.runsById[restored.activeRunId]?.referenceImages).toEqual([
+      {
+        id: "reference-product",
+        url: "https://example.com/product.png",
+        label: "Product packshot",
+        role: "product",
+        primary: true
+      }
+    ]);
+  });
+
   it("round-trips parallel run data and removes transient UI state", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -53,7 +111,22 @@ describe("workspace serializer", () => {
     workspace = workspaceReducer(workspace, {
       type: "apply-run-action",
       runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:15.000Z",
+      action: {
+        type: "set-artwork-brief",
+        brief: "Use real guests and natural light."
+      }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
       now: "2026-06-23T10:05:30.000Z",
+      action: { type: "set-hook-idea-mode", mode: "fresh-research" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:35.000Z",
       action: { type: "set-artwork-mode", mode: "reference-library" }
     });
     workspace = workspaceReducer(workspace, {
@@ -107,8 +180,14 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["album-run"]?.brief).toBe(
       "Album persisted brief"
     );
+    expect(restored?.runsById["album-run"]?.artworkBrief).toBe(
+      "Use real guests and natural light."
+    );
     expect(restored?.runsById["album-run"]?.artworkMode).toBe(
       "reference-library"
+    );
+    expect(restored?.runsById["album-run"]?.hookIdeaMode).toBe(
+      "fresh-research"
     );
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"
@@ -142,6 +221,21 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.artworkMode).toBe("design-system");
+  });
+
+  it("loads older snapshots without an artwork brief as empty", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as { data: { runsById: Record<string, { artworkBrief?: string }> } };
+    delete parsed.data.runsById["run-1"]?.artworkBrief;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.artworkBrief).toBe("");
   });
 
   it("restores an interrupted generation as retryable after refresh", () => {

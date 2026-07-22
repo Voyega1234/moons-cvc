@@ -115,6 +115,75 @@ describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
   });
 });
 
+describe("SupabaseCollaborativeWorkspaceRepository recovery points", () => {
+  it("stores the current run snapshot with its optimistic-lock version", async () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-20T10:00:00Z"
+    });
+    const { client, checkpointInserts } = createRecoveryClient(workspace);
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(),
+      client
+    );
+    await repository.save(workspace);
+
+    const checkpoint = await repository.createCheckpoint(
+      workspace,
+      "run-1",
+      "regenerate"
+    );
+
+    expect(checkpoint.reason).toBe("regenerate");
+    expect(checkpointInserts).toHaveLength(1);
+    expect(checkpointInserts[0]).toMatchObject({
+      run_id: "database-run-1",
+      reason: "regenerate",
+      source_version: 1,
+      created_by: "user-1"
+    });
+  });
+
+  it("restores through the version-checked database function", async () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-20T10:00:00Z"
+    });
+    const currentRun = getActiveRun(workspace);
+    const recoveredWorkspace = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        "run-1": { ...currentRun, brief: "Recovered cloud brief" }
+      }
+    };
+    const { client, rpcCalls } = createRecoveryClient(
+      workspace,
+      recoveredWorkspace
+    );
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(),
+      client
+    );
+    await repository.save(workspace);
+
+    const restored = await repository.restoreCheckpoint(
+      workspace,
+      "run-1",
+      "checkpoint-db-1"
+    );
+
+    expect(getActiveRun(restored).brief).toBe("Recovered cloud brief");
+    expect(rpcCalls).toEqual([
+      {
+        p_checkpoint_id: "checkpoint-db-1",
+        p_workspace_run_id: "run-1",
+        p_expected_version: 1
+      }
+    ]);
+  });
+});
+
 function memoryRepository(): WorkspaceRepository {
   return {
     async load() {
@@ -140,6 +209,7 @@ function sharedRunRow(workspace: ReturnType<typeof createInitialWorkspaceState>)
     )
   ) as Json;
   return {
+    id: "database-run-1",
     workspace_run_id: run.id,
     snapshot,
     current_owner_user_id: "user-1",
@@ -192,6 +262,7 @@ function createClient({
                     async single() {
                       return {
                         data: {
+                          id: "database-run-1",
                           current_owner_user_id: "user-1",
                           version: 1
                         },
@@ -209,4 +280,87 @@ function createClient({
     }
   } as unknown as SupabaseClient<Database>;
   return { client, inserts };
+}
+
+function createRecoveryClient(
+  workspace: ReturnType<typeof createInitialWorkspaceState>,
+  restoredWorkspace = workspace
+): {
+  client: SupabaseClient<Database>;
+  checkpointInserts: Record<string, unknown>[];
+  rpcCalls: Record<string, unknown>[];
+} {
+  const checkpointInserts: Record<string, unknown>[] = [];
+  const rpcCalls: Record<string, unknown>[] = [];
+  const knownRow = sharedRunRow(workspace);
+  const restoredRow = sharedRunRow(restoredWorkspace);
+  const client = {
+    auth: {
+      async getUser() {
+        return { data: { user: { id: "user-1" } }, error: null };
+      }
+    },
+    schema() {
+      return {
+        rpc(_name: string, args: Record<string, unknown>) {
+          rpcCalls.push(args);
+          return {
+            async single() {
+              return {
+                data: {
+                  ...restoredRow,
+                  version: 2,
+                  updated_at: "2026-07-20T10:10:00Z"
+                },
+                error: null
+              };
+            }
+          };
+        },
+        from(table: string) {
+          if (table === "runs") {
+            const query = {
+              select() {
+                return query;
+              },
+              eq() {
+                return query;
+              },
+              async maybeSingle() {
+                return { data: knownRow, error: null };
+              }
+            };
+            return query;
+          }
+          if (table === "run_checkpoints") {
+            return {
+              insert(payload: Record<string, unknown>) {
+                checkpointInserts.push(payload);
+                return {
+                  select() {
+                    return {
+                      async single() {
+                        return {
+                          data: {
+                            id: "checkpoint-db-1",
+                            reason: payload.reason,
+                            source_version: payload.source_version,
+                            created_by: "user-1",
+                            created_at: "2026-07-20T10:05:00Z"
+                          },
+                          error: null
+                        };
+                      }
+                    };
+                  }
+                };
+              }
+            };
+          }
+          throw new Error(`Unexpected table ${table}`);
+        }
+      };
+    }
+  } as unknown as SupabaseClient<Database>;
+  return { client, checkpointInserts, rpcCalls };
 }

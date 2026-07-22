@@ -1,4 +1,5 @@
 import { useCallback, useState, type Dispatch } from "react";
+import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { env } from "../../config/env";
 import type { ServiceType } from "../../domain/creative-run";
 import { generateDirectionsWithHarness } from "../../services/creative-generation/harness-hook-generation";
@@ -7,6 +8,7 @@ import { playGenerationSuccessSound } from "../../shared/utils/notification-soun
 import { serviceLabels } from "./config";
 import {
   creativeMixContentTypeQuotas,
+  directionServiceAt,
   EXTRA_HOOK_CANDIDATES_PER_TYPE,
   hookGenerationContentTypeQuotas,
   totalHookGenerationQuantity,
@@ -63,6 +65,7 @@ export function useGenerateHooks(
         ? generateDirectionsWithHarness({ run: state, extraInstructions })
         : generateDirectionsFromWebhook({
             brand: state.brand,
+            hookIdeaMode: state.hookIdeaMode,
             service: contentTypeQuotas[0]?.service ?? state.service,
             quantity: totalHookGenerationQuantity(state),
             contentTypeQuotas,
@@ -149,6 +152,7 @@ export function useGenerateMoreHooks(
             })
           : generateDirectionsFromWebhook({
               brand: targetedState.brand,
+              hookIdeaMode: targetedState.hookIdeaMode,
               service,
               quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
@@ -195,6 +199,7 @@ export function useRegenerateHook(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -209,7 +214,20 @@ export function useRegenerateHook(
       setLoadingId(direction.id);
       setError(null);
 
-      const extraInstructions = withCreativeMixInstructions(state, [
+      const directionIndex = state.directions.findIndex(
+        (item) => item.id === direction.id
+      );
+      const service = directionServiceAt(state, direction, directionIndex);
+      const targetedState: WorkflowState = {
+        ...state,
+        service,
+        quantity: 1,
+        creativeMix: [
+          { id: `regenerate-${service}`, service, quantity: 1 }
+        ]
+      };
+
+      const extraInstructions = withCreativeMixInstructions(targetedState, [
         "Regenerate one existing hook instead of creating an unrelated idea.",
         `Original hook: ${direction.hook}`,
         `Original concept: ${direction.concept}`,
@@ -222,18 +240,22 @@ export function useRegenerateHook(
         hook: item.hook,
         concept: item.concept
       }));
-      const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
+      const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
 
       const generation =
         env.hookGenerationMode === "harness"
-          ? generateDirectionsWithHarness({ run: state, extraInstructions })
+          ? generateDirectionsWithHarness({
+              run: targetedState,
+              extraInstructions
+            })
           : generateDirectionsFromWebhook({
-              brand: state.brand,
-              service: contentTypeQuotas[0]?.service ?? state.service,
-              quantity: totalHookGenerationQuantity(state),
+              brand: targetedState.brand,
+              hookIdeaMode: targetedState.hookIdeaMode,
+              service,
+              quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
-              brief: state.brief,
-              uploadedMaterials: state.uploadedMaterials,
+              brief: targetedState.brief,
+              uploadedMaterials: targetedState.uploadedMaterials,
               extraInstructions,
               existingHooks
             });
@@ -242,6 +264,7 @@ export function useRegenerateHook(
         const directions = await generation;
         const replacement = directions[0];
         if (!replacement) throw new Error("Hook regeneration returned no hook.");
+        await createCheckpoint?.("regenerate", state.id);
         dispatch({
           type: "replace-direction",
           id: direction.id,
@@ -260,7 +283,7 @@ export function useRegenerateHook(
         setLoadingId(null);
       }
     },
-    [state, dispatch]
+    [state, dispatch, createCheckpoint]
   );
 
   return { regenerate, loadingId, error };
@@ -272,6 +295,7 @@ export function useRegenerateAllHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -287,23 +311,48 @@ export function useRegenerateAllHooks(
       setError(null);
 
       try {
-        const replacements = [];
-        for (
-          let offset = 0;
-          offset < state.directions.length;
-          offset += REGENERATE_ALL_BATCH_SIZE
-        ) {
-          const originals = state.directions.slice(
-            offset,
-            offset + REGENERATE_ALL_BATCH_SIZE
-          );
+        const replacementsByIndex = new Map<
+          number,
+          WorkflowState["directions"][number]
+        >();
+        const directionsByService = new Map<
+          ServiceType,
+          { direction: WorkflowState["directions"][number]; index: number }[]
+        >();
+        state.directions.forEach((direction, index) => {
+          const service = directionServiceAt(state, direction, index);
+          const items = directionsByService.get(service) ?? [];
+          items.push({ direction, index });
+          directionsByService.set(service, items);
+        });
+
+        for (const [service, items] of directionsByService) {
+          for (
+            let offset = 0;
+            offset < items.length;
+            offset += REGENERATE_ALL_BATCH_SIZE
+          ) {
+          const batch = items.slice(offset, offset + REGENERATE_ALL_BATCH_SIZE);
+          const originals = batch.map((item) => item.direction);
+          const targetedState: WorkflowState = {
+            ...state,
+            service,
+            quantity: originals.length,
+            creativeMix: [
+              {
+                id: `regenerate-all-${service}`,
+                service,
+                quantity: originals.length
+              }
+            ]
+          };
           const originalList = originals
             .map(
               (direction, index) =>
                 `${index + 1}. Hook: ${direction.hook}\nConcept: ${direction.concept}`
             )
             .join("\n\n");
-          const extraInstructions = withCreativeMixInstructions(state, [
+          const extraInstructions = withCreativeMixInstructions(targetedState, [
             `Regenerate these ${originals.length} existing hooks in the same order instead of creating unrelated ideas:`,
             originalList,
             `New writing tone for every hook: ${normalizedTone}`,
@@ -314,20 +363,21 @@ export function useRegenerateAllHooks(
             hook: direction.hook,
             concept: direction.concept
           }));
-          const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
+          const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
           const generated =
             env.hookGenerationMode === "harness"
               ? await generateDirectionsWithHarness({
-                  run: state,
+                  run: targetedState,
                   extraInstructions
                 })
               : await generateDirectionsFromWebhook({
-                  brand: state.brand,
-                  service: contentTypeQuotas[0]?.service ?? state.service,
-                  quantity: totalHookGenerationQuantity(state),
+                  brand: targetedState.brand,
+                  hookIdeaMode: targetedState.hookIdeaMode,
+                  service,
+                  quantity: totalHookGenerationQuantity(targetedState),
                   contentTypeQuotas,
-                  brief: state.brief,
-                  uploadedMaterials: state.uploadedMaterials,
+                  brief: targetedState.brief,
+                  uploadedMaterials: targetedState.uploadedMaterials,
                   extraInstructions,
                   existingHooks
                 });
@@ -337,10 +387,30 @@ export function useRegenerateAllHooks(
               `Regeneration returned ${generated.length} of ${originals.length} required hooks.`
             );
           }
-          replacements.push(...generated.slice(0, originals.length));
+          generated.slice(0, originals.length).forEach((direction, index) => {
+            const originalIndex = batch[index]?.index;
+            if (originalIndex !== undefined) {
+              replacementsByIndex.set(originalIndex, direction);
+            }
+          });
+          }
         }
 
-        dispatch({ type: "replace-directions", directions: replacements });
+        const replacements = state.directions.map(
+          (_, index) => replacementsByIndex.get(index)
+        );
+        if (replacements.some((direction) => direction === undefined)) {
+          throw new Error("Regeneration did not return every required hook.");
+        }
+
+        await createCheckpoint?.("regenerate", state.id);
+        dispatch({
+          type: "replace-directions",
+          directions: replacements.filter(
+            (direction): direction is WorkflowState["directions"][number] =>
+              direction !== undefined
+          )
+        });
         playGenerationSuccessSound();
         return true;
       } catch (caught: unknown) {
@@ -354,7 +424,7 @@ export function useRegenerateAllHooks(
         setLoading(false);
       }
     },
-    [state, dispatch]
+    [state, dispatch, createCheckpoint]
   );
 
   return { regenerateAll, loading, error };

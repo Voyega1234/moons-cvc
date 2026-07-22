@@ -25,7 +25,19 @@ describe("DirectionsStage artwork mode", () => {
         "aria-pressed"
       )
     ).toBe("true");
-    expect(screen.queryByRole("button", { name: "Standard" })).toBeNull();
+    const hookMode = within(
+      screen.getByRole("group", { name: "Hook idea mode" })
+    );
+    expect(
+      hookMode
+        .getByRole("button", { name: "Standard" })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+    await user.click(hookMode.getByRole("button", { name: "Fresh research" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-hook-idea-mode",
+      mode: "fresh-research"
+    });
     expect(
       screen.queryByRole("button", { name: "Reference library" })
     ).toBeNull();

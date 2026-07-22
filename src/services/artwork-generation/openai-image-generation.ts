@@ -3,10 +3,13 @@ import {
   defaultArtworkOutputSize,
   emptyApprovalComments,
   emptyApprovalGate,
+  inferredReferenceImageRole,
   outputFormatForService,
+  referenceImageRoleLabels,
   type ArtworkOutputSize,
   type CreativeDirection,
-  type CreativeOutput
+  type CreativeOutput,
+  type ReferenceImageSelection
 } from "../../domain/creative-run";
 import {
   creativeMixItems,
@@ -20,6 +23,9 @@ import type {
 } from "../../domain/creative-run";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import { generateArtworkFromWebhook } from "./n8n-artwork-generation";
+
+const ARTWORK_REQUEST_BATCH_SIZE = 4;
+const ARTWORK_REQUEST_CONCURRENCY = 2;
 
 export type ArtworkReferenceImage =
   | {
@@ -40,10 +46,31 @@ export type ArtworkReferenceImage =
       label?: string;
     };
 
+export function artworkReferencesFromSelections(
+  references: readonly ReferenceImageSelection[]
+): readonly ArtworkReferenceImage[] {
+  return [...references]
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.primary)) - Number(Boolean(left.primary))
+    )
+    .map((reference) => ({
+      kind: "url" as const,
+      url: reference.url,
+      label: [
+        reference.primary ? "Primary reference" : "Supporting reference",
+        referenceImageRoleLabels[inferredReferenceImageRole(reference)],
+        reference.label
+      ].join(" · ")
+    }));
+}
+
 export interface GenerateArtworkForSelectedHooksInput {
   run: WorkflowState;
   textInputs?: readonly string[];
   referenceImages?: readonly ArtworkReferenceImage[];
+  onProgress?: (completed: number, total: number) => void;
+  onBatch?: (outputs: readonly CreativeOutput[]) => void;
 }
 
 export interface ArtworkGenerationRequest {
@@ -51,6 +78,7 @@ export interface ArtworkGenerationRequest {
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
   runId: string;
+  assetVersion?: number;
   brand: {
     id: string;
     name: string;
@@ -105,6 +133,7 @@ export interface ArtworkRevisionRequest {
   runId: string;
   outputId: string;
   directionId: string;
+  assetVersion: number;
   format: string;
   sourceImageUrl: string;
   instructions: string;
@@ -133,7 +162,9 @@ type ArtworkRegenerationDirection = Pick<
 export async function generateArtworkForSelectedHooks({
   run,
   textInputs = [],
-  referenceImages = []
+  referenceImages = [],
+  onProgress,
+  onBatch
 }: GenerateArtworkForSelectedHooksInput): Promise<readonly CreativeOutput[]> {
   const requests = buildArtworkGenerationRequests({
     run,
@@ -141,24 +172,55 @@ export async function generateArtworkForSelectedHooks({
     referenceImages
   });
   const templateOutputs = buildUgcTemplateOutputs(run);
+  const shouldResume = run.artworkGenerationStatus === "failed";
+  const selectedDirectionIds = new Set(
+    run.directions
+      .filter((direction) => direction.selected)
+      .map((direction) => direction.id)
+  );
+  const existingOutputs = shouldResume
+    ? run.outputs.filter((output) => selectedDirectionIds.has(output.directionId))
+    : [];
+  const total = requests.reduce(
+    (sum, request) => sum + request.selectedHooks.length,
+    existingOutputs.length + templateOutputs.length
+  );
+  let completed = existingOutputs.length + templateOutputs.length;
+  if (templateOutputs.length) onBatch?.(templateOutputs);
+  onProgress?.(completed, total);
 
   if (
     env.artworkGenerationMode === "openai" &&
     !env.artworkGenerationEndpoint
   ) {
-    return sortOutputsBySelectedDirection(run, [
-      ...buildDraftOutputs(
-        run,
-        requests.flatMap((request) => request.selectedHooks)
-      ),
+    const draftOutputs = buildDraftOutputs(
+      run,
+      requests.flatMap((request) => request.selectedHooks)
+    );
+    if (draftOutputs.length) onBatch?.(draftOutputs);
+    const outputs = sortOutputsBySelectedDirection(run, [
+      ...existingOutputs,
+      ...draftOutputs,
       ...templateOutputs
     ]);
+    onProgress?.(total, total);
+    return outputs;
   }
 
-  const payloads = await Promise.all(
-    requests.map((request) => requestArtworkGeneration({ request, run }))
+  const payloads = await mapWithConcurrency(
+    requests,
+    ARTWORK_REQUEST_CONCURRENCY,
+    async (request) => {
+      const payload = await requestArtworkGeneration({ request, run });
+      const outputs = payload.outputs.map(normalizeArtworkOutput);
+      onBatch?.(outputs);
+      completed += request.selectedHooks.length;
+      onProgress?.(completed, total);
+      return payload;
+    }
   );
   return sortOutputsBySelectedDirection(run, [
+    ...existingOutputs,
     ...payloads.flatMap((payload) =>
       payload.outputs.map(normalizeArtworkOutput)
     ),
@@ -234,6 +296,7 @@ export function buildArtworkRevisionRequest({
     runId: run.id,
     outputId: output.id,
     directionId: output.directionId,
+    assetVersion: output.revisionCount + 2,
     format: output.format,
     sourceImageUrl,
     instructions: trimmedInstructions,
@@ -306,6 +369,7 @@ export function buildArtworkRegenerationRequest({
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
     runId: run.id,
+    assetVersion: nextArtworkAssetVersion(run),
     brand: buildBrandIdentity(run.brand),
     service: savedDirection
       ? directionServiceAt(run, savedDirection, directionIndex)
@@ -313,7 +377,10 @@ export function buildArtworkRegenerationRequest({
     quantity: 1,
     brief: run.brief,
     selectedHooks: [direction],
-    textInputs: trimmedInstructions ? [trimmedInstructions] : [],
+    textInputs: artworkPromptInputs(
+      run,
+      trimmedInstructions ? [trimmedInstructions] : []
+    ),
     referenceImages: [
       ...(trimmedSourceImageUrl
         ? [
@@ -324,11 +391,8 @@ export function buildArtworkRegenerationRequest({
             }
           ]
         : []),
-      ...run.referenceImages.map((item) => ({
-        kind: "url" as const,
-        url: item.url,
-        label: item.label
-      })),
+      ...artworkReferencesFromSelections(run.referenceImages),
+      ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
     ...buildBrandContext(run.brand),
@@ -366,12 +430,20 @@ export function buildArtworkGenerationRequests({
   textInputs = [],
   referenceImages = []
 }: GenerateArtworkForSelectedHooksInput): readonly ArtworkGenerationRequest[] {
+  const completedDirectionIds = new Set(
+    run.artworkGenerationStatus === "failed"
+      ? run.outputs.map((output) => output.directionId)
+      : []
+  );
   const selectedHooks = run.directions
     .map((direction, index) => ({
       direction,
       service: directionServiceAt(run, direction, index)
     }))
-    .filter(({ direction }) => direction.selected);
+    .filter(
+      ({ direction }) =>
+        direction.selected && !completedDirectionIds.has(direction.id)
+    );
 
   return creativeMixItems(run).flatMap((item) => {
     if (item.service === "ugc-video") return [];
@@ -405,28 +477,32 @@ export function buildArtworkGenerationRequests({
         contactLine,
         caption
       }));
-    return hooks.length
-      ? [
+    return chunk(hooks, ARTWORK_REQUEST_BATCH_SIZE).map((selectedHooks) =>
           buildArtworkRequest({
             run,
             service: item.service,
-            quantity: hooks.length,
-            selectedHooks: hooks,
+            quantity: selectedHooks.length,
+            selectedHooks,
             textInputs,
             referenceImages
           })
-        ]
-      : [];
+        );
   });
 }
 
 function buildUgcTemplateOutputs(run: WorkflowState): readonly CreativeOutput[] {
+  const completedDirectionIds = new Set(
+    run.artworkGenerationStatus === "failed"
+      ? run.outputs.map((output) => output.directionId)
+      : []
+  );
   return run.directions
     .map((direction, index) => ({ direction, index }))
     .filter(
       ({ direction, index }) =>
         direction.selected &&
-        directionServiceAt(run, direction, index) === "ugc-video"
+        directionServiceAt(run, direction, index) === "ugc-video" &&
+        !completedDirectionIds.has(direction.id)
     )
     .map(({ direction }, index) => ({
       id: `ugc-template-${direction.id}-${index + 1}`,
@@ -479,14 +555,16 @@ function buildArtworkRequest({
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
     runId: run.id,
+    assetVersion: nextArtworkAssetVersion(run),
     brand: buildBrandIdentity(run.brand),
     service,
     quantity,
     brief: run.brief,
     selectedHooks,
-    textInputs,
+    textInputs: artworkPromptInputs(run, textInputs),
     referenceImages: [
       ...referenceImages,
+      ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
     ...buildBrandContext(run.brand),
@@ -495,6 +573,25 @@ function buildArtworkRequest({
       format: "png"
     }
   };
+}
+
+function artworkPromptInputs(
+  run: WorkflowState,
+  additionalInputs: readonly string[]
+): readonly string[] {
+  return [run.artworkBrief?.trim(), ...additionalInputs.map((item) => item.trim())]
+    .filter((item): item is string => Boolean(item));
+}
+
+function nextArtworkAssetVersion(run: WorkflowState): number {
+  const currentVersion = run.outputs.reduce(
+    (latest, output) => Math.max(latest, output.revisionCount + 1),
+    0
+  );
+  if (currentVersion === 0) return 1;
+  return run.artworkGenerationStatus === "failed"
+    ? currentVersion
+    : currentVersion + 1;
 }
 
 function creativeMaterialReferences(
@@ -524,6 +621,36 @@ function creativeMaterialReferences(
       label
     };
   });
+}
+
+function brandGuidelineReferences(
+  run: WorkflowState
+): readonly ArtworkReferenceImage[] {
+  return (run.brand?.library.brand ?? [])
+    .filter(
+      (item) =>
+        item.assetUrl &&
+        normalizeBrandRuleTitle(item.title) === "brandciguideline" &&
+        isSupportedImageUrl(item.assetUrl)
+    )
+    .map((item) => ({
+      kind: "url" as const,
+      url: item.assetUrl as string,
+      label:
+        "Brand CI / Guideline source — follow its identity, typography, color, spacing, imagery, and logo rules; do not copy sample campaign content"
+    }));
+}
+
+function normalizeBrandRuleTitle(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function isSupportedImageUrl(value: string): boolean {
+  try {
+    return /\.(?:png|jpe?g|webp)$/i.test(new URL(value).pathname);
+  } catch {
+    return /\.(?:png|jpe?g|webp)(?:\?|$)/i.test(value);
+  }
 }
 
 function creativeMaterialRoleLabel(
@@ -608,6 +735,41 @@ function compactUnique(values: readonly string[]): readonly string[] {
   return Array.from(
     new Set(values.map((value) => value.trim()).filter(Boolean))
   ).slice(0, 8);
+}
+
+function chunk<T>(items: readonly T[], size: number): readonly T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function mapWithConcurrency<Input, Output>(
+  items: readonly Input[],
+  concurrency: number,
+  task: (item: Input, index: number) => Promise<Output>
+): Promise<readonly Output[]> {
+  const results = new Array<Output>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item === undefined) continue;
+      results[index] = await task(item, index);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), items.length) },
+      () => worker()
+    )
+  );
+  return results;
 }
 
 function buildBrandContext(brand: WorkflowState["brand"]): Pick<

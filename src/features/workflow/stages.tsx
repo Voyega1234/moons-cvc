@@ -2,6 +2,7 @@ import {
   Fragment,
   useEffect,
   useId,
+  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
@@ -37,10 +38,16 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   creativeMaterialRoles,
+  inferredReferenceImageRole,
+  referenceImageRoleLabels,
+  referenceImageRoles,
   type ApprovalRole,
   type ArtworkMode,
   type CreativeOutput,
   type CreativeMaterialRole,
+  type HookIdeaMode,
+  type ReferenceImageRole,
+  type ReferenceImageSelection,
   type ServiceType
 } from "../../domain/creative-run";
 import {
@@ -58,6 +65,7 @@ import { useBrandMemoryRepository } from "../../app/providers/brand-memory-provi
 import { useBrands } from "../../app/providers/brand-provider";
 import { useClientIntakeRepository } from "../../app/providers/client-intake-provider";
 import { useOptionalRunCollaboration } from "../../app/providers/run-collaboration-provider";
+import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { departmentLabel } from "../../domain/run-collaboration";
 import {
   CLIENT_CATEGORY_MAX_LENGTH,
@@ -79,6 +87,7 @@ import { getFileNames } from "../../shared/utils/files";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import { pluralize } from "../../shared/utils/text";
 import { createId, nowIso } from "../../shared/utils/id";
+import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 import { serviceLabels, stages } from "./config";
 import {
   buildAngleExportReview,
@@ -101,6 +110,8 @@ import {
 } from "./rules";
 import { presentBrandMemoryText } from "./brand-memory-presentation";
 import {
+  createStageClientSlideItems,
+  downloadCreateStageSlides,
   downloadPmApprovedClientSlides,
   pmApprovedClientSlideItems
 } from "./export-client-slides-pptx";
@@ -128,6 +139,47 @@ function artworkModeLabel(mode: ArtworkMode): string {
     case "reference-library":
       return "Reference library";
   }
+}
+
+function HookIdeaModeToggle({
+  mode,
+  disabled,
+  dispatch
+}: {
+  mode: HookIdeaMode;
+  disabled: boolean;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  return (
+    <div
+      className="compass-hook-mode-toggle"
+      role="group"
+      aria-label="Hook idea mode"
+    >
+      <button
+        className={mode === "standard" ? "active" : ""}
+        type="button"
+        disabled={disabled}
+        aria-pressed={mode === "standard"}
+        onClick={() =>
+          dispatch({ type: "set-hook-idea-mode", mode: "standard" })
+        }
+      >
+        Standard
+      </button>
+      <button
+        className={mode === "fresh-research" ? "active" : ""}
+        type="button"
+        disabled={disabled}
+        aria-pressed={mode === "fresh-research"}
+        onClick={() =>
+          dispatch({ type: "set-hook-idea-mode", mode: "fresh-research" })
+        }
+      >
+        Fresh research
+      </button>
+    </div>
+  );
 }
 
 function DecisionCard({
@@ -445,6 +497,7 @@ export function StartStage({ state, dispatch }: StageProps) {
         <BrandProfilePanel
           key={`${state.brand?.id ?? "empty"}-${memoryRevision}`}
           state={state}
+          dispatch={dispatch}
           section={profileSection}
           onSectionChange={setProfileSection}
         />
@@ -452,6 +505,7 @@ export function StartStage({ state, dispatch }: StageProps) {
       {state.brand && libraryOpen ? (
         <BrandLibraryModal
           state={state}
+          dispatch={dispatch}
           section={profileSection}
           onSectionChange={setProfileSection}
           onClose={() => {
@@ -1125,7 +1179,7 @@ type BrandProfileSection =
 const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["brand", "Brand kit", "Rules, voice, CI, claim guardrails"],
   ["products", "Products", "Offers, benefits, audience, claim notes"],
-  ["docs", "Documents", "Guidelines, briefs, factsheets, extracted text"],
+  ["docs", "Guideline", "Editable guideline text, files, briefs, and factsheets"],
   ["refs", "References", "Visual inspiration, avoid, competitors"],
   ["past", "Past work", "Delivered runs and approved learnings"],
   ["learning", "Brand learning", "What's working and what to avoid"]
@@ -1169,10 +1223,12 @@ const brandSystemTopics = [
 
 function BrandProfilePanel({
   state,
+  dispatch,
   section,
   onSectionChange
 }: {
   state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
   section: BrandProfileSection;
   onSectionChange: (section: BrandProfileSection) => void;
 }) {
@@ -1356,7 +1412,12 @@ function BrandProfilePanel({
           brandName={brand.name}
           clientId={brand.id}
           initialItems={brandRules}
-          onSaved={setBrandRules}
+          initialGuidelines={brand.library.docs}
+          onSaved={({ brandRules: items, guidelines }) => {
+            setBrandRules(items);
+            dispatch({ type: "sync-brand-rules", items });
+            dispatch({ type: "sync-brand-guidelines", items: guidelines });
+          }}
           onClose={() => setGuidelineDialogOpen(false)}
         />
       ) : null}
@@ -1368,13 +1429,15 @@ function GuidelineQuickAddDialog({
   brandName,
   clientId,
   initialItems,
+  initialGuidelines,
   onSaved,
   onClose
 }: {
   brandName: string;
   clientId: string;
   initialItems: readonly LibraryItem[];
-  onSaved: (items: readonly LibraryItem[]) => void;
+  initialGuidelines: readonly LibraryItem[];
+  onSaved: (result: SavedBrandGuideline) => void;
   onClose: () => void;
 }) {
   const repository = useBrandMemoryRepository();
@@ -1387,13 +1450,14 @@ function GuidelineQuickAddDialog({
     setAnalyzing(true);
     setError(null);
     try {
-      const items = await analyzeAndSaveBrandGuideline({
+      const result = await analyzeAndSaveBrandGuideline({
         repository,
         clientId,
         items: initialItems,
+        guidelines: initialGuidelines,
         source
       });
-      onSaved(items);
+      onSaved(result);
       setAnalyzing(false);
       onClose();
     } catch (caught) {
@@ -1570,11 +1634,13 @@ function normalizeBrandSystemTitle(value: string): string {
 
 function BrandLibraryModal({
   state,
+  dispatch,
   section,
   onSectionChange,
   onClose
 }: {
   state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
   section: BrandProfileSection;
   onSectionChange: (section: BrandProfileSection) => void;
   onClose: () => void;
@@ -1658,7 +1724,11 @@ function BrandLibraryModal({
               </span>
             </div>
             <div className="compass-material-browser-content">
-              <BrandProfileSectionContent state={state} section={section} />
+              <BrandProfileSectionContent
+                state={state}
+                dispatch={dispatch}
+                section={section}
+              />
             </div>
           </section>
         </div>
@@ -1669,9 +1739,11 @@ function BrandLibraryModal({
 
 function BrandProfileSectionContent({
   state,
+  dispatch,
   section
 }: {
   state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
   section: BrandProfileSection;
 }) {
   const brand = state.brand;
@@ -1684,6 +1756,12 @@ function BrandProfileSectionContent({
           clientId={brand.id}
           initialItems={brand.library.brand}
           libraryDocuments={brand.library.docs}
+          onBrandRulesSaved={(items) =>
+            dispatch({ type: "sync-brand-rules", items })
+          }
+          onGuidelinesSaved={(items) =>
+            dispatch({ type: "sync-brand-guidelines", items })
+          }
         />
       ) : null}
       {section === "products" ? (
@@ -1693,6 +1771,13 @@ function BrandProfileSectionContent({
         <BrandDocumentsMemoryList
           clientId={brand.id}
           libraryItems={brand.library.docs}
+          legacyBrandGuideline={findRuleByTitle(
+            brand.library.brand,
+            "Brand CI / Guideline"
+          )}
+          onGuidelinesSaved={(items) =>
+            dispatch({ type: "sync-brand-guidelines", items })
+          }
         />
       ) : null}
       {section === "refs" ? (
@@ -1995,6 +2080,12 @@ function ProductField({ label, value }: { label: string; value: string }) {
 }
 
 type GuidelineSource = { file: File } | { text: string };
+type SavedBrandGuideline = {
+  brandRules: readonly LibraryItem[];
+  guidelines: readonly LibraryItem[];
+};
+
+const EDITABLE_GUIDELINE_TITLE = "Brand guideline";
 
 function upsertLibraryItem(
   items: readonly LibraryItem[],
@@ -2009,38 +2100,78 @@ async function analyzeAndSaveBrandGuideline({
   repository,
   clientId,
   items,
+  guidelines,
   source
 }: {
   repository: BrandMemoryRepository;
   clientId: string;
   items: readonly LibraryItem[];
+  guidelines: readonly LibraryItem[];
   source: GuidelineSource;
-}): Promise<readonly LibraryItem[]> {
+}): Promise<SavedBrandGuideline> {
   const analysis = await repository.analyzeGuideline(
     "file" in source
       ? { clientId, file: source.file }
       : { clientId, text: source.text }
   );
   let nextItems = items;
+  let nextGuidelines = guidelines;
 
-  async function saveRule(ruleTitle: string, description: string) {
+  if ("text" in source) {
+    const existing = findRuleByTitle(
+      nextGuidelines,
+      EDITABLE_GUIDELINE_TITLE
+    );
+    const saved = existing
+      ? await repository.updateGuideline({
+          id: existing.id,
+          title: EDITABLE_GUIDELINE_TITLE,
+          description: source.text.trim()
+        })
+      : await repository.createGuideline({
+          clientId,
+          title: EDITABLE_GUIDELINE_TITLE,
+          description: source.text.trim()
+        });
+    nextGuidelines = upsertLibraryItem(nextGuidelines, saved);
+  }
+
+  async function saveRule(
+    ruleTitle: string,
+    description: string,
+    assetFile?: File
+  ) {
     const existing = findRuleByTitle(nextItems, ruleTitle);
     const saved = existing
       ? await repository.updateBrandRule({
           id: existing.id,
           title: ruleTitle,
-          description
+          description,
+          ...(assetFile ? { assetFile } : {})
         })
       : await repository.createBrandRule({
           clientId,
           title: ruleTitle,
-          description
+          description,
+          ...(assetFile ? { assetFile } : {})
         });
     nextItems = upsertLibraryItem(nextItems, saved);
   }
 
   if (analysis.summary.trim()) {
     await saveRule("Tone & Style", analysis.summary.trim());
+  }
+
+  if (analysis.generationContext.trim()) {
+    const guidelineImage =
+      "file" in source && isImageGuidelineFile(source.file)
+        ? source.file
+        : undefined;
+    await saveRule(
+      "Brand CI / Guideline",
+      analysis.generationContext.trim(),
+      guidelineImage
+    );
   }
 
   for (const [ruleTitle, newColors] of [
@@ -2059,17 +2190,28 @@ async function analyzeAndSaveBrandGuideline({
     await saveRule(ruleTitle, merged.join(", "));
   }
 
-  return nextItems;
+  return { brandRules: nextItems, guidelines: nextGuidelines };
+}
+
+function isImageGuidelineFile(file: File): boolean {
+  return (
+    file.type.startsWith("image/") ||
+    /\.(?:png|jpe?g|webp)$/i.test(file.name)
+  );
 }
 
 function BrandKitMemoryList({
   clientId,
   initialItems,
-  libraryDocuments
+  libraryDocuments,
+  onBrandRulesSaved,
+  onGuidelinesSaved
 }: {
   clientId: string;
   initialItems: readonly LibraryItem[];
   libraryDocuments: readonly LibraryItem[];
+  onBrandRulesSaved: (items: readonly LibraryItem[]) => void;
+  onGuidelinesSaved: (items: readonly LibraryItem[]) => void;
 }) {
   const repository = useBrandMemoryRepository();
   const [items, setItems] = useState<readonly LibraryItem[]>(initialItems);
@@ -2176,13 +2318,16 @@ function BrandKitMemoryList({
     setGuidelineError(null);
 
     try {
-      const nextItems = await analyzeAndSaveBrandGuideline({
+      const result = await analyzeAndSaveBrandGuideline({
         repository,
         clientId,
         items,
+        guidelines: libraryDocuments,
         source
       });
-      setItems(nextItems);
+      setItems(result.brandRules);
+      onBrandRulesSaved(result.brandRules);
+      onGuidelinesSaved(result.guidelines);
 
       if ("text" in source) {
         setGuidelineText("");
@@ -2841,18 +2986,100 @@ function MemoryList({
 
 function BrandDocumentsMemoryList({
   clientId,
-  libraryItems
+  libraryItems,
+  legacyBrandGuideline,
+  onGuidelinesSaved
 }: {
   clientId: string;
   libraryItems: NonNullable<WorkflowState["brand"]>["library"]["docs"];
+  legacyBrandGuideline?: LibraryItem;
+  onGuidelinesSaved: (items: readonly LibraryItem[]) => void;
 }) {
   const repository = useBrandMemoryRepository();
+  const legacyMigrationAttempted = useRef(false);
   const [documents, setDocuments] = useState<readonly BrandDocument[]>([]);
+  const [guidelines, setGuidelines] =
+    useState<readonly LibraryItem[]>(libraryItems);
   const [documentType, setDocumentType] =
     useState<BrandDocumentType>("brand_guideline");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [editingGuidelineId, setEditingGuidelineId] = useState<string | null>(
+    null
+  );
+  const [guidelineTitle, setGuidelineTitle] = useState("");
+  const [guidelineText, setGuidelineText] = useState("");
+  const [savingGuideline, setSavingGuideline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setGuidelines(libraryItems);
+  }, [libraryItems]);
+
+  useEffect(() => {
+    const hasEditableGuideline = libraryItems.some(
+      (item) =>
+        item.title.trim().toLowerCase() ===
+        EDITABLE_GUIDELINE_TITLE.toLowerCase()
+    );
+    if (
+      hasEditableGuideline ||
+      legacyMigrationAttempted.current
+    ) {
+      return;
+    }
+
+    legacyMigrationAttempted.current = true;
+    let active = true;
+    void Promise.all([
+      repository.listGuidelines(clientId),
+      repository.listBrandRules(clientId)
+    ])
+      .then(async ([existing, latestBrandRules]) => {
+        if (!active) return;
+        const existingEditable = findRuleByTitle(
+          existing,
+          EDITABLE_GUIDELINE_TITLE
+        );
+        if (existingEditable) {
+          setGuidelines(existing);
+          onGuidelinesSaved(existing);
+          return;
+        }
+
+        const source =
+          legacyBrandGuideline ??
+          findRuleByTitle(latestBrandRules, "Brand CI / Guideline");
+        if (!source?.description.trim()) return;
+
+        const created = await repository.createGuideline({
+          clientId,
+          title: EDITABLE_GUIDELINE_TITLE,
+          description: source.description.trim()
+        });
+        if (!active) return;
+        const next = [...existing, created];
+        setGuidelines(next);
+        onGuidelinesSaved(next);
+      })
+      .catch((caught: unknown) => {
+        if (!active) return;
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not prepare the editable guideline."
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    clientId,
+    legacyBrandGuideline,
+    libraryItems.length,
+    repository
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -2898,12 +3125,54 @@ function BrandDocumentsMemoryList({
     }
   }
 
+  function editGuideline(item: LibraryItem) {
+    setEditingGuidelineId(item.id);
+    setGuidelineTitle(item.title);
+    setGuidelineText(item.description);
+    setError(null);
+  }
+
+  function cancelGuidelineEdit() {
+    setEditingGuidelineId(null);
+    setGuidelineTitle("");
+    setGuidelineText("");
+  }
+
+  async function saveGuideline() {
+    if (!editingGuidelineId || !guidelineText.trim()) {
+      setError("Guideline text is required.");
+      return;
+    }
+
+    setSavingGuideline(true);
+    setError(null);
+    try {
+      const updated = await repository.updateGuideline({
+        id: editingGuidelineId,
+        title: guidelineTitle,
+        description: guidelineText.trim()
+      });
+      const next = guidelines.map((item) =>
+        item.id === updated.id ? updated : item
+      );
+      setGuidelines(next);
+      onGuidelinesSaved(next);
+      cancelGuidelineEdit();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not save guideline."
+      );
+    } finally {
+      setSavingGuideline(false);
+    }
+  }
+
   return (
     <section className="memory-editor">
       <header>
         <div>
-          <h4>Documents</h4>
-          <p>Upload briefs, guidelines, factsheets, and references for AI.</p>
+          <h4>Guideline</h4>
+          <p>Edit source guideline text or upload supporting documents for AI.</p>
         </div>
         <div className="memory-upload-controls">
           <label>
@@ -2964,20 +3233,64 @@ function BrandDocumentsMemoryList({
           </div>
         </>
       ) : null}
-      {libraryItems.length ? (
+      {guidelines.length ? (
         <>
-          <span className="memory-subhead">Library notes</span>
+          <span className="memory-subhead">Editable guideline text</span>
           <div className="memory-item-list">
-            {libraryItems.map((item) => (
+            {guidelines.map((item) => (
               <article className="memory-item" key={item.id}>
                 <b>{item.title}</b>
                 <p>{item.description}</p>
+                <div className="memory-item-actions">
+                  <button
+                    type="button"
+                    disabled={savingGuideline}
+                    onClick={() => editGuideline(item)}
+                  >
+                    Edit
+                  </button>
+                </div>
               </article>
             ))}
           </div>
         </>
       ) : null}
-      {!loading && !documents.length && !libraryItems.length ? (
+      {editingGuidelineId ? (
+        <div className="memory-form">
+          <b>{guidelineTitle}</b>
+          <label>
+            <span>Guideline text</span>
+            <textarea
+              value={guidelineText}
+              disabled={savingGuideline}
+              rows={10}
+              onChange={(event) => setGuidelineText(event.target.value)}
+            />
+          </label>
+          <div className="memory-form-actions">
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={savingGuideline}
+              onClick={cancelGuidelineEdit}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={
+                savingGuideline ||
+                !guidelineText.trim()
+              }
+              onClick={() => void saveGuideline()}
+            >
+              {savingGuideline ? "Saving…" : "Save guideline"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {!loading && !documents.length && !guidelines.length ? (
         <div className="empty">
           <b>No documents yet.</b>
           <p>Upload a guideline, brief, product sheet, or reference file.</p>
@@ -3431,16 +3744,23 @@ export function BriefStage({ state, dispatch }: StageProps) {
           >
             ← Back to signal
           </button>
-          <button
-            className="btn orange"
-            type="button"
-            disabled={Boolean(generateBlocked) || loading}
-            title={generateBlocked ?? undefined}
-            onClick={generate}
-          >
-            {loading ? <Spinner /> : null}
-            {loading ? "Generating angles…" : "Generate angles →"}
-          </button>
+          <div className="compass-brief-generate-actions">
+            <HookIdeaModeToggle
+              mode={state.hookIdeaMode}
+              disabled={loading}
+              dispatch={dispatch}
+            />
+            <button
+              className="btn orange"
+              type="button"
+              disabled={Boolean(generateBlocked) || loading}
+              title={generateBlocked ?? undefined}
+              onClick={generate}
+            >
+              {loading ? <Spinner /> : null}
+              {loading ? "Generating angles…" : "Generate angles →"}
+            </button>
+          </div>
         </>
       }
     >
@@ -3451,7 +3771,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
             <div className="compass-module-head">
               <div>
                 <h3>Creative mix</h3>
-                <p>{totalDeliverables} deliverables planned</p>
+                <p>
+                  {totalDeliverables} deliverables planned · max 50 per content
+                  type
+                </p>
               </div>
               <button
                 className="btn secondary small"
@@ -3492,8 +3815,8 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         <input
                           aria-label={`${label} quantity`}
                           type="number"
-                          min={0}
-                          max={9}
+                          min={QUANTITY_LIMITS.minimum}
+                          max={QUANTITY_LIMITS.maximum}
                           value={item.quantity}
                           onChange={(event) =>
                             dispatch({
@@ -3506,7 +3829,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         <button
                           type="button"
                           aria-label={`Increase ${label} quantity`}
-                          disabled={totalDeliverables >= 9}
+                          disabled={item.quantity >= QUANTITY_LIMITS.maximum}
                           onClick={() =>
                             dispatch({
                               type: "set-creative-mix-quantity",
@@ -3899,13 +4222,17 @@ const REFERENCE_LIBRARY_CATEGORIES: readonly [
   ["reference", "Reference board"]
 ];
 
-function libraryItemsWithImages(items: readonly LibraryItem[]) {
+function libraryItemsWithImages(
+  items: readonly LibraryItem[],
+  role?: ReferenceImageRole
+): ReferenceImageSelection[] {
   return items
     .filter((item) => item.assetUrl)
     .map((item) => ({
       id: `library-${item.id}`,
       url: item.assetUrl as string,
-      label: item.title || "Untitled"
+      label: item.title || "Untitled",
+      ...(role ? { role } : {})
     }));
 }
 
@@ -3999,7 +4326,7 @@ function ReferenceLibraryPicker({
     upsertBrandRule(saved);
     dispatch({
       type: "sync-brand-logo-reference",
-      item: libraryItemsWithImages([saved])[0] ?? null
+      item: libraryItemsWithImages([saved], "logo")[0] ?? null
     });
   }
 
@@ -4046,7 +4373,7 @@ function ReferenceLibraryPicker({
     if (!clientId) return;
     const saved = await repository.createReferenceImage({ clientId, file });
     setRefImages((current) => [saved, ...current]);
-    const selectedReference = libraryItemsWithImages([saved])[0];
+    const selectedReference = libraryItemsWithImages([saved], "style")[0];
     if (
       selectedReference &&
       !state.referenceImages.some((item) => item.id === selectedReference.id)
@@ -4059,13 +4386,13 @@ function ReferenceLibraryPicker({
 
   const candidatesByCategory: Record<
     ReferenceLibraryCategory,
-    { id: string; url: string; label: string; displayLabel?: string }[]
+    (ReferenceImageSelection & { displayLabel?: string })[]
   > = {
-    guideline: libraryItemsWithImages(brand?.library.docs ?? []),
-    logo: logoRule ? libraryItemsWithImages([logoRule]) : [],
+    guideline: libraryItemsWithImages(brand?.library.docs ?? [], "content"),
+    logo: logoRule ? libraryItemsWithImages([logoRule], "logo") : [],
     product: [],
     reference: [
-      ...libraryItemsWithImages(refImages),
+      ...libraryItemsWithImages(refImages, "style"),
       ...pastWork
         .filter(
           (item): item is BrandPastWorkItem & { imageUrl: string } =>
@@ -4075,6 +4402,7 @@ function ReferenceLibraryPicker({
           id: `past-work-${item.id}`,
           url: item.imageUrl,
           label: `Past work style reference — ${item.title || "Untitled"}`,
+          role: "style" as const,
           displayLabel: item.title || "Past work"
         }))
     ]
@@ -4149,7 +4477,8 @@ function ReferenceLibraryPicker({
                         item: {
                           id: candidate.id,
                           url: candidate.url,
-                          label: candidate.label
+                          label: candidate.label,
+                          role: candidate.role
                         }
                       })
                     }
@@ -4345,6 +4674,8 @@ function InlineUploadForm({
   );
 }
 
+const ARTWORK_BRIEF_MAX_LENGTH = 2_000;
+
 export function DirectionsStage({ state, dispatch }: StageProps) {
   const selected = selectedDirectionCount(state);
   const requiredCount = totalCreativeMixQuantity(state);
@@ -4390,7 +4721,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
   const {
     create: createSelectedHooks,
     loading: creating,
-    error: createError
+    error: createError,
+    progress: artworkProgress
   } = useCreateSelectedHooks(state, dispatch);
 
   useEffect(() => {
@@ -4469,7 +4801,11 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             onClick={createSelectedHooks}
           >
             {creating ? <Spinner /> : null}
-            {creating ? "Generating artwork…" : "Confirm hooks & create →"}
+            {creating
+              ? artworkProgress?.total
+                ? `Generating artwork ${artworkProgress.completed}/${artworkProgress.total}…`
+                : "Preparing artwork…"
+              : "Confirm hooks & create →"}
           </button>
         </>
       }
@@ -4531,6 +4867,44 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         </label>
       </section>
       <section
+        className="compass-angle-ai-brief"
+        aria-labelledby="angle-artwork-brief-title"
+      >
+        <div className="compass-angle-ai-brief-copy">
+          <div className="compass-angle-ai-brief-title-row">
+            <TextT size={18} weight="bold" aria-hidden="true" />
+            <h3 id="angle-artwork-brief-title">Artwork brief for AI</h3>
+          </div>
+          <p>
+            Add visual requirements for this run. This instruction is included
+            in every image generation and regeneration prompt.
+          </p>
+        </div>
+        <label className="compass-angle-ai-brief-field">
+          <span className="sr-only">Artwork brief for AI</span>
+          <textarea
+            aria-label="Artwork brief for AI"
+            value={state.artworkBrief}
+            maxLength={ARTWORK_BRIEF_MAX_LENGTH}
+            rows={3}
+            disabled={creating}
+            placeholder="Example: Use a bright hotel lifestyle scene, prioritize real guests and natural light, keep the layout spacious, and avoid heavy gradients."
+            onChange={(event) =>
+              dispatch({
+                type: "set-artwork-brief",
+                brief: event.target.value
+              })
+            }
+          />
+          <span className="compass-angle-ai-brief-meta">
+            <span>{state.artworkBrief.trim() ? "Included in prompt" : "Optional"}</span>
+            <span>
+              {state.artworkBrief.length}/{ARTWORK_BRIEF_MAX_LENGTH}
+            </span>
+          </span>
+        </label>
+      </section>
+      <section
         className="compass-angle-references"
         aria-labelledby="angle-selected-references-title"
       >
@@ -4557,10 +4931,52 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         {state.referenceImages.length ? (
           <div className="compass-angle-reference-strip">
             {state.referenceImages.map((reference) => (
-              <article className="compass-angle-reference-item" key={reference.id}>
-                <img src={reference.url} alt="" />
+              <article
+                className={`compass-angle-reference-item ${reference.primary ? "primary" : ""}`}
+                key={reference.id}
+              >
+                <div className="compass-angle-reference-image-wrap">
+                  <img src={reference.url} alt="" />
+                  {reference.primary ? <b>Primary</b> : null}
+                </div>
                 <span title={reference.label}>{reference.label}</span>
+                <label>
+                  <span>Use as</span>
+                  <select
+                    aria-label={`Reference role for ${reference.label}`}
+                    value={inferredReferenceImageRole(reference)}
+                    disabled={creating}
+                    onChange={(event) =>
+                      dispatch({
+                        type: "set-reference-image-role",
+                        id: reference.id,
+                        role: event.target.value as ReferenceImageRole
+                      })
+                    }
+                  >
+                    {referenceImageRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {referenceImageRoleLabels[role]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
+                  className="compass-angle-reference-primary"
+                  type="button"
+                  aria-pressed={Boolean(reference.primary)}
+                  disabled={creating}
+                  onClick={() =>
+                    dispatch({
+                      type: "set-primary-reference-image",
+                      id: reference.primary ? null : reference.id
+                    })
+                  }
+                >
+                  {reference.primary ? "★ Primary" : "☆ Make primary"}
+                </button>
+                <button
+                  className="compass-angle-reference-remove"
                   type="button"
                   aria-label={`Remove ${reference.label} from selected references`}
                   disabled={creating}
@@ -4594,6 +5010,15 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           </p>
         </div>
         <div className="compass-angle-toolbar-actions">
+          <HookIdeaModeToggle
+            mode={state.hookIdeaMode}
+            disabled={
+              generatingMore ||
+              regeneratingAllHooks ||
+              Boolean(regeneratingHookId)
+            }
+            dispatch={dispatch}
+          />
           <button
             className="btn secondary small compass-angle-export-pdf"
             type="button"
@@ -5456,6 +5881,11 @@ function HookRegenerateAllModal({
 }
 
 export function StudioStage({ state, dispatch }: StageProps) {
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
+  const [sendingToQc, setSendingToQc] = useState(false);
+  const [sendToQcError, setSendToQcError] = useState<string | null>(null);
+  const [slidesExporting, setSlidesExporting] = useState(false);
+  const [slidesError, setSlidesError] = useState<string | null>(null);
   const backAction: WorkflowAction = { type: "set-stage", stage: "directions" };
   const runQaBlocked = workflowActionBlockReason(state, {
     type: "run-qa",
@@ -5470,9 +5900,60 @@ export function StudioStage({ state, dispatch }: StageProps) {
     state,
     dispatch
   );
+  const {
+    create: regenerateAllArtwork,
+    loading: regeneratingAllArtwork,
+    error: regenerateAllArtworkError,
+    progress: regenerateAllArtworkProgress
+  } = useCreateSelectedHooks(state, dispatch);
   const creativeCount = reviewCreativeCount(state.outputs);
+  const slideCount = createStageClientSlideItems(state).length;
   const failedCount = reviewGuidedImprovementCount(state.outputs);
   const readyCount = state.qaComplete ? creativeCount - failedCount : 0;
+
+  const handleRegenerateAllArtwork = () => {
+    if (
+      !window.confirm(
+        "Regenerate every image in this creative set? Existing images stay in storage as earlier versions."
+      )
+    ) {
+      return;
+    }
+    regenerateAllArtwork();
+  };
+
+  const handleDownloadSlides = async () => {
+    setSlidesExporting(true);
+    setSlidesError(null);
+    try {
+      await downloadCreateStageSlides(state);
+    } catch (caught) {
+      setSlidesError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not create the slides. Please try again."
+      );
+    } finally {
+      setSlidesExporting(false);
+    }
+  };
+
+  const handleSendToQc = async () => {
+    setSendingToQc(true);
+    setSendToQcError(null);
+    try {
+      await createCheckpoint?.("send-to-qc", state.id);
+      dispatch(approvalAction);
+    } catch (caught) {
+      setSendToQcError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save a recovery point before Internal QC."
+      );
+    } finally {
+      setSendingToQc(false);
+    }
+  };
 
   return (
     <DecisionCard
@@ -5480,7 +5961,11 @@ export function StudioStage({ state, dispatch }: StageProps) {
       title="Review the creative set."
       helper="Refine each draft, run a quality check, and resolve any guided improvements before sending the work to Internal QC."
       status={
-        checking
+        regeneratingAllArtwork
+          ? regenerateAllArtworkProgress?.total
+            ? `Generating ${regenerateAllArtworkProgress.completed}/${regenerateAllArtworkProgress.total}…`
+            : "Preparing new artwork…"
+          : checking
           ? "Checking quality…"
           : !state.qaComplete
             ? "Not checked"
@@ -5500,9 +5985,46 @@ export function StudioStage({ state, dispatch }: StageProps) {
             ← Back to angles
           </button>
           <button
+            className="btn secondary"
+            type="button"
+            disabled={
+              regeneratingAllArtwork || checking || sendingToQc
+            }
+            onClick={handleRegenerateAllArtwork}
+          >
+            {regeneratingAllArtwork ? <Spinner /> : null}
+            {regeneratingAllArtwork
+              ? regenerateAllArtworkProgress?.total
+                ? `Regenerating ${regenerateAllArtworkProgress.completed}/${regenerateAllArtworkProgress.total}…`
+                : "Preparing…"
+              : "↻ Regenerate all images"}
+          </button>
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={
+              !slideCount ||
+              slidesExporting ||
+              regeneratingAllArtwork ||
+              checking ||
+              sendingToQc
+            }
+            title={
+              slideCount
+                ? `Download ${slideCount} creative slide${slideCount === 1 ? "" : "s"}`
+                : "Generate artwork before downloading slides"
+            }
+            onClick={() => void handleDownloadSlides()}
+          >
+            {slidesExporting ? <Spinner /> : null}
+            {slidesExporting ? "Creating slides…" : "Download slides"}
+          </button>
+          <button
             className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
             type="button"
-            disabled={checking || Boolean(runQaBlocked)}
+            disabled={
+              regeneratingAllArtwork || checking || Boolean(runQaBlocked)
+            }
             title={runQaBlocked ?? undefined}
             onClick={check}
           >
@@ -5516,11 +6038,13 @@ export function StudioStage({ state, dispatch }: StageProps) {
           <button
             className={`btn ${state.qaComplete ? "primary" : "secondary"}`}
             type="button"
-            disabled={Boolean(approvalBlocked)}
+            disabled={
+              regeneratingAllArtwork || sendingToQc || Boolean(approvalBlocked)
+            }
             title={approvalBlocked ?? undefined}
-            onClick={() => dispatch(approvalAction)}
+            onClick={() => void handleSendToQc()}
           >
-            Send to Internal QC →
+            {sendingToQc ? "Saving recovery point…" : "Send to Internal QC →"}
           </button>
         </>
       }
@@ -5542,6 +6066,15 @@ export function StudioStage({ state, dispatch }: StageProps) {
           </span>
         </section>
         {qaError ? <p className="repository-message error">{qaError}</p> : null}
+        {regenerateAllArtworkError ? (
+          <p className="repository-message error">{regenerateAllArtworkError}</p>
+        ) : null}
+        {sendToQcError ? (
+          <p className="repository-message error">{sendToQcError}</p>
+        ) : null}
+        {slidesError ? (
+          <p className="repository-message error">{slidesError}</p>
+        ) : null}
         <OutputGrid state={state} dispatch={dispatch} />
         {state.qaComplete ? (
           <section className={`compass-build-qa-strip ${failedCount ? "needs" : "ready"}`}>
@@ -5718,6 +6251,8 @@ function AlbumMosaic({
           <img
             src={output.assetUrl}
             alt={`${direction?.hook ?? "Album creative"} panel ${index + 1}`}
+            loading="lazy"
+            decoding="async"
             key={output.id}
           />
         ) : (
@@ -5885,6 +6420,8 @@ function OutputGrid({
                             className="generated-preview"
                             src={output.assetUrl}
                             alt={direction?.hook ?? `Creative ${index + 1}`}
+                            loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           <div className="static-preview">
@@ -6260,6 +6797,7 @@ function OutputRegenerateModal({
   onClose: () => void;
   initialPrompt?: string;
 }) {
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [phase, setPhase] = useState<"idle" | "regenerating" | "checking">(
     "idle"
@@ -6310,6 +6848,7 @@ function OutputRegenerateModal({
           updated: { ...updated, assetUrl }
         };
       });
+      await createCheckpoint?.("regenerate", run.id);
       replacements.forEach(({ currentOutput, updated }) => {
         dispatch({
           type: "replace-output-asset",
@@ -7175,6 +7714,7 @@ function QcSlide({
   role: ApprovalRole;
   dispatch: Dispatch<WorkflowAction>;
 }) {
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -7209,6 +7749,7 @@ function QcSlide({
     setUploadError(null);
     try {
       const targets = album ? orderedOutputs : [output];
+      const replacements = [];
       for (const [panelIndex, target] of targets.entries()) {
         const file = files[panelIndex];
         if (!file) continue;
@@ -7217,6 +7758,10 @@ function QcSlide({
           output: target,
           file
         });
+        replacements.push({ target, replacement });
+      }
+      await createCheckpoint?.("replace-image", run.id);
+      for (const { target, replacement } of replacements) {
         dispatch({
           type: "replace-output-asset",
           id: target.id,
@@ -7641,6 +8186,8 @@ export function ClientStage({ state, dispatch }: StageProps) {
                     className="generated-preview"
                     src={output.assetUrl}
                     alt={direction?.hook ?? `Creative ${index + 1}`}
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : (
                   <div className="static-preview">

@@ -37,12 +37,14 @@ const run: WorkflowState = {
   brandSearch: "",
   librarySection: "brand",
   service: "single-static",
+  hookIdeaMode: "standard",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
   outputSize: "1024x1024",
   quantity: 3,
   successMetric: "CTR",
   brief: "Generate hooks for AI SEO webinar.",
+  artworkBrief: "",
   attachments: ["brief.pdf"],
   uploadedMaterials: [
     {
@@ -72,6 +74,7 @@ describe("buildHookGenerationHarnessRequest", () => {
     const request = buildHookGenerationHarnessRequest({ run });
 
     expect(request.brand?.name).toBe("Convert Cake");
+    expect(request.hookIdeaMode).toBe("standard");
     expect(request.brief).toBe("Generate hooks for AI SEO webinar.");
     expect(request.brandMemory.working).toEqual(["Thai B2B examples work well."]);
     expect(request.brandLibrary.products[0]).toMatchObject({

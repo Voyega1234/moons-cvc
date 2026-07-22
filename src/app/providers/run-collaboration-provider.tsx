@@ -25,11 +25,12 @@ interface RunCollaborationContextValue {
   clientMemberships: readonly ClientMembership[];
   clientPicByClientId: Readonly<Record<string, TeamMember>>;
   ownershipByRunId: Readonly<Record<string, RunOwnership>>;
+  ownershipReady: boolean;
   loading: boolean;
   error: Error | null;
   handoff: (input: HandoffRunInput) => Promise<RunOwnership>;
   setClientPic: (input: SetClientPicInput) => Promise<ClientMembership>;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<readonly RunOwnership[]>;
 }
 
 const RunCollaborationContext =
@@ -51,29 +52,48 @@ export function RunCollaborationProvider({
   const [ownershipByRunId, setOwnershipByRunId] = useState<
     Readonly<Record<string, RunOwnership>>
   >({});
+  const [ownershipScopeKey, setOwnershipScopeKey] = useState<string | null>(
+    null
+  );
   const [loading, setLoading] = useState(Boolean(repository));
   const [error, setError] = useState<Error | null>(null);
   const runIdsKey = workspace.runOrder.join("\n");
 
   const refresh = useCallback(async () => {
-    if (!repository) return;
+    if (!repository) return [];
     setLoading(true);
     try {
-      const [nextMembers, ownerships, memberships] = await Promise.all([
-        repository.listTeamMembers(),
-        repository.listOwnerships(workspace.runOrder),
-        repository.listClientMemberships()
-      ]);
-      setMembers(nextMembers);
-      setClientMemberships(memberships);
+      const ownerships = await repository.listOwnerships(workspace.runOrder);
       setOwnershipByRunId(
         Object.fromEntries(
           ownerships.map((ownership) => [ownership.workspaceRunId, ownership])
         )
       );
-      setError(null);
+      setOwnershipScopeKey(runIdsKey);
+
+      const [membersResult, membershipsResult] = await Promise.allSettled([
+        repository.listTeamMembers(),
+        repository.listClientMemberships()
+      ]);
+      if (membersResult.status === "fulfilled") {
+        setMembers(membersResult.value);
+      }
+      if (membershipsResult.status === "fulfilled") {
+        setClientMemberships(membershipsResult.value);
+      }
+      const auxiliaryError = [membersResult, membershipsResult].find(
+        (result) => result.status === "rejected"
+      );
+      setError(
+        auxiliaryError?.status === "rejected"
+          ? toError(auxiliaryError.reason)
+          : null
+      );
+      return ownerships;
     } catch (caught) {
+      setOwnershipScopeKey(null);
       setError(toError(caught));
+      return [];
     } finally {
       setLoading(false);
     }
@@ -147,6 +167,7 @@ export function RunCollaborationProvider({
       clientMemberships,
       clientPicByClientId,
       ownershipByRunId,
+      ownershipReady: ownershipScopeKey === runIdsKey,
       loading,
       error,
       handoff,
@@ -160,6 +181,8 @@ export function RunCollaborationProvider({
       clientMemberships,
       clientPicByClientId,
       ownershipByRunId,
+      ownershipScopeKey,
+      runIdsKey,
       loading,
       error,
       handoff,

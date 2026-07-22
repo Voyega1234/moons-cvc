@@ -1,5 +1,8 @@
 import type { Brand } from "../../domain/brand";
-import type { UploadedCreativeMaterial } from "../../domain/creative-run";
+import type {
+  HookIdeaMode,
+  UploadedCreativeMaterial
+} from "../../domain/creative-run";
 import {
   ctaActionTypes,
   normalizeFormatBeatsForService,
@@ -12,6 +15,7 @@ import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight"
 
 export interface HookGenerationInput {
   brand: Brand | null;
+  hookIdeaMode: HookIdeaMode;
   service: WorkflowState["service"];
   quantity: number;
   contentTypeQuotas?: readonly { service: ServiceType; count: number }[];

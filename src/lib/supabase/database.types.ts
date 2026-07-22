@@ -828,6 +828,26 @@ export type Database = {
           updated_at?: string;
         }
       >;
+      run_checkpoints: TableDefinition<
+        {
+          id: string;
+          run_id: string;
+          reason: "regenerate" | "replace-image" | "send-to-qc";
+          snapshot: Json;
+          source_version: number;
+          created_by: string;
+          created_at: string;
+        },
+        {
+          id?: string;
+          run_id: string;
+          reason: "regenerate" | "replace-image" | "send-to-qc";
+          snapshot: Json;
+          source_version: number;
+          created_by: string;
+          created_at?: string;
+        }
+      >;
       run_handoffs: TableDefinition<
         {
           id: string;
@@ -928,6 +948,20 @@ export type Database = {
           workspace_run_id: string;
           current_owner_user_id: string;
           version: number;
+          updated_at: string;
+        }[];
+      };
+      restore_run_checkpoint: {
+        Args: {
+          p_checkpoint_id: string;
+          p_workspace_run_id: string;
+          p_expected_version: number;
+        };
+        Returns: {
+          workspace_run_id: string;
+          current_owner_user_id: string;
+          version: number;
+          snapshot: Json;
           updated_at: string;
         }[];
       };

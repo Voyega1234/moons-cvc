@@ -205,6 +205,45 @@ describe("workflowReducer", () => {
     expect(state.quantity).toBe(6);
   });
 
+  it("allows up to 50 deliverables independently for each content type", () => {
+    const staticMaxed = workflowReducer(initialWorkflowState, {
+      type: "set-creative-mix-quantity",
+      id: "creative-mix-1",
+      quantity: 80
+    });
+    const albumMaxed = workflowReducer(staticMaxed, {
+      type: "set-creative-mix-quantity",
+      id: "creative-mix-3",
+      quantity: 50
+    });
+
+    expect(albumMaxed.creativeMix?.map((item) => item.quantity)).toEqual([
+      50,
+      2,
+      50
+    ]);
+    expect(albumMaxed.quantity).toBe(102);
+  });
+
+  it("invalidates downstream review state when artwork generation starts again", () => {
+    const regenerating = workflowReducer(
+      {
+        ...initialWorkflowState,
+        qaComplete: true,
+        approved: true,
+        clientSent: true,
+        done: true
+      },
+      { type: "start-artwork-generation" }
+    );
+
+    expect(regenerating.artworkGenerationStatus).toBe("running");
+    expect(regenerating.qaComplete).toBe(false);
+    expect(regenerating.approved).toBe(false);
+    expect(regenerating.clientSent).toBe(false);
+    expect(regenerating.done).toBe(false);
+  });
+
   it("moves from brand selection to generated directions", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -858,6 +897,51 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
+  it("stores the artwork brief used by image generation", () => {
+    const state = workflowReducer(initialWorkflowState, {
+      type: "set-artwork-brief",
+      brief: "Use real guests and natural light."
+    });
+
+    expect(state.artworkBrief).toBe("Use real guests and natural light.");
+  });
+
+  it("assigns reference roles and keeps only one primary reference", () => {
+    const first = {
+      id: "reference-1",
+      url: "https://example.com/reference-1.png",
+      label: "Lifestyle"
+    };
+    const second = {
+      id: "reference-2",
+      url: "https://example.com/reference-2.png",
+      label: "Product packshot"
+    };
+    let state: WorkflowState = {
+      ...initialWorkflowState,
+      referenceImages: [first, second]
+    };
+
+    state = workflowReducer(state, {
+      type: "set-reference-image-role",
+      id: first.id,
+      role: "style"
+    });
+    state = workflowReducer(state, {
+      type: "set-primary-reference-image",
+      id: first.id
+    });
+    state = workflowReducer(state, {
+      type: "set-primary-reference-image",
+      id: second.id
+    });
+
+    expect(state.referenceImages).toEqual([
+      { ...first, role: "style", primary: false },
+      { ...second, primary: true }
+    ]);
+  });
+
   it("selects a default reference image without toggling an existing selection", () => {
     const item = {
       id: "library-logo-1",
@@ -942,9 +1026,56 @@ describe("workflowReducer", () => {
       {
         id: "convert-cake-logo",
         url: "https://example.com/convert-cake-logo.png",
-        label: "Logo"
+        label: "Logo",
+        role: "logo"
       }
     ]);
+  });
+
+  it("syncs newly analyzed brand rules into the active run", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    const state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    const items = [
+      {
+        id: "guideline-1",
+        title: "Brand CI / Guideline",
+        description: "Use the supplied CI as the source of truth."
+      }
+    ];
+
+    const synced = workflowReducer(state, {
+      type: "sync-brand-rules",
+      items
+    });
+
+    expect(synced.brand?.library.brand).toEqual(items);
+  });
+
+  it("syncs editable guideline source into the active run", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    const state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    const items = [
+      {
+        id: "guideline-source-1",
+        title: "Brand guideline",
+        description: "Use the latest user-edited guideline text."
+      }
+    ];
+
+    const synced = workflowReducer(state, {
+      type: "sync-brand-guidelines",
+      items
+    });
+
+    expect(synced.brand?.library.docs).toEqual(items);
   });
 
   it("routes a commented client change request back to Internal QC", () => {

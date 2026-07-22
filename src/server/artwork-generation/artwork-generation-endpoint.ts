@@ -431,6 +431,7 @@ async function reviseArtworkOutput({
     hook,
     outputId: input.outputId,
     directionId: input.directionId,
+    assetVersion: input.assetVersion,
     format: input.format,
     model,
     imageBytes: Buffer.from(image.base64, "base64"),
@@ -679,11 +680,13 @@ async function generateOutputForHook({
 
   const imageBytes = Buffer.from(image.base64, "base64");
   if (isAlbum) {
+    const assetVersion = input.assetVersion ?? 1;
     await persistArtworkOutput({
       input,
       hook: { ...hook, id: `${hook.id}-album-master` },
-      outputId: `${hook.id}-album-master-v1`,
+      outputId: `${hook.id}-album-master-v${assetVersion}`,
       directionId: hook.id,
+      assetVersion,
       format,
       model,
       imageBytes,
@@ -698,8 +701,9 @@ async function generateOutputForHook({
         persistArtworkOutput({
           input,
           hook: { ...hook, id: `${hook.id}-album-${panel.index}` },
-          outputId: `${hook.id}-album-${panel.index}-v1`,
+          outputId: `${hook.id}-album-${panel.index}-v${assetVersion}`,
           directionId: hook.id,
+          assetVersion,
           format,
           model,
           imageBytes: panel.bytes,
@@ -716,8 +720,9 @@ async function generateOutputForHook({
     await persistArtworkOutput({
       input,
       hook,
-      outputId: `${hook.id}-v1`,
+      outputId: `${hook.id}-v${input.assetVersion ?? 1}`,
       directionId: hook.id,
+      assetVersion: input.assetVersion ?? 1,
       format,
       model,
       imageBytes,
@@ -780,6 +785,7 @@ async function persistArtworkOutput({
   hook,
   outputId,
   directionId,
+  assetVersion = 1,
   format,
   model,
   imageBytes,
@@ -792,6 +798,7 @@ async function persistArtworkOutput({
   hook: { id: string };
   outputId: string;
   directionId: string;
+  assetVersion?: number;
   format: string;
   model: string;
   imageBytes: Buffer;
@@ -803,7 +810,8 @@ async function persistArtworkOutput({
   const assetStoragePath = buildStoragePath({
     clientId: input.brand?.id ?? "unbranded",
     runId: input.runId,
-    directionId: hook.id
+    directionId: hook.id,
+    assetVersion
   });
   const uploadResult = await storage.storage
     .from(ARTWORK_BUCKET)
@@ -846,7 +854,7 @@ async function persistArtworkOutput({
     assetBucket: ARTWORK_BUCKET,
     provider: "openai",
     model,
-    revisionCount: 0,
+    revisionCount: Math.max(0, assetVersion - 1),
     approval: emptyApprovalGate,
     approvalComments: emptyApprovalComments
   };
@@ -1073,6 +1081,21 @@ async function buildDirectDesignSystemPrompt({
   const additionalRequirements = input.textInputs.length
     ? input.textInputs
     : ["None supplied."];
+  const editableGuidelineItems = input.brandLibrary.docs.filter(
+    isEditableBrandGuidelineItem
+  );
+  const derivedGuidelineItems = input.brandLibrary.brand.filter(
+    isBrandGuidelineItem
+  );
+  const guidelineItems = editableGuidelineItems.length
+    ? editableGuidelineItems
+    : derivedGuidelineItems;
+  const otherBrandItems = input.brandLibrary.brand.filter(
+    (item) => !isBrandGuidelineItem(item)
+  );
+  const otherDocumentItems = input.brandLibrary.docs.filter(
+    (item) => !isEditableBrandGuidelineItem(item)
+  );
   const thickContext = {
     brand: input.brand
       ? {
@@ -1088,9 +1111,10 @@ async function buildDirectDesignSystemPrompt({
       avoid: compactPromptList(input.brandMemory.avoid, 8, 240)
     },
     brandLibrary: {
-      brand: compactPromptLibrary(input.brandLibrary.brand, 6, 400),
+      guidelines: compactPromptLibrary(guidelineItems, 3, 4_000),
+      brand: compactPromptLibrary(otherBrandItems, 6, 400),
       products: compactPromptLibrary(input.brandLibrary.products, 8, 500),
-      docs: compactPromptLibrary(input.brandLibrary.docs, 4, 280),
+      docs: compactPromptLibrary(otherDocumentItems, 4, 280),
       refs: compactPromptLibrary(input.brandLibrary.refs, 6, 280)
     },
     campaignContext: {
@@ -1163,6 +1187,16 @@ async function buildDirectDesignSystemPrompt({
   }
 
   return prompt;
+}
+
+function isBrandGuidelineItem(item: { title: string }): boolean {
+  return item.title.toLowerCase().replace(/[^a-z0-9]+/g, "") ===
+    "brandciguideline";
+}
+
+function isEditableBrandGuidelineItem(item: { title: string }): boolean {
+  return item.title.toLowerCase().replace(/[^a-z0-9]+/g, "") ===
+    "brandguideline";
 }
 
 function buildDesignSystemCopyPriority(
@@ -1695,17 +1729,19 @@ function buildImagePromptAgentDebugLog(
 function buildStoragePath({
   clientId,
   runId,
-  directionId
+  directionId,
+  assetVersion = 1
 }: {
   clientId: string;
   runId: string;
   directionId: string;
+  assetVersion?: number;
 }): string {
   return [
     safePathSegment(clientId),
     safePathSegment(runId),
     "outputs",
-    `${safePathSegment(directionId)}-v1.png`
+    `${safePathSegment(directionId)}-v${assetVersion}.png`
   ].join("/");
 }
 
@@ -1753,6 +1789,10 @@ function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest {
     runId: readString(value.runId, "runId"),
     outputId: readString(value.outputId, "outputId"),
     directionId: readString(value.directionId, "directionId"),
+    assetVersion:
+      value.assetVersion === undefined
+        ? 2
+        : readPositiveInteger(value.assetVersion, "assetVersion"),
     format: readString(value.format, "format"),
     sourceImageUrl: readString(value.sourceImageUrl, "sourceImageUrl"),
     instructions,
@@ -1785,6 +1825,10 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     throw new Error("imagePromptModel is not supported.");
   }
   const runId = readString(value.runId, "runId");
+  const assetVersion =
+    value.assetVersion === undefined
+      ? 1
+      : readPositiveInteger(value.assetVersion, "assetVersion");
   const service = readString(value.service, "service");
   const quantity = readNumber(value.quantity, "quantity");
   const brief = readString(value.brief, "brief");
@@ -1809,6 +1853,7 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     imagePromptModel:
       imagePromptModel as ArtworkGenerationRequest["imagePromptModel"],
     runId,
+    assetVersion,
     brand: value.brand == null ? null : parseBrand(value.brand),
     service: service as ArtworkGenerationRequest["service"],
     quantity,
@@ -1969,6 +2014,14 @@ function readNumber(value: unknown, field: string): number {
     throw new Error(`${field} must be a number.`);
   }
   return value;
+}
+
+function readPositiveInteger(value: unknown, field: string): number {
+  const number = readNumber(value, field);
+  if (!Number.isInteger(number) || number < 1) {
+    throw new Error(`${field} must be a positive integer.`);
+  }
+  return number;
 }
 
 function readStringArray(value: unknown, field: string): readonly string[] {

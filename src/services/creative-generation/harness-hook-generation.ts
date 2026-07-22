@@ -1,6 +1,7 @@
 import { env } from "../../config/env";
 import type {
   CreativeDirection,
+  HookIdeaMode,
   UploadedCreativeMaterial
 } from "../../domain/creative-run";
 import { getSupabaseClient } from "../../lib/supabase/client";
@@ -17,6 +18,7 @@ import {
 
 export interface HookGenerationHarnessRequest {
   runId: string;
+  hookIdeaMode: HookIdeaMode;
   brand: {
     id: string;
     name: string;
@@ -92,6 +94,7 @@ export function buildHookGenerationHarnessRequest({
 
   return {
     runId: run.id,
+    hookIdeaMode: run.hookIdeaMode,
     brand: brand
       ? {
           id: brand.id,

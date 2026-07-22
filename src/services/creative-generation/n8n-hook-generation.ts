@@ -21,6 +21,7 @@ export async function generateDirectionsFromWebhook(
           }
         : null,
       brief: {
+        hookIdeaMode: input.hookIdeaMode,
         service: input.service,
         quantity: input.quantity,
         contentTypeQuotas: input.contentTypeQuotas ?? [

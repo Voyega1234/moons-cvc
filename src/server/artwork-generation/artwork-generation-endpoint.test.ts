@@ -223,7 +223,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(uploads).toEqual([
       {
         bucket: "creative-assets",
-        path: "flora/run-1/outputs/hook-1-v1.png"
+        path: "flora/run-1/outputs/hook-1-v2.png"
       }
     ]);
     expect(debugLogs).toEqual([
@@ -1289,21 +1289,35 @@ describe("handleArtworkGenerationRequest", () => {
             avoid: [oversizedContext]
           },
           brandLibrary: {
-            brand: [{ title: "Brand system", description: oversizedContext }],
+            brand: [
+              { title: "Brand system", description: oversizedContext },
+              {
+                title: "Brand CI / Guideline",
+                description:
+                  "DERIVED STALE GUIDELINE: use a different typeface and ignore clear space."
+              }
+            ],
             products: [{ title: "Product truths", description: oversizedContext }],
-            docs: [{ title: "Guideline", description: oversizedContext }],
+            docs: [
+              {
+                title: "Brand guideline",
+                description:
+                  "EDITABLE SOURCE GUIDELINE. Typography: use Söhne Breit for headlines. Logo: preserve 48 px clear space. Imagery: warm natural daylight; never use floating 3D objects."
+              },
+              { title: "Campaign brief", description: oversizedContext }
+            ],
             refs: [{ title: "Creative learning", description: oversizedContext }]
           },
           referenceImages: [
             {
               kind: "url",
               url: "https://example.com/logo.png",
-              label: "Logo"
+              label: "Primary reference · Logo · Latest logo"
             },
             {
               kind: "url",
               url: "https://example.com/logo.png",
-              label: "Past work style reference — Workshop CTA"
+              label: "Supporting reference · Style · Workshop CTA"
             }
           ]
         })
@@ -1364,13 +1378,20 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(prompt).toContain("multi-row bullets, feature cards, icon lists");
     expect(prompt).toContain("THICK CONTEXT / ARTIFACTS");
-    expect(prompt).toContain('"role": "Logo"');
     expect(prompt).toContain(
-      '"role": "Past work style reference — Workshop CTA"'
+      '"role": "Primary reference · Logo · Latest logo"'
+    );
+    expect(prompt).toContain(
+      '"role": "Supporting reference · Style · Workshop CTA"'
     );
     expect(prompt).toContain("Freely adapt compatible composition logic");
     expect(prompt).toContain('"brandMemory"');
     expect(prompt).toContain('"brandLibrary"');
+    expect(prompt).toContain('"guidelines"');
+    expect(prompt).toContain("EDITABLE SOURCE GUIDELINE");
+    expect(prompt).toContain("use Söhne Breit for headlines");
+    expect(prompt).toContain("preserve 48 px clear space");
+    expect(prompt).not.toContain("DERIVED STALE GUIDELINE");
     expect(prompt).toContain('"products"');
     expect(prompt).toContain('"caption"');
     expect(prompt).toContain("Product truths");

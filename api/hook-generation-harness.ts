@@ -1,5 +1,9 @@
 import { handleHookGenerationHarnessRequest } from "../src/server/hook-generation/hook-generation-harness-endpoint.js";
 
+export const config = {
+  maxDuration: 300
+};
+
 type VercelRequest = {
   method?: string;
   headers: Record<string, string | string[] | undefined>;

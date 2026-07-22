@@ -1,5 +1,9 @@
 import type { WorkspaceState } from "../../features/workflow/model";
-import type { WorkspaceRepository } from "../../ports/workspace-repository";
+import type {
+  WorkspaceCheckpoint,
+  WorkspaceCheckpointReason,
+  WorkspaceRepository
+} from "../../ports/workspace-repository";
 import {
   DEFAULT_WORKSPACE_STORAGE_KEY,
   LocalWorkspaceRepository,
@@ -41,6 +45,38 @@ export class ScopedLocalWorkspaceRepository implements WorkspaceRepository {
     const repository = await this.resolveRepository();
     this.activeRepository = repository;
     return repository.clear();
+  }
+
+  async createCheckpoint(
+    workspace: WorkspaceState,
+    runId: string,
+    reason: WorkspaceCheckpointReason
+  ): Promise<WorkspaceCheckpoint> {
+    const repository = await this.active();
+    return repository.createCheckpoint(workspace, runId, reason);
+  }
+
+  async listCheckpoints(
+    runId: string
+  ): Promise<readonly WorkspaceCheckpoint[]> {
+    const repository = await this.active();
+    return repository.listCheckpoints(runId);
+  }
+
+  async restoreCheckpoint(
+    workspace: WorkspaceState,
+    runId: string,
+    checkpointId: string
+  ): Promise<WorkspaceState> {
+    const repository = await this.active();
+    return repository.restoreCheckpoint(workspace, runId, checkpointId);
+  }
+
+  private async active(): Promise<LocalWorkspaceRepository> {
+    if (this.activeRepository) return this.activeRepository;
+    const repository = await this.resolveRepository();
+    this.activeRepository = repository;
+    return repository;
   }
 
   private async resolveRepository(): Promise<LocalWorkspaceRepository> {

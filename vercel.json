@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/hook-generation-harness.ts": {
-      "includeFiles": "agent_prompt/agent_hook.md"
+      "includeFiles": "agent_prompt/agent_hook.md",
+      "maxDuration": 300
     },
     "api/artwork-generation.ts": {
       "includeFiles": "{agent_prompt/agent_image.md,agent_prompt/agent_artwork_reference.md,agent_prompt/agent_design_system.md,graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md}"

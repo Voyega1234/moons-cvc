@@ -34,6 +34,22 @@ export function pmApprovedClientSlideItems(
     approvalRolesForOutput(output).every(
       (role) => output.approval[role] === "approved"
     );
+  return groupedClientSlideItems(state, approved);
+}
+
+export function createStageClientSlideItems(
+  state: Pick<WorkflowState, "outputs" | "directions">
+): readonly ClientSlideItem[] {
+  return groupedClientSlideItems(
+    state,
+    (output) => isUgcOutput(output) || Boolean(output.assetUrl)
+  );
+}
+
+function groupedClientSlideItems(
+  state: Pick<WorkflowState, "outputs" | "directions">,
+  include: (output: CreativeOutput) => boolean
+): readonly ClientSlideItem[] {
   const albumGroups = new Map<string, CreativeOutput[]>();
   state.outputs.filter(isAlbumOutput).forEach((output) => {
     const group = albumGroups.get(output.directionId) ?? [];
@@ -47,14 +63,14 @@ export function pmApprovedClientSlideItems(
       (candidate) => candidate.id === output.directionId
     );
     if (!isAlbumOutput(output)) {
-      return approved(output) ? [{ output, outputs: [output], direction }] : [];
+      return include(output) ? [{ output, outputs: [output], direction }] : [];
     }
     if (emittedAlbums.has(output.directionId)) return [];
     emittedAlbums.add(output.directionId);
     const outputs = sortAlbumOutputs(
       albumGroups.get(output.directionId) ?? [output]
     );
-    if (!outputs.every(approved)) return [];
+    if (!outputs.every(include)) return [];
     return [{ output: outputs[0] ?? output, outputs, direction }];
   });
 }
@@ -441,14 +457,54 @@ export async function buildPmApprovedClientSlidesPptx(
     throw new Error("No PM-approved assets are ready for client slides yet.");
   }
 
+  return buildClientSlidesPptx(
+    state,
+    items,
+    resolveImage,
+    "approved creative concepts",
+    "client slides"
+  );
+}
+
+export async function buildCreateStageSlidesPptx(
+  state: Pick<
+    WorkflowState,
+    "brand" | "outputs" | "directions" | "outputSize"
+  >,
+  resolveImage: ClientSlideImageResolver = fetchClientSlideImage
+): Promise<PptxGenJS> {
+  const items = createStageClientSlideItems(state);
+  if (!items.length) {
+    throw new Error("No generated artwork is ready for slides yet.");
+  }
+
+  return buildClientSlidesPptx(
+    state,
+    items,
+    resolveImage,
+    "creative concepts",
+    "creative slides"
+  );
+}
+
+async function buildClientSlidesPptx(
+  state: Pick<
+    WorkflowState,
+    "brand" | "outputs" | "directions" | "outputSize"
+  >,
+  items: readonly ClientSlideItem[],
+  resolveImage: ClientSlideImageResolver,
+  subject: string,
+  title: string
+): Promise<PptxGenJS> {
   const { default: PptxGenJSConstructor } = await import("pptxgenjs");
   const pptx = new PptxGenJSConstructor();
   const brandName = cleanText(state.brand?.name, "Client");
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Compass";
   pptx.company = "Neo Creative Compass";
-  pptx.subject = `${brandName} approved creative concepts`;
-  pptx.title = `${brandName} client slides`;
+  pptx.subject = `${brandName} ${subject}`;
+  pptx.title = `${brandName} ${title}`;
   pptx.theme = {
     headFontFace: "Aptos Display",
     bodyFontFace: "Aptos"
@@ -461,7 +517,7 @@ export async function buildPmApprovedClientSlidesPptx(
         item.outputs.map((output, panelIndex) => {
           if (!output.assetUrl) {
             throw new Error(
-              `Approved asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
+              `Creative asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
             );
           }
           return resolveImage(output.assetUrl);
@@ -480,6 +536,19 @@ export async function buildPmApprovedClientSlidesPptx(
   }
 
   return pptx;
+}
+
+export async function downloadCreateStageSlides(
+  state: Pick<
+    WorkflowState,
+    "brand" | "outputs" | "directions" | "outputSize"
+  >
+): Promise<void> {
+  const pptx = await buildCreateStageSlidesPptx(state);
+  await pptx.writeFile({
+    fileName: `${fileSlug(state.brand?.name ?? "creative")}-creative-slides.pptx`,
+    compression: true
+  });
 }
 
 export async function downloadPmApprovedClientSlides(

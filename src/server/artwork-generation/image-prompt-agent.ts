@@ -279,13 +279,41 @@ function renderStandardPrompt(
 
 function buildCompactReference(label: string, index: number) {
   const normalized = label.trim().toLowerCase();
+  const primary = normalized.includes("primary reference");
+  const explicitRole = /·\s*(product|logo|style|content)\s*·/.exec(
+    normalized
+  )?.[1];
   const id =
     normalized
       .replaceAll(/[^a-z0-9]+/g, "-")
       .replaceAll(/^-|-$/g, "") || `reference-${index + 1}`;
 
+  if (explicitRole === "logo") {
+    return { id, role: primary ? "primary-logo" : "logo", fidelity: "exact" };
+  }
+  if (explicitRole === "product") {
+    return {
+      id,
+      role: primary ? "primary-product" : "product",
+      fidelity: "exact"
+    };
+  }
+  if (explicitRole === "style") {
+    return {
+      id,
+      role: primary ? "primary-style" : "style",
+      fidelity: "inspired"
+    };
+  }
+  if (explicitRole === "content") {
+    return {
+      id,
+      role: primary ? "primary-content" : "content",
+      fidelity: "information-only"
+    };
+  }
   if (/logo|โลโก้/.test(normalized)) {
-    return { id, role: "logo", fidelity: "exact" };
+    return { id, role: primary ? "primary-logo" : "logo", fidelity: "exact" };
   }
   if (/past work style reference/.test(normalized)) {
     return { id, role: "brand-visual-dna", fidelity: "style-only" };
@@ -297,7 +325,11 @@ function buildCompactReference(label: string, index: number) {
     return { id, role: "source-object", fidelity: "exact" };
   }
   if (/product|packshot|สินค้า/.test(normalized)) {
-    return { id, role: "product", fidelity: "exact" };
+    return {
+      id,
+      role: primary ? "primary-product" : "product",
+      fidelity: "exact"
+    };
   }
   if (/supporting component/.test(normalized)) {
     return { id, role: "supporting-component", fidelity: "exact" };
@@ -306,12 +338,27 @@ function buildCompactReference(label: string, index: number) {
     return { id, role: "client-context", fidelity: "inspired" };
   }
   if (/brand|guideline|ci|style|แบรนด์|คู่มือ|ซีไอ/.test(normalized)) {
-    return { id, role: "brand-system", fidelity: "inspired" };
+    return {
+      id,
+      role: primary ? "primary-style" : "brand-system",
+      fidelity: "inspired"
+    };
   }
   if (/layout|เลย์เอาต์|จัดวาง/.test(normalized)) {
     return { id, role: "layout", fidelity: "inspired" };
   }
-  return { id, role: "reference", fidelity: "inspired" };
+  if (/content|ข้อความ/.test(normalized)) {
+    return {
+      id,
+      role: primary ? "primary-content" : "content",
+      fidelity: "information-only"
+    };
+  }
+  return {
+    id,
+    role: primary ? "primary-reference" : "reference",
+    fidelity: "inspired"
+  };
 }
 
 function compactServiceName(service: string): string {
@@ -391,6 +438,19 @@ function compactStrategyClaim(
 
 function referenceLibraryRole(label: string): string {
   const normalized = label.toLowerCase();
+  const primary = normalized.includes("primary reference");
+  const prefix = primary ? "PRIMARY — " : "";
+  const explicitRole = /·\s*(product|logo|style|content)\s*·/.exec(
+    normalized
+  )?.[1];
+  if (explicitRole === "logo") return `${prefix}official logo — exact`;
+  if (explicitRole === "product") return `${prefix}official product — exact`;
+  if (explicitRole === "style") {
+    return `${prefix}style reference — borrow visual language only; do not copy content`;
+  }
+  if (explicitRole === "content") {
+    return `${prefix}content reference — use for supplied facts or copy only`;
+  }
   if (normalized.includes("current artwork to revise")) {
     return "current artwork revision base — preserve approved identity and improve only the diagnosed issues";
   }
@@ -403,11 +463,17 @@ function referenceLibraryRole(label: string): string {
   if (normalized.includes("past work style reference")) {
     return "approved past work — infer brand visual DNA only; do not copy its content";
   }
-  if (/logo|โลโก้/.test(normalized)) return "official logo — exact";
+  if (/logo|โลโก้/.test(normalized)) return `${prefix}official logo — exact`;
   if (/product|packshot|สินค้า/.test(normalized)) {
-    return "official product — exact";
+    return `${prefix}official product — exact`;
   }
-  return "client reference — use only for its supplied asset role";
+  if (/style|แบรนด์/.test(normalized)) {
+    return `${prefix}style reference — borrow visual language only; do not copy content`;
+  }
+  if (/content|ข้อความ/.test(normalized)) {
+    return `${prefix}content reference — use for supplied facts or copy only`;
+  }
+  return `${prefix}client reference — use only for its supplied asset role`;
 }
 
 const standardImagePromptSchema = {

@@ -24,7 +24,9 @@ import {
 import { buildDirectionFixtures } from "./test-fixtures";
 import { buildAngleExportReview } from "./angle-content-types";
 import {
+  buildCreateStageSlidesPptx,
   buildPmApprovedClientSlidesPptx,
+  createStageClientSlideItems,
   pmApprovedClientSlideItems
 } from "./export-client-slides-pptx";
 
@@ -372,6 +374,7 @@ describe("redesigned workflow stages", () => {
     const brandRepository = new MockBrandRepository();
     const memoryRepository = new MockBrandMemoryRepository();
     const analyzeGuideline = vi.spyOn(memoryRepository, "analyzeGuideline");
+    const dispatch = vi.fn();
 
     const view = render(
       <BrandProvider
@@ -384,7 +387,7 @@ describe("redesigned workflow stages", () => {
           <BrandMemoryProvider repository={memoryRepository}>
             <StartStage
               state={{ ...state, stage: "start" }}
-              dispatch={vi.fn()}
+              dispatch={dispatch}
             />
           </BrandMemoryProvider>
         </ClientIntakeProvider>
@@ -424,6 +427,171 @@ describe("redesigned workflow stages", () => {
         "โทนสงบ หรูหรา ใช้ตัวอักษร sans-serif เรียบง่ายและเว้นพื้นที่ว่างมาก"
       )
     ).toBeTruthy();
+    expect(await memoryRepository.listBrandRules(state.brand!.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Brand CI / Guideline",
+          description: expect.stringContaining("Typography: ใช้ sans-serif")
+        })
+      ])
+    );
+    expect(await memoryRepository.listGuidelines(state.brand!.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Brand guideline",
+          description: "Use a direct, premium voice with #101828 and #FFFFFF."
+        })
+      ])
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sync-brand-rules" })
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sync-brand-guidelines" })
+    );
+  });
+
+  it("edits the pasted guideline source from the Guideline folder", async () => {
+    const user = userEvent.setup();
+    const baseState = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = baseState.brand!.id;
+    const guideline = await memoryRepository.createGuideline({
+      clientId,
+      title: "Brand guideline",
+      description: "Original guideline source."
+    });
+    const state = {
+      ...baseState,
+      brand: {
+        ...baseState.brand!,
+        library: {
+          ...baseState.brand!.library,
+          docs: [guideline]
+        }
+      }
+    };
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const dialog = stage.getByRole("dialog", { name: "Manage brand materials" });
+    await user.click(
+      within(dialog).getByRole("button", { name: /Guideline/ })
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Edit" }));
+    const editor = within(dialog).getByRole("textbox", {
+      name: "Guideline text"
+    });
+    await user.clear(editor);
+    await user.type(editor, "Latest editable guideline source.");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save guideline" })
+    );
+
+    await waitFor(async () => {
+      expect(await memoryRepository.listGuidelines(clientId)).toEqual([
+        expect.objectContaining({
+          title: "Brand guideline",
+          description: "Latest editable guideline source."
+        })
+      ]);
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-brand-guidelines",
+      items: [
+        expect.objectContaining({
+          description: "Latest editable guideline source."
+        })
+      ]
+    });
+  });
+
+  it("creates an editable Guideline copy for brands with legacy Brand CI only", async () => {
+    const user = userEvent.setup();
+    const baseState = buildCreativeState();
+    const state = {
+      ...baseState,
+      brand: {
+        ...baseState.brand!,
+        library: {
+          ...baseState.brand!.library,
+          brand: baseState.brand!.library.brand.filter(
+            (item) => item.title !== "Brand CI / Guideline"
+          ),
+          docs: []
+        }
+      }
+    };
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    await memoryRepository.createBrandRule({
+      clientId: state.brand.id,
+      title: "Brand CI / Guideline",
+      description: "Legacy extracted guideline available for editing."
+    });
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const dialog = stage.getByRole("dialog", { name: "Manage brand materials" });
+    await user.click(
+      within(dialog).getByRole("button", { name: /Guideline/ })
+    );
+
+    expect(
+      await within(dialog).findByText(
+        "Legacy extracted guideline available for editing."
+      )
+    ).toBeTruthy();
+    expect(
+      await memoryRepository.listGuidelines(state.brand.id)
+    ).toEqual([
+      expect.objectContaining({
+        title: "Brand guideline",
+        description: "Legacy extracted guideline available for editing."
+      })
+    ]);
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sync-brand-guidelines" })
+    );
   });
 
   it("preselects a Questionnaire Facebook page and includes its Brand Kit evidence", async () => {
@@ -1019,6 +1187,22 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
     expect(stage.getByText("Approved product lifestyle")).toBeTruthy();
     expect(stage.getByText("1 image")).toBeTruthy();
+    await user.selectOptions(
+      stage.getByRole("combobox", {
+        name: "Reference role for Approved product lifestyle"
+      }),
+      "product"
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-reference-image-role",
+      id: reference.id,
+      role: "product"
+    });
+    await user.click(stage.getByRole("button", { name: "☆ Make primary" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-primary-reference-image",
+      id: reference.id
+    });
 
     await user.click(
       stage.getByRole("button", { name: "+ Upload or choose" })
@@ -1045,6 +1229,33 @@ describe("redesigned workflow stages", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "toggle-reference-image",
       item: reference
+    });
+  });
+
+  it("captures an artwork brief for every image prompt from Angles", async () => {
+    const state = {
+      ...buildCreativeState(),
+      stage: "directions" as const,
+      artworkBrief: "Keep the layout spacious."
+    };
+    const dispatch = vi.fn();
+    const view = render(<DirectionsStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+    const field = stage.getByRole("textbox", {
+      name: "Artwork brief for AI"
+    });
+
+    expect(field.getAttribute("maxlength")).toBe("2000");
+    expect((field as HTMLTextAreaElement).value).toBe(
+      "Keep the layout spacious."
+    );
+    fireEvent.change(field, {
+      target: { value: "Use real guests and natural light." }
+    });
+
+    expect(dispatch).toHaveBeenLastCalledWith({
+      type: "set-artwork-brief",
+      brief: "Use real guests and natural light."
     });
   });
 
@@ -1146,6 +1357,41 @@ describe("redesigned workflow stages", () => {
     expect(reviewCards[0]?.querySelector(".compass-build-qa")).toBeNull();
     expect(stage.queryByText("Not checked yet")).toBeNull();
     expect(reviewCards[0]?.querySelector(".compass-build-output-foot")).toBeTruthy();
+    expect(
+      stage.getByRole("button", { name: "↻ Regenerate all images" })
+    ).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Download slides" })).toBeTruthy();
+  });
+
+  it("enables Create slide download for every generated creative", async () => {
+    const base = buildCreativeState();
+    const state = {
+      ...base,
+      outputs: base.outputs.map((output) => ({
+        ...output,
+        assetUrl: `https://example.com/${output.id}.png`
+      }))
+    };
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+    const button = stage.getByRole("button", { name: "Download slides" });
+
+    expect(button.hasAttribute("disabled")).toBe(false);
+    expect(button.getAttribute("title")).toBe(
+      `Download ${createStageClientSlideItems(state).length} creative slides`
+    );
+
+    const pptx = await buildCreateStageSlidesPptx(
+      state,
+      async (url) => `data:image/png;base64,${btoa(url)}`
+    );
+    expect(
+      (
+        pptx as unknown as {
+          _slides: readonly unknown[];
+        }
+      )._slides
+    ).toHaveLength(createStageClientSlideItems(state).length);
   });
 
   it("combines three album panels into one review card and preview", async () => {

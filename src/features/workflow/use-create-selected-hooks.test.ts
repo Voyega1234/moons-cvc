@@ -5,6 +5,7 @@ import { createInitialWorkflowState } from "./reducer";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 
 vi.mock("../../services/artwork-generation/openai-image-generation", () => ({
+  artworkReferencesFromSelections: vi.fn(() => []),
   generateArtworkForSelectedHooks: vi.fn()
 }));
 

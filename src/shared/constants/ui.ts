@@ -4,5 +4,5 @@ export const UI_TIMING = {
 
 export const QUANTITY_LIMITS = {
   minimum: 0,
-  maximum: 9
+  maximum: 50
 } as const;

@@ -6,8 +6,10 @@ import {
   ctaActionTypes,
   defaultArtworkOutputSize,
   emptyApprovalComments,
+  hookIdeaModes,
   imagePromptModels,
   normalizeFormatBeatsForService,
+  referenceImageRoles,
   serviceTypes,
   type CreativeStage,
   type ServiceType
@@ -21,6 +23,7 @@ import type {
   WorkflowState
 } from "../../features/workflow/model";
 import { successMetrics } from "../../features/workflow/model";
+import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
 
@@ -116,6 +119,10 @@ function parseRun(value: unknown): WorkflowState | null {
   const updatedAt = parseString(value.updatedAt);
   const stage = parseMember(value.stage, creativeStages);
   const service = parseMember(value.service, serviceTypes);
+  const hookIdeaMode =
+    value.hookIdeaMode === undefined
+      ? "standard"
+      : parseMember(value.hookIdeaMode, hookIdeaModes);
   const artworkMode =
     value.artworkMode === undefined
       ? "design-system"
@@ -134,6 +141,10 @@ function parseRun(value: unknown): WorkflowState | null {
       ? "CVR"
       : parseMember(value.successMetric, successMetrics);
   const brief = parseString(value.brief, true);
+  const artworkBrief =
+    value.artworkBrief === undefined
+      ? ""
+      : parseString(value.artworkBrief, true);
   const attachments = parseStringArray(value.attachments);
   const uploadedMaterials = parseUploadedMaterials(value.uploadedMaterials);
   const persistedIdeaGenerationStatus =
@@ -168,12 +179,14 @@ function parseRun(value: unknown): WorkflowState | null {
     !updatedAt ||
     !stage ||
     !service ||
+    !hookIdeaMode ||
     !artworkMode ||
     !imagePromptModel ||
     !outputSize ||
     !successMetric ||
     quantity === null ||
     brief === null ||
+    artworkBrief === null ||
     !attachments ||
     !uploadedMaterials ||
     !persistedIdeaGenerationStatus ||
@@ -189,7 +202,7 @@ function parseRun(value: unknown): WorkflowState | null {
     typeof value.clientSent !== "boolean" ||
     typeof value.done !== "boolean" ||
     quantity < 1 ||
-    quantity > 6
+    quantity > serviceTypes.length * QUANTITY_LIMITS.maximum
   ) {
     return null;
   }
@@ -248,12 +261,14 @@ function parseRun(value: unknown): WorkflowState | null {
     librarySection,
     creativeMix,
     service: creativeMix[0]?.service ?? (service as ServiceType),
+    hookIdeaMode,
     artworkMode,
     imagePromptModel,
     outputSize,
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
     brief,
+    artworkBrief,
     attachments,
     uploadedMaterials,
     referenceImages,
@@ -283,8 +298,8 @@ function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {
       !id ||
       !service ||
       quantity === null ||
-      quantity < 1 ||
-      quantity > 6
+      quantity < QUANTITY_LIMITS.minimum ||
+      quantity > QUANTITY_LIMITS.maximum
     ) {
       return null;
     }
@@ -293,7 +308,10 @@ function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {
 
   if (new Set(items.map((item) => item.id)).size !== items.length) return null;
   if (new Set(items.map((item) => item.service)).size !== items.length) return null;
-  if (items.reduce((total, item) => total + item.quantity, 0) > 6) return null;
+  const total = items.reduce((sum, item) => sum + item.quantity, 0);
+  if (total < 1 || total > serviceTypes.length * QUANTITY_LIMITS.maximum) {
+    return null;
+  }
   return items;
 }
 
@@ -373,7 +391,15 @@ function parseReferenceImages(
     const url = parseString(item.url);
     const label = parseString(item.label, true);
     if (!id || !url || label === null) return null;
-    return { id, url, label };
+    const role = referenceImageRoles.find((candidate) => candidate === item.role);
+    const primary = typeof item.primary === "boolean" ? item.primary : undefined;
+    return {
+      id,
+      url,
+      label,
+      ...(role ? { role } : {}),
+      ...(primary !== undefined ? { primary } : {})
+    };
   });
 
   return items.every((item) => item !== null) ? items : null;

@@ -5,6 +5,7 @@ import {
   ctaActionTypes,
   serviceTypes,
   type CtaActionType,
+  type HookIdeaMode,
   type ServiceType
 } from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
@@ -74,6 +75,13 @@ interface HookResearch {
   limitations: string;
 }
 
+const STANDARD_MODE_RESEARCH: HookResearch = {
+  overallFinding: "Standard mode uses only the supplied brief and brand context.",
+  references: [],
+  searchQueriesUsed: [],
+  limitations: "Live web research was not requested for this generation."
+};
+
 interface GeneratedDirection extends RawDirection {
   id: string;
   service: ServiceType;
@@ -101,6 +109,9 @@ interface HookGenerationResult {
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const HOOK_GENERATION_BATCH_SIZE = 12;
+const HOOK_GENERATION_CONCURRENCY = 3;
+const SUBHEADLINE_BATCH_SIZE = 24;
 
 export async function handleHookGenerationHarnessRequest({
   request,
@@ -138,22 +149,43 @@ export async function handleHookGenerationHarnessRequest({
       createPastPostsClient
     });
     const agentHookPrompt = await loadAgentHookPrompt();
-    const research = await runResearchStep({
-      input,
-      apiKey,
-      model: supportModel,
-      fetchImpl
-    });
-    const result = await runGenerationStep({
-      input,
-      research,
-      pastPosts,
-      agentHookPrompt,
-      apiKey,
-      model,
-      fetchImpl
-    });
-    const directions = result.directions.slice(0, input.quantity);
+    const research =
+      input.hookIdeaMode === "fresh-research"
+        ? await runResearchStep({
+            input,
+            apiKey,
+            model: supportModel,
+            fetchImpl
+          })
+        : STANDARD_MODE_RESEARCH;
+    const generationBatches = buildHookGenerationBatches(input);
+    const batchResults = await mapWithConcurrency(
+      generationBatches,
+      HOOK_GENERATION_CONCURRENCY,
+      (batch) =>
+        withTransientRetry(() =>
+          runGenerationStep({
+            input: batch,
+            research,
+            pastPosts,
+            agentHookPrompt,
+            apiKey,
+            model,
+            fetchImpl
+          })
+        )
+    );
+    const directions = makeDirectionIdsUnique(
+      batchResults.flatMap((result) => result.directions)
+    ).slice(0, input.quantity);
+    if (
+      input.quantity > HOOK_GENERATION_BATCH_SIZE &&
+      directions.length < input.quantity
+    ) {
+      throw new Error(
+        `Hook generation returned ${directions.length} of ${input.quantity} requested ideas. Please retry the run.`
+      );
+    }
     const highlightedDirections = await runSubheadlineHighlightStep({
       directions,
       apiKey,
@@ -301,6 +333,34 @@ async function runSubheadlineHighlightStep({
   model: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
+  const batches = chunk(directions, SUBHEADLINE_BATCH_SIZE);
+  const highlightedBatches = await mapWithConcurrency(
+    batches,
+    HOOK_GENERATION_CONCURRENCY,
+    (batch) =>
+      withTransientRetry(() =>
+        runSubheadlineHighlightBatch({
+          directions: batch,
+          apiKey,
+          model,
+          fetchImpl
+        })
+      )
+  );
+  return highlightedBatches.flat();
+}
+
+async function runSubheadlineHighlightBatch({
+  directions,
+  apiKey,
+  model,
+  fetchImpl
+}: {
+  directions: readonly GeneratedDirection[];
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+}): Promise<readonly GeneratedDirection[]> {
   const items = directions.map((direction) => ({
     id: direction.id,
     subheadline: direction.subheadline
@@ -327,6 +387,95 @@ async function runSubheadlineHighlightStep({
     ...direction,
     subheadlineHighlight: highlights.get(direction.id) ?? ""
   }));
+}
+
+export function buildHookGenerationBatches(
+  input: HookGenerationHarnessRequest,
+  batchSize = HOOK_GENERATION_BATCH_SIZE
+): readonly HookGenerationHarnessRequest[] {
+  if (input.quantity <= batchSize) return [input];
+
+  const batches = input.contentTypeQuotas.flatMap((quota) => {
+    const counts: number[] = [];
+    for (let remaining = quota.count; remaining > 0; remaining -= batchSize) {
+      counts.push(Math.min(batchSize, remaining));
+    }
+    return counts.map((count) => ({
+      ...input,
+      service: quota.service,
+      quantity: count,
+      contentTypeQuotas: [{ service: quota.service, count }]
+    }));
+  });
+
+  return batches.map((batch, index) => ({
+    ...batch,
+    extraInstructions: [
+      batch.extraInstructions,
+      `High-volume batch ${index + 1}/${batches.length}. Explore a distinct strategic territory for this batch and avoid repeating any supplied existing hook.`
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }));
+}
+
+function makeDirectionIdsUnique(
+  directions: readonly GeneratedDirection[]
+): readonly GeneratedDirection[] {
+  const seen = new Map<string, number>();
+  return directions.map((direction) => {
+    const count = (seen.get(direction.id) ?? 0) + 1;
+    seen.set(direction.id, count);
+    return count === 1
+      ? direction
+      : { ...direction, id: `${direction.id}-batch-${count}` };
+  });
+}
+
+function chunk<T>(items: readonly T[], size: number): readonly T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function mapWithConcurrency<Input, Output>(
+  items: readonly Input[],
+  concurrency: number,
+  task: (item: Input, index: number) => Promise<Output>
+): Promise<readonly Output[]> {
+  const results = new Array<Output>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item === undefined) continue;
+      results[index] = await task(item, index);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), items.length) },
+      () => worker()
+    )
+  );
+  return results;
+}
+
+async function withTransientRetry<T>(task: () => Promise<T>): Promise<T> {
+  try {
+    return await task();
+  } catch (error) {
+    const message = readableError(error);
+    if (!/\b(429|500|502|503|504)\b/.test(message)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return task();
+  }
 }
 
 function buildSubheadlineHighlightPrompt(
@@ -804,6 +953,7 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
 
   return {
     runId,
+    hookIdeaMode: readHookIdeaMode(value.hookIdeaMode),
     brand: value.brand === null ? null : parseBrand(value.brand),
     service: service as HookGenerationHarnessRequest["service"],
     quantity,
@@ -830,6 +980,12 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readHookIdeaMode(value: unknown): HookIdeaMode {
+  if (value === undefined) return "standard";
+  if (value === "standard" || value === "fresh-research") return value;
+  throw new Error("hookIdeaMode is invalid.");
 }
 
 function readUploadedMaterials(

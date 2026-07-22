@@ -30,7 +30,10 @@ export function isStageComplete(
     case "brief":
       return run.directions.length > 0;
     case "directions":
-      return run.outputs.length > 0;
+      return (
+        run.outputs.length > 0 &&
+        run.artworkGenerationStatus === "idle"
+      );
     case "studio":
       return (
         run.qaComplete &&

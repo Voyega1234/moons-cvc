@@ -77,7 +77,12 @@ export function buildN8nArtworkGenerationRequest({
 }
 
 function isLogoReference(label: string | undefined): boolean {
-  return label?.trim().toLowerCase() === "logo";
+  const normalized = label?.trim().toLowerCase();
+  return Boolean(
+    normalized === "logo" ||
+      normalized?.includes("· logo ·") ||
+      normalized?.startsWith("logo reference")
+  );
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

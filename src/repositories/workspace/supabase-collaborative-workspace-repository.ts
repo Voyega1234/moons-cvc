@@ -5,7 +5,11 @@ import type {
 } from "../../features/workflow/model";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database, Json } from "../../lib/supabase/database.types";
-import type { WorkspaceRepository } from "../../ports/workspace-repository";
+import type {
+  WorkspaceCheckpoint,
+  WorkspaceCheckpointReason,
+  WorkspaceRepository
+} from "../../ports/workspace-repository";
 import {
   deserializeWorkspace,
   serializeWorkspace
@@ -14,12 +18,14 @@ import { nowIso } from "../../shared/utils/id";
 import { SupabaseWorkspaceRepository } from "./supabase-workspace-repository";
 
 interface KnownRun {
+  databaseId: string;
   currentOwnerUserId: string;
   version: number;
   serialized: string;
 }
 
 interface SharedRunRow {
+  id?: string;
   workspace_run_id: string | null;
   snapshot: Json | null;
   current_owner_user_id: string;
@@ -43,7 +49,7 @@ export class SupabaseCollaborativeWorkspaceRepository
     const { data, error } = await this.client
       .schema("moons")
       .from("runs")
-      .select("workspace_run_id,snapshot,current_owner_user_id,version")
+      .select("id,workspace_run_id,snapshot,current_owner_user_id,version")
       .not("workspace_run_id", "is", null)
       .not("snapshot", "is", null)
       .neq("status", "archived")
@@ -54,6 +60,7 @@ export class SupabaseCollaborativeWorkspaceRepository
       const run = deserializeSharedRun(row);
       if (!run || !row.workspace_run_id) return [];
       this.knownRuns.set(row.workspace_run_id, {
+        databaseId: row.id,
         currentOwnerUserId: row.current_owner_user_id,
         version: row.version,
         serialized: serializeSharedRun(run)
@@ -74,6 +81,119 @@ export class SupabaseCollaborativeWorkspaceRepository
 
   async clear(): Promise<void> {
     await this.legacy.clear();
+  }
+
+  async createCheckpoint(
+    workspace: WorkspaceState,
+    runId: string,
+    reason: WorkspaceCheckpointReason
+  ): Promise<WorkspaceCheckpoint> {
+    const run = workspace.runsById[runId];
+    if (!run) throw new Error("Project not found for recovery point.");
+    const known = await this.requireKnownRun(runId);
+    const userId = await getUserId(this.client);
+    if (known.currentOwnerUserId !== userId) {
+      throw new Error("Only the current owner can create a recovery point.");
+    }
+    const snapshot = JSON.parse(serializeSharedRun(run)) as Json;
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("run_checkpoints")
+      .insert({
+        run_id: known.databaseId,
+        reason,
+        snapshot,
+        source_version: known.version,
+        created_by: userId
+      })
+      .select("id,reason,source_version,created_by,created_at")
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      runId,
+      reason: data.reason,
+      createdAt: data.created_at,
+      createdBy: "You",
+      sourceVersion: data.source_version
+    };
+  }
+
+  async listCheckpoints(
+    runId: string
+  ): Promise<readonly WorkspaceCheckpoint[]> {
+    const known =
+      this.knownRuns.get(runId) ?? (await this.findKnownRun(runId));
+    if (!known) return [];
+    this.knownRuns.set(runId, known);
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("run_checkpoints")
+      .select("id,reason,source_version,created_by,created_at")
+      .eq("run_id", known.databaseId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    if (error) throw error;
+
+    const userIds = [...new Set((data ?? []).map((item) => item.created_by))];
+    const namesByUserId = new Map<string, string>();
+    if (userIds.length) {
+      const { data: profiles, error: profileError } = await this.client
+        .schema("moons")
+        .from("team_profiles")
+        .select("user_id,display_name,email")
+        .in("user_id", userIds);
+      if (profileError) throw profileError;
+      profiles?.forEach((profile) => {
+        namesByUserId.set(
+          profile.user_id,
+          profile.display_name || profile.email
+        );
+      });
+    }
+
+    return (data ?? []).map((item) => ({
+      id: item.id,
+      runId,
+      reason: item.reason,
+      createdAt: item.created_at,
+      createdBy: namesByUserId.get(item.created_by) ?? "Team member",
+      sourceVersion: item.source_version
+    }));
+  }
+
+  async restoreCheckpoint(
+    workspace: WorkspaceState,
+    runId: string,
+    checkpointId: string
+  ): Promise<WorkspaceState> {
+    const known = await this.requireKnownRun(runId);
+    const { data, error } = await this.client
+      .schema("moons")
+      .rpc("restore_run_checkpoint", {
+        p_checkpoint_id: checkpointId,
+        p_workspace_run_id: runId,
+        p_expected_version: known.version
+      })
+      .single();
+    if (error) throw error;
+    const restoredRun = deserializeSharedRun(data);
+    if (!restoredRun || data.workspace_run_id !== runId) {
+      throw new Error("Recovery point returned invalid project data.");
+    }
+    const restoredWorkspace = {
+      ...workspace,
+      runsById: { ...workspace.runsById, [runId]: restoredRun },
+      toast: null
+    };
+    this.knownRuns.set(runId, {
+      databaseId: known.databaseId,
+      currentOwnerUserId: data.current_owner_user_id,
+      version: data.version,
+      serialized: serializeSharedRun(restoredRun)
+    });
+    await this.legacy.save(restoredWorkspace);
+    return restoredWorkspace;
   }
 
   private async persist(workspace: WorkspaceState): Promise<void> {
@@ -115,7 +235,7 @@ export class SupabaseCollaborativeWorkspaceRepository
             is_pitching: false,
             completed_at: run.done ? nowIso() : null
           })
-          .select("current_owner_user_id,version")
+          .select("id,current_owner_user_id,version")
           .single();
 
         if (error) {
@@ -131,6 +251,7 @@ export class SupabaseCollaborativeWorkspaceRepository
           throw staleLocalProjectError();
         }
         this.knownRuns.set(run.id, {
+          databaseId: data.id,
           currentOwnerUserId: data.current_owner_user_id,
           version: data.version,
           serialized
@@ -160,7 +281,7 @@ export class SupabaseCollaborativeWorkspaceRepository
         })
         .eq("workspace_run_id", run.id)
         .eq("version", known.version)
-        .select("current_owner_user_id,version")
+        .select("id,current_owner_user_id,version")
         .maybeSingle();
 
       if (error) throw error;
@@ -170,6 +291,7 @@ export class SupabaseCollaborativeWorkspaceRepository
         );
       }
       this.knownRuns.set(run.id, {
+        databaseId: data.id,
         currentOwnerUserId: data.current_owner_user_id,
         version: data.version,
         serialized
@@ -181,7 +303,7 @@ export class SupabaseCollaborativeWorkspaceRepository
     const { data, error } = await this.client
       .schema("moons")
       .from("runs")
-      .select("workspace_run_id,snapshot,current_owner_user_id,version")
+      .select("id,workspace_run_id,snapshot,current_owner_user_id,version")
       .eq("workspace_run_id", workspaceRunId)
       .maybeSingle();
 
@@ -189,10 +311,20 @@ export class SupabaseCollaborativeWorkspaceRepository
     if (!data) return null;
     const remoteRun = deserializeSharedRun(data);
     return {
+      databaseId: data.id,
       currentOwnerUserId: data.current_owner_user_id,
       version: data.version,
       serialized: remoteRun ? serializeSharedRun(remoteRun) : ""
     };
+  }
+
+  private async requireKnownRun(workspaceRunId: string): Promise<KnownRun> {
+    const known =
+      this.knownRuns.get(workspaceRunId) ??
+      (await this.findKnownRun(workspaceRunId));
+    if (!known) throw new Error("Save the project before creating a recovery point.");
+    this.knownRuns.set(workspaceRunId, known);
+    return known;
   }
 }
 

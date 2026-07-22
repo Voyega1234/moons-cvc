@@ -50,6 +50,8 @@ export const artworkModes = [
   "reference-library"
 ] as const;
 export type ArtworkMode = (typeof artworkModes)[number];
+export const hookIdeaModes = ["standard", "fresh-research"] as const;
+export type HookIdeaMode = (typeof hookIdeaModes)[number];
 export const imagePromptModels = [
   "gpt-5.6-terra",
   "anthropic/claude-sonnet-4.6"
@@ -117,6 +119,36 @@ export interface ReferenceImageSelection {
   id: string;
   url: string;
   label: string;
+  role?: ReferenceImageRole;
+  primary?: boolean;
+}
+
+export const referenceImageRoles = [
+  "product",
+  "logo",
+  "style",
+  "content"
+] as const;
+export type ReferenceImageRole = (typeof referenceImageRoles)[number];
+
+export const referenceImageRoleLabels: Record<ReferenceImageRole, string> = {
+  product: "Product",
+  logo: "Logo",
+  style: "Style",
+  content: "Content"
+};
+
+export function inferredReferenceImageRole(
+  reference: Pick<ReferenceImageSelection, "label" | "role">
+): ReferenceImageRole {
+  if (reference.role) return reference.role;
+  const label = reference.label.trim().toLowerCase();
+  if (/logo|โลโก้/.test(label)) return "logo";
+  if (/product|packshot|สินค้า/.test(label)) return "product";
+  if (/guideline|document|copy|text|brief|คู่มือ|ข้อความ/.test(label)) {
+    return "content";
+  }
+  return "style";
 }
 
 export const creativeMaterialRoles = [

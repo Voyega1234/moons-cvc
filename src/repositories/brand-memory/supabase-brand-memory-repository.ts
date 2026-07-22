@@ -18,8 +18,10 @@ import type {
   GuidelineAnalysisResult,
   SaveBrandProductInput,
   SaveBrandRuleInput,
+  SaveGuidelineInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
+  UpdateGuidelineInput,
   UploadBrandDocumentInput
 } from "../../ports/brand-memory-repository";
 
@@ -149,6 +151,75 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .delete()
       .eq("id", id)
       .eq("section", "brand");
+
+    if (error) throw error;
+  }
+
+  async listGuidelines(clientId: string): Promise<readonly LibraryItem[]> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_library")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("section", "docs")
+      .order("sort_order")
+      .order("created_at");
+
+    if (error) throw error;
+    return data.map(mapLibraryItem);
+  }
+
+  async createGuideline({
+    clientId,
+    title,
+    description
+  }: SaveGuidelineInput): Promise<LibraryItem> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_library")
+      .insert({
+        client_id: clientId,
+        section: "docs",
+        title: title.trim(),
+        description: description.trim(),
+        sort_order: nextSortOrder()
+      })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return mapLibraryItem(data);
+  }
+
+  async updateGuideline({
+    id,
+    title,
+    description
+  }: UpdateGuidelineInput): Promise<LibraryItem> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_library")
+      .update({ title: title.trim(), description: description.trim() })
+      .eq("id", id)
+      .eq("section", "docs")
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return mapLibraryItem(data);
+  }
+
+  async deleteGuideline(id: string): Promise<void> {
+    const client = getSupabaseClient();
+    const { error } = await client
+      .schema("moons")
+      .from("brand_library")
+      .delete()
+      .eq("id", id)
+      .eq("section", "docs");
 
     if (error) throw error;
   }
@@ -544,6 +615,7 @@ async function callGuidelineAnalysisEndpoint(
   const payload = JSON.parse(text) as {
     ok?: boolean;
     summary?: string;
+    generationContext?: string;
     primaryColors?: string[];
     secondaryColors?: string[];
     error?: string;
@@ -557,6 +629,7 @@ async function callGuidelineAnalysisEndpoint(
 
   return {
     summary: payload.summary ?? "",
+    generationContext: payload.generationContext ?? "",
     primaryColors: payload.primaryColors ?? [],
     secondaryColors: payload.secondaryColors ?? []
   };

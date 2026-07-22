@@ -1,386 +1,449 @@
-# CONDENSED MASTER PROMPT
+# DIRECT CREATIVE ARTWORK PROMPT — GPT IMAGE 2
 
-## GLOBAL AGENCY CAMPAIGN ARTWORK
+Create **ONE complete, publication-ready social media advertising artwork** from the supplied brief, brand information, official assets, product images, copy, and visual references.
 
-Create **ONE complete, publication-ready social media advertising artwork** from the supplied brief, campaign context, brand identity, official assets, product images, copy, and visual references.
+The final artwork must feel like it was created by an experienced Creative Director, Art Director, Graphic Designer, Photographer, and Photoshop Retoucher.
 
-The result must feel intentionally art-directed by an experienced international Creative Director and Graphic Designer using professional photography, typography, layout, compositing, and controlled Photoshop retouching.
+It should feel:
 
-It must feel:
-
-* strategically designed
-* visually unified
+* original and campaign-specific
+* visually memorable
 * commercially effective
-* brand-specific
-* realistic and publication-ready
+* brand-accurate
+* professionally composed
+* realistic and production-ready
+* intentionally designed rather than generated
 
 It must not feel like:
 
-* an AI-generated fantasy scene
-* a generic social template
-* a crowded retail banner
+* a generic social media template
+* a predictable product-and-headline banner
 * a marketplace poster
-* unrelated attractive elements assembled together
-* an effect-heavy advertisement
-* a rough mockup or moodboard
-
-**The final image must feel designed, not decorated.**
+* a collection of unrelated attractive elements
+* a raw AI-generated scene
+* a repetitive layout reused from previous artwork
 
 ---
 
-## 1. CORE CREATIVE PRINCIPLE
+## CREATIVE FREEDOM
 
-Communicate through **design intelligence**, not visual spectacle.
+Build the visual concept directly from the campaign message.
 
-Create impact through:
+Do not automatically choose the safest, cleanest, most minimal, or most conventional solution.
 
-* one clear commercial idea
-* intelligent composition
-* meaningful visual relationships
-* strong image selection and cropping
-* hierarchy, spacing, alignment, and negative space
-* disciplined typography and color
-* realistic materials, lighting, and compositing
-* brand-specific art direction
+The artwork may be:
 
-Do not compensate for a weak idea with oversized typography, excessive boldness, neon lighting, dramatic glow, particles, random gradients, floating decorations, generic UI elements, unnecessary 3D metaphors, or excessive visual complexity.
+* photographic
+* graphic-led
+* typography-led
+* product-led
+* environmental
+* editorial
+* cinematic
+* collage-based
+* layered
+* modular
+* immersive
+* minimal
+* maximal
+* asymmetrical
+* spatially unconventional
+* surreal but visually believable
 
----
+Choose the approach that communicates this specific message most effectively.
 
-## 2. INTERNAL CREATIVE REASONING
-
-Before generating, silently develop **three genuinely different creative approaches**.
-
-Each approach must use a different central idea—not merely rearrange the same layout.
-
-Evaluate them based on:
-
-1. clarity of the commercial message
-2. relevance to brand and audience
-3. originality and strength of concept
-4. effective use of supplied assets
-5. composition and hierarchy
-6. visual restraint
-7. realism and material quality
-8. typography quality
-9. mobile readability
-10. likelihood of feeling professionally designed rather than AI-generated
-
-Select only the strongest approach.
-
-Do not combine unrelated concepts.
-Do not reveal the alternatives.
-Generate only the selected final artwork.
+Create a composition that feels specifically invented for this campaign and difficult to reuse for another brand.
 
 ---
 
-## 3. CREATIVE DIRECTION
+## ORIGINAL COMPOSITION
 
-Content type: {{COMMERCIAL_STYLE}}
-Treatment: {{TREATMENT}}
-Selling approach: {{SELLING_MECHANISM}}
-Human presence: {{HUMAN_PRESENCE}}
-Audience moment: {{AUDIENCE_MOMENT}}
-Brand-fit reason: {{BRAND_FIT_REASON}}
+Do not default automatically to:
 
-Use this information to determine:
-
-* emotional tone
-* visual energy
-* information density
-* commercial directness
-* photography or graphic treatment
-* appropriate visual restraint
-
-Do not treat it as a prescribed layout, hero object, background, camera angle, metaphor, or lighting setup.
-
-Make those decisions from the brief, brand context, official assets, and reference evidence.
-
----
-
-## 4. DESIGN SYSTEM
-
-Build the artwork using professional graphic design principles.
-
-### Simplicity
-
-Every object, text group, shape, texture, and effect must support at least one of these:
-
-* message
-* hierarchy
-* readability
-* brand identity
-* product understanding
-* visual balance
-* intended action
-
-Remove anything that does not earn its place.
-
-### Grid and Alignment
-
-Use an intentional grid to control margins, columns, text width, image boundaries, spacing, logo placement, CTA placement, and overall balance.
-
-Avoid arbitrary positioning, inconsistent margins, accidental alignment, or elements added merely to fill space.
-
-### Hierarchy
-
-Create a clear primary, secondary, and tertiary reading order.
-
-Use scale, placement, contrast, crop, spacing, focus, light, color, and typography weight—not headline size alone.
-
-Do not allow multiple elements to compete at the same level.
-
-### Balance and Proportion
-
-Control the relationship between:
-
-* imagery and typography
-* product and environment
-* foreground and background
-* occupied and empty space
-* central idea and brand presence
-* primary and supporting information
-
-The composition may be symmetrical or asymmetrical, but it must feel stable and resolved.
-
-### Negative Space
-
-Use negative space actively to frame the focal point, separate information, improve readability, control rhythm, and create sophistication.
-
-Keep at least one meaningful quiet area free from unnecessary text, icons, badges, or decoration.
-
-### Consistency
-
-Maintain one coherent system for spacing, typography, shapes, corners, line thickness, icon style, image treatment, color, and visual density.
-
----
-
-## 5. CONCEPT AND COMPOSITION
-
-Design the artwork as a premium international campaign post—not a conventional promotional banner.
-
-Prioritize:
-
-* one clear message
-* one coherent visual idea
-* one dominant focal relationship
-* restrained information density
-* strong image-to-text interaction
-* intentional crop and scale
-* meaningful negative space
-* immediate mobile readability
-* distinctive brand character
-
-Use no more than three primary visual groups:
-
-1. main visual or central design gesture
-2. supporting message only when necessary
-3. brand and action area
-
-Default to a graphic-led, typography-led, product-led, object-led, or environment-led focal idea. It may come from object relationships, repetition, absence, contrast, crop, scale, material transformation, environmental context, or image–typography interaction. Use a human gesture only when the Human presence policy permits it.
-
-Prefer a simple, intelligent, real-world visual solution over an elaborate synthetic scene.
-
-Do not automatically default to:
-
-* logo above headline
-* centered product surrounded by benefits
-* left-copy/right-product layout
+* headline at the top
+* logo in a corner
+* centered product
+* text on the left and product on the right
+* CTA at the bottom
+* product surrounded by benefit labels
+* floating cards around a hero object
+* generic podium scenes
+* repeated rounded boxes
 * bottom feature strips
-* icon rows
-* stacked benefit cards
-* generic rounded boxes
-* multiple badges
-* split-screen before-and-after
-* floating data cards
-* generic podium compositions
+* symmetrical template layouts
+* blue-purple gradient backgrounds with floating 3D objects
 
-Use these only when they are clearly the strongest solution for the brief.
+These structures may be used only when they are creatively transformed and genuinely suit the campaign idea.
 
----
+Explore more original spatial relationships through:
 
-## 6. TYPOGRAPHY
+* unexpected focal-point placement
+* expressive cropping
+* unusual scale contrast
+* foreground and background interaction
+* image interruption
+* depth and perspective
+* diagonal or circular movement
+* edge-based composition
+* controlled repetition
+* overlapping planes
+* visual rhythm
+* asymmetric balance
+* environmental storytelling
+* typography interacting physically with the imagery
 
-Typography must feel composed—not merely enlarged.
+Do not simply rearrange standard advertising components.
 
-Use:
-
-* one primary font family
-* no more than two weights unless required by the brand
-* natural line breaks
-* comfortable leading and tracking
-* generous margins
-* clear alignment
-* mobile-readable sizing
-* balanced image-to-text proportion
-
-The headline must be immediately readable but should not automatically dominate the whole canvas.
-
-Avoid extra-bold default styling, compressed text blocks, excessive keyword highlighting, multiple competing headlines, heavy shadows, text glow, outlines, bevels, excessive colors, and tiny filler labels.
-
-When the headline is long, give it more space and simplify the surrounding design instead of compressing it.
+Create a new visual system from the message.
 
 ---
 
-## 7. COLOR, MATERIALS, AND EFFECTS
+## VISUAL IDEA
 
-Derive the palette from the official brand identity and the most relevant liked references.
+Use one strong central idea or one clearly connected visual system.
 
-Prefer:
+The idea may be communicated through:
 
-* one dominant brand color
-* one supporting neutral or structural color
-* one controlled accent when necessary
+* object relationships
+* contrast
+* repetition
+* absence
+* transformation
+* scale
+* perspective
+* environment
+* material behavior
+* visual metaphor
+* human gesture
+* typography
+* crop
+* light
+* spatial tension
 
-Use effects only when they improve realism, hierarchy, atmosphere, or depth.
+The central idea should be understandable quickly but does not need to be literal.
 
-Appropriate treatments include:
+Unexpected visual solutions are encouraged when they remain strategically relevant to the brand, audience, and message.
 
-* realistic shadows
-* restrained tonal contrast
-* subtle grain
-* practical light bloom
-* natural depth of field
-* soft reflected light
-* gentle material texture
-* controlled color grading
-* clean masking and compositing
-
-Avoid excessive glow, neon edges, random gradients, flares, sparks, particles, contextless smoke, glowing rings, holograms, floating glass panels, glossy UI cards, heavy HDR, excessive blur, decorative 3D objects, and generic blue-purple cinematic lighting.
-
-Materials must behave naturally. Do not make every surface glossy, metallic, plastic, translucent, chrome, or perfectly smooth.
+Do not use visual effects as the main idea.
 
 ---
 
-## 8. UNIFIED VISUAL WORLD AND REALISM
+## COMPOSITION AND HIERARCHY
 
-Every component must belong to the same visual world.
+Use the amount of visual complexity appropriate to the concept.
 
-Maintain compatible:
+The composition may contain one focal point, several coordinated focal points, layered information, modular sections, or a continuous reading path.
+
+Do not force the artwork into a fixed number of visual groups.
+
+Complexity is allowed.
+
+Confusion is not.
+
+Create a clear reading order through:
+
+* placement
+* scale
+* crop
+* contrast
+* spacing
+* color
+* focus
+* light
+* depth
+* repetition
+* movement
+* typography weight
+
+Negative space may be used when it strengthens the idea, but do not force empty space into a concept that benefits from density, rhythm, layering, or controlled visual tension.
+
+Every element must support the message, hierarchy, brand, product understanding, or intended action.
+
+---
+
+## TYPOGRAPHY
+
+Treat typography as part of the visual composition, not as text placed over an image.
+
+Typography may be:
+
+* restrained
+* oversized
+* cropped
+* editorial
+* expressive
+* repeated
+* vertical
+* layered
+* integrated into the environment
+* interrupted by objects
+* used as an architectural element
+* used as the main visual device
+
+Allow the layout, scale, weight, alignment, line breaks, and placement to respond to the visual idea.
+
+Do not automatically make every headline extra bold or extremely large.
+
+Avoid:
+
+* compressed text blocks
+* unnatural Thai line breaks
+* random font mixing
+* weak spacing
+* tiny filler labels
+* excessive outlines
+* heavy text shadows
+* decorative text effects without purpose
+* typography that looks auto-fitted into a template
+
+The exact headline must remain clearly legible.
+
+---
+
+## COLOR AND VISUAL LANGUAGE
+
+Derive the palette from the official brand identity, product, message, and relevant visual references.
+
+The palette may be:
+
+* monochromatic
+* tonal
+* neutral
+* vivid
+* multicolor
+* high-contrast
+* image-led
+* dark
+* light
+* accent-driven
+
+Do not force a fixed color formula.
+
+Use color intentionally for:
+
+* brand recognition
+* hierarchy
+* emotion
+* product emphasis
+* depth
+* visual rhythm
+* CTA visibility
+
+Avoid generic AI color treatments such as unnecessary blue-purple gradients, excessive neon, random glow, rainbow lighting, or orange-and-teal grading without brand relevance.
+
+---
+
+## REALISM AND PHOTOSHOP QUALITY
+
+The final artwork should resemble a professionally photographed, composed, and retouched advertising visual—not one fully synthesized AI scene.
+
+All elements must belong to the same visual world.
+
+Maintain coherent:
 
 * lighting direction
 * shadow behavior
 * perspective
 * scale
-* depth
 * sharpness
+* depth of field
 * color temperature
 * contrast
 * grain
 * material behavior
-* graphic language
-* emotional tone
+* environmental reflection
 
-The final artwork should resemble a professionally assembled Photoshop advertising composite—not one fully synthesized AI scene.
+Use believable:
 
-Use believable photographic elements, clean masking, accurate cutouts, realistic contact shadows, ambient occlusion, matching light direction, coherent depth of field, bounced light, environmental color contamination, natural surface variation, restrained grain, and subtle photographic imperfections.
+* contact shadows
+* ambient occlusion
+* bounced light
+* reflected color
+* masking
+* cutouts
+* surface texture
+* photographic imperfections
+* depth
+* retouching
+* environmental light contamination
 
-Avoid floating subjects, pasted-in products, inconsistent lighting, impossible perspective, universal sharpness, waxy surfaces, synthetic perfection, over-smoothed textures, and excessive retouching.
+Avoid:
 
-### People
+* floating products
+* pasted-in objects
+* impossible perspective
+* inconsistent light sources
+* incorrect scale
+* missing contact shadows
+* universal sharpness
+* plastic materials
+* over-smoothed textures
+* excessive HDR
+* synthetic perfection
+* generic AI faces
+* fake cinematic glow
 
-Follow the Human presence policy as a hard creative constraint:
-
-* `avoid`: do not use a person, face, portrait, body, or hand as the main visual. Prefer graphic design, typography, products, real objects, environments, diagrams, or photographic compositing. Incidental background people should be omitted unless physically unavoidable.
-* `supporting`: people may provide small secondary context, but they must not dominate the crop, hierarchy, or emotional focus.
-* `essential`: a person may become the hero only because the specific message genuinely depends on a human care, body, treatment, transformation, hospitality, teaching, or interpersonal-service experience.
-
-Do not infer that people are required merely because the audience, caption, or reference artwork contains people. For most B2B, technology, agency, and abstract service messages, prefer a strong graphic-led solution.
-
-They must have realistic facial proportions, skin texture, hair, hands, posture, expressions, fabric folds, scale, perspective, and environmental lighting.
-
-Avoid beauty-filter faces, plastic skin, malformed hands, generic stock poses, unnatural gestures, and exaggerated rim lighting.
-
-### Backgrounds
-
-Use credible photographed locations, practical studio sets, architectural spaces, restrained graphic environments, or carefully constructed composites.
-
-Backgrounds must have believable spatial structure, materials, perspective, depth, and natural light falloff.
+The finished image should feel assembled through professional photography, graphic design, compositing, and Photoshop retouching.
 
 ---
 
-## 9. PRODUCTS AND OFFICIAL ASSETS
+## PEOPLE
 
-Use supplied products, packaging, logos, people, and official assets accurately.
+Human presence: {{HUMAN_PRESENCE}}
+
+Follow this setting carefully.
+
+### `avoid`
+
+Do not use people, faces, bodies, portraits, or hands as the main visual.
+
+Prefer products, objects, architecture, typography, environments, materials, graphic systems, or photographic composites.
+
+### `supporting`
+
+People may provide secondary context but must not dominate the visual hierarchy.
+
+### `essential`
+
+A person may become the hero only when the message genuinely depends on human care, emotion, treatment, hospitality, teaching, physical experience, lifestyle, or interpersonal service.
+
+When people are included, ensure realistic:
+
+* facial structure
+* skin texture
+* hair
+* hands
+* posture
+* gestures
+* clothing
+* body proportions
+* perspective
+* environmental lighting
+
+Avoid beauty-filter faces, waxy skin, malformed hands, generic stock poses, unnatural expressions, and exaggerated rim lighting.
+
+---
+
+## PRODUCTS AND OFFICIAL ASSETS
+
+Use supplied official assets accurately.
 
 Preserve:
 
+* logos
 * product proportions
-* packaging design
+* packaging
 * labels
 * official colors
 * orientation
-* material behavior
-* important brand details
+* brand details
+* materials
 
-Do not invent products, packaging, factual claims, statistics, certifications, partner logos, interfaces, devices, or unsupported features. Editable layout-completion details are allowed only under the Text Density rules; they must fit the current idea and must not impersonate a real person or third party.
+Do not redesign official packaging or logos to improve the layout.
 
-Do not redesign official packaging to improve the composition.
+Do not invent:
 
-Products must feel physically present through believable scale, perspective, contact shadows, reflected light, matching sharpness, and coherent color grading.
+* products
+* claims
+* statistics
+* certifications
+* partner logos
+* guarantees
+* case results
+* product functions
+* interfaces
+* promotional facts
 
-Use 3D only when clearly supported by the brief, product, brand, or references.
+Products must feel physically present through realistic scale, perspective, contact shadows, reflected light, environmental interaction, matching sharpness, and coherent color grading.
 
 ---
 
-## 10. REFERENCE AUTHORITY
+## REFERENCES
 
-Study every attached reference and use each artifact only for its assigned role.
+Use supplied visual references as evidence of:
 
-Liked references define the desired standard for:
-
-* composition
-* information density
-* typography behavior
-* negative space
-* crop logic
-* visual rhythm
-* image-to-text relationship
+* creative quality
+* composition behavior
+* typography logic
+* crop
+* scale
+* image treatment
 * color discipline
-* material treatment
-* effect restraint
-* finishing quality
+* visual rhythm
+* material quality
+* atmosphere
+* commercial energy
+* finishing standard
 
-Extract the **design thinking and visual behavior** without copying the exact artwork.
+Extract the design thinking behind the references.
 
-Use references as direct visual evidence. Freely adapt compatible composition logic, visual language, typography behavior, image treatment, subject treatment, crop, rhythm, and production techniques when they strengthen the current brief. Do not reproduce readable reference text, campaign-specific offers, dates, URLs, or CTA copy; write those for the current idea instead.
+Do not copy their exact layouts, text, offers, dates, URLs, branding, or campaign-specific details.
 
-The Human presence policy overrides reference subject matter. When it is `avoid`, learn the reference's design behavior without carrying over its people, faces, bodies, portraits, or hands.
+Do not combine every reference into one averaged generic style.
 
-Do not average conflicting references into a safe generic style. Select the reference behavior most relevant to the current message.
+Select the reference behavior most relevant to the current message.
 
-Brand guidelines and official assets are authoritative.
-
-Avoid references and brand-memory avoid rules are negative constraints.
-
----
-
-## 11. MOBILE-FIRST QUALITY
-
-Evaluate the artwork at approximately **320–390 px wide**.
-
-At that size, the viewer must immediately understand:
-
-* the central visual idea
-* the exact headline
-* the brand or product
-* the intended action
-
-The viewer should not need to zoom.
-
-When the artwork feels dense, simplify it.
-When the image and headline already communicate the message, remove unnecessary support.
-When an effect does not improve understanding, realism, or hierarchy, remove it.
+Official brand guidelines and official assets remain authoritative.
 
 ---
 
-# BRIEF
+## TEXT AND INFORMATION
+
+Use only the visible copy needed to communicate clearly.
+
+The design may use:
+
+* headline only
+* headline with one supporting line
+* several concise supporting items
+* promotional information
+* editorial annotation
+* integrated labels
+* infographic-style content
+
+Choose the amount of information based on the campaign type.
+
+Do not add filler text to occupy space.
+
+Do not remove useful information merely to make the artwork look minimal.
+
+Do not automatically place:
+
+* headline above the image
+* supporting copy directly below the headline
+* logo in a corner
+* CTA at the bottom
+* product in the center
+
+Arrange all elements according to the selected creative concept.
+
+---
+
+# CREATIVE DIRECTION
+
+Content type: {{COMMERCIAL_STYLE}}
+
+Treatment: {{TREATMENT}}
+
+Selling approach: {{SELLING_MECHANISM}}
+
+Audience moment: {{AUDIENCE_MOMENT}}
+
+Brand-fit reason: {{BRAND_FIT_REASON}}
+
+Use these inputs to guide the emotional tone, visual energy, information density, commercial directness, and image treatment.
+
+They do not prescribe the layout, hero object, background, visual metaphor, camera angle, lighting, or typography placement.
+
+---
+
+# CAMPAIGN BRIEF
 
 Brand: {{BRAND_NAME_AND_CATEGORY}}
 
 Objective: {{OBJECTIVE}}
 
-Audience: Infer conservatively from the supplied objective and campaign context.
+Audience: Infer conservatively from the supplied campaign context.
 
 Main message: {{MAIN_MESSAGE}}
 
@@ -392,77 +455,36 @@ CTA: {{CTA}}
 
 Canvas: {{CANVAS}}
 
----
+Copy priority: {{ON_ARTWORK_COPY_PRIORITY}}
 
-# TEXT DENSITY
-
-{{ON_ARTWORK_COPY_PRIORITY}}
-
-Keep visible copy compact enough to understand immediately in a mobile feed. Complete the full ad unit, not an isolated poster: account identity, primary text, headline fields, and platform CTA may already carry part of the communication outside the image.
-
-Before adding secondary copy, silently check three roles: **Identification**—is the product, service, or brand understood; **Persuasion**—is there a useful reason, benefit, offer, or proof; **Action**—is the next step clear. Image content and platform UI may satisfy a role without another line of text.
-
-Normally use one cohesive secondary group containing zero to three short items in total. This range is a ceiling and design heuristic, not a quota. Select the smallest combination that closes real Identification, Persuasion, or Action gaps: a product or service descriptor, benefit, offer, proof point, specification, service area, date/time, price, discount, urgency note, page name, or contact microcopy. Promotion and infographic formats may use more only when an intentional grid preserves hierarchy, breathing room, and mobile readability.
-
-For paid social or Meta placements, do not repeat page identity or contact information merely to make the canvas feel full when the surrounding ad unit already provides identity and a CTA button. For standalone, organic, downloadable, or frequently reshared artwork, make brand identity and the action path self-contained; a compact contact line may then improve completeness.
-
-Use supplied facts when available. When a layout needs temporary completion copy, you may create a plausible editable placeholder, including a page name, LINE handle, URL, or phone number. Derive it from the supplied brand name and use obviously replaceable formats such as `LINE: @brandname`, `Facebook: Brand Name`, `brandname.com`, or `0XX-XXX-XXXX`; never fabricate a real person's name, personal contact details, street address, third-party handle, certification, partner status, case result, or guarantee.
-
-Group related secondary information instead of scattering labels around the canvas. Empty space is not a defect, but do not leave a semantic or action gap merely to minimize copy. Every added line must improve Identification, Persuasion, or Action and remain legible at mobile size.
-
-Use the caption, library, memory, and references to understand the brand and invent the visual—not as a checklist of text to place on the canvas. Do not turn available evidence into multi-row bullets, feature cards, icon lists, footer strips, dashboard labels, or extra sections unless the selected content type genuinely requires an infographic or promotion structure.
-
-Do not borrow copy from another campaign merely because it appears in a reference or context record. Do not invent certifications, partner status, case results, guarantees, or factual claims that could misrepresent the brand. Let the image, composition, and visual idea do most of the communication.
+Additional requirements: {{ADDITIONAL_REQUIREMENTS}}
 
 ---
 
-# MANDATORY REQUIREMENTS
-
-* Render the exact headline once, clearly and legibly.
-* Render the exact CTA once when supplied and mandatory.
-* Select supporting and completion copy according to the composition and commercial message; do not enforce a one-item limit and do not add filler.
-* Do not invent unsupported factual claims, statistics, certifications, partner marks, case results, or guarantees. Plausible editable placeholder details—including a date, price, discount, page name, LINE handle, URL, phone number, or short promotional detail—are allowed only when they fit the content type and improve completeness.
-* Preserve official logos, products, packaging, people, and source assets accurately.
-* Use every artifact only for its assigned role.
-* Produce the complete final artwork in this generation.
-* Treat supplied facts as authoritative. Re-author any optional completion copy for this exact idea instead of copying another campaign.
-* Do not use effects as the primary creative concept.
-* Do not default to oversized or extra-bold typography.
-* Do not add decorative elements without a communication purpose.
-* Ensure every component belongs to the same visual world.
-* Respect professional design principles throughout the composition.
-{{ADDITIONAL_REQUIREMENTS}}
-
----
-
-# THICK CONTEXT / ARTIFACTS
+# CONTEXT AND ASSETS
 
 {{THICK_CONTEXT_JSON}}
 
 ---
 
-# FINAL INTERNAL REVIEW
+# NON-NEGOTIABLE REQUIREMENTS
 
-Before producing the final artwork, silently confirm:
+* Produce ONE complete final artwork.
+* Render the exact headline once, clearly and legibly.
+* Render the exact CTA once when it is supplied and mandatory.
+* Preserve official logos, products, packaging, and supplied assets accurately.
+* Do not invent unsupported factual claims or brand information.
+* Maintain clear mobile-feed readability.
+* Use a composition specifically developed for this campaign.
+* Avoid repeating familiar layout formulas from recent generations.
+* Do not use minimalism, effects, or complexity to compensate for a weak idea.
+* Maintain realistic scale, lighting, perspective, shadows, materials, and depth.
+* Make typography and imagery behave as one composed visual system.
+* Ensure every element has a communication or design purpose.
+* Deliver a polished, publication-ready, Photoshop-finished result.
 
-* There is one clear and relevant creative idea.
-* Every component has a communication or design purpose.
-* The layout uses an intentional grid and spacing system.
-* The reading order is immediately clear.
-* Alignment, scale, proximity, and proportion are controlled.
-* Negative space supports the composition.
-* Typography is readable and restrained.
-* Color and contrast are used selectively.
-* Effects are minimal and purposeful.
-* Every element belongs to the same visual world.
-* Image, typography, product, background, branding, and CTA strengthen one another.
-* People, products, materials, shadows, lighting, and perspective look believable.
-* No unsupported factual claim, certification, partner mark, case result, or guarantee was invented; any temporary editable placeholder is brand-derived, relevant, restrained, and does not impersonate a real person or third party.
-* The artwork remains clear at mobile size.
-* The result feels complete, polished, and professionally art-directed—not AI-generated.
+Before rendering, check that the composition feels original, brand-specific, visually memorable, commercially clear, and meaningfully different from a reusable social media template.
 
-Correct weak areas internally before producing the result.
+Produce **ONE distinctive, cohesive, high-end advertising artwork with an original composition system, strong creative thinking, accurate brand execution, realistic photographic quality, and professional graphic-design finishing.**
 
-Produce **ONE polished, cohesive, high-end, Photoshop-finished social media campaign artwork** with intelligent composition, restrained typography, authentic photographic realism, meaningful negative space, minimal effects, and no obvious AI-generated appearance.
-
-**THE FINAL IMAGE MUST FEEL DESIGNED, NOT DECORATED.**
+**The final image must feel specifically invented for this campaign—not assembled from a template.**

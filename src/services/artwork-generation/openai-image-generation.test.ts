@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  artworkReferencesFromSelections,
   buildArtworkGenerationRequest,
   buildArtworkGenerationRequests,
   buildArtworkRegenerationRequest,
@@ -26,12 +27,14 @@ const run: WorkflowState = {
   brandSearch: "",
   librarySection: "brand",
   service: "single-static",
+  hookIdeaMode: "standard",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
   outputSize: "1024x1024",
   quantity: 1,
   successMetric: "CTR",
   brief: "Launch a soft summer bouquet offer.",
+  artworkBrief: "",
   attachments: [],
   uploadedMaterials: [],
   referenceImages: [],
@@ -69,12 +72,46 @@ const run: WorkflowState = {
 };
 
 describe("buildArtworkGenerationRequest", () => {
+  it("orders the primary reference first and includes its selected role", () => {
+    expect(
+      artworkReferencesFromSelections([
+        {
+          id: "style-1",
+          url: "https://example.com/style.png",
+          label: "Minimal living room",
+          role: "style"
+        },
+        {
+          id: "product-1",
+          url: "https://example.com/product.png",
+          label: "Official packshot",
+          role: "product",
+          primary: true
+        }
+      ])
+    ).toEqual([
+      {
+        kind: "url",
+        url: "https://example.com/product.png",
+        label: "Primary reference · Product · Official packshot"
+      },
+      {
+        kind: "url",
+        url: "https://example.com/style.png",
+        label: "Supporting reference · Style · Minimal living room"
+      }
+    ]);
+  });
+
   it("keeps the legacy full generation request for album regeneration", () => {
     const direction = run.directions[0];
     if (!direction) throw new Error("Expected a selected direction fixture.");
 
     const request = buildArtworkRegenerationRequest({
-      run,
+      run: {
+        ...run,
+        artworkBrief: "Use real guests and natural light."
+      },
       direction,
       sourceImageUrl: "https://example.com/current-artwork.png",
       extraInstructions: "Fix hierarchy and make the CTA more direct."
@@ -82,6 +119,7 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request.quantity).toBe(1);
     expect(request.textInputs).toEqual([
+      "Use real guests and natural light.",
       "Fix hierarchy and make the CTA more direct."
     ]);
     expect(request.referenceImages[0]).toEqual({
@@ -155,6 +193,7 @@ describe("buildArtworkGenerationRequest", () => {
       runId: "run-1",
       outputId: "hook-1-v1",
       directionId: "hook-1",
+      assetVersion: 2,
       format: "1:1 Static",
       sourceImageUrl: "https://example.com/current-artwork.png",
       instructions: "Increase whitespace around the CTA.",
@@ -168,7 +207,10 @@ describe("buildArtworkGenerationRequest", () => {
 
   it("passes brief, selected hooks, text inputs, and reference images to the backend contract", () => {
     const request = buildArtworkGenerationRequest({
-      run,
+      run: {
+        ...run,
+        artworkBrief: "Use real guests and natural light."
+      },
       textInputs: ["Keep it calm and premium."],
       referenceImages: [
         {
@@ -187,7 +229,10 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.selectedHooks[0]?.hook).toBe(
       "Flowers that make the room feel softer"
     );
-    expect(request.textInputs).toEqual(["Keep it calm and premium."]);
+    expect(request.textInputs).toEqual([
+      "Use real guests and natural light.",
+      "Keep it calm and premium."
+    ]);
     expect(request.referenceImages[0]).toMatchObject({
       kind: "url",
       url: "https://example.com/reference.png"
@@ -213,6 +258,39 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.output.size).toBe("2160x3840");
+  });
+
+  it("attaches an uploaded image guideline as a visual Brand CI input", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        brand: {
+          ...run.brand!,
+          library: {
+            ...run.brand!.library,
+            brand: [
+              {
+                id: "ci-1",
+                title: "Brand CI / Guideline",
+                description: "Use generous spacing and the approved type family.",
+                assetUrl:
+                  "https://example.supabase.co/storage/brand-ci.png?token=signed"
+              }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(request.referenceImages).toContainEqual({
+      kind: "url",
+      url: "https://example.supabase.co/storage/brand-ci.png?token=signed",
+      label:
+        "Brand CI / Guideline source — follow its identity, typography, color, spacing, imagery, and logo rules; do not copy sample campaign content"
+    });
+    expect(request.brandLibrary.brand[0]?.description).toContain(
+      "approved type family"
+    );
   });
 
   it("keeps the latest selected logo instead of the stale brand snapshot logo", () => {
@@ -414,6 +492,120 @@ describe("buildArtworkGenerationRequest", () => {
     expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-static-replacement");
   });
 
+  it("splits high-volume artwork into bounded batches", () => {
+    const source = run.directions[0];
+    if (!source) throw new Error("Expected a direction fixture.");
+    const directions = Array.from({ length: 10 }, (_, index) => ({
+      ...source,
+      id: `hook-${index + 1}`,
+      service: "single-static" as const,
+      selected: true
+    }));
+
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "mix-static", service: "single-static", quantity: 10 }
+        ],
+        quantity: 10,
+        directions
+      }
+    });
+
+    expect(requests.map((request) => request.quantity)).toEqual([4, 4, 2]);
+    expect(requests.flatMap((request) => request.selectedHooks)).toHaveLength(10);
+  });
+
+  it("resumes a partial artwork run without regenerating completed directions", () => {
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        artworkGenerationStatus: "failed",
+        artworkGenerationError: "Artwork generation was interrupted.",
+        creativeMix: [
+          { id: "mix-static", service: "single-static", quantity: 2 }
+        ],
+        quantity: 2,
+        directions: run.directions.map((direction) => ({
+          ...direction,
+          service: "single-static" as const,
+          selected: true
+        })),
+        outputs: [
+          {
+            id: "hook-1-v1",
+            directionId: "hook-1",
+            format: "1:1 Static",
+            status: "draft",
+            clientStatus: "queued",
+            assetUrl: "https://example.com/hook-1.png",
+            revisionCount: 0,
+            approval: {
+              graphicDesign: null,
+              clientService: null,
+              projectManager: null
+            },
+            approvalComments: {
+              graphicDesign: "",
+              clientService: "",
+              projectManager: ""
+            }
+          }
+        ]
+      }
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.selectedHooks.map((hook) => hook.id)).toEqual([
+      "hook-2"
+    ]);
+    expect(requests[0]?.assetVersion).toBe(1);
+  });
+
+  it("creates a new asset version when the user intentionally generates again", () => {
+    const source = run.directions[0];
+    if (!source) throw new Error("Expected a direction fixture.");
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        artworkGenerationStatus: "idle",
+        artworkGenerationError: null,
+        creativeMix: [
+          { id: "mix-static", service: "single-static", quantity: 1 }
+        ],
+        quantity: 1,
+        directions: [{ ...source, selected: true }],
+        outputs: [
+          {
+            id: "hook-1-v1",
+            directionId: "hook-1",
+            format: "1:1 Static",
+            status: "ready",
+            clientStatus: "queued",
+            assetUrl: "https://example.com/hook-1-v1.png",
+            revisionCount: 0,
+            approval: {
+              graphicDesign: null,
+              clientService: null,
+              projectManager: null
+            },
+            approvalComments: {
+              graphicDesign: "",
+              clientService: "",
+              projectManager: ""
+            }
+          }
+        ]
+      }
+    });
+
+    expect(requests[0]?.selectedHooks.map((hook) => hook.id)).toEqual([
+      "hook-1"
+    ]);
+    expect(requests[0]?.assetVersion).toBe(2);
+  });
+
   it("keeps returned assets as links and storage metadata, not base64 payloads", () => {
     const output = normalizeArtworkOutput({
       id: "output-1",
@@ -461,7 +653,7 @@ describe("buildArtworkGenerationRequest", () => {
         {
           kind: "url",
           url: "https://assets.example.com/latest-uploaded-logo.png",
-          label: "Logo"
+          label: "Primary reference · Logo · Latest uploaded logo"
         },
         {
           kind: "url",

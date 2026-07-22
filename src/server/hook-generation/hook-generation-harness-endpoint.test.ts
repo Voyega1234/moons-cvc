@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleHookGenerationHarnessRequest } from "./hook-generation-harness-endpoint";
+import {
+  buildHookGenerationBatches,
+  handleHookGenerationHarnessRequest
+} from "./hook-generation-harness-endpoint";
+import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation";
 import type { PastPostsClient } from "./past-posts";
 
 const requestBody = {
   runId: "run-1",
+  hookIdeaMode: "fresh-research",
   brand: {
     id: "convert-cake",
     name: "Convert Cake",
@@ -62,6 +67,42 @@ function highlightResponse(id: string, highlights: readonly string[]) {
 }
 
 describe("handleHookGenerationHarnessRequest", () => {
+  it("splits high-volume hook quotas into bounded, content-specific batches", () => {
+    const batches = buildHookGenerationBatches({
+      ...requestBody,
+      service: "single-static",
+      uploadedMaterials: requestBody.uploadedMaterials.map((material) => ({
+        ...material,
+        role: "main-object" as const
+      })),
+      hookIdeaMode: "fresh-research",
+      extraInstructions: "",
+      existingHooks: [],
+      quantity: 104,
+      contentTypeQuotas: [
+        { service: "single-static", count: 52 },
+        { service: "album-post", count: 52 }
+      ]
+    } satisfies HookGenerationHarnessRequest);
+
+    expect(batches.map((batch) => batch.quantity)).toEqual([
+      12,
+      12,
+      12,
+      12,
+      4,
+      12,
+      12,
+      12,
+      12,
+      4
+    ]);
+    expect(batches.every((batch) => batch.contentTypeQuotas.length === 1)).toBe(
+      true
+    );
+    expect(batches[0]?.extraInstructions).toContain("batch 1/10");
+  });
+
   it("requires a Supabase user token when backend Supabase env is configured", async () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -237,6 +278,56 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(highlightPrompt).toContain(
       '"subheadline": "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น"'
+    );
+  });
+
+  it("skips web search in Standard mode", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              directions: [
+                {
+                  id: "hook-standard",
+                  service: "single-static",
+                  hook: "เริ่มจากปัญหาที่ลูกค้าเจอจริง",
+                  subheadline: "ใช้ข้อมูลแบรนด์และบรีฟโดยไม่ค้นเว็บ",
+                  concept: "Standard brand-led idea",
+                  why: "Uses supplied context only",
+                  visual: "Clean and direct",
+                  cta: "ดูรายละเอียด",
+                  caption: "เริ่มจากข้อมูลที่แบรนด์ยืนยันแล้ว",
+                  score: 85,
+                  reasoning: "Strong brand fit",
+                  citations: []
+                }
+              ]
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("hook-standard", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({ ...requestBody, hookIdeaMode: "standard" })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { tools?: unknown[]; input: unknown };
+    expect(generationBody.tools).toBeUndefined();
+    expect(JSON.stringify(generationBody.input)).toContain(
+      "Standard mode uses only the supplied brief and brand context."
     );
   });
 
