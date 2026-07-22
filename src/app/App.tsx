@@ -290,10 +290,14 @@ export function App() {
                     </aside>
                   </section>
                 ) : null}
-                <fieldset className="compass-run-edit-scope" disabled={!runCanEdit}>
+                <fieldset
+                  className="compass-run-edit-scope"
+                  disabled={!runCanEdit && state.stage !== "studio"}
+                >
                   <CurrentStage
                     state={state}
                     dispatch={dispatch}
+                    canEdit={runCanEdit}
                     onCreateRun={() => createRun(true)}
                   />
                 </fieldset>
@@ -1003,10 +1007,12 @@ function MemoryRibbon({ state }: { state: WorkflowState }) {
 function CurrentStage({
   state,
   dispatch,
+  canEdit,
   onCreateRun
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
+  canEdit: boolean;
   onCreateRun: () => void;
 }) {
   const props = { state, dispatch };
@@ -1018,7 +1024,7 @@ function CurrentStage({
     case "directions":
       return <DirectionsStage {...props} />;
     case "studio":
-      return <StudioStage {...props} />;
+      return <StudioStage {...props} canEdit={canEdit} />;
     case "approval":
       return <ApprovalStage {...props} />;
     case "client":

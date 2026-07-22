@@ -5684,7 +5684,11 @@ function HookRegenerateAllModal({
   );
 }
 
-export function StudioStage({ state, dispatch }: StageProps) {
+export function StudioStage({
+  state,
+  dispatch,
+  canEdit = true
+}: StageProps & { canEdit?: boolean }) {
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [sendingToQc, setSendingToQc] = useState(false);
   const [sendToQcError, setSendToQcError] = useState<string | null>(null);
@@ -5784,6 +5788,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
           <button
             className="btn secondary"
             type="button"
+            disabled={!canEdit}
             onClick={() => dispatch(backAction)}
           >
             ← Back to angles
@@ -5792,7 +5797,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
             className="btn secondary"
             type="button"
             disabled={
-              regeneratingAllArtwork || checking || sendingToQc
+              !canEdit || regeneratingAllArtwork || checking || sendingToQc
             }
             onClick={handleRegenerateAllArtwork}
           >
@@ -5827,7 +5832,10 @@ export function StudioStage({ state, dispatch }: StageProps) {
             className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
             type="button"
             disabled={
-              regeneratingAllArtwork || checking || Boolean(runQaBlocked)
+              !canEdit ||
+              regeneratingAllArtwork ||
+              checking ||
+              Boolean(runQaBlocked)
             }
             title={runQaBlocked ?? undefined}
             onClick={check}
@@ -5843,7 +5851,10 @@ export function StudioStage({ state, dispatch }: StageProps) {
             className={`btn ${state.qaComplete ? "primary" : "secondary"}`}
             type="button"
             disabled={
-              regeneratingAllArtwork || sendingToQc || Boolean(approvalBlocked)
+              !canEdit ||
+              regeneratingAllArtwork ||
+              sendingToQc ||
+              Boolean(approvalBlocked)
             }
             title={approvalBlocked ?? undefined}
             onClick={() => void handleSendToQc()}
@@ -5879,7 +5890,7 @@ export function StudioStage({ state, dispatch }: StageProps) {
         {slidesError ? (
           <p className="repository-message error">{slidesError}</p>
         ) : null}
-        <OutputGrid state={state} dispatch={dispatch} />
+        <OutputGrid state={state} dispatch={dispatch} canEdit={canEdit} />
         {state.qaComplete ? (
           <section className={`compass-build-qa-strip ${failedCount ? "needs" : "ready"}`}>
             <div>
@@ -6071,10 +6082,12 @@ function AlbumMosaic({
 
 function OutputGrid({
   state,
-  dispatch
+  dispatch,
+  canEdit = true
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
+  canEdit?: boolean;
 }) {
   const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
   const [regenerateOutputId, setRegenerateOutputId] = useState<string | null>(
@@ -6247,6 +6260,7 @@ function OutputGrid({
                           output={output}
                           direction={direction}
                           dispatch={dispatch}
+                          canEdit={canEdit}
                         />
                       ) : null}
                     </div>
@@ -6297,6 +6311,7 @@ function OutputGrid({
                           <button
                             className="btn primary small"
                             type="button"
+                            disabled={!canEdit}
                             onClick={() => {
                               if (isUgcOutput(output)) {
                                 setEditOutputId(output.id);
@@ -6315,6 +6330,7 @@ function OutputGrid({
                           <button
                             className="btn ghost small"
                             type="button"
+                            disabled={!canEdit}
                             onClick={() =>
                               reviewOutputs
                                 .filter(outputNeedsGuidedImprovement)
@@ -6334,6 +6350,7 @@ function OutputGrid({
                           <button
                             className="btn secondary small"
                             type="button"
+                            disabled={!canEdit}
                             onClick={() => setRegenerateOutputId(output.id)}
                           >
                             {album ? "Regenerate album" : "Regenerate draft"}
@@ -6341,9 +6358,12 @@ function OutputGrid({
                           <button
                             className="btn ghost small"
                             type="button"
-                            disabled={reviewOutputs.every(
-                              (item) => item.savedToReferences
-                            )}
+                            disabled={
+                              !canEdit ||
+                              reviewOutputs.every(
+                                (item) => item.savedToReferences
+                              )
+                            }
                             onClick={() =>
                               reviewOutputs.forEach((item) =>
                                 dispatch({
@@ -6413,11 +6433,13 @@ function OutputGrid({
 function BuildCaptionEditor({
   output,
   direction,
-  dispatch
+  dispatch,
+  canEdit = true
 }: {
   output: CreativeOutput;
   direction: WorkflowState["directions"][number];
   dispatch: Dispatch<WorkflowAction>;
+  canEdit?: boolean;
 }) {
   const [caption, setCaption] = useState(direction.caption);
   const [saved, setSaved] = useState(false);
@@ -6448,6 +6470,7 @@ function BuildCaptionEditor({
         id={`build-caption-${output.id}`}
         aria-label={isUgcOutput(output) ? "Edit script direction" : "Edit caption"}
         value={caption}
+        disabled={!canEdit}
         onChange={(event) => {
           setCaption(event.target.value);
           setSaved(false);
@@ -6458,7 +6481,7 @@ function BuildCaptionEditor({
         <button
           className="btn primary small"
           type="button"
-          disabled={!caption.trim() || saved}
+          disabled={!canEdit || !caption.trim() || saved}
           onClick={saveCaption}
         >
           {saved ? "Saved" : "Save"}

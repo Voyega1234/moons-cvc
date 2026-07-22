@@ -27,6 +27,16 @@ const COLORS = {
   limeInk: "28330B"
 } as const;
 
+const THAI_TEXT_PATTERN = /[\u0E00-\u0E7F]/;
+const SLIDE_FONT_FACE = "Sarabun";
+
+function localizedTextStyle(value: string) {
+  return {
+    fontFace: SLIDE_FONT_FACE,
+    lang: THAI_TEXT_PATTERN.test(value) ? "th-TH" : "en-US"
+  };
+}
+
 export function pmApprovedClientSlideItems(
   state: Pick<WorkflowState, "outputs" | "directions">
 ): readonly ClientSlideItem[] {
@@ -152,25 +162,26 @@ function addTextBlock(
   height: number,
   maxLength: number
 ) {
+  const text = clampText(value, maxLength);
   slide.addText(label.toUpperCase(), {
     x: 7.35,
     y,
     w: 5.05,
     h: 0.2,
     margin: 0,
-    fontFace: "Aptos",
+    ...localizedTextStyle(label),
     fontSize: 8,
     bold: true,
     color: COLORS.muted,
     charSpacing: 1.1
   });
-  slide.addText(clampText(value, maxLength), {
+  slide.addText(text, {
     x: 7.35,
     y: y + 0.25,
     w: 5.05,
     h: height - 0.25,
     margin: 0,
-    fontFace: "Aptos",
+    ...localizedTextStyle(text),
     fontSize: 12.5,
     color: COLORS.ink,
     breakLine: false,
@@ -218,20 +229,21 @@ function addUgcPreview(
     w: 2.4,
     h: 0.25,
     margin: 0,
-    fontFace: "Aptos",
+    fontFace: SLIDE_FONT_FACE,
     fontSize: 8,
     bold: true,
     color: COLORS.violet,
     align: "center",
     charSpacing: 1.2
   });
-  slide.addText(clampText(direction?.hook, 120), {
+  const hook = clampText(direction?.hook, 120);
+  slide.addText(hook, {
     x: 1.98,
     y: 1.8,
     w: 2.34,
     h: 1.55,
     margin: 0,
-    fontFace: "Aptos Display",
+    ...localizedTextStyle(hook),
     fontSize: 22,
     bold: true,
     color: COLORS.ink,
@@ -258,7 +270,7 @@ function addUgcPreview(
     w: 2.02,
     h: 1.28,
     margin: 0,
-    fontFace: "Aptos",
+    ...localizedTextStyle(beatText),
     fontSize: 10.5,
     color: COLORS.ink,
     breakLine: false,
@@ -271,7 +283,7 @@ function addUgcPreview(
     w: 2.38,
     h: 0.22,
     margin: 0,
-    fontFace: "Aptos",
+    fontFace: SLIDE_FONT_FACE,
     fontSize: 8,
     color: COLORS.muted,
     align: "center"
@@ -362,13 +374,14 @@ function addClientSlide(
     );
   }
 
-  slide.addText(brandName.toUpperCase(), {
+  const displayBrandName = brandName.toUpperCase();
+  slide.addText(displayBrandName, {
     x: 7.35,
     y: 0.64,
     w: 3.6,
     h: 0.22,
     margin: 0,
-    fontFace: "Aptos",
+    ...localizedTextStyle(displayBrandName),
     fontSize: 8,
     bold: true,
     color: COLORS.violet,
@@ -389,20 +402,21 @@ function addClientSlide(
     w: 1.06,
     h: 0.14,
     margin: 0,
-    fontFace: "Aptos",
+    fontFace: SLIDE_FONT_FACE,
     fontSize: 7.5,
     bold: true,
     color: COLORS.limeInk,
     align: "center",
     fit: "shrink"
   });
-  slide.addText(clampText(direction?.hook, 170), {
+  const hook = clampText(direction?.hook, 170);
+  slide.addText(hook, {
     x: 7.35,
     y: 1.18,
     w: 5.05,
     h: 1.42,
     margin: 0,
-    fontFace: "Aptos Display",
+    ...localizedTextStyle(hook),
     fontSize: 26,
     bold: true,
     color: COLORS.ink,
@@ -438,7 +452,7 @@ function addClientSlide(
     w: 0.68,
     h: 0.2,
     margin: 0,
-    fontFace: "Aptos",
+    fontFace: SLIDE_FONT_FACE,
     fontSize: 8,
     color: COLORS.muted,
     align: "right"
@@ -506,8 +520,8 @@ async function buildClientSlidesPptx(
   pptx.subject = `${brandName} ${subject}`;
   pptx.title = `${brandName} ${title}`;
   pptx.theme = {
-    headFontFace: "Aptos Display",
-    bodyFontFace: "Aptos"
+    headFontFace: SLIDE_FONT_FACE,
+    bodyFontFace: SLIDE_FONT_FACE
   };
 
   for (const [index, item] of items.entries()) {

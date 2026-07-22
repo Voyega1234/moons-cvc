@@ -1322,6 +1322,101 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(createStageClientSlideItems(state).length);
   });
 
+  it("keeps the existing Create slide download enabled for viewers", () => {
+    const base = buildCreativeState();
+    const state = {
+      ...base,
+      outputs: base.outputs.map((output) => ({
+        ...output,
+        assetUrl: `https://example.com/${output.id}.png`
+      }))
+    };
+    const view = render(
+      <StudioStage state={state} dispatch={vi.fn()} canEdit={false} />
+    );
+    const stage = within(view.container);
+
+    expect(
+      stage.getByRole("button", { name: "Download slides" }).hasAttribute("disabled")
+    ).toBe(false);
+    expect(
+      stage.getByRole("button", { name: "Open Creative 1 preview" }).matches(":disabled")
+    ).toBe(false);
+    expect(
+      stage.getByRole("button", { name: "↻ Regenerate all images" }).hasAttribute("disabled")
+    ).toBe(true);
+    expect(
+      stage
+        .getAllByRole("textbox", { name: "Edit caption" })
+        .every((textbox) => textbox.matches(":disabled"))
+    ).toBe(true);
+  });
+
+  it("uses Sarabun throughout the slide and tags Thai text correctly", async () => {
+    const base = buildCreativeState();
+    const firstDirection = base.directions[0];
+    const firstOutput = base.outputs[0];
+    if (!firstDirection || !firstOutput) {
+      throw new Error("Expected creative fixtures for Thai slide export.");
+    }
+    const state = {
+      ...base,
+      directions: [
+        {
+          ...firstDirection,
+          hook: "เปลี่ยนเตาเมื่อไร กระทะก็ยังไปต่อ",
+          concept: "สื่อสารว่ากระทะใบเดียวใช้งานได้กับเตาหลายประเภท",
+          cta: "เลือกกระทะที่ใช้ได้ทุกเตา",
+          caption: "ใช้งานได้ทั้งเตาแก๊ส เตาไฟฟ้า และเตา Induction"
+        }
+      ],
+      outputs: [
+        {
+          ...firstOutput,
+          directionId: firstDirection.id,
+          assetUrl: "https://example.com/thai-creative.png"
+        }
+      ]
+    };
+
+    const pptx = await buildCreateStageSlidesPptx(
+      state,
+      async () =>
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
+    );
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            text?: Array<{ text: string }>;
+            options: { fontFace?: string; lang?: string };
+          }>;
+        }>;
+      }
+    )._slides;
+    const textObjects = slides.flatMap((slide) =>
+      slide._slideObjects.filter(
+        (object) => object._type === "text" && Boolean(object.text?.length)
+      )
+    );
+    const thaiTextObjects = textObjects.filter((object) =>
+      object.text?.some((run) => /[\u0E00-\u0E7F]/.test(run.text))
+    );
+
+    expect(textObjects.length).toBeGreaterThan(0);
+    expect(thaiTextObjects.length).toBeGreaterThan(0);
+    textObjects.forEach((object) => {
+      expect(object.options.fontFace).toBe("Sarabun");
+    });
+    thaiTextObjects.forEach((object) => {
+      expect(object.options).toMatchObject({
+        fontFace: "Sarabun",
+        lang: "th-TH"
+      });
+    });
+  });
+
   it("combines three album panels into one review card and preview", async () => {
     const user = userEvent.setup();
     const base = buildCreativeState();
