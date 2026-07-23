@@ -6,6 +6,7 @@ export interface ConvertCakeAuthEnv {
 export interface ConvertCakeAuthorization {
   authorized: boolean;
   accessToken: string | null;
+  email: string | null;
 }
 
 export async function resolveConvertCakeAuthorization(
@@ -20,8 +21,12 @@ export async function resolveConvertCakeAuthorization(
     ? authorization.slice("Bearer ".length)
     : null;
 
-  if (!supabaseUrl || !supabaseAnonKey) return { authorized: true, accessToken };
-  if (!accessToken) return { authorized: false, accessToken: null };
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { authorized: true, accessToken, email: null };
+  }
+  if (!accessToken) {
+    return { authorized: false, accessToken: null, email: null };
+  }
 
   const response = await fetchImpl(`${supabaseUrl}/auth/v1/user`, {
     headers: {
@@ -30,10 +35,14 @@ export async function resolveConvertCakeAuthorization(
     }
   });
 
-  if (!response.ok) return { authorized: false, accessToken: null };
+  if (!response.ok) {
+    return { authorized: false, accessToken: null, email: null };
+  }
 
   const user = (await response.json()) as unknown;
-  if (!isRecord(user)) return { authorized: false, accessToken: null };
+  if (!isRecord(user)) {
+    return { authorized: false, accessToken: null, email: null };
+  }
 
   const email = typeof user.email === "string" ? user.email : "";
   const metadata = isRecord(user.app_metadata) ? user.app_metadata : {};
@@ -42,7 +51,11 @@ export async function resolveConvertCakeAuthorization(
   const authorized =
     organization === "convert_cake" || email.endsWith("@convertcake.com");
 
-  return { authorized, accessToken: authorized ? accessToken : null };
+  return {
+    authorized,
+    accessToken: authorized ? accessToken : null,
+    email: authorized ? email.toLowerCase() : null
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

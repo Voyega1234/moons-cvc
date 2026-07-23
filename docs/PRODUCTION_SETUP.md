@@ -128,14 +128,43 @@ The worker uses a Supabase `service_role` client. Apply the service-role
 migration below before running it because custom-schema tables require explicit
 PostgreSQL grants.
 
-The client picker also loads the published mapping Google Sheet CSV. Override
-the default only when needed:
+The client picker reads a normal, domain-restricted Google Sheet URL through
+the backend:
 
 ```bash
-VITE_MAPPING_CLIENTS_CSV_URL=<published-google-sheet-csv-url>
+MAPPING_CLIENTS_GOOGLE_SHEET_URL=<normal-google-sheet-url>
+GOOGLE_CLOUD_PROJECT_NUMBER=<numeric-project-number>
+GOOGLE_WORKLOAD_IDENTITY_POOL=<pool-id>
+GOOGLE_WORKLOAD_IDENTITY_PROVIDER=<provider-id>
+GOOGLE_SERVICE_ACCOUNT_EMAIL=<service-account-email>
 ```
 
-Local desktop setup also accepts `MAPPING_CLIENTS_CSV_URL`.
+Production and Preview use the Vercel OIDC token with Google Workload Identity
+Federation. Grant only the matching Vercel project/environment principal
+`roles/iam.serviceAccountTokenCreator` on the dedicated service account.
+Authorize that service account's numeric OAuth client ID in Google Workspace
+Domain-Wide Delegation with only:
+
+```text
+https://www.googleapis.com/auth/spreadsheets.readonly
+```
+
+For local development, grant the developer or developer group
+direct read access to the domain-restricted Sheets and run:
+
+```bash
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly
+```
+
+If the local request has no authenticated Supabase email, set
+`GOOGLE_WORKSPACE_LOCAL_USER` to the developer's `@convertcake.com` email as a
+domain-validation fallback.
+Local development uses the user ADC Sheets token directly and does not require
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`; that variable is required only in Production
+and Preview for OIDC plus Domain-Wide Delegation.
+Do not set `GOOGLE_APPLICATION_CREDENTIALS`; service-account JSON keys are
+intentionally rejected.
 
 To dry-run an idempotent sync of Sheet rows whose `Status` is exactly `Active`
 into missing `moons.clients` records:

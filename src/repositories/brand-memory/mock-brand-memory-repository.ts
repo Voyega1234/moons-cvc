@@ -1,4 +1,8 @@
-import type { LibraryItem } from "../../domain/brand";
+import type {
+  LibraryItem,
+  OnboardingQuestionnaireSource
+} from "../../domain/brand";
+import { validateOnboardingQuestionnaire } from "../../domain/client-ingestion";
 import type {
   BrandDocument,
   BrandPastWorkItem,
@@ -13,6 +17,7 @@ import type {
   SaveBrandRuleInput,
   SaveGuidelineInput,
   SaveBrandProductInput,
+  SaveOnboardingQuestionnaireInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
   UpdateGuidelineInput,
@@ -25,6 +30,10 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
   private readonly guidelinesByClient = new Map<string, LibraryItem[]>();
   private readonly productsByClient = new Map<string, BrandProduct[]>();
   private readonly documentsByClient = new Map<string, BrandDocument[]>();
+  private readonly questionnairesByClient = new Map<
+    string,
+    OnboardingQuestionnaireSource
+  >();
 
   async listBrandRules(clientId: string): Promise<readonly LibraryItem[]> {
     return this.brandRulesByClient.get(clientId) ?? [];
@@ -238,6 +247,29 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
       description: "",
       assetUrl: URL.createObjectURL(file)
     };
+  }
+
+  async saveOnboardingQuestionnaire({
+    clientId,
+    text,
+    sourceUrl,
+    sheetTitle,
+    extractedFields
+  }: SaveOnboardingQuestionnaireInput): Promise<OnboardingQuestionnaireSource> {
+    const validationError = validateOnboardingQuestionnaire(text);
+    if (validationError) throw new Error(validationError);
+
+    const normalizedText = text.trim();
+    const questionnaire: OnboardingQuestionnaireSource = {
+      ...(sourceUrl?.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
+      text: normalizedText,
+      preview: normalizedText.slice(0, 280),
+      facebookUrls: [],
+      ...(sheetTitle?.trim() ? { sheetTitle: sheetTitle.trim() } : {}),
+      ...(extractedFields?.length ? { extractedFields } : {})
+    };
+    this.questionnairesByClient.set(clientId, questionnaire);
+    return questionnaire;
   }
 
   async analyzeGuideline(

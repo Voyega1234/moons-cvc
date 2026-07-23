@@ -5,6 +5,7 @@ import {
   type HookGenerationInput,
   type RawDirection
 } from "./hook-generation-types";
+import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionnaire-hook-context";
 
 export async function generateDirectionsFromWebhook(
   input: HookGenerationInput
@@ -28,6 +29,9 @@ export async function generateDirectionsFromWebhook(
           { service: input.service, count: input.quantity }
         ],
         text: input.brief,
+        onboardingQuestionnaire: buildOnboardingQuestionnaireHookContext(
+          input.brand?.onboardingQuestionnaire
+        ),
         extraInstructions: input.extraInstructions?.trim() ?? "",
         existingHooks: input.existingHooks ?? []
       },

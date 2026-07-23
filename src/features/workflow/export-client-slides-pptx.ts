@@ -1,11 +1,20 @@
 import type PptxGenJS from "pptxgenjs";
+import { env } from "../../config/env";
 import type {
   CreativeDirection,
-  CreativeOutput
+  CreativeOutput,
+  ReferenceImageSelection,
+  UgcVideoBrief
 } from "../../domain/creative-run";
+import { inferredReferenceImageRole } from "../../domain/creative-run";
 import { directionSubheadline } from "../../domain/subheadline-highlight";
 import type { WorkflowState } from "./model";
 import { approvalRolesForOutput } from "./rules";
+import {
+  requestGoogleDriveAccessToken,
+  uploadPptxToGoogleSlides,
+  type GoogleSlidesImportResult
+} from "../../services/google-slides/google-slides-import";
 
 export interface ClientSlideItem {
   output: CreativeOutput;
@@ -87,6 +96,27 @@ function groupedClientSlideItems(
 
 function isUgcOutput(output: CreativeOutput): boolean {
   return output.format.toUpperCase().includes("UGC");
+}
+
+function preferredUgcReference(
+  references: readonly ReferenceImageSelection[]
+): ReferenceImageSelection | undefined {
+  return (
+    references.find(
+      (reference) =>
+        reference.primary && inferredReferenceImageRole(reference) === "style"
+    ) ??
+    references.find(
+      (reference) => inferredReferenceImageRole(reference) === "style"
+    ) ??
+    references.find(
+      (reference) =>
+        reference.primary && inferredReferenceImageRole(reference) !== "logo"
+    ) ??
+    references.find(
+      (reference) => inferredReferenceImageRole(reference) !== "logo"
+    )
+  );
 }
 
 function isAlbumOutput(output: CreativeOutput): boolean {
@@ -191,102 +221,367 @@ function addTextBlock(
   });
 }
 
-function addUgcPreview(
+function resolvedUgcBrief(
+  direction: CreativeDirection | undefined,
+  brandName: string
+): UgcVideoBrief {
+  const beats = direction?.formatBeats ?? [];
+  return (
+    direction?.ugcBrief ?? {
+      product: brandName,
+      duration: "15–30 วินาที",
+      objective: cleanText(direction?.why, "สื่อสารแนวคิดให้เข้าใจและจดจำได้เร็ว"),
+      moodAndTone: cleanText(direction?.visual, "เป็นธรรมชาติ กระชับ และน่าเชื่อถือ"),
+      productionStyle: "Creator-led vertical video ถ่ายแบบเป็นธรรมชาติและตัดต่อกระชับ",
+      referenceDirection: cleanText(
+        direction?.visual,
+        "ภาพแนวตั้งแบบ native social ที่ดูจริงและไม่จัดฉากเกินไป"
+      ),
+      openingScript: cleanText(beats[0], direction?.hook),
+      showcaseScript: cleanText(beats[1], direction?.concept),
+      closingScript: cleanText(beats[2], direction?.cta)
+    }
+  );
+}
+
+function addUgcScriptRow(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
-  direction: CreativeDirection | undefined
+  index: number,
+  label: string,
+  value: string,
+  y: number
 ) {
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 1.58,
-    y: 0.7,
-    w: 3.15,
-    h: 6.12,
-    rectRadius: 0.16,
-    fill: { color: COLORS.ink },
-    line: { color: COLORS.ink }
-  });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 1.7,
-    y: 0.86,
-    w: 2.91,
-    h: 5.8,
-    rectRadius: 0.12,
+  slide.addShape(pptx.ShapeType.ellipse, {
+    x: 5.5,
+    y: y + 0.02,
+    w: 0.32,
+    h: 0.32,
     fill: { color: COLORS.violetSoft },
     line: { color: COLORS.violetSoft }
   });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 2.59,
-    y: 0.76,
-    w: 1.14,
-    h: 0.15,
-    rectRadius: 0.06,
-    fill: { color: "0F1018" },
-    line: { color: "0F1018" }
+  slide.addText(String(index).padStart(2, "0"), {
+    x: 5.53,
+    y: y + 0.105,
+    w: 0.26,
+    h: 0.1,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 6.8,
+    bold: true,
+    color: COLORS.violet,
+    align: "center"
   });
-  slide.addText("CREATOR-LED UGC", {
-    x: 1.95,
-    y: 1.25,
-    w: 2.4,
-    h: 0.25,
+  slide.addText(label, {
+    x: 5.98,
+    y,
+    w: 1.42,
+    h: 0.2,
+    margin: 0,
+    ...localizedTextStyle(label),
+    fontSize: 9.5,
+    bold: true,
+    color: COLORS.violet,
+    fit: "shrink"
+  });
+  const text = clampText(value, 520);
+  slide.addText(text, {
+    x: 7.45,
+    y,
+    w: 4.92,
+    h: 0.58,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize: 9.6,
+    color: COLORS.ink,
+    valign: "top",
+    fit: "shrink",
+    breakLine: false,
+    paraSpaceAfter: 0
+  });
+}
+
+function addUgcPhoneMockup(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  brandName: string,
+  brief: UgcVideoBrief,
+  referenceImage?: string
+) {
+  slide.addText("UGC VISUAL REFERENCE", {
+    x: 0.78,
+    y: 0.68,
+    w: 3.8,
+    h: 0.2,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
     fontSize: 8,
     bold: true,
     color: COLORS.violet,
+    charSpacing: 1.1
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 1.32,
+    y: 1.02,
+    w: 2.75,
+    h: 5.22,
+    rectRadius: 0.22,
+    fill: { color: "161824" },
+    line: { color: "161824", width: 1 }
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 1.45,
+    y: 1.17,
+    w: 2.49,
+    h: 4.92,
+    rectRadius: 0.17,
+    fill: { color: "E9EAF0" },
+    line: { color: "2A2D3D", width: 0.4 }
+  });
+  if (referenceImage) {
+    slide.addImage({
+      data: referenceImage,
+      x: 1.48,
+      y: 1.2,
+      w: 2.43,
+      h: 4.86,
+      sizing: { type: "cover", w: 2.43, h: 4.86 },
+      altText: `${brandName} UGC visual reference in phone mockup`
+    });
+  } else {
+    const referenceText = clampText(brief.referenceDirection, 220);
+    slide.addText("UGC", {
+      x: 1.73,
+      y: 2.0,
+      w: 1.93,
+      h: 0.45,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 25,
+      bold: true,
+      color: COLORS.violet,
+      align: "center"
+    });
+    slide.addText(referenceText, {
+      x: 1.72,
+      y: 2.62,
+      w: 1.95,
+      h: 1.72,
+      margin: 0,
+      ...localizedTextStyle(referenceText),
+      fontSize: 11,
+      color: COLORS.muted,
+      align: "center",
+      valign: "middle",
+      fit: "shrink"
+    });
+  }
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 2.17,
+    y: 1.12,
+    w: 1.05,
+    h: 0.18,
+    rectRadius: 0.08,
+    fill: { color: "161824" },
+    line: { color: "161824" }
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 2.37,
+    y: 5.91,
+    w: 0.65,
+    h: 0.05,
+    rectRadius: 0.02,
+    fill: { color: "FFFFFF", transparency: 15 },
+    line: { color: "FFFFFF", transparency: 100 }
+  });
+  const referenceDirection = clampText(brief.referenceDirection, 150);
+  slide.addText(referenceDirection, {
+    x: 0.82,
+    y: 6.43,
+    w: 3.76,
+    h: 0.36,
+    margin: 0,
+    ...localizedTextStyle(referenceDirection),
+    fontSize: 8.8,
+    italic: true,
+    color: COLORS.muted,
     align: "center",
+    fit: "shrink"
+  });
+}
+
+function addUgcClientSlide(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  direction: CreativeDirection | undefined,
+  brandName: string,
+  slideNumber: number,
+  totalSlides: number,
+  referenceImage?: string
+) {
+  const brief = resolvedUgcBrief(direction, brandName);
+  slide.background = { color: COLORS.canvas };
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 0.45,
+    y: 0.45,
+    w: 4.55,
+    h: 6.6,
+    rectRadius: 0.16,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  addUgcPhoneMockup(pptx, slide, brandName, brief, referenceImage);
+
+  const displayBrandName = brandName.toUpperCase();
+  slide.addText(displayBrandName, {
+    x: 5.5,
+    y: 0.64,
+    w: 3.6,
+    h: 0.22,
+    margin: 0,
+    ...localizedTextStyle(displayBrandName),
+    fontSize: 8,
+    bold: true,
+    color: COLORS.violet,
     charSpacing: 1.2
   });
-  const hook = clampText(direction?.hook, 120);
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 11.1,
+    y: 0.56,
+    w: 1.26,
+    h: 0.38,
+    rectRadius: 0.08,
+    fill: { color: COLORS.lime },
+    line: { color: COLORS.lime }
+  });
+  slide.addText("UGC VIDEO", {
+    x: 11.2,
+    y: 0.67,
+    w: 1.06,
+    h: 0.14,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 7.5,
+    bold: true,
+    color: COLORS.limeInk,
+    align: "center"
+  });
+  const hook = clampText(direction?.hook, 170);
   slide.addText(hook, {
-    x: 1.98,
-    y: 1.8,
-    w: 2.34,
-    h: 1.55,
+    x: 5.5,
+    y: 1.12,
+    w: 6.86,
+    h: 0.78,
     margin: 0,
     ...localizedTextStyle(hook),
-    fontSize: 22,
+    fontSize: 25,
     bold: true,
     color: COLORS.ink,
-    align: "center",
-    valign: "middle",
-    fit: "shrink"
+    valign: "top",
+    fit: "shrink",
+    breakLine: false
   });
-  const beats = (direction?.formatBeats ?? []).slice(0, 3);
-  const beatText = beats.length
-    ? beats.map((beat, index) => `${index + 1}. ${cleanText(beat)}`).join("\n")
-    : clampText(direction?.caption, 170);
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 1.98,
-    y: 4.1,
-    w: 2.34,
-    h: 1.64,
-    rectRadius: 0.1,
-    fill: { color: COLORS.paper, transparency: 8 },
-    line: { color: COLORS.paper, transparency: 100 }
-  });
-  slide.addText(beatText, {
-    x: 2.14,
-    y: 4.28,
-    w: 2.02,
-    h: 1.28,
-    margin: 0,
-    ...localizedTextStyle(beatText),
-    fontSize: 10.5,
-    color: COLORS.ink,
-    breakLine: false,
-    valign: "middle",
-    fit: "shrink"
-  });
-  slide.addText("9:16 concept preview", {
-    x: 1.96,
-    y: 6.06,
-    w: 2.38,
+
+  const projectDetails = `${brief.product}  •  ${brief.duration}`;
+  slide.addText(projectDetails, {
+    x: 5.5,
+    y: 2.03,
+    w: 6.86,
     h: 0.22,
+    margin: 0,
+    ...localizedTextStyle(projectDetails),
+    fontSize: 9.5,
+    bold: true,
+    color: COLORS.violet,
+    fit: "shrink"
+  });
+  slide.addText("OBJECTIVE", {
+    x: 5.5,
+    y: 2.43,
+    w: 1.2,
+    h: 0.16,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 7.5,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1
+  });
+  const objective = clampText(brief.objective, 200);
+  slide.addText(objective, {
+    x: 5.5,
+    y: 2.68,
+    w: 6.86,
+    h: 0.5,
+    margin: 0,
+    ...localizedTextStyle(objective),
+    fontSize: 11,
+    color: COLORS.ink,
+    fit: "shrink",
+    valign: "top"
+  });
+
+  slide.addText("VIDEO STORYLINE", {
+    x: 5.5,
+    y: 3.37,
+    w: 2.1,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+  addUgcScriptRow(pptx, slide, 1, "OPEN / HOOK", brief.openingScript, 3.72);
+  addUgcScriptRow(pptx, slide, 2, "SHOWCASE", brief.showcaseScript, 4.47);
+  addUgcScriptRow(pptx, slide, 3, "END / CTA", brief.closingScript, 5.22);
+
+  slide.addShape(pptx.ShapeType.line, {
+    x: 5.5,
+    y: 6.02,
+    w: 6.86,
+    h: 0,
+    line: { color: COLORS.line, width: 1 }
+  });
+  const production = clampText(
+    `${brief.moodAndTone} • ${brief.productionStyle}`,
+    240
+  );
+  slide.addText(production, {
+    x: 5.5,
+    y: 6.2,
+    w: 6.86,
+    h: 0.36,
+    margin: 0,
+    ...localizedTextStyle(production),
+    fontSize: 8.8,
+    italic: true,
+    color: COLORS.muted,
+    fit: "shrink",
+    valign: "top"
+  });
+  slide.addText("Prepared by Convert Cake", {
+    x: 5.5,
+    y: 6.68,
+    w: 2.5,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted
+  });
+  slide.addText(`${slideNumber} / ${totalSlides}`, {
+    x: 11.75,
+    y: 6.68,
+    w: 0.7,
+    h: 0.18,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
     fontSize: 8,
     color: COLORS.muted,
-    align: "center"
+    align: "right"
   });
 }
 
@@ -350,6 +645,18 @@ function addClientSlide(
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
+  if (isUgcOutput(output)) {
+    addUgcClientSlide(
+      pptx,
+      slide,
+      direction,
+      brandName,
+      slideNumber,
+      totalSlides,
+      imageData[0]
+    );
+    return;
+  }
   slide.background = { color: COLORS.canvas };
 
   slide.addShape(pptx.ShapeType.roundRect, {
@@ -361,9 +668,7 @@ function addClientSlide(
     fill: { color: COLORS.paper },
     line: { color: COLORS.line, width: 1 }
   });
-  if (isUgcOutput(output)) {
-    addUgcPreview(pptx, slide, direction);
-  } else if (isAlbumOutput(output) && imageData.length > 1) {
+  if (isAlbumOutput(output) && imageData.length > 1) {
     addAlbumArtworkPreview(slide, imageData, brandName);
   } else if (imageData[0]) {
     addArtworkPreview(
@@ -426,12 +731,8 @@ function addClientSlide(
   });
   addTextBlock(
     slide,
-    isUgcOutput(output) ? "Script direction" : "Sub-headline",
-    isUgcOutput(output)
-      ? direction?.caption
-      : direction
-        ? directionSubheadline(direction)
-        : undefined,
+    "Sub-headline",
+    direction ? directionSubheadline(direction) : undefined,
     2.95,
     1.25,
     320
@@ -462,7 +763,7 @@ function addClientSlide(
 export async function buildPmApprovedClientSlidesPptx(
   state: Pick<
     WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize"
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
   >,
   resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
@@ -483,7 +784,7 @@ export async function buildPmApprovedClientSlidesPptx(
 export async function buildCreateStageSlidesPptx(
   state: Pick<
     WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize"
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
   >,
   resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
@@ -504,7 +805,7 @@ export async function buildCreateStageSlidesPptx(
 async function buildClientSlidesPptx(
   state: Pick<
     WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize"
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
   >,
   items: readonly ClientSlideItem[],
   resolveImage: ClientSlideImageResolver,
@@ -523,10 +824,21 @@ async function buildClientSlidesPptx(
     headFontFace: SLIDE_FONT_FACE,
     bodyFontFace: SLIDE_FONT_FACE
   };
+  const ugcReference = preferredUgcReference(state.referenceImages);
+  let ugcReferenceData: string | null | undefined;
 
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
-    if (!isUgcOutput(item.output)) {
+    if (isUgcOutput(item.output) && ugcReference) {
+      if (ugcReferenceData === undefined) {
+        try {
+          ugcReferenceData = await resolveImage(ugcReference.url);
+        } catch {
+          ugcReferenceData = null;
+        }
+      }
+      imageData = ugcReferenceData ? [ugcReferenceData] : [];
+    } else if (!isUgcOutput(item.output)) {
       imageData = await Promise.all(
         item.outputs.map((output, panelIndex) => {
           if (!output.assetUrl) {
@@ -555,7 +867,7 @@ async function buildClientSlidesPptx(
 export async function downloadCreateStageSlides(
   state: Pick<
     WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize"
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
   >
 ): Promise<void> {
   const pptx = await buildCreateStageSlidesPptx(state);
@@ -568,7 +880,7 @@ export async function downloadCreateStageSlides(
 export async function downloadPmApprovedClientSlides(
   state: Pick<
     WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize"
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
   >
 ): Promise<void> {
   const pptx = await buildPmApprovedClientSlidesPptx(state);
@@ -576,4 +888,51 @@ export async function downloadPmApprovedClientSlides(
     fileName: `${fileSlug(state.brand?.name ?? "client")}-client-slides.pptx`,
     compression: true
   });
+}
+
+async function pptxBlob(pptx: PptxGenJS): Promise<Blob> {
+  const output = await pptx.write({ outputType: "blob", compression: true });
+  if (!(output instanceof Blob)) {
+    throw new Error("Could not prepare the slide deck for Google Drive.");
+  }
+  return output;
+}
+
+async function openPptxInGoogleSlides(
+  build: () => Promise<PptxGenJS>,
+  name: string
+): Promise<GoogleSlidesImportResult> {
+  const accessToken = await requestGoogleDriveAccessToken(
+    env.googleOAuthClientId ?? ""
+  );
+  const pptx = await build();
+  return uploadPptxToGoogleSlides({
+    blob: await pptxBlob(pptx),
+    name,
+    accessToken
+  });
+}
+
+export async function openCreateStageSlidesInGoogleSlides(
+  state: Pick<
+    WorkflowState,
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
+  >
+): Promise<GoogleSlidesImportResult> {
+  return openPptxInGoogleSlides(
+    () => buildCreateStageSlidesPptx(state),
+    `${fileSlug(state.brand?.name ?? "creative")}-creative-slides`
+  );
+}
+
+export async function openPmApprovedClientSlidesInGoogleSlides(
+  state: Pick<
+    WorkflowState,
+    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
+  >
+): Promise<GoogleSlidesImportResult> {
+  return openPptxInGoogleSlides(
+    () => buildPmApprovedClientSlidesPptx(state),
+    `${fileSlug(state.brand?.name ?? "client")}-client-slides`
+  );
 }

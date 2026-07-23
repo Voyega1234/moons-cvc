@@ -1,12 +1,18 @@
-import type { Brand, BrandLibrary, LibrarySection } from "../../domain/brand";
+import type {
+  Brand,
+  BrandLibrary,
+  LibrarySection,
+  QuestionnaireExtractedField
+} from "../../domain/brand";
 import type { BrandRepository } from "../../ports/brand-repository";
 import { getSupabaseClient } from "../../lib/supabase/client";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database, Json } from "../../lib/supabase/database.types";
 
 type ClientRow = Database["moons"]["Tables"]["clients"]["Row"];
 type LibraryRow = Database["moons"]["Tables"]["brand_library"]["Row"];
 type LearningRow = Database["moons"]["Tables"]["brand_learning"]["Row"];
 type ProductRow = Database["moons"]["Tables"]["brand_products"]["Row"];
+type BrandSourceRow = Database["moons"]["Tables"]["brand_sources"]["Row"];
 
 export class SupabaseBrandRepository implements BrandRepository {
   async list(): Promise<readonly Brand[]> {
@@ -25,7 +31,8 @@ export class SupabaseBrandRepository implements BrandRepository {
     const [
       { data: library, error: libraryError },
       { data: learning, error },
-      { data: products, error: productsError }
+      { data: products, error: productsError },
+      { data: sources, error: sourcesError }
     ] = await Promise.all([
         client
           .schema("moons")
@@ -45,15 +52,29 @@ export class SupabaseBrandRepository implements BrandRepository {
           .select("*")
           .in("client_id", clientIds)
           .eq("is_active", true)
-          .order("sort_order")
+          .order("sort_order"),
+        client
+          .schema("moons")
+          .from("brand_sources")
+          .select("*")
+          .in("client_id", clientIds)
+          .eq("source_type", "manual_input")
+          .order("collected_at", { ascending: false })
       ]);
 
     if (libraryError) throw libraryError;
     if (error) throw error;
     if (productsError) throw productsError;
+    if (sourcesError) throw sourcesError;
 
     return clients.map((brand) =>
-      mapBrand(brand, library ?? [], learning ?? [], products ?? [])
+      mapBrand(
+        brand,
+        library ?? [],
+        learning ?? [],
+        products ?? [],
+        sources ?? []
+      )
     );
   }
 
@@ -73,7 +94,8 @@ export class SupabaseBrandRepository implements BrandRepository {
     const [
       { data: library, error: libraryError },
       { data: learning, error },
-      { data: products, error: productsError }
+      { data: products, error: productsError },
+      { data: sources, error: sourcesError }
     ] = await Promise.all([
         client
           .schema("moons")
@@ -93,14 +115,28 @@ export class SupabaseBrandRepository implements BrandRepository {
           .select("*")
           .eq("client_id", id)
           .eq("is_active", true)
-          .order("sort_order")
+          .order("sort_order"),
+        client
+          .schema("moons")
+          .from("brand_sources")
+          .select("*")
+          .eq("client_id", id)
+          .eq("source_type", "manual_input")
+          .order("collected_at", { ascending: false })
       ]);
 
     if (libraryError) throw libraryError;
     if (error) throw error;
     if (productsError) throw productsError;
+    if (sourcesError) throw sourcesError;
 
-    return mapBrand(brand, library ?? [], learning ?? [], products ?? []);
+    return mapBrand(
+      brand,
+      library ?? [],
+      learning ?? [],
+      products ?? [],
+      sources ?? []
+    );
   }
 }
 
@@ -117,9 +153,14 @@ function mapBrand(
   brand: ClientRow,
   libraryRows: readonly LibraryRow[],
   learningRows: readonly LearningRow[],
-  productRows: readonly ProductRow[]
+  productRows: readonly ProductRow[],
+  sourceRows: readonly BrandSourceRow[]
 ): Brand {
   const library = emptyLibrary();
+  const onboardingQuestionnaire = mapOnboardingQuestionnaire(
+    brand.id,
+    sourceRows
+  );
 
   for (const row of libraryRows) {
     if (row.client_id !== brand.id) continue;
@@ -167,6 +208,72 @@ function mapBrand(
       avoid: learningRows
         .filter((row) => row.client_id === brand.id && row.polarity === "avoid")
         .map((row) => row.note)
-    }
+    },
+    ...(onboardingQuestionnaire ? { onboardingQuestionnaire } : {})
   };
+}
+
+function mapOnboardingQuestionnaire(
+  clientId: string,
+  rows: readonly BrandSourceRow[]
+): Brand["onboardingQuestionnaire"] {
+  for (const row of rows) {
+    if (row.client_id !== clientId || !isJsonRecord(row.raw_payload)) continue;
+    const kind = row.raw_payload.kind;
+    const text = row.raw_payload.text;
+    if (
+      (kind !== "onboarding_questionnaire" &&
+        kind !== "mapping_questionnaire") ||
+      typeof text !== "string" ||
+      !text.trim()
+    ) {
+      continue;
+    }
+
+    const normalizedText = text.trim();
+    const sheetTitle =
+      typeof row.raw_payload.sheetTitle === "string"
+        ? row.raw_payload.sheetTitle.trim()
+        : "";
+    const extractedFields = mapQuestionnaireExtractedFields(
+      row.raw_payload.extractedFields
+    );
+    return {
+      ...(row.source_url ? { sourceUrl: row.source_url } : {}),
+      text: normalizedText,
+      preview: normalizedText.slice(0, 280),
+      facebookUrls: [],
+      ...(sheetTitle ? { sheetTitle } : {}),
+      ...(extractedFields.length ? { extractedFields } : {})
+    };
+  }
+
+  return undefined;
+}
+
+function mapQuestionnaireExtractedFields(
+  value: Json | undefined
+): readonly QuestionnaireExtractedField[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((field) => {
+    if (
+      !isJsonRecord(field) ||
+      typeof field.key !== "string" ||
+      typeof field.label !== "string" ||
+      typeof field.value !== "string"
+    ) {
+      return [];
+    }
+    return [
+      {
+        key: field.key,
+        label: field.label,
+        value: field.value
+      }
+    ];
+  });
+}
+
+function isJsonRecord(value: Json): value is { [key: string]: Json } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

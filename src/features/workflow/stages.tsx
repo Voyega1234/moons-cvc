@@ -24,7 +24,8 @@ import {
   canSelectBrand,
   canStartBrandIngestion,
   type Brand,
-  type LibraryItem
+  type LibraryItem,
+  type OnboardingQuestionnaireSource
 } from "../../domain/brand";
 import {
   brandDocumentTypeLabels,
@@ -66,7 +67,9 @@ import { departmentLabel } from "../../domain/run-collaboration";
 import {
   CLIENT_CATEGORY_MAX_LENGTH,
   validateClientCategory,
-  validateFacebookUrl
+  validateFacebookUrl,
+  validateOnboardingQuestionnaire,
+  validateQuestionnaireGoogleSheetUrl
 } from "../../domain/client-ingestion";
 import {
   regenerateOutputImages,
@@ -107,8 +110,8 @@ import {
 import { presentBrandMemoryText } from "./brand-memory-presentation";
 import {
   createStageClientSlideItems,
-  downloadCreateStageSlides,
-  downloadPmApprovedClientSlides,
+  openCreateStageSlidesInGoogleSlides,
+  openPmApprovedClientSlidesInGoogleSlides,
   pmApprovedClientSlideItems
 } from "./export-client-slides-pptx";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
@@ -575,7 +578,8 @@ function BrandMaterialsSummary({
       (brand?.memory.working.length ?? 0) + (brand?.memory.avoid.length ?? 0),
       "learning"
     ],
-    ["Product list & info", brand?.library.products.length ?? 0, "products"]
+    ["Product list & info", brand?.library.products.length ?? 0, "products"],
+    ["Questionnaire", brand?.onboardingQuestionnaire ? 1 : 0, "questionnaire"]
   ];
   const total = rows.reduce((sum, [, count]) => sum + count, 0);
 
@@ -589,7 +593,9 @@ function BrandMaterialsSummary({
           </small>
         </div>
         <div className="compass-materials-head-actions">
-          <span className="pill blue">{total} files</span>
+          <span className="pill blue">
+            {total} item{total === 1 ? "" : "s"}
+          </span>
           <button
             className="btn small primary"
             type="button"
@@ -603,12 +609,16 @@ function BrandMaterialsSummary({
       <div className="compass-materials-compact-grid">
         {rows.map(([label, count, section], index) => (
           <div
-            className={`compass-material-compact-row ${index === rows.length - 1 ? "wide" : ""}`}
+            className={`compass-material-compact-row ${
+              rows.length % 2 === 1 && index === rows.length - 1 ? "wide" : ""
+            }`}
             key={label}
           >
             <div>
               <b>{label}</b>
-              <span>{count} files</span>
+              <span>
+                {count} item{count === 1 ? "" : "s"}
+              </span>
             </div>
             <button
               className="btn small"
@@ -635,13 +645,16 @@ function MappingBrandSetupPanel({
   onCreated: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
+  const { readMappingQuestionnaire } = useBrands();
   const sourceOptions = brandFacebookSourceOptions(brand);
   const [facebookSource, setFacebookSource] = useState(
     sourceOptions[0]?.url ?? "manual"
   );
   const [manualFacebookUrl, setManualFacebookUrl] = useState("");
-  const [includeQuestionnaire, setIncludeQuestionnaire] = useState(
-    Boolean(brand.mappingQuestionnaire?.text)
+  const [questionnaireUrl, setQuestionnaireUrl] = useState(
+    brand.onboardingQuestionnaire?.sourceUrl ??
+      brand.mappingClientPortalUrl ??
+      ""
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -654,18 +667,30 @@ function MappingBrandSetupPanel({
       setError(urlError);
       return;
     }
+    const questionnaireUrlError =
+      validateQuestionnaireGoogleSheetUrl(questionnaireUrl);
+    if (questionnaireUrlError) {
+      setError(questionnaireUrlError);
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
     try {
+      const questionnaire = await importQuestionnaireFromGoogleSheet(
+        questionnaireUrl,
+        readMappingQuestionnaire
+      );
       await repository.createDraftClient({
         name: brand.name,
         facebookUrl: facebookUrl.trim(),
-        questionnaire: selectedQuestionnaire(
-          brand,
-          includeQuestionnaire
-        )
+        questionnaire: {
+          text: questionnaire.text,
+          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+          sheetTitle: questionnaire.sheetTitle,
+          extractedFields: questionnaire.extractedFields
+        }
       });
       await onCreated(brand.name);
     } catch (error) {
@@ -693,11 +718,11 @@ function MappingBrandSetupPanel({
           sourceOptions={sourceOptions}
           facebookSource={facebookSource}
           manualFacebookUrl={manualFacebookUrl}
-          includeQuestionnaire={includeQuestionnaire}
+          questionnaireUrl={questionnaireUrl}
           disabled={saving}
           onFacebookSourceChange={setFacebookSource}
           onManualFacebookUrlChange={setManualFacebookUrl}
-          onIncludeQuestionnaireChange={setIncludeQuestionnaire}
+          onQuestionnaireUrlChange={setQuestionnaireUrl}
         />
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="client-intake-actions">
@@ -733,6 +758,7 @@ function ExistingBrandSetupPanel({
   onQueued: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
+  const { readMappingQuestionnaire } = useBrands();
   const sourceOptions = brandFacebookSourceOptions(brand);
   const [facebookSource, setFacebookSource] = useState(
     sourceOptions[0]?.url ?? "manual"
@@ -740,8 +766,10 @@ function ExistingBrandSetupPanel({
   const [manualFacebookUrl, setManualFacebookUrl] = useState(
     sourceOptions.length ? "" : (brand.facebookUrl ?? "")
   );
-  const [includeQuestionnaire, setIncludeQuestionnaire] = useState(
-    Boolean(brand.mappingQuestionnaire?.text)
+  const [questionnaireUrl, setQuestionnaireUrl] = useState(
+    brand.onboardingQuestionnaire?.sourceUrl ??
+      brand.mappingClientPortalUrl ??
+      ""
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -754,18 +782,30 @@ function ExistingBrandSetupPanel({
       setError(urlError);
       return;
     }
+    const questionnaireUrlError =
+      validateQuestionnaireGoogleSheetUrl(questionnaireUrl);
+    if (questionnaireUrlError) {
+      setError(questionnaireUrlError);
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
     try {
+      const questionnaire = await importQuestionnaireFromGoogleSheet(
+        questionnaireUrl,
+        readMappingQuestionnaire
+      );
       await repository.queueExistingClient({
         clientId: brand.id,
         facebookUrl: facebookUrl.trim(),
-        questionnaire: selectedQuestionnaire(
-          brand,
-          includeQuestionnaire
-        )
+        questionnaire: {
+          text: questionnaire.text,
+          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+          sheetTitle: questionnaire.sheetTitle,
+          extractedFields: questionnaire.extractedFields
+        }
       });
       await onQueued(brand.name);
     } catch (error) {
@@ -789,11 +829,11 @@ function ExistingBrandSetupPanel({
           sourceOptions={sourceOptions}
           facebookSource={facebookSource}
           manualFacebookUrl={manualFacebookUrl}
-          includeQuestionnaire={includeQuestionnaire}
+          questionnaireUrl={questionnaireUrl}
           disabled={saving}
           onFacebookSourceChange={setFacebookSource}
           onManualFacebookUrlChange={setManualFacebookUrl}
-          onIncludeQuestionnaireChange={setIncludeQuestionnaire}
+          onQuestionnaireUrlChange={setQuestionnaireUrl}
         />
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="client-intake-actions">
@@ -836,6 +876,29 @@ export function repositoryErrorMessage(
   return fallback;
 }
 
+async function importQuestionnaireFromGoogleSheet(
+  sheetUrl: string,
+  readQuestionnaire: (
+    sheetUrl: string
+  ) => Promise<OnboardingQuestionnaireSource | null>
+): Promise<OnboardingQuestionnaireSource> {
+  const urlError = validateQuestionnaireGoogleSheetUrl(sheetUrl);
+  if (urlError) throw new Error(urlError);
+
+  const questionnaire = await readQuestionnaire(sheetUrl.trim());
+  if (!questionnaire) {
+    throw new Error(
+      'The "1. Questionnaire" tab is empty or could not be read.'
+    );
+  }
+  const questionnaireError = validateOnboardingQuestionnaire(
+    questionnaire.text
+  );
+  if (questionnaireError) throw new Error(questionnaireError);
+
+  return questionnaire;
+}
+
 interface FacebookSourceOption {
   url: string;
   label: string;
@@ -846,26 +909,34 @@ function BrandSetupSources({
   sourceOptions,
   facebookSource,
   manualFacebookUrl,
-  includeQuestionnaire,
+  questionnaireUrl,
   disabled,
   onFacebookSourceChange,
   onManualFacebookUrlChange,
-  onIncludeQuestionnaireChange
+  onQuestionnaireUrlChange
 }: {
   brand: Brand;
   sourceOptions: readonly FacebookSourceOption[];
   facebookSource: string;
   manualFacebookUrl: string;
-  includeQuestionnaire: boolean;
+  questionnaireUrl: string;
   disabled: boolean;
   onFacebookSourceChange: (value: string) => void;
   onManualFacebookUrlChange: (value: string) => void;
-  onIncludeQuestionnaireChange: (value: boolean) => void;
+  onQuestionnaireUrlChange: (value: string) => void;
 }) {
-  const questionnaire = brand.mappingQuestionnaire;
-
   return (
     <>
+      <GoogleSheetExtractionSummary
+        brand={
+          brand.source === "mapping" ||
+          brand.mappingStatus ||
+          brand.serviceStatus ||
+          brand.mappingClientPortalUrl
+            ? brand
+            : undefined
+        }
+      />
       <fieldset className="client-source-picker">
         <legend>Facebook page</legend>
         <p>
@@ -925,31 +996,11 @@ function BrandSetupSources({
         ) : null}
       </fieldset>
 
-      {questionnaire?.text ? (
-        <section className="client-questionnaire-source">
-          <label>
-            <input
-              type="checkbox"
-              checked={includeQuestionnaire}
-              disabled={disabled}
-              onChange={(event) =>
-                onIncludeQuestionnaireChange(event.target.checked)
-              }
-            />
-            <span>
-              <b>Use Questionnaire as Brand Kit evidence</b>
-              <small>
-                First-party brand details and channel information will guide
-                Brand Memory.
-              </small>
-            </span>
-          </label>
-          <details>
-            <summary>Preview Questionnaire evidence</summary>
-            <p>{questionnaire.preview}</p>
-          </details>
-        </section>
-      ) : null}
+      <OnboardingQuestionnaireField
+        value={questionnaireUrl}
+        disabled={disabled}
+        onChange={onQuestionnaireUrlChange}
+      />
     </>
   );
 }
@@ -957,32 +1008,106 @@ function BrandSetupSources({
 function brandFacebookSourceOptions(
   brand: Brand
 ): readonly FacebookSourceOption[] {
-  const questionnaireUrls = brand.mappingQuestionnaire?.facebookUrls ?? [];
-  const urls = [
-    ...questionnaireUrls,
-    ...(brand.facebookUrl ? [brand.facebookUrl] : [])
-  ].filter((url, index, values) => values.indexOf(url) === index);
+  const urls = brand.facebookUrl ? [brand.facebookUrl] : [];
 
   return urls.map((url) => ({
     url,
-    label: questionnaireUrls.includes(url)
-      ? "Found in Questionnaire"
-      : "Current Compass page"
+    label: "Current Compass page"
   }));
 }
 
-function selectedQuestionnaire(
-  brand: Brand,
-  include: boolean
-): { sourceUrl?: string; text: string } | undefined {
-  const questionnaire = brand.mappingQuestionnaire;
-  if (!include || !questionnaire?.text) return undefined;
-  return {
-    ...(questionnaire.sourceUrl
-      ? { sourceUrl: questionnaire.sourceUrl }
-      : {}),
-    text: questionnaire.text
-  };
+function GoogleSheetExtractionSummary({
+  brand,
+  questionnaire
+}: {
+  brand?: Brand;
+  questionnaire?: OnboardingQuestionnaireSource;
+}) {
+  const questionnaireSource =
+    questionnaire ?? brand?.onboardingQuestionnaire;
+  const questionnaireFields = questionnaireSource?.extractedFields;
+  const mappingValues = brand
+    ? [
+        ["Client name", brand.name],
+        ["Account status", brand.mappingStatus ?? "Not provided"],
+        ["Service status", brand.serviceStatus ?? "Not provided"],
+        [
+          "Client Portal URL",
+          brand.mappingClientPortalUrl ?? "Not provided"
+        ]
+      ]
+    : null;
+
+  return (
+    <section className="client-sheet-extraction">
+      <div>
+        <b>Google Sheet extraction</b>
+        <small>
+          {questionnaireFields?.length
+            ? `Extracted ${questionnaireFields.length} answered fields from the read-only ${questionnaireSource?.sheetTitle ?? "1. Questionnaire"} tab.`
+            : "Compass reads only the tab named 1. Questionnaire and extracts answered fields from its {{field_name}} placeholders."}
+        </small>
+      </div>
+      {questionnaireFields?.length ? (
+        <dl className="questionnaire-extracted-values">
+          {questionnaireFields.map((field) => (
+            <div key={field.key}>
+              <dt>
+                {field.label}
+                <small>{field.key}</small>
+              </dt>
+              <dd>{field.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : mappingValues ? (
+        <dl>
+          {mappingValues.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <ul>
+          <li>Questionnaire answers</li>
+          <li>Tab: 1. Questionnaire (read-only)</li>
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function OnboardingQuestionnaireField({
+  value,
+  disabled,
+  onChange
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="client-onboarding-questionnaire">
+      <label>
+        <span>Questionnaire Google Sheet URL required</span>
+        <input
+          aria-label="Questionnaire Google Sheet URL"
+          type="url"
+          value={value}
+          disabled={disabled}
+          required
+          placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=..."
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <small>
+          Compass uses read-only access and imports the 1. Questionnaire tab as
+          onboarding context. It is not the current campaign brief.
+        </small>
+      </label>
+    </div>
+  );
 }
 
 function AddClientPanel({
@@ -995,9 +1120,11 @@ function AddClientPanel({
   onCreated: (brandName: string) => Promise<void>;
 }) {
   const repository = useClientIntakeRepository();
+  const { readMappingQuestionnaire } = useBrands();
   const [name, setName] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
   const [category, setCategory] = useState("");
+  const [questionnaireUrl, setQuestionnaireUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1019,20 +1146,37 @@ function AddClientPanel({
       setError(categoryError);
       return;
     }
+    const questionnaireUrlError =
+      validateQuestionnaireGoogleSheetUrl(questionnaireUrl);
+    if (questionnaireUrlError) {
+      setError(questionnaireUrlError);
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
     try {
+      const questionnaire = await importQuestionnaireFromGoogleSheet(
+        questionnaireUrl,
+        readMappingQuestionnaire
+      );
       const result = await repository.createDraftClient({
         name: trimmedName,
         facebookUrl: facebookUrl.trim(),
+        questionnaire: {
+          text: questionnaire.text,
+          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+          sheetTitle: questionnaire.sheetTitle,
+          extractedFields: questionnaire.extractedFields
+        },
         ...(category.trim() ? { category: category.trim() } : {})
       });
       await onCreated(result.brand.name);
       setName("");
       setFacebookUrl("");
       setCategory("");
+      setQuestionnaireUrl("");
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Could not create client."
@@ -1046,7 +1190,9 @@ function AddClientPanel({
     <section className="client-intake-card">
       <button className="client-intake-toggle" type="button" onClick={onToggle}>
         <span>{open ? "Close add client" : "Add new client"}</span>
-        <small>Requires Facebook URL. Backend harness will ingest sources.</small>
+        <small>
+          Requires Facebook and Questionnaire Google Sheet URLs.
+        </small>
       </button>
       {open ? (
         <div className="client-intake-form">
@@ -1078,6 +1224,11 @@ function AddClientPanel({
               onChange={(event) => setCategory(event.target.value)}
             />
           </label>
+          <OnboardingQuestionnaireField
+            value={questionnaireUrl}
+            disabled={saving}
+            onChange={setQuestionnaireUrl}
+          />
           {error ? <p className="repository-message error">{error}</p> : null}
           <button
             className="btn secondary"
@@ -1157,7 +1308,8 @@ type BrandProfileSection =
   | "docs"
   | "refs"
   | "past"
-  | "learning";
+  | "learning"
+  | "questionnaire";
 
 const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["brand", "Brand kit", "Rules, voice, CI, claim guardrails"],
@@ -1165,7 +1317,12 @@ const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["docs", "Guideline", "Editable guideline text, files, briefs, and factsheets"],
   ["refs", "References", "Visual inspiration, avoid, competitors"],
   ["past", "Past work", "Delivered runs and approved learnings"],
-  ["learning", "Brand learning", "What's working and what to avoid"]
+  ["learning", "Brand learning", "What's working and what to avoid"],
+  [
+    "questionnaire",
+    "Questionnaire",
+    "Onboarding-only source context used by Brand Memory and Hook Agent"
+  ]
 ];
 
 type BrandSnapshotSection = "brand" | "products" | "learning";
@@ -1637,7 +1794,8 @@ function BrandLibraryModal({
     docs: brand.library.docs.length,
     refs: brand.library.refs.length,
     past: 0,
-    learning: brand.memory.working.length + brand.memory.avoid.length
+    learning: brand.memory.working.length + brand.memory.avoid.length,
+    questionnaire: brand.onboardingQuestionnaire ? 1 : 0
   };
   const activeSection =
     brandProfileSections.find(([id]) => id === section) ?? brandProfileSections[0];
@@ -1776,7 +1934,173 @@ function BrandProfileSectionContent({
         <PastWorkPreview state={state} clientId={brand.id} />
       ) : null}
       {section === "learning" ? <BrandLearning state={state} /> : null}
+      {section === "questionnaire" ? (
+        <OnboardingQuestionnaireMemory
+          clientId={brand.id}
+          initialQuestionnaire={brand.onboardingQuestionnaire}
+          onSaved={(questionnaire) =>
+            dispatch({
+              type: "sync-onboarding-questionnaire",
+              questionnaire
+            })
+          }
+        />
+      ) : null}
     </div>
+  );
+}
+
+function OnboardingQuestionnaireMemory({
+  clientId,
+  initialQuestionnaire,
+  onSaved
+}: {
+  clientId: string;
+  initialQuestionnaire: OnboardingQuestionnaireSource | undefined;
+  onSaved: (questionnaire: OnboardingQuestionnaireSource) => void;
+}) {
+  const repository = useBrandMemoryRepository();
+  const { readMappingQuestionnaire } = useBrands();
+  const [questionnaire, setQuestionnaire] = useState(initialQuestionnaire);
+  const [sheetUrl, setSheetUrl] = useState(
+    initialQuestionnaire?.sourceUrl ?? ""
+  );
+  const [editing, setEditing] = useState(!initialQuestionnaire);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setQuestionnaire(initialQuestionnaire);
+    setSheetUrl(initialQuestionnaire?.sourceUrl ?? "");
+    setEditing(!initialQuestionnaire);
+  }, [clientId, initialQuestionnaire]);
+
+  async function saveQuestionnaire(): Promise<void> {
+    const urlError = validateQuestionnaireGoogleSheetUrl(sheetUrl);
+    if (urlError) {
+      setError(urlError);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const imported = await importQuestionnaireFromGoogleSheet(
+        sheetUrl,
+        readMappingQuestionnaire
+      );
+      const saved = await repository.saveOnboardingQuestionnaire({
+        clientId,
+        text: imported.text,
+        sourceUrl: imported.sourceUrl ?? sheetUrl.trim(),
+        sheetTitle: imported.sheetTitle,
+        extractedFields: imported.extractedFields
+      });
+      setQuestionnaire(saved);
+      setSheetUrl(saved.sourceUrl ?? sheetUrl.trim());
+      setEditing(false);
+      onSaved(saved);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save the onboarding questionnaire."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEditing(): void {
+    setSheetUrl(questionnaire?.sourceUrl ?? "");
+    setError(null);
+    setEditing(!questionnaire);
+  }
+
+  return (
+    <section className="memory-editor questionnaire-memory">
+      <header>
+        <div>
+          <h4>Onboarding questionnaire</h4>
+          <p>
+            Onboarding-only historical context for Brand Memory and Hook Agent.
+            This is not the brief for the current campaign.
+          </p>
+        </div>
+        {questionnaire && !editing ? (
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => setEditing(true)}
+          >
+            Edit questionnaire
+          </button>
+        ) : null}
+      </header>
+
+      {error ? (
+        <p className="memory-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {editing ? (
+        <div className="memory-form questionnaire-memory-form">
+          <OnboardingQuestionnaireField
+            value={sheetUrl}
+            disabled={saving}
+            onChange={setSheetUrl}
+          />
+          <div className="memory-form-actions">
+            {questionnaire ? (
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={saving}
+                onClick={cancelEditing}
+              >
+                Cancel
+              </button>
+            ) : null}
+            <button
+              className="btn primary"
+              type="button"
+              disabled={saving || !sheetUrl.trim()}
+              onClick={() => void saveQuestionnaire()}
+            >
+              {saving ? "Importing…" : "Import questionnaire"}
+            </button>
+          </div>
+        </div>
+      ) : questionnaire ? (
+        <article className="memory-item questionnaire-memory-item">
+          {questionnaire.extractedFields?.length ? (
+            <GoogleSheetExtractionSummary questionnaire={questionnaire} />
+          ) : (
+            <>
+              <b>Imported questionnaire</b>
+              <p className="memory-item-desc">{questionnaire.text}</p>
+            </>
+          )}
+          {questionnaire.sourceUrl ? (
+            <a
+              className="memory-citation"
+              href={questionnaire.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open questionnaire Google Sheet
+            </a>
+          ) : null}
+          <div className="memory-item-actions">
+            <span>Used in Hook Agent context</span>
+            <button type="button" onClick={() => setEditing(true)}>
+              Edit
+            </button>
+          </div>
+        </article>
+      ) : null}
+    </section>
   );
 }
 
@@ -5692,8 +6016,9 @@ export function StudioStage({
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [sendingToQc, setSendingToQc] = useState(false);
   const [sendToQcError, setSendToQcError] = useState<string | null>(null);
-  const [slidesExporting, setSlidesExporting] = useState(false);
+  const [slidesImporting, setSlidesImporting] = useState(false);
   const [slidesError, setSlidesError] = useState<string | null>(null);
+  const [googleSlidesUrl, setGoogleSlidesUrl] = useState<string | null>(null);
   const backAction: WorkflowAction = { type: "set-stage", stage: "directions" };
   const runQaBlocked = workflowActionBlockReason(state, {
     type: "run-qa",
@@ -5730,19 +6055,22 @@ export function StudioStage({
     regenerateAllArtwork();
   };
 
-  const handleDownloadSlides = async () => {
-    setSlidesExporting(true);
+  const handleOpenGoogleSlides = async () => {
+    setSlidesImporting(true);
     setSlidesError(null);
+    setGoogleSlidesUrl(null);
     try {
-      await downloadCreateStageSlides(state);
+      const result = await openCreateStageSlidesInGoogleSlides(state);
+      setGoogleSlidesUrl(result.url);
+      window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (caught) {
       setSlidesError(
         caught instanceof Error
           ? caught.message
-          : "Could not create the slides. Please try again."
+          : "Could not import the deck to Google Slides. Please try again."
       );
     } finally {
-      setSlidesExporting(false);
+      setSlidesImporting(false);
     }
   };
 
@@ -5813,20 +6141,20 @@ export function StudioStage({
             type="button"
             disabled={
               !slideCount ||
-              slidesExporting ||
+              slidesImporting ||
               regeneratingAllArtwork ||
               checking ||
               sendingToQc
             }
             title={
               slideCount
-                ? `Download ${slideCount} creative slide${slideCount === 1 ? "" : "s"}`
-                : "Generate artwork before downloading slides"
+                ? `Create ${slideCount} creative slide${slideCount === 1 ? "" : "s"} in Google Slides`
+                : "Generate artwork before creating Google Slides"
             }
-            onClick={() => void handleDownloadSlides()}
+            onClick={() => void handleOpenGoogleSlides()}
           >
-            {slidesExporting ? <Spinner /> : null}
-            {slidesExporting ? "Creating slides…" : "Download slides"}
+            {slidesImporting ? <Spinner /> : null}
+            {slidesImporting ? "Importing to Google…" : "Open in Google Slides"}
           </button>
           <button
             className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
@@ -5889,6 +6217,14 @@ export function StudioStage({
         ) : null}
         {slidesError ? (
           <p className="repository-message error">{slidesError}</p>
+        ) : null}
+        {googleSlidesUrl ? (
+          <p className="repository-message success">
+            Google Slides is ready. {" "}
+            <a href={googleSlidesUrl} target="_blank" rel="noreferrer">
+              Open the presentation
+            </a>
+          </p>
         ) : null}
         <OutputGrid state={state} dispatch={dispatch} canEdit={canEdit} />
         {state.qaComplete ? (
@@ -7004,8 +7340,11 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
       ? "projectManager"
       : "graphicDesign"
   );
-  const [clientSlidesExporting, setClientSlidesExporting] = useState(false);
+  const [clientSlidesImporting, setClientSlidesImporting] = useState(false);
   const [clientSlidesError, setClientSlidesError] = useState<string | null>(null);
+  const [clientGoogleSlidesUrl, setClientGoogleSlidesUrl] = useState<string | null>(
+    null
+  );
   const reviewGroups = reviewCreativeGroups(state.outputs);
   const totalChecks = reviewGroups.reduce(
     (total, outputs) =>
@@ -7041,19 +7380,22 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
   };
   const approveRoleBlocked = workflowActionBlockReason(state, approveRoleAction);
 
-  async function downloadClientSlides() {
-    setClientSlidesExporting(true);
+  async function openClientSlidesInGoogle() {
+    setClientSlidesImporting(true);
     setClientSlidesError(null);
+    setClientGoogleSlidesUrl(null);
     try {
-      await downloadPmApprovedClientSlides(state);
+      const result = await openPmApprovedClientSlidesInGoogleSlides(state);
+      setClientGoogleSlidesUrl(result.url);
+      window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (error) {
       setClientSlidesError(
         error instanceof Error
           ? error.message
-          : "Could not create the client slides. Please try again."
+          : "Could not import the client deck to Google Slides. Please try again."
       );
     } finally {
-      setClientSlidesExporting(false);
+      setClientSlidesImporting(false);
     }
   }
 
@@ -7240,22 +7582,34 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                   {activeRole === "projectManager" ? (
                     <div className="compass-qc-role-guide-actions">
                       <span className="compass-qc-pm-download-note">
-                        One .pptx with every PM-approved asset, including UGC.
+                        One Google Slides deck with every PM-approved asset, including UGC.
                       </span>
                       <button
                         className="btn primary compass-qc-client-slides-button"
                         type="button"
-                        disabled={!readyAssets || clientSlidesExporting}
-                        onClick={() => void downloadClientSlides()}
+                        disabled={
+                          !readyAssets || clientSlidesImporting
+                        }
+                        onClick={() => void openClientSlidesInGoogle()}
                       >
-                        {clientSlidesExporting
-                          ? "Creating slides…"
-                          : `Download client slides · ${readyAssets}`}
+                        {clientSlidesImporting
+                          ? "Importing to Google…"
+                          : `Open in Google Slides · ${readyAssets}`}
                       </button>
                       {clientSlidesError ? (
                         <span className="compass-qc-client-slides-error" role="alert">
                           {clientSlidesError}
                         </span>
+                      ) : null}
+                      {clientGoogleSlidesUrl ? (
+                        <a
+                          className="compass-qc-client-slides-link"
+                          href={clientGoogleSlidesUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open presentation again
+                        </a>
                       ) : null}
                     </div>
                   ) : (

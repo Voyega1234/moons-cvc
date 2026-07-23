@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "../../config/env";
-import type { LibraryItem } from "../../domain/brand";
+import type {
+  LibraryItem,
+  OnboardingQuestionnaireSource
+} from "../../domain/brand";
+import { validateOnboardingQuestionnaire } from "../../domain/client-ingestion";
 import {
   isBrandDocumentType,
   type BrandDocument,
@@ -9,7 +13,7 @@ import {
   type BrandProduct
 } from "../../domain/brand-memory";
 import { getSupabaseClient } from "../../lib/supabase/client";
-import type { Database } from "../../lib/supabase/database.types";
+import type { Database, Json } from "../../lib/supabase/database.types";
 import type {
   AnalyzeGuidelineInput,
   BrandMemoryRepository,
@@ -19,6 +23,7 @@ import type {
   SaveBrandProductInput,
   SaveBrandRuleInput,
   SaveGuidelineInput,
+  SaveOnboardingQuestionnaireInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
   UpdateGuidelineInput,
@@ -509,6 +514,56 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
     return mapLibraryItem(data);
+  }
+
+  async saveOnboardingQuestionnaire({
+    clientId,
+    text,
+    sourceUrl,
+    sheetTitle,
+    extractedFields
+  }: SaveOnboardingQuestionnaireInput): Promise<OnboardingQuestionnaireSource> {
+    const validationError = validateOnboardingQuestionnaire(text);
+    if (validationError) throw new Error(validationError);
+
+    const normalizedText = text.trim();
+    const normalizedSourceUrl = sourceUrl?.trim();
+    const client = getSupabaseClient();
+    const { error } = await client
+      .schema("moons")
+      .from("brand_sources")
+      .insert({
+        client_id: clientId,
+        job_id: null,
+        source_type: "manual_input",
+        source_url: normalizedSourceUrl || null,
+        status: "succeeded",
+        raw_payload: {
+          kind: "onboarding_questionnaire",
+          text: normalizedText,
+          ...(sheetTitle?.trim() ? { sheetTitle: sheetTitle.trim() } : {}),
+          ...(extractedFields?.length
+            ? {
+                extractedFields: extractedFields.map((field) => ({
+                  key: field.key,
+                  label: field.label,
+                  value: field.value
+                }))
+              }
+            : {})
+        } satisfies Json
+      });
+
+    if (error) throw error;
+
+    return {
+      ...(normalizedSourceUrl ? { sourceUrl: normalizedSourceUrl } : {}),
+      text: normalizedText,
+      preview: normalizedText.slice(0, 280),
+      facebookUrls: [],
+      ...(sheetTitle?.trim() ? { sheetTitle: sheetTitle.trim() } : {}),
+      ...(extractedFields?.length ? { extractedFields } : {})
+    };
   }
 
   async analyzeGuideline(input: AnalyzeGuidelineInput): Promise<GuidelineAnalysisResult> {

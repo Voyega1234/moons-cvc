@@ -368,6 +368,97 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
   });
 
+  it("adds an onboarding questionnaire later from Brand materials", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const saveQuestionnaire = vi.spyOn(
+      memoryRepository,
+      "saveOnboardingQuestionnaire"
+    );
+    const questionnaireUrl =
+      "https://docs.google.com/spreadsheets/d/questionnaire-sheet/edit?gid=577277204#gid=577277204";
+    const questionnaireText =
+      "Question\tAnswer\nPrimary audience\tUrban professionals";
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{
+          list: async () => [],
+          readQuestionnaire: async (sourceUrl) => ({
+            sourceUrl,
+            text: questionnaireText,
+            preview: questionnaireText,
+            facebookUrls: []
+          })
+        }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+    const questionnaireRow = stage
+      .getByText("Questionnaire", { exact: true })
+      .closest(".compass-material-compact-row");
+    if (!(questionnaireRow instanceof HTMLElement)) {
+      throw new Error("Questionnaire material row is missing.");
+    }
+
+    await user.click(
+      within(questionnaireRow).getByRole("button", { name: "Add" })
+    );
+    const dialog = stage.getByRole("dialog", {
+      name: "Manage brand materials"
+    });
+    expect(
+      within(dialog).getByText(
+        "Onboarding-only historical context for Brand Memory and Hook Agent. This is not the brief for the current campaign."
+      )
+    ).toBeTruthy();
+
+    await user.type(
+      within(dialog).getByRole("textbox", {
+        name: "Questionnaire Google Sheet URL"
+      }),
+      questionnaireUrl
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Import questionnaire" })
+    );
+
+    await waitFor(() =>
+      expect(saveQuestionnaire).toHaveBeenCalledWith({
+        clientId: state.brand?.id,
+        text: questionnaireText,
+        sourceUrl: questionnaireUrl
+      })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-onboarding-questionnaire",
+      questionnaire: {
+        sourceUrl: questionnaireUrl,
+        text: questionnaireText,
+        preview: questionnaireText,
+        facebookUrls: []
+      }
+    });
+    expect(
+      within(dialog).getByText("Used in Hook Agent context")
+    ).toBeTruthy();
+  });
+
   it("adds a guideline from the Memory header through file or pasted text", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -594,7 +685,7 @@ describe("redesigned workflow stages", () => {
     );
   });
 
-  it("preselects a Questionnaire Facebook page and includes its Brand Kit evidence", async () => {
+  it('loads onboarding context from the read-only "1. Questionnaire" tab', async () => {
     const user = userEvent.setup();
     const state = {
       ...createInitialWorkflowState({
@@ -609,14 +700,10 @@ describe("redesigned workflow stages", () => {
       intakeRepository,
       "createDraftClient"
     );
-    const questionnaire = {
-      sourceUrl: "https://docs.google.com/client-portal",
-      text: "Brand Name: Centre Point Hotels Group. Website: www.centrepoint.com",
-      preview: "Brand Name: Centre Point Hotels Group.",
-      facebookUrls: [
-        "https://www.facebook.com/centrepointhotels"
-      ]
-    };
+    const questionnaire =
+      "Brand Name: Centre Point Hotels Group. Website: www.centrepoint.com";
+    const questionnaireUrl =
+      "https://docs.google.com/spreadsheets/d/client-portal/edit?gid=577277204#gid=577277204";
     const view = render(
       <BrandProvider
         repository={brandRepository}
@@ -626,9 +713,15 @@ describe("redesigned workflow stages", () => {
               clientId: "Centre Point Group",
               status: "Active",
               serviceStatus: "Active",
-              questionnaire
+              clientPortalUrl: questionnaireUrl
             }
-          ]
+          ],
+          readQuestionnaire: async (sourceUrl) => ({
+            sourceUrl,
+            text: questionnaire,
+            preview: questionnaire,
+            facebookUrls: []
+          })
         }}
       >
         <ClientIntakeProvider repository={intakeRepository}>
@@ -641,20 +734,16 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     await user.click(await stage.findByRole("button", { name: "Add to Compass" }));
-    expect(
-      (
-        stage.getByRole("radio", {
-        name: /Found in Questionnaire.*centrepointhotels/i
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(true);
-    expect(
-      (
-        stage.getByRole("checkbox", {
-          name: /Use Questionnaire as Brand Kit evidence/i
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(true);
+    expect(stage.getByText("Google Sheet extraction")).toBeTruthy();
+    expect(stage.getByText(questionnaireUrl)).toBeTruthy();
+    const questionnaireField = stage.getByLabelText(
+      "Questionnaire Google Sheet URL"
+    ) as HTMLInputElement;
+    expect(questionnaireField.value).toBe(questionnaireUrl);
+    await user.type(
+      stage.getByLabelText("Facebook URL"),
+      "https://www.facebook.com/centrepointhotels"
+    );
 
     await user.click(stage.getByRole("button", { name: "Add and analyze" }));
 
@@ -663,8 +752,8 @@ describe("redesigned workflow stages", () => {
         name: "Centre Point Group",
         facebookUrl: "https://www.facebook.com/centrepointhotels",
         questionnaire: {
-          sourceUrl: "https://docs.google.com/client-portal",
-          text: questionnaire.text
+          text: questionnaire,
+          sourceUrl: questionnaireUrl
         }
       })
     );
@@ -710,6 +799,8 @@ describe("redesigned workflow stages", () => {
           resolveQueue = resolve;
         })
     );
+    const questionnaireUrl =
+      "https://docs.google.com/spreadsheets/d/draft-brand-questionnaire/edit?gid=577277204";
     const intakeRepository = {
       createDraftClient: vi.fn(),
       queueExistingClient
@@ -724,7 +815,15 @@ describe("redesigned workflow stages", () => {
     const view = render(
       <BrandProvider
         repository={brandRepository}
-        mappingRepository={{ list: async () => [] }}
+        mappingRepository={{
+          list: async () => [],
+          readQuestionnaire: async (sourceUrl) => ({
+            sourceUrl,
+            text: "Draft Brand onboarding context.",
+            preview: "Draft Brand onboarding context.",
+            facebookUrls: []
+          })
+        }}
       >
         <ClientIntakeProvider repository={intakeRepository}>
           <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
@@ -736,6 +835,10 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     await user.click(await stage.findByRole("button", { name: "Set up brand" }));
+    await user.type(
+      stage.getByLabelText("Questionnaire Google Sheet URL"),
+      questionnaireUrl
+    );
     await user.click(stage.getByRole("button", { name: "Analyze brand" }));
 
     expect(
@@ -746,7 +849,10 @@ describe("redesigned workflow stages", () => {
     expect(queueExistingClient).toHaveBeenCalledWith({
       clientId: draftBrand.id,
       facebookUrl: draftBrand.facebookUrl,
-      questionnaire: undefined
+      questionnaire: {
+        text: "Draft Brand onboarding context.",
+        sourceUrl: questionnaireUrl
+      }
     });
 
     resolveQueue?.({ jobId: "job-draft-brand" });
@@ -761,6 +867,8 @@ describe("redesigned workflow stages", () => {
   it("confirms a manually added client without exposing backend job details", async () => {
     const user = userEvent.setup();
     const brandRepository = new MockBrandRepository();
+    const questionnaireUrl =
+      "https://docs.google.com/spreadsheets/d/new-client-questionnaire/edit?gid=577277204";
     const state = {
       ...createInitialWorkflowState({
         id: "run-manual-brand-intake",
@@ -771,7 +879,15 @@ describe("redesigned workflow stages", () => {
     const view = render(
       <BrandProvider
         repository={brandRepository}
-        mappingRepository={{ list: async () => [] }}
+        mappingRepository={{
+          list: async () => [],
+          readQuestionnaire: async (sourceUrl) => ({
+            sourceUrl,
+            text: "New Client onboarding context.",
+            preview: "New Client onboarding context.",
+            facebookUrls: []
+          })
+        }}
       >
         <ClientIntakeProvider
           repository={new MockClientIntakeRepository(brandRepository)}
@@ -791,6 +907,10 @@ describe("redesigned workflow stages", () => {
     await user.type(
       stage.getByLabelText("Facebook URL"),
       "https://www.facebook.com/newclient"
+    );
+    await user.type(
+      stage.getByLabelText("Questionnaire Google Sheet URL"),
+      questionnaireUrl
     );
     await user.click(stage.getByRole("button", { name: "Create client draft" }));
 
@@ -1288,10 +1408,12 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("button", { name: "↻ Regenerate all images" })
     ).toBeTruthy();
-    expect(stage.getByRole("button", { name: "Download slides" })).toBeTruthy();
+    expect(
+      stage.getByRole("button", { name: "Open in Google Slides" })
+    ).toBeTruthy();
   });
 
-  it("enables Create slide download for every generated creative", async () => {
+  it("enables Google Slides export for every generated creative", async () => {
     const base = buildCreativeState();
     const state = {
       ...base,
@@ -1302,11 +1424,13 @@ describe("redesigned workflow stages", () => {
     };
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
-    const button = stage.getByRole("button", { name: "Download slides" });
+    const googleSlidesButton = stage.getByRole("button", {
+      name: "Open in Google Slides"
+    });
 
-    expect(button.hasAttribute("disabled")).toBe(false);
-    expect(button.getAttribute("title")).toBe(
-      `Download ${createStageClientSlideItems(state).length} creative slides`
+    expect(googleSlidesButton.hasAttribute("disabled")).toBe(false);
+    expect(googleSlidesButton.getAttribute("title")).toBe(
+      `Create ${createStageClientSlideItems(state).length} creative slides in Google Slides`
     );
 
     const pptx = await buildCreateStageSlidesPptx(
@@ -1322,7 +1446,7 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(createStageClientSlideItems(state).length);
   });
 
-  it("keeps the existing Create slide download enabled for viewers", () => {
+  it("keeps Google Slides export enabled for viewers", () => {
     const base = buildCreativeState();
     const state = {
       ...base,
@@ -1337,7 +1461,9 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(
-      stage.getByRole("button", { name: "Download slides" }).hasAttribute("disabled")
+      stage
+        .getByRole("button", { name: "Open in Google Slides" })
+        .hasAttribute("disabled")
     ).toBe(false);
     expect(
       stage.getByRole("button", { name: "Open Creative 1 preview" }).matches(":disabled")
@@ -1415,6 +1541,85 @@ describe("redesigned workflow stages", () => {
         lang: "th-TH"
       });
     });
+  });
+
+  it("exports UGC in the shared deck theme with a phone reference and three-part script", async () => {
+    const base = buildCreativeState();
+    const firstDirection = base.directions[0];
+    const firstOutput = base.outputs[0];
+    if (!firstDirection || !firstOutput) {
+      throw new Error("Expected creative fixtures for UGC slide export.");
+    }
+    const direction = {
+      ...firstDirection,
+      service: "ugc-video" as const,
+      hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+      concept: "Creator สาธิตมื้อเช้าจริงที่ทำได้ก่อนออกจากบ้าน",
+      formatBeats: ["เปิดด้วยเวลาที่ใกล้หมด", "สาธิตทำไข่ข้น", "ชิมและปิดด้วย CTA"],
+      ugcBrief: {
+        product: "Korea King Colormic 24cm",
+        duration: "15–30 วินาที",
+        objective: "ทำให้คนเห็นว่ากระทะเหมาะกับเมนูเช้าที่ทำได้เร็ว",
+        moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว",
+        productionStyle: "Handheld creator POV สลับ close-up อาหาร",
+        referenceDirection: "UGC ครัวเช้า แสงธรรมชาติ และ text overlay สั้น",
+        openingScript: "เปิดนาฬิกาแล้วพูดว่าเหลือเวลาไม่ถึง 10 นาที",
+        showcaseScript: "เทไข่ลงกระทะและถ่าย close-up เนื้อไข่ข้น",
+        closingScript: "ยกจานขึ้นชิมแล้วชวนเลือก Colormic 24cm"
+      }
+    };
+    const state = {
+      ...base,
+      directions: [direction],
+      outputs: [
+        {
+          ...firstOutput,
+          directionId: direction.id,
+          format: "9:16 UGC",
+          assetUrl: undefined
+        }
+      ],
+      referenceImages: [
+        {
+          id: "ugc-style-reference",
+          url: "https://example.com/ugc-reference.png",
+          label: "UGC morning kitchen reference",
+          role: "style" as const,
+          primary: true
+        }
+      ]
+    };
+
+    const pptx = await buildCreateStageSlidesPptx(
+      state,
+      async () =>
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
+    );
+    const [slide] = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            text?: Array<{ text: string }>;
+          }>;
+        }>;
+      }
+    )._slides;
+    const visibleText =
+      slide?._slideObjects
+        .flatMap((object) => object.text?.map((run) => run.text) ?? [])
+        .join("\n") ?? "";
+
+    expect(visibleText).toContain("UGC VISUAL REFERENCE");
+    expect(visibleText).toContain("Korea King Colormic 24cm");
+    expect(visibleText).toContain("15–30 วินาที");
+    expect(visibleText).toContain("VIDEO STORYLINE");
+    expect(visibleText).toContain("OPEN / HOOK");
+    expect(visibleText).toContain("SHOWCASE");
+    expect(visibleText).toContain("END / CTA");
+    expect(
+      slide?._slideObjects.some((object) => object._type === "image")
+    ).toBe(true);
   });
 
   it("combines three album panels into one review card and preview", async () => {
@@ -1936,12 +2141,14 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     await user.click(stage.getByRole("tab", { name: /PM Review/i }));
-    const emptyDownload = stage.getByRole("button", {
-      name: "Download client slides · 0"
+    const emptyGoogleSlides = stage.getByRole("button", {
+      name: "Open in Google Slides · 0"
     }) as HTMLButtonElement;
-    expect(emptyDownload.disabled).toBe(true);
+    expect(emptyGoogleSlides.disabled).toBe(true);
     expect(
-      stage.getByText("One .pptx with every PM-approved asset, including UGC.")
+      stage.getByText(
+        "One Google Slides deck with every PM-approved asset, including UGC."
+      )
     ).toBeTruthy();
 
     const approvedState = workflowReducer(state, { type: "approve-all" });
@@ -1956,10 +2163,10 @@ describe("redesigned workflow stages", () => {
     expect(
       readyItems.some((item) => item.output.format.toUpperCase().includes("UGC"))
     ).toBe(true);
-    const readyDownload = stage.getByRole("button", {
-      name: `Download client slides · ${approvedState.outputs.length}`
+    const readyGoogleSlides = stage.getByRole("button", {
+      name: `Open in Google Slides · ${approvedState.outputs.length}`
     }) as HTMLButtonElement;
-    expect(readyDownload.disabled).toBe(false);
+    expect(readyGoogleSlides.disabled).toBe(false);
   });
 
   it("exports approved album panels as one composed client slide", async () => {

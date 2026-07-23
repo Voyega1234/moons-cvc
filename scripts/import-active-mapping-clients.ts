@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../src/lib/supabase/database.types.js";
-import { GoogleSheetMappingClientRepository } from "../src/repositories/mapping-clients/google-sheet-mapping-client-repository.js";
+import { createGoogleSheetsAccessToken } from "../src/server/google-sheets/google-workspace-auth.js";
+import { readMappingClientsFromGoogleSheet } from "../src/server/google-sheets/mapping-client-sheet.js";
 import { planActiveMappingClientImports } from "../src/services/clients/plan-mapping-client-import.js";
 
 const apply = process.argv.includes("--apply");
@@ -14,10 +15,23 @@ const supabase = createClient<Database>(
   requiredEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY"),
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
-const mappingRepository = new GoogleSheetMappingClientRepository();
-const mappingClients = await mappingRepository.list();
+const googleWorkspaceUser = requiredEnvironmentVariable(
+  "GOOGLE_WORKSPACE_LOCAL_USER"
+);
+const googleSheetsAccessToken = await createGoogleSheetsAccessToken({
+  env: {
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    GOOGLE_APPLICATION_CREDENTIALS:
+      process.env.GOOGLE_APPLICATION_CREDENTIALS
+  },
+  subjectEmail: googleWorkspaceUser
+});
+const { clients: mappingClients } = await readMappingClientsFromGoogleSheet({
+  sheetUrl: requiredEnvironmentVariable("MAPPING_CLIENTS_GOOGLE_SHEET_URL"),
+  accessToken: googleSheetsAccessToken
+});
 if (!mappingClients.length) {
-  throw new Error("The published mapping sheet returned no clients; import aborted.");
+  throw new Error("The mapping Google Sheet returned no clients; import aborted.");
 }
 
 const existingClients = await listExistingClients();

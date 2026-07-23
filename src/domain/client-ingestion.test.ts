@@ -3,7 +3,8 @@ import { canSelectBrand, canStartBrandIngestion, type Brand } from "./brand";
 import {
   initialsFromClientName,
   validateClientCategory,
-  validateFacebookUrl
+  validateFacebookUrl,
+  validateQuestionnaireGoogleSheetUrl
 } from "./client-ingestion";
 
 const brand: Brand = {
@@ -37,6 +38,25 @@ describe("client ingestion domain rules", () => {
     expect(validateClientCategory("x".repeat(81))).toBe(
       "Use a short category label (80 characters or fewer)."
     );
+  });
+
+  it("requires a normal Google Sheet URL for the questionnaire", () => {
+    expect(validateQuestionnaireGoogleSheetUrl("")).toBe(
+      "Questionnaire Google Sheet URL is required."
+    );
+    expect(validateQuestionnaireGoogleSheetUrl("not a url")).toBe(
+      "Enter a valid Google Sheet URL."
+    );
+    expect(
+      validateQuestionnaireGoogleSheetUrl(
+        "https://docs.google.com/spreadsheets/d/e/published/pub"
+      )
+    ).toBe("Use a normal docs.google.com spreadsheet URL.");
+    expect(
+      validateQuestionnaireGoogleSheetUrl(
+        "https://docs.google.com/spreadsheets/d/1ORr3M5rx-FT_NlVxRbpVTMqXb2vYFH47cXrVbWv9II8/edit?gid=577277204#gid=577277204"
+      )
+    ).toBeNull();
   });
 
   it("only selects clients after ingestion has produced memory", () => {

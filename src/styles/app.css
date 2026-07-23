@@ -1227,8 +1227,7 @@ main {
   box-shadow: inset 0 0 0 1px #dbe0ff;
 }
 
-.client-source-option input,
-.client-questionnaire-source input {
+.client-source-option input {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
@@ -1237,8 +1236,7 @@ main {
   accent-color: var(--blue);
 }
 
-.client-source-option > span,
-.client-questionnaire-source label > span {
+.client-source-option > span {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -1247,14 +1245,12 @@ main {
   text-transform: none;
 }
 
-.client-source-option b,
-.client-questionnaire-source b {
+.client-source-option b {
   font-size: 11.5px;
   line-height: 1.35;
 }
 
-.client-source-option small,
-.client-questionnaire-source small {
+.client-source-option small {
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.4;
@@ -1265,43 +1261,99 @@ main {
   margin-top: 1px;
 }
 
-.client-questionnaire-source {
+.client-sheet-extraction {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 11px 12px;
   border: 1px solid #dbe0ff;
   border-radius: 12px;
   background: #f7f8ff;
 }
 
-.client-questionnaire-source > label {
-  display: flex;
-  grid-template-columns: none;
-  align-items: flex-start;
-  gap: 9px;
-  cursor: pointer;
+.client-sheet-extraction > div:first-child {
+  display: grid;
+  gap: 3px;
 }
 
-.client-questionnaire-source details {
-  padding-top: 7px;
-  border-top: 1px solid #e4e7f7;
+.client-sheet-extraction b {
+  color: var(--ink);
+  font-size: 11.5px;
 }
 
-.client-questionnaire-source summary {
-  color: var(--blue);
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.client-questionnaire-source details p {
-  margin: 7px 0 0;
+.client-sheet-extraction small,
+.client-onboarding-questionnaire small {
   color: var(--muted);
   font-size: 10.5px;
-  line-height: 1.5;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
-.client-intake-form input:not([type="radio"]):not([type="checkbox"]) {
+.client-sheet-extraction dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.client-sheet-extraction dl > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.4fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.client-sheet-extraction dt,
+.client-sheet-extraction dd,
+.client-sheet-extraction li {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.client-sheet-extraction dt {
+  color: var(--muted);
+}
+
+.client-sheet-extraction dt small {
+  display: block;
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.client-sheet-extraction dd {
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.client-sheet-extraction ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 18px;
+  margin: 0;
+  padding-left: 17px;
+  color: var(--ink);
+}
+
+.client-onboarding-questionnaire {
+  display: grid;
+  gap: 6px !important;
+}
+
+.client-onboarding-questionnaire > label {
+  display: grid;
+  gap: 6px;
+}
+
+.questionnaire-extracted-values {
+  max-height: 320px;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.client-intake-form input:not([type="radio"]):not([type="checkbox"]),
+.client-intake-form textarea {
   height: 38px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1310,6 +1362,14 @@ main {
   font: inherit;
   font-size: 12.5px;
   padding: 0 12px;
+}
+
+.client-intake-form textarea {
+  min-height: 118px;
+  height: auto;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .client-intake-form .btn {
@@ -1557,6 +1617,16 @@ main {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.questionnaire-memory-item {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.questionnaire-memory-item .memory-item-desc {
+  max-width: 90ch;
+  line-height: 1.55;
 }
 
 .product-memory-form {

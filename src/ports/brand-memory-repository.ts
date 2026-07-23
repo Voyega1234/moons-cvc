@@ -1,4 +1,8 @@
-import type { LibraryItem } from "../domain/brand";
+import type {
+  LibraryItem,
+  OnboardingQuestionnaireSource,
+  QuestionnaireExtractedField
+} from "../domain/brand";
 import type {
   BrandDocument,
   BrandDocumentType,
@@ -66,6 +70,14 @@ export interface CreateReferenceImageInput {
   label?: string;
 }
 
+export interface SaveOnboardingQuestionnaireInput {
+  clientId: string;
+  text: string;
+  sourceUrl?: string;
+  sheetTitle?: string;
+  extractedFields?: readonly QuestionnaireExtractedField[];
+}
+
 export type AnalyzeGuidelineInput =
   | { clientId: string; file: File; text?: undefined }
   | { clientId: string; text: string; file?: undefined };
@@ -95,6 +107,9 @@ export interface BrandMemoryRepository {
   uploadDocument(input: UploadBrandDocumentInput): Promise<BrandDocument>;
   createLearningEntry(input: CreateLearningEntryInput): Promise<void>;
   createReferenceImage(input: CreateReferenceImageInput): Promise<LibraryItem>;
+  saveOnboardingQuestionnaire(
+    input: SaveOnboardingQuestionnaireInput
+  ): Promise<OnboardingQuestionnaireSource>;
   analyzeGuideline(
     input: AnalyzeGuidelineInput
   ): Promise<GuidelineAnalysisResult>;

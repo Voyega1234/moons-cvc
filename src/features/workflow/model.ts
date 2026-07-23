@@ -1,4 +1,9 @@
-import type { Brand, LibraryItem, LibrarySection } from "../../domain/brand";
+import type {
+  Brand,
+  LibraryItem,
+  LibrarySection,
+  OnboardingQuestionnaireSource
+} from "../../domain/brand";
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import type {
   ApprovalRole,
@@ -88,6 +93,10 @@ export type WorkflowAction =
   | { type: "set-library-section"; section: LibrarySection }
   | { type: "sync-brand-rules"; items: readonly LibraryItem[] }
   | { type: "sync-brand-guidelines"; items: readonly LibraryItem[] }
+  | {
+      type: "sync-onboarding-questionnaire";
+      questionnaire: OnboardingQuestionnaireSource;
+    }
   | { type: "set-service"; service: ServiceType }
   | { type: "set-hook-idea-mode"; mode: HookIdeaMode }
   | { type: "set-artwork-mode"; mode: ArtworkMode }

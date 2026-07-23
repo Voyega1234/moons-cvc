@@ -28,11 +28,7 @@ describe("mergeMappingClients", () => {
           clientId: "New Client",
           status: "Active",
           serviceStatus: "Pitching",
-          questionnaire: {
-            text: "Brand Name: New Client",
-            preview: "Brand Name: New Client",
-            facebookUrls: ["https://www.facebook.com/new-client"]
-          }
+          clientPortalUrl: "https://docs.google.com/spreadsheets/new-client"
         }
       ]
     );
@@ -44,9 +40,9 @@ describe("mergeMappingClients", () => {
     expect(bonefit?.mappingStatus).toBe("Active");
     expect(newClient?.existsInSystem).toBe(false);
     expect(newClient?.source).toBe("mapping");
-    expect(newClient?.mappingQuestionnaire?.facebookUrls).toEqual([
-      "https://www.facebook.com/new-client"
-    ]);
+    expect(newClient?.mappingClientPortalUrl).toBe(
+      "https://docs.google.com/spreadsheets/new-client"
+    );
   });
 
   it("sorts database clients before sheet-only clients", () => {

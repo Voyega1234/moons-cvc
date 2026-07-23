@@ -53,7 +53,8 @@ instead of scattering auth conditions through policies.
 
 Source for the Start brand picker.
 
-The visible picker is merged with the published mapping Google Sheet. Clients
+The visible picker is merged with the domain-restricted mapping Google Sheet.
+The sheet is read by the backend through keyless Workspace delegation. Clients
 that exist in `moons.clients` are selectable. Clients that exist only in the
 mapping sheet are displayed as grey/disabled rows so operators can see demand
 without accidentally starting a run that has no brand memory.
@@ -89,7 +90,12 @@ Use:
 - `moons.brand_social_posts` for normalized organic Facebook posts.
 - `moons.brand_ad_library_items` for normalized Facebook Ads Library ads.
 - `moons.brand_visual_assets` for mirrored image-only assets and visual
-  analysis results.
+analysis results.
+
+The required user-entered onboarding questionnaire is stored in
+`moons.brand_sources` with `source_type='manual_input'` and
+`raw_payload.kind='onboarding_questionnaire'`. Brand reads load the newest
+matching source so Hook Agent keeps the onboarding context after refresh.
 
 Facebook CDN URLs are temporary. Durable source images belong in private
 Supabase Storage bucket `brand-source-assets`; store the object path in

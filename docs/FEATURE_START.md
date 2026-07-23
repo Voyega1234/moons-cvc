@@ -68,24 +68,46 @@ Dropdown rows:
   “Analyzing visuals”
 - mapping/service statuses are shown inline when available
 
-Operators can add a new client from Start by entering client name and required
-Facebook URL. This creates a draft client and queued ingestion job; the client
-remains disabled until the backend harness prepares Brand Memory.
+Operators can add a new client from Start by entering a client name, Facebook
+URL, and a normal Google Sheet URL for the required onboarding questionnaire.
+Compass reads the public `1. Questionnaire` tab on demand without Google
+credentials. Mapping clients prefill the URL from Client Portal when available, but
+the operator can replace it before import. The questionnaire is historical
+onboarding context and is not treated as the current campaign brief. This
+creates a draft client and queued ingestion job; the client remains disabled
+until the backend harness prepares Brand Memory.
+
+The intake form includes a Google Sheet extraction section. Supported mapping
+fields are Client ID, Status, Service Status, and Client Portal URL. For a
+sheet-backed client, the section shows the values that were extracted from its
+mapping row. Questionnaire content is imported from the Google Sheet URL in the
+setup form when the operator submits it.
 
 Overview rows follow the same selectability rule and use `.brief-row.disabled`
 when a sheet-only client appears there.
 
-## Current limitation
+## Google Sheet access
 
-The Google Sheet CSV is fetched from the browser. If the published CSV ever
-blocks browser fetches, add a small server/proxy adapter instead of moving sheet
-logic into UI components.
+The browser calls `/api/mapping-clients`; it never fetches Google directly.
+Questionnaire reads use the public Google Visualization response for the exact
+`1. Questionnaire` tab and therefore require the Sheet to be shared as
+`Anyone with the link`. The endpoint remains protected by Compass
+authentication. The configured source must be a normal Google Sheet URL, not a
+Publish to web URL.
+
+The separate mapping-client list reader still uses keyless Google authentication:
+Production and Preview use Vercel OIDC through Workload Identity Federation,
+while local development uses Application Default Credentials.
 
 ## Verification
 
 Relevant tests:
 
-- CSV parser handles quoted fields
+- normal Google Sheet URL and selected `gid` parsing
+- OIDC/ADC authentication selection and key-file rejection
+- Sheets API mapping and extraction summary
+- anonymous read-only extraction from the public Client Portal
+  `1. Questionnaire` tab without creating a Google access token
 - merge keeps system clients selectable
 - merge adds sheet-only clients as disabled
 - reducer blocks selecting a sheet-only client

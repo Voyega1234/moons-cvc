@@ -51,7 +51,7 @@ export function planActiveMappingClientImports(
       initials: initialsFromClientName(name),
       source: "mapping_import",
       is_active: true,
-      facebook_url: mappingClient.questionnaire?.facebookUrls[0] ?? null,
+      facebook_url: null,
       ingestion_status: "not_started",
       ingestion_error: null
     });

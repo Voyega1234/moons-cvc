@@ -17,6 +17,27 @@ function passingQaResults(state: WorkflowState) {
 }
 
 describe("workflowReducer", () => {
+  it("refreshes the selected brand questionnaire for Hook Agent context", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    const selected = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    const questionnaire = {
+      text: "The core audience wants a fast setup and visible results.",
+      preview: "The core audience wants a fast setup and visible results.",
+      facebookUrls: [] as const
+    };
+    const updated = workflowReducer(selected, {
+      type: "sync-onboarding-questionnaire",
+      questionnaire
+    });
+
+    expect(updated.brand?.onboardingQuestionnaire).toEqual(questionnaire);
+  });
+
   it("approves only the current role queue and advances assets in sequence", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

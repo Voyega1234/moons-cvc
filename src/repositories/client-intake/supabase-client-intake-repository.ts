@@ -3,6 +3,7 @@ import {
   initialsFromClientName,
   validateClientCategory,
   validateFacebookUrl,
+  validateOnboardingQuestionnaire,
   type CreateClientDraftInput,
   type CreateClientDraftResult,
   type QueueClientIngestionInput,
@@ -30,6 +31,10 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
     if (urlError) throw new Error(urlError);
     const categoryError = validateClientCategory(category ?? "");
     if (categoryError) throw new Error(categoryError);
+    const questionnaireError = validateOnboardingQuestionnaire(
+      questionnaire?.text ?? ""
+    );
+    if (questionnaireError) throw new Error(questionnaireError);
 
     const client = getSupabaseClient();
     const { data: userData } = await client.auth.getUser();
@@ -90,7 +95,7 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
     });
 
     return {
-      brand: mapBrand(updatedClient),
+      brand: mapBrand(updatedClient, questionnaire),
       jobId: job.id
     };
   }
@@ -102,6 +107,10 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
   }: QueueClientIngestionInput): Promise<QueueClientIngestionResult> {
     const urlError = validateFacebookUrl(facebookUrl);
     if (urlError) throw new Error(urlError);
+    const questionnaireError = validateOnboardingQuestionnaire(
+      questionnaire?.text ?? ""
+    );
+    if (questionnaireError) throw new Error(questionnaireError);
 
     const client = getSupabaseClient();
     const { data: jobId, error } = await client
@@ -150,15 +159,31 @@ async function saveQuestionnaireSource({
       source_url: questionnaire?.sourceUrl?.trim() || null,
       status: "succeeded",
       raw_payload: {
-        kind: "mapping_questionnaire",
-        text
+        kind: "onboarding_questionnaire",
+        text,
+        ...(questionnaire.sheetTitle?.trim()
+          ? { sheetTitle: questionnaire.sheetTitle.trim() }
+          : {}),
+        ...(questionnaire.extractedFields?.length
+          ? {
+              extractedFields: questionnaire.extractedFields.map((field) => ({
+                key: field.key,
+                label: field.label,
+                value: field.value
+              }))
+            }
+          : {})
       } satisfies Json
     });
 
   if (error) throw error;
 }
 
-function mapBrand(row: ClientRow): Brand {
+function mapBrand(
+  row: ClientRow,
+  questionnaire?: CreateClientDraftInput["questionnaire"]
+): Brand {
+  const questionnaireText = questionnaire?.text.trim();
   return {
     id: row.id,
     name: row.name,
@@ -171,7 +196,25 @@ function mapBrand(row: ClientRow): Brand {
     library: { brand: [], products: [], docs: [], refs: [] },
     memory: { working: [], avoid: [] },
     existsInSystem: true,
-    source: "system"
+    source: "system",
+    ...(questionnaireText
+      ? {
+          onboardingQuestionnaire: {
+            ...(questionnaire?.sourceUrl?.trim()
+              ? { sourceUrl: questionnaire.sourceUrl.trim() }
+              : {}),
+            text: questionnaireText,
+            preview: questionnaireText.slice(0, 280),
+            facebookUrls: [],
+            ...(questionnaire?.sheetTitle?.trim()
+              ? { sheetTitle: questionnaire.sheetTitle.trim() }
+              : {}),
+            ...(questionnaire?.extractedFields?.length
+              ? { extractedFields: questionnaire.extractedFields }
+              : {})
+          }
+        }
+      : {})
   };
 }
 

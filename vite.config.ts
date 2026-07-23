@@ -14,9 +14,6 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.SUPABASE_ANON_KEY": JSON.stringify(
         env.SUPABASE_ANON_KEY ?? ""
       ),
-      "import.meta.env.MAPPING_CLIENTS_CSV_URL": JSON.stringify(
-        env.MAPPING_CLIENTS_CSV_URL ?? ""
-      ),
       "import.meta.env.BRAND_ASSETS_BUCKET": JSON.stringify(
         env.BRAND_ASSETS_BUCKET ?? ""
       )

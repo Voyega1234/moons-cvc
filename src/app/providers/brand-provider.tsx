@@ -7,7 +7,11 @@ import {
   useState,
   type ReactNode
 } from "react";
-import type { Brand, ClientIngestionStatus } from "../../domain/brand";
+import type {
+  Brand,
+  ClientIngestionStatus,
+  OnboardingQuestionnaireSource
+} from "../../domain/brand";
 import {
   allClientAccess,
   filterBrandsForAccess,
@@ -25,6 +29,9 @@ interface BrandContextValue {
   notifications: readonly BrandNotification[];
   unreadNotificationCount: number;
   refresh: () => Promise<void>;
+  readMappingQuestionnaire: (
+    sheetUrl: string
+  ) => Promise<OnboardingQuestionnaireSource | null>;
   markAllNotificationsRead: () => void;
 }
 
@@ -138,6 +145,11 @@ export function BrandProvider({
   }, [access, mappingRepository, repository]);
 
   const refresh = useCallback(() => loadBrands(true), [loadBrands]);
+  const readMappingQuestionnaire = useCallback(
+    async (sheetUrl: string) =>
+      mappingRepository.readQuestionnaire?.(sheetUrl) ?? null,
+    [mappingRepository]
+  );
 
   const markAllNotificationsRead = useCallback(() => {
     setNotifications((current) =>
@@ -176,6 +188,7 @@ export function BrandProvider({
         notifications,
         unreadNotificationCount,
         refresh,
+        readMappingQuestionnaire,
         markAllNotificationsRead
       }}
     >

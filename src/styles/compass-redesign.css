@@ -4334,7 +4334,7 @@
   font-family: "Sukhumvit Set", var(--display);
   font-size: 34px;
   font-weight: 700;
-  line-height: 1.08;
+  line-height: 1.16;
   letter-spacing: -0.035em;
 }
 
@@ -4643,7 +4643,7 @@
   color: var(--ink);
   font-size: clamp(23px, 2vw, 32px);
   font-weight: 600;
-  line-height: 1.04;
+  line-height: 1.16;
   letter-spacing: -0.045em;
 }
 
@@ -5861,6 +5861,13 @@
   color: #be3838;
   font-size: 9.5px;
   line-height: 1.35;
+  text-align: right;
+}
+
+.compass-app .compass-qc-client-slides-link {
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 750;
   text-align: right;
 }
 

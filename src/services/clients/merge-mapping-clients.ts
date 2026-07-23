@@ -37,7 +37,7 @@ export function mergeMappingClients(
     if (existingClient) {
       existingClient.mappingStatus = mappingClient.status;
       existingClient.serviceStatus = mappingClient.serviceStatus;
-      existingClient.mappingQuestionnaire = mappingClient.questionnaire;
+      existingClient.mappingClientPortalUrl = mappingClient.clientPortalUrl;
       continue;
     }
 
@@ -51,7 +51,7 @@ export function mergeMappingClients(
       existsInSystem: false,
       mappingStatus: mappingClient.status,
       serviceStatus: mappingClient.serviceStatus,
-      mappingQuestionnaire: mappingClient.questionnaire,
+      mappingClientPortalUrl: mappingClient.clientPortalUrl,
       source: "mapping"
     });
   }

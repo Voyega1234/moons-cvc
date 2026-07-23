@@ -8,7 +8,8 @@ import {
   normalizeFormatBeatsForService,
   serviceTypes,
   type CreativeDirection,
-  type ServiceType
+  type ServiceType,
+  type UgcVideoBrief
 } from "../../domain/creative-run";
 import type { WorkflowState } from "../../features/workflow/model";
 import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
@@ -45,6 +46,7 @@ export interface RawDirection {
   cta?: unknown;
   supportingPoints?: unknown;
   formatBeats?: unknown;
+  ugcBrief?: unknown;
   ctaActionType?: unknown;
   ctaDestination?: unknown;
   contactLine?: unknown;
@@ -80,6 +82,35 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
     serviceTypes.includes(raw.service as ServiceType)
       ? (raw.service as ServiceType)
       : undefined;
+  const formatBeats = normalizeFormatBeatsForService(
+    service,
+    Array.isArray(raw.formatBeats)
+      ? raw.formatBeats.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : []
+  );
+  const why =
+    typeof raw.why === "string" && raw.why
+      ? raw.why
+      : "Works when the audience needs fast clarity.";
+  const cta = typeof raw.cta === "string" && raw.cta ? raw.cta : "Learn more";
+  const caption =
+    typeof raw.caption === "string" && raw.caption
+      ? raw.caption
+      : `${raw.hook} ${raw.concept}.`;
+  const ugcBrief =
+    service === "ugc-video"
+      ? normalizeUgcVideoBrief(raw.ugcBrief, {
+          hook: raw.hook,
+          concept: raw.concept,
+          why,
+          visual: raw.visual,
+          cta,
+          caption,
+          formatBeats
+        })
+      : undefined;
 
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : `direction-${index + 1}`,
@@ -93,25 +124,16 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
         ? raw.subheadlineHighlight
         : undefined
     ),
-    why:
-      typeof raw.why === "string" && raw.why
-        ? raw.why
-        : "Works when the audience needs fast clarity.",
+    why,
     visual: raw.visual,
-    cta: typeof raw.cta === "string" && raw.cta ? raw.cta : "Learn more",
+    cta,
     supportingPoints: Array.isArray(raw.supportingPoints)
       ? raw.supportingPoints.filter(
           (item): item is string => typeof item === "string" && item.trim().length > 0
         )
       : [],
-    formatBeats: normalizeFormatBeatsForService(
-      service,
-      Array.isArray(raw.formatBeats)
-        ? raw.formatBeats.filter(
-            (item): item is string => typeof item === "string"
-          )
-        : []
-    ),
+    formatBeats,
+    ...(ugcBrief ? { ugcBrief } : {}),
     ...(typeof raw.ctaActionType === "string" &&
     ctaActionTypes.includes(raw.ctaActionType as (typeof ctaActionTypes)[number])
       ? { ctaActionType: raw.ctaActionType as (typeof ctaActionTypes)[number] }
@@ -122,13 +144,56 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
     ...(typeof raw.contactLine === "string" && raw.contactLine.trim()
       ? { contactLine: raw.contactLine.trim() }
       : {}),
-    caption:
-      typeof raw.caption === "string" && raw.caption
-        ? raw.caption
-        : `${raw.hook} ${raw.concept}.`,
+    caption,
     ...(typeof raw.score === "number" && Number.isFinite(raw.score)
       ? { score: raw.score }
       : {}),
     selected: false
+  };
+}
+
+function normalizeUgcVideoBrief(
+  value: unknown,
+  fallback: {
+    hook: string;
+    concept: string;
+    why: string;
+    visual: string;
+    cta: string;
+    caption: string;
+    formatBeats: readonly string[];
+  }
+): UgcVideoBrief {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const text = (field: string, fallbackValue: string) =>
+    typeof record[field] === "string" && record[field].trim()
+      ? record[field].trim()
+      : fallbackValue;
+
+  return {
+    product: text("product", "สินค้า/บริการตาม Brief"),
+    duration: text("duration", "15–30 วินาที"),
+    objective: text("objective", fallback.why),
+    moodAndTone: text("moodAndTone", fallback.visual),
+    productionStyle: text(
+      "productionStyle",
+      "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ"
+    ),
+    referenceDirection: text("referenceDirection", fallback.visual),
+    openingScript: text(
+      "openingScript",
+      fallback.formatBeats[0] ?? fallback.hook
+    ),
+    showcaseScript: text(
+      "showcaseScript",
+      fallback.formatBeats[1] ?? fallback.concept
+    ),
+    closingScript: text(
+      "closingScript",
+      fallback.formatBeats[2] ?? `${fallback.cta} — ${fallback.caption}`
+    )
   };
 }

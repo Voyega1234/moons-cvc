@@ -1,11 +1,13 @@
+import { env } from "../../config/env";
+import type { OnboardingQuestionnaireSource } from "../../domain/brand";
+import {
+  getSupabaseClient,
+  isSupabaseConfigured
+} from "../../lib/supabase/client";
 import type {
   MappingClient,
   MappingClientRepository
 } from "../../ports/mapping-client-repository";
-import type { QuestionnaireBrandSource } from "../../domain/brand";
-
-const DEFAULT_MAPPING_CLIENTS_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRvN1Bg6vUI2MeCMCSAmG9jmBjTlV17sIsyRu5Nd-h2JXuZG8Gbmdr61a8lJMdto13stA_bfGiuLETe/pub?gid=147531213&single=true&output=csv";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -17,9 +19,11 @@ export class GoogleSheetMappingClientRepository
     | null = null;
 
   constructor(
-    private readonly csvUrl = mappingClientsCsvUrl(),
+    private readonly endpoint = `${env.apiBaseUrl}/mapping-clients`,
     private readonly fetchImpl: typeof fetch = (input, init) =>
-      fetch(input, init)
+      fetch(input, init),
+    private readonly accessTokenProvider: () => Promise<string | null> =
+      currentSupabaseAccessToken
   ) {}
 
   async list(): Promise<readonly MappingClient[]> {
@@ -27,172 +31,169 @@ export class GoogleSheetMappingClientRepository
       return this.cached.clients;
     }
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const clients = await this.fetchClients();
-        this.cached = {
-          clients,
-          expiresAt: Date.now() + CACHE_TTL_MS
-        };
-        return clients;
-      } catch {
-        // Google occasionally returns an HTML storage-access page with 200.
-        // Retry once and never cache the invalid response.
-      }
+    try {
+      const clients = await this.fetchClients();
+      this.cached = {
+        clients,
+        expiresAt: Date.now() + CACHE_TTL_MS
+      };
+      return clients;
+    } catch {
+      return [];
     }
+  }
 
-    return [];
+  async readQuestionnaire(
+    sheetUrl: string
+  ): Promise<OnboardingQuestionnaireSource | null> {
+    const accessToken = await this.accessTokenProvider();
+    const separator = this.endpoint.includes("?") ? "&" : "?";
+    const url = `${this.endpoint}${separator}questionnaireSheetUrl=${encodeURIComponent(sheetUrl)}`;
+    const response = await this.fetchImpl(url, {
+      cache: "no-store",
+      headers: accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : undefined
+    });
+    const payload = (await response.json()) as unknown;
+    if (!response.ok) {
+      throw new Error(mappingSheetError(payload, response.status));
+    }
+    if (!isRecord(payload) || payload.ok !== true) {
+      throw new Error("Questionnaire sheet endpoint returned invalid data.");
+    }
+    return parseQuestionnaire(payload.questionnaire);
   }
 
   private async fetchClients(): Promise<readonly MappingClient[]> {
-    const response = await this.fetchImpl(this.csvUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Mapping sheet failed: ${response.status}`);
-
-    const rows = parseCsv(await response.text());
-    const [header = [], ...dataRows] = rows;
-    const indexes = {
-      clientId: findColumnIndex(header, "Client ID"),
-      status: findColumnIndex(header, "Status"),
-      serviceStatus: findColumnIndex(header, "Service Status"),
-      clientPortal: findColumnIndex(header, "Client Portal"),
-      questionnaire: findColumnIndex(header, "Questionnaire")
-    };
-
-    if (indexes.clientId < 0) {
-      throw new Error("Mapping sheet did not return CSV client data.");
+    const accessToken = await this.accessTokenProvider();
+    const response = await this.fetchImpl(this.endpoint, {
+      cache: "no-store",
+      headers: accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : undefined
+    });
+    const payload = (await response.json()) as unknown;
+    if (!response.ok) {
+      throw new Error(mappingSheetError(payload, response.status));
+    }
+    if (
+      !isRecord(payload) ||
+      payload.ok !== true ||
+      !Array.isArray(payload.clients)
+    ) {
+      throw new Error("Mapping sheet endpoint returned invalid data.");
     }
 
-    return dataRows
-      .map((row) => {
-        const questionnaireText = cell(row, indexes.questionnaire);
-        const sourceUrl = cell(row, indexes.clientPortal);
-        return {
-          clientId: cell(row, indexes.clientId),
-          status: cell(row, indexes.status),
-          serviceStatus: cell(row, indexes.serviceStatus),
-          ...(questionnaireText
-            ? {
-                questionnaire: buildQuestionnaireBrandSource(
-                  questionnaireText,
-                  sourceUrl
-                )
-              }
-            : {})
-        };
-      })
-      .filter((client) => client.clientId);
+    return payload.clients.map(parseMappingClient);
   }
 }
 
-export function buildQuestionnaireBrandSource(
-  questionnaire: string,
-  sourceUrl = ""
-): QuestionnaireBrandSource {
-  const text = questionnaireBrandEvidence(questionnaire);
+async function currentSupabaseAccessToken(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  const { data, error } = await getSupabaseClient().auth.getSession();
+  if (error) throw error;
+  return data.session?.access_token ?? null;
+}
+
+function parseMappingClient(value: unknown): MappingClient {
+  if (!isRecord(value)) {
+    throw new Error("Mapping sheet endpoint returned an invalid client.");
+  }
+  const clientId = readString(value.clientId, "clientId");
+  const status = readString(value.status, "status", true);
+  const serviceStatus = readString(
+    value.serviceStatus,
+    "serviceStatus",
+    true
+  );
+  const clientPortalUrl =
+    value.clientPortalUrl === undefined
+      ? undefined
+      : readString(value.clientPortalUrl, "clientPortalUrl");
+
   return {
-    ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
-    text,
-    preview: text.slice(0, 280),
-    facebookUrls: extractFacebookUrls(questionnaire)
+    clientId,
+    status,
+    serviceStatus,
+    ...(clientPortalUrl ? { clientPortalUrl } : {})
   };
 }
 
-export function extractFacebookUrls(text: string): string[] {
-  const matches = text.match(
-    /(?:https?:\/\/)?(?:www\.)?(?:facebook\.com|fb\.com)\/[^\s,;)'"<>]+/gi
-  );
-  if (!matches) return [];
-
-  const urls = matches
-    .map((match) => match.replace(/[.\]}]+$/g, ""))
-    .map((match) => (/^https?:\/\//i.test(match) ? match : `https://${match}`))
-    .filter((value) => {
-      try {
-        const hostname = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
-        return hostname === "facebook.com" || hostname === "fb.com";
-      } catch {
-        return false;
-      }
-    });
-
-  return [...new Set(urls)];
-}
-
-export function questionnaireBrandEvidence(text: string): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  const contactMarkers = [
-    /\bContacts?\b/i,
-    /\bPrimary Contact\b/i,
-    /\bPrimary Point of Contact\b/i,
-    /\bSession 2:\s*Contact/i
-  ];
-  const cutAt = contactMarkers
-    .map((pattern) => normalized.search(pattern))
-    .filter((index) => index >= 0)
-    .reduce((earliest, index) => Math.min(earliest, index), normalized.length);
-
-  return normalized.slice(0, cutAt).trim().slice(0, 12_000);
-}
-
-function findColumnIndex(header: readonly string[], name: string): number {
-  const normalizedName = name.trim().toLowerCase();
-  return header.findIndex(
-    (value) => value.trim().toLowerCase() === normalizedName
-  );
-}
-
-function cell(row: readonly string[], index: number): string {
-  return index < 0 ? "" : (row[index] || "").trim();
-}
-
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let value = "";
-  let inQuotes = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      row.push(value);
-      value = "";
-      continue;
-    }
-
-    if ((char === "\n" || char === "\r") && !inQuotes) {
-      if (char === "\r" && next === "\n") index += 1;
-      row.push(value);
-      if (row.some((cell) => cell.trim())) rows.push(row);
-      row = [];
-      value = "";
-      continue;
-    }
-
-    value += char;
+function parseQuestionnaire(
+  value: unknown
+): OnboardingQuestionnaireSource | null {
+  if (value === null) return null;
+  const extractedFields =
+    isRecord(value) && value.extractedFields !== undefined
+      ? parseExtractedFields(value.extractedFields)
+      : undefined;
+  if (
+    !isRecord(value) ||
+    typeof value.text !== "string" ||
+    typeof value.preview !== "string" ||
+    !Array.isArray(value.facebookUrls) ||
+    !value.facebookUrls.every((url) => typeof url === "string") ||
+    (value.sourceUrl !== undefined && typeof value.sourceUrl !== "string") ||
+    (value.sheetTitle !== undefined && typeof value.sheetTitle !== "string") ||
+    extractedFields === null
+  ) {
+    throw new Error("Questionnaire sheet endpoint returned invalid data.");
   }
 
-  row.push(value);
-  if (row.some((cell) => cell.trim())) rows.push(row);
-
-  return rows;
+  return {
+    ...(value.sourceUrl ? { sourceUrl: value.sourceUrl } : {}),
+    text: value.text,
+    preview: value.preview,
+    facebookUrls: value.facebookUrls,
+    ...(value.sheetTitle ? { sheetTitle: value.sheetTitle } : {}),
+    ...(extractedFields ? { extractedFields } : {})
+  };
 }
 
-function mappingClientsCsvUrl(): string {
-  return (
-    import.meta.env.VITE_MAPPING_CLIENTS_CSV_URL ||
-    import.meta.env.MAPPING_CLIENTS_CSV_URL ||
-    DEFAULT_MAPPING_CLIENTS_CSV_URL
-  );
+function parseExtractedFields(
+  value: unknown
+): OnboardingQuestionnaireSource["extractedFields"] | null {
+  if (!Array.isArray(value)) return null;
+  const fields = value.map((field) => {
+    if (
+      !isRecord(field) ||
+      typeof field.key !== "string" ||
+      typeof field.label !== "string" ||
+      typeof field.value !== "string"
+    ) {
+      return null;
+    }
+    return {
+      key: field.key,
+      label: field.label,
+      value: field.value
+    };
+  });
+  return fields.every((field) => field !== null)
+    ? (fields as NonNullable<
+        OnboardingQuestionnaireSource["extractedFields"]
+      >)
+    : null;
+}
+
+function readString(
+  value: unknown,
+  field: string,
+  allowEmpty = false
+): string {
+  if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
+    throw new Error(`Mapping sheet client ${field} is invalid.`);
+  }
+  return value.trim();
+}
+
+function mappingSheetError(payload: unknown, status: number): string {
+  return isRecord(payload) && typeof payload.error === "string"
+    ? payload.error
+    : `Mapping sheet failed: ${status}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

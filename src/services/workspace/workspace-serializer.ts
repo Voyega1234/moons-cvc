@@ -12,9 +12,15 @@ import {
   referenceImageRoles,
   serviceTypes,
   type CreativeStage,
-  type ServiceType
+  type ServiceType,
+  type UgcVideoBrief
 } from "../../domain/creative-run";
-import type { Brand, BrandLibrary, LibraryItem } from "../../domain/brand";
+import type {
+  Brand,
+  BrandLibrary,
+  LibraryItem,
+  QuestionnaireExtractedField
+} from "../../domain/brand";
 import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
 import type {
   AppView,
@@ -319,6 +325,12 @@ function parseBrand(value: unknown): Brand | null {
   const memory = isRecord(value.memory) ? value.memory : null;
   const working = memory ? parseStringArray(memory.working) : null;
   const avoid = memory ? parseStringArray(memory.avoid) : null;
+  const serializedQuestionnaire =
+    value.onboardingQuestionnaire ?? value.mappingQuestionnaire;
+  const onboardingQuestionnaire =
+    serializedQuestionnaire === undefined
+      ? undefined
+      : parseOnboardingQuestionnaire(serializedQuestionnaire);
 
   if (
     !id ||
@@ -327,7 +339,8 @@ function parseBrand(value: unknown): Brand | null {
     !initials ||
     !library ||
     !working ||
-    !avoid
+    !avoid ||
+    onboardingQuestionnaire === null
   ) {
     return null;
   }
@@ -338,8 +351,62 @@ function parseBrand(value: unknown): Brand | null {
     category,
     initials,
     library,
-    memory: { working, avoid }
+    memory: { working, avoid },
+    ...(onboardingQuestionnaire ? { onboardingQuestionnaire } : {})
   };
+}
+
+function parseOnboardingQuestionnaire(
+  value: unknown
+): Brand["onboardingQuestionnaire"] | null {
+  if (!isRecord(value)) return null;
+  const sourceUrl =
+    value.sourceUrl === undefined ? undefined : parseString(value.sourceUrl);
+  const text = parseString(value.text);
+  const preview = parseString(value.preview, true);
+  const facebookUrls = parseStringArray(value.facebookUrls);
+  const sheetTitle =
+    value.sheetTitle === undefined ? undefined : parseString(value.sheetTitle);
+  const extractedFields =
+    value.extractedFields === undefined
+      ? undefined
+      : parseQuestionnaireExtractedFields(value.extractedFields);
+  if (
+    sourceUrl === null ||
+    !text ||
+    preview === null ||
+    !facebookUrls ||
+    sheetTitle === null ||
+    extractedFields === null
+  ) {
+    return null;
+  }
+  return {
+    ...(sourceUrl ? { sourceUrl } : {}),
+    text,
+    preview,
+    facebookUrls,
+    ...(sheetTitle ? { sheetTitle } : {}),
+    ...(extractedFields ? { extractedFields } : {})
+  };
+}
+
+function parseQuestionnaireExtractedFields(
+  value: unknown
+): readonly QuestionnaireExtractedField[] | null {
+  if (!Array.isArray(value)) return null;
+  const fields = value.map((field) => {
+    if (!isRecord(field)) return null;
+    const key = parseString(field.key);
+    const label = parseString(field.label);
+    const fieldValue = parseString(field.value);
+    return key && label && fieldValue
+      ? { key, label, value: fieldValue }
+      : null;
+  });
+  return fields.every((field) => field !== null)
+    ? (fields as readonly QuestionnaireExtractedField[])
+    : null;
 }
 
 function parseBrandLibrary(value: unknown): BrandLibrary | null {
@@ -504,6 +571,8 @@ function parseDirections(
         : parseStringArray(item.supportingPoints);
     const formatBeats =
       item.formatBeats === undefined ? [] : parseStringArray(item.formatBeats);
+    const ugcBrief =
+      item.ugcBrief === undefined ? undefined : parseUgcVideoBrief(item.ugcBrief);
     const ctaActionType =
       item.ctaActionType === undefined
         ? undefined
@@ -535,6 +604,7 @@ function parseDirections(
       cta === null ||
       supportingPoints === null ||
       formatBeats === null ||
+      ugcBrief === null ||
       (item.ctaActionType !== undefined && !ctaActionType) ||
       ctaDestination === null ||
       contactLine === null ||
@@ -565,6 +635,7 @@ function parseDirections(
         service ?? undefined,
         formatBeats
       ),
+      ugcBrief: ugcBrief ?? undefined,
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,
       contactLine: contactLine ?? undefined,
@@ -576,6 +647,43 @@ function parseDirections(
   return directions.every((direction) => direction !== null)
     ? directions
     : null;
+}
+
+function parseUgcVideoBrief(value: unknown): UgcVideoBrief | null {
+  if (!isRecord(value)) return null;
+  const product = parseString(value.product, true);
+  const duration = parseString(value.duration, true);
+  const objective = parseString(value.objective, true);
+  const moodAndTone = parseString(value.moodAndTone, true);
+  const productionStyle = parseString(value.productionStyle, true);
+  const referenceDirection = parseString(value.referenceDirection, true);
+  const openingScript = parseString(value.openingScript, true);
+  const showcaseScript = parseString(value.showcaseScript, true);
+  const closingScript = parseString(value.closingScript, true);
+  if (
+    product === null ||
+    duration === null ||
+    objective === null ||
+    moodAndTone === null ||
+    productionStyle === null ||
+    referenceDirection === null ||
+    openingScript === null ||
+    showcaseScript === null ||
+    closingScript === null
+  ) {
+    return null;
+  }
+  return {
+    product,
+    duration,
+    objective,
+    moodAndTone,
+    productionStyle,
+    referenceDirection,
+    openingScript,
+    showcaseScript,
+    closingScript
+  };
 }
 
 function parseOutputs(value: unknown): WorkflowState["outputs"] | null {

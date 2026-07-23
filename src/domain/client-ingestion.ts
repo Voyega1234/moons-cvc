@@ -1,17 +1,20 @@
-import type { Brand } from "./brand";
+import type { Brand, QuestionnaireExtractedField } from "./brand";
 
 export const CLIENT_CATEGORY_MAX_LENGTH = 80;
+export const ONBOARDING_QUESTIONNAIRE_MAX_LENGTH = 12_000;
 
 export interface CreateClientDraftInput {
   name: string;
   facebookUrl: string;
   category?: string;
-  questionnaire?: QuestionnaireIntakeSource;
+  questionnaire: QuestionnaireIntakeSource;
 }
 
 export interface QuestionnaireIntakeSource {
   sourceUrl?: string;
   text: string;
+  sheetTitle?: string;
+  extractedFields?: readonly QuestionnaireExtractedField[];
 }
 
 export interface CreateClientDraftResult {
@@ -22,7 +25,7 @@ export interface CreateClientDraftResult {
 export interface QueueClientIngestionInput {
   clientId: string;
   facebookUrl: string;
-  questionnaire?: QuestionnaireIntakeSource;
+  questionnaire: QuestionnaireIntakeSource;
 }
 
 export interface QueueClientIngestionResult {
@@ -52,6 +55,35 @@ export function validateClientCategory(value: string): string | null {
   return trimmed.length <= CLIENT_CATEGORY_MAX_LENGTH && !/[\r\n]/.test(trimmed)
     ? null
     : `Use a short category label (${CLIENT_CATEGORY_MAX_LENGTH} characters or fewer).`;
+}
+
+export function validateOnboardingQuestionnaire(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Onboarding questionnaire is required.";
+  return trimmed.length <= ONBOARDING_QUESTIONNAIRE_MAX_LENGTH
+    ? null
+    : `Keep the onboarding questionnaire within ${ONBOARDING_QUESTIONNAIRE_MAX_LENGTH.toLocaleString()} characters.`;
+}
+
+export function validateQuestionnaireGoogleSheetUrl(
+  value: string
+): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Questionnaire Google Sheet URL is required.";
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a valid Google Sheet URL.";
+  }
+
+  const match = parsed.pathname.match(/^\/spreadsheets\/d\/([^/]+)/);
+  return parsed.hostname === "docs.google.com" &&
+    match?.[1] &&
+    match[1] !== "e"
+    ? null
+    : "Use a normal docs.google.com spreadsheet URL.";
 }
 
 export function initialsFromClientName(name: string): string {

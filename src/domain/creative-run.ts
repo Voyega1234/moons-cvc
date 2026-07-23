@@ -170,6 +170,18 @@ export interface UploadedCreativeMaterial {
   storageBucket?: string;
 }
 
+export interface UgcVideoBrief {
+  product: string;
+  duration: string;
+  objective: string;
+  moodAndTone: string;
+  productionStyle: string;
+  referenceDirection: string;
+  openingScript: string;
+  showcaseScript: string;
+  closingScript: string;
+}
+
 export interface CreativeDirection {
   id: string;
   /** Deliverable this direction was written for. Optional for saved legacy runs. */
@@ -195,6 +207,8 @@ export interface CreativeDirection {
   supportingPoints?: readonly string[];
   /** Format-native story beats. Album/UGC/video directions use exactly three. */
   formatBeats?: readonly string[];
+  /** Production-ready detail generated only for UGC video directions. */
+  ugcBrief?: UgcVideoBrief;
   /** Intended conversion route for the CTA. Optional for saved legacy runs. */
   ctaActionType?: CtaActionType;
   /** Verified destination copied from brand context. Never generated from inference. */

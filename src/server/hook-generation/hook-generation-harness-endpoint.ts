@@ -6,7 +6,8 @@ import {
   serviceTypes,
   type CtaActionType,
   type HookIdeaMode,
-  type ServiceType
+  type ServiceType,
+  type UgcVideoBrief
 } from "../../domain/creative-run.js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
@@ -86,6 +87,7 @@ interface GeneratedDirection extends RawDirection {
   cta: string;
   supportingPoints: readonly string[];
   formatBeats: readonly string[];
+  ugcBrief?: UgcVideoBrief;
   ctaActionType: CtaActionType;
   ctaDestination: string;
   contactLine: string;
@@ -584,6 +586,7 @@ function buildGenerationPrompt(
     "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
     "- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดีสำหรับภาพด้านใน 3 ใบ; แต่ละ topic ต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic.",
     "- ugc-video: คิดเป็น creator-led vertical video ที่ฟังเหมือนคนจริงพูด ไม่ใช่ headline บนโปสเตอร์. Hook ต้องเปิดเรื่องได้ใน 1-3 วินาที. formatBeats ต้องมี 3 beat พอดี: opening situation/tension → demonstration/proof → brand-fit action/close.",
+    "  สำหรับ ugc-video ให้สร้าง ugcBrief เพิ่มเติม: product = ชื่อสินค้า/บริการที่มีหลักฐานตรง, duration = ความยาวที่เหมาะสม เช่น 15–30 วินาที, objective = เป้าหมายวิดีโอที่ชัด, moodAndTone = mood/tone 3–5 คำพร้อมคำอธิบายสั้น, productionStyle = วิธีถ่ายและตัดต่อที่ creator ทำตามได้, referenceDirection = ลักษณะ reference visual ที่ควรหา/แนบโดยไม่อ้างชื่อ creator จริง, openingScript = คำพูด+action+ข้อความบนจอสำหรับช่วงเปิด, showcaseScript = คำพูด+action+proof/demo ช่วงกลาง, closingScript = คำพูด+action+CTA ช่วงปิด. แต่ละ script ต้อง production-ready 2–5 ประโยค กระชับ เป็นภาษาคนจริง และห้ามแต่ง claim. สำหรับ service อื่นให้คืนทุก field ใน ugcBrief เป็น string ว่าง.",
     "- motion-static: คิดเป็น short motion creative. Hook ต้องทำงานกับ movement/reveal. formatBeats ต้องมี 3 beat พอดี: opening frame → motion/reveal → resolved message/CTA.",
     "- resize: adapt approved work ไป placement ใหม่โดยไม่เสียสารหลัก และคืน formatBeats เป็น [].",
     "",
@@ -637,7 +640,7 @@ function buildGenerationPrompt(
     "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
     "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
     `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
-    "5. ใส่ concept, why, visual, formatBeats, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
+    "5. ใส่ concept, why, visual, formatBeats, ugcBrief, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
     "",
     "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
     "",
@@ -650,7 +653,7 @@ function buildGenerationPrompt(
     "",
     "## Compass output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; formatBeats = the exact format-native sequence defined above; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
+    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
     "Format-beat validation: album-post, ugc-video, and motion-static must return exactly 3 non-empty formatBeats. single-static and resize must return an empty array. Album formatBeats are the three inside-slide supporting topics—not hidden rationale and not generic filler.",
     "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
@@ -739,6 +742,14 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "Brand Memory — What to avoid:",
     ...input.brandMemory.avoid.map((item) => `- ${item}`),
     "",
+    ...(input.onboardingQuestionnaire
+      ? [
+          "Onboarding questionnaire — HISTORICAL ONBOARDING CONTEXT ONLY, NOT A CURRENT CAMPAIGN BRIEF:",
+          "Use this only as background about the brand, business, and audience. The current User Brief, Brand Memory, and verified Product data have higher priority. Do not reuse old goals, offers, prices, claims, or instructions unless the current input confirms them.",
+          input.onboardingQuestionnaire,
+          ""
+        ]
+      : []),
     "Brand kit:",
     ...input.brandLibrary.brand.map(
       (item) => `- ${item.title}: ${item.description}`
@@ -866,6 +877,32 @@ const hookGenerationSchema = {
             maxItems: 3,
             items: { type: "string" }
           },
+          ugcBrief: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              product: { type: "string" },
+              duration: { type: "string" },
+              objective: { type: "string" },
+              moodAndTone: { type: "string" },
+              productionStyle: { type: "string" },
+              referenceDirection: { type: "string" },
+              openingScript: { type: "string" },
+              showcaseScript: { type: "string" },
+              closingScript: { type: "string" }
+            },
+            required: [
+              "product",
+              "duration",
+              "objective",
+              "moodAndTone",
+              "productionStyle",
+              "referenceDirection",
+              "openingScript",
+              "showcaseScript",
+              "closingScript"
+            ]
+          },
           ctaActionType: { type: "string", enum: ctaActionTypes },
           ctaDestination: { type: "string" },
           contactLine: { type: "string" },
@@ -885,6 +922,7 @@ const hookGenerationSchema = {
           "cta",
           "supportingPoints",
           "formatBeats",
+          "ugcBrief",
           "ctaActionType",
           "ctaDestination",
           "contactLine",
@@ -949,6 +987,10 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
     quantity,
     contentTypeQuotas,
     brief,
+    onboardingQuestionnaire:
+      typeof value.onboardingQuestionnaire === "string"
+        ? value.onboardingQuestionnaire.trim()
+        : "",
     extraInstructions:
       typeof value.extraInstructions === "string"
         ? value.extraInstructions
@@ -1165,18 +1207,43 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
               direction.formatBeats,
               `directions[${index}].formatBeats`
             );
+      const hook = readString(direction.hook, `directions[${index}].hook`);
+      const concept = readString(
+        direction.concept,
+        `directions[${index}].concept`
+      );
+      const why = readString(direction.why, `directions[${index}].why`);
+      const visual = readString(direction.visual, `directions[${index}].visual`);
+      const cta = readString(direction.cta, `directions[${index}].cta`);
+      const caption = readString(
+        direction.caption,
+        `directions[${index}].caption`
+      );
+      const formatBeats = validateFormatBeats(service, rawFormatBeats, index);
+      const ugcBrief =
+        service === "ugc-video"
+          ? readUgcVideoBrief(direction.ugcBrief, `directions[${index}].ugcBrief`, {
+              hook,
+              concept,
+              why,
+              visual,
+              cta,
+              caption,
+              formatBeats
+            })
+          : undefined;
       return {
         id: readString(direction.id, `directions[${index}].id`),
         service,
-        hook: readString(direction.hook, `directions[${index}].hook`),
+        hook,
         subheadline: readString(
           direction.subheadline,
           `directions[${index}].subheadline`
         ),
-        concept: readString(direction.concept, `directions[${index}].concept`),
-        why: readString(direction.why, `directions[${index}].why`),
-        visual: readString(direction.visual, `directions[${index}].visual`),
-        cta: readString(direction.cta, `directions[${index}].cta`),
+        concept,
+        why,
+        visual,
+        cta,
         supportingPoints:
           direction.supportingPoints === undefined
             ? []
@@ -1184,7 +1251,8 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
                 direction.supportingPoints,
                 `directions[${index}].supportingPoints`
               ),
-        formatBeats: validateFormatBeats(service, rawFormatBeats, index),
+        formatBeats,
+        ...(ugcBrief ? { ugcBrief } : {}),
         ctaActionType:
           direction.ctaActionType === undefined
             ? "other"
@@ -1206,7 +1274,7 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
                 direction.contactLine,
                 `directions[${index}].contactLine`
               ),
-        caption: readString(direction.caption, `directions[${index}].caption`),
+        caption,
         score: readNumber(direction.score, `directions[${index}].score`),
         reasoning: readString(
           direction.reasoning,
@@ -1234,6 +1302,57 @@ function validateFormatBeats(
     );
   }
   return normalized;
+}
+
+function readUgcVideoBrief(
+  value: unknown,
+  field: string,
+  fallback: {
+    hook: string;
+    concept: string;
+    why: string;
+    visual: string;
+    cta: string;
+    caption: string;
+    formatBeats: readonly string[];
+  }
+): UgcVideoBrief {
+  if (value === undefined) {
+    return {
+      product: "สินค้า/บริการตาม Brief",
+      duration: "15–30 วินาที",
+      objective: fallback.why,
+      moodAndTone: fallback.visual,
+      productionStyle: "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ",
+      referenceDirection: fallback.visual,
+      openingScript: fallback.formatBeats[0] ?? fallback.hook,
+      showcaseScript: fallback.formatBeats[1] ?? fallback.concept,
+      closingScript:
+        fallback.formatBeats[2] ?? `${fallback.cta} — ${fallback.caption}`
+    };
+  }
+
+  const record = readRecord(value, field);
+  return {
+    product: readString(record.product, `${field}.product`),
+    duration: readString(record.duration, `${field}.duration`),
+    objective: readString(record.objective, `${field}.objective`),
+    moodAndTone: readString(record.moodAndTone, `${field}.moodAndTone`),
+    productionStyle: readString(
+      record.productionStyle,
+      `${field}.productionStyle`
+    ),
+    referenceDirection: readString(
+      record.referenceDirection,
+      `${field}.referenceDirection`
+    ),
+    openingScript: readString(record.openingScript, `${field}.openingScript`),
+    showcaseScript: readString(
+      record.showcaseScript,
+      `${field}.showcaseScript`
+    ),
+    closingScript: readString(record.closingScript, `${field}.closingScript`)
+  };
 }
 
 function parseSubheadlineHighlights(

@@ -19,11 +19,19 @@ export interface BrandMemory {
   avoid: readonly string[];
 }
 
-export interface QuestionnaireBrandSource {
+export interface QuestionnaireExtractedField {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface OnboardingQuestionnaireSource {
   sourceUrl?: string;
   text: string;
   preview: string;
   facebookUrls: readonly string[];
+  sheetTitle?: string;
+  extractedFields?: readonly QuestionnaireExtractedField[];
 }
 
 export interface Brand {
@@ -40,7 +48,8 @@ export interface Brand {
   existsInSystem?: boolean;
   mappingStatus?: string;
   serviceStatus?: string;
-  mappingQuestionnaire?: QuestionnaireBrandSource;
+  mappingClientPortalUrl?: string;
+  onboardingQuestionnaire?: OnboardingQuestionnaireSource;
   source?: "system" | "mapping";
 }
 

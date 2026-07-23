@@ -15,6 +15,7 @@ import {
   hookGenerationContentTypeQuotas,
   totalHookGenerationQuantity
 } from "../../features/workflow/model";
+import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionnaire-hook-context";
 
 export interface HookGenerationHarnessRequest {
   runId: string;
@@ -31,6 +32,7 @@ export interface HookGenerationHarnessRequest {
     count: number;
   }[];
   brief: string;
+  onboardingQuestionnaire: string;
   extraInstructions: string;
   existingHooks: readonly { hook: string; concept: string }[];
   attachments: readonly string[];
@@ -106,6 +108,9 @@ export function buildHookGenerationHarnessRequest({
     quantity: totalHookGenerationQuantity(run),
     contentTypeQuotas,
     brief: run.brief,
+    onboardingQuestionnaire: buildOnboardingQuestionnaireHookContext(
+      brand?.onboardingQuestionnaire
+    ),
     extraInstructions: extraInstructions?.trim() ?? "",
     existingHooks: run.directions.map((direction) => ({
       hook: direction.hook,

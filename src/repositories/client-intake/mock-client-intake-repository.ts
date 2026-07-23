@@ -3,6 +3,7 @@ import {
   initialsFromClientName,
   validateClientCategory,
   validateFacebookUrl,
+  validateOnboardingQuestionnaire,
   type CreateClientDraftInput,
   type CreateClientDraftResult,
   type QueueClientIngestionInput,
@@ -18,12 +19,18 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
   async createDraftClient({
     name,
     facebookUrl,
-    category
+    category,
+    questionnaire
   }: CreateClientDraftInput): Promise<CreateClientDraftResult> {
     const error = validateFacebookUrl(facebookUrl);
     if (error) throw new Error(error);
     const categoryError = validateClientCategory(category ?? "");
     if (categoryError) throw new Error(categoryError);
+    const questionnaireError = validateOnboardingQuestionnaire(
+      questionnaire.text
+    );
+    if (questionnaireError) throw new Error(questionnaireError);
+    const questionnaireText = questionnaire.text.trim();
 
     const brand: Brand = {
       id: createClientId(name),
@@ -35,7 +42,21 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
       library: { brand: [], products: [], docs: [], refs: [] },
       memory: { working: [], avoid: [] },
       existsInSystem: true,
-      source: "system"
+      source: "system",
+      onboardingQuestionnaire: {
+        ...(questionnaire.sourceUrl?.trim()
+          ? { sourceUrl: questionnaire.sourceUrl.trim() }
+          : {}),
+        text: questionnaireText,
+        preview: questionnaireText.slice(0, 280),
+        facebookUrls: [],
+        ...(questionnaire.sheetTitle?.trim()
+          ? { sheetTitle: questionnaire.sheetTitle.trim() }
+          : {}),
+        ...(questionnaire.extractedFields?.length
+          ? { extractedFields: questionnaire.extractedFields }
+          : {})
+      }
     };
 
     this.brandRepository.addClient(brand);
@@ -48,10 +69,16 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
 
   async queueExistingClient({
     clientId,
-    facebookUrl
+    facebookUrl,
+    questionnaire
   }: QueueClientIngestionInput): Promise<QueueClientIngestionResult> {
     const error = validateFacebookUrl(facebookUrl);
     if (error) throw new Error(error);
+    const questionnaireError = validateOnboardingQuestionnaire(
+      questionnaire.text
+    );
+    if (questionnaireError) throw new Error(questionnaireError);
+    const questionnaireText = questionnaire.text.trim();
 
     const brand = await this.brandRepository.getById(clientId);
     if (!brand) throw new Error("Client not found.");
@@ -60,7 +87,21 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
       ...brand,
       facebookUrl: facebookUrl.trim(),
       ingestionStatus: "queued",
-      ingestionError: undefined
+      ingestionError: undefined,
+      onboardingQuestionnaire: {
+        ...(questionnaire.sourceUrl?.trim()
+          ? { sourceUrl: questionnaire.sourceUrl.trim() }
+          : {}),
+        text: questionnaireText,
+        preview: questionnaireText.slice(0, 280),
+        facebookUrls: [],
+        ...(questionnaire.sheetTitle?.trim()
+          ? { sheetTitle: questionnaire.sheetTitle.trim() }
+          : {}),
+        ...(questionnaire.extractedFields?.length
+          ? { extractedFields: questionnaire.extractedFields }
+          : {})
+      }
     });
 
     return { jobId: `job-${brand.id}` };

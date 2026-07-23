@@ -418,6 +418,16 @@ export function workflowReducer(
             }
           }
         : state;
+    case "sync-onboarding-questionnaire":
+      return state.brand
+        ? {
+            ...state,
+            brand: {
+              ...state.brand,
+              onboardingQuestionnaire: action.questionnaire
+            }
+          }
+        : state;
     case "set-service":
       return withCreativeMix(state, [
         {

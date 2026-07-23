@@ -68,6 +68,7 @@ type HookGenerationHarnessRequest = {
   service: "single-static" | "album-post" | "motion-static" | "resize" | "ugc-video";
   quantity: number;
   brief: string;
+  onboardingQuestionnaire: string; // historical onboarding context only
   extraInstructions: string;
   existingHooks: { hook: string; concept: string }[];
   attachments: string[];
@@ -204,6 +205,8 @@ context:
 - Documents
 - References
 - Brand Memory working/avoid notes
+- onboarding questionnaire text, explicitly marked as historical onboarding
+  context rather than a current campaign brief
 - attachment file names
 
 The research step keeps the same discipline as `agent_seasonal.md`: it is

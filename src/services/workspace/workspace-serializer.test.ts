@@ -12,6 +12,43 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("preserves onboarding questionnaire context with the selected brand", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    let workspace = createInitialWorkspaceState({
+      runId: "questionnaire-run",
+      now: "2026-07-22T10:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-22T10:01:00.000Z",
+      action: {
+        type: "select-brand",
+        brand: {
+          ...brand,
+          onboardingQuestionnaire: {
+            sourceUrl: "https://example.com/onboarding",
+            text: "Onboarding answer about the brand audience.",
+            preview: "Onboarding answer about the brand audience.",
+            facebookUrls: ["https://facebook.com/example"]
+          }
+        }
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-22T10:02:00.000Z")
+    );
+
+    expect(
+      restored?.runsById["questionnaire-run"]?.brand?.onboardingQuestionnaire
+    ).toMatchObject({
+      text: "Onboarding answer about the brand audience.",
+      facebookUrls: ["https://facebook.com/example"]
+    });
+  });
+
   it("round-trips high-volume mixes with up to 50 items per content type", () => {
     let workspace = createInitialWorkspaceState({
       runId: "high-volume-run",

@@ -773,20 +773,17 @@ lime/orange semantic accents, soft borders, and medium information density.
     and shows `CS → PM → Client`. Trail pills derive completed/current/future
     styling from each output's real approval state and switch the final Client
     pill to `Client ready` after all applicable internal gates pass.
-  - Google Sheet Questionnaire intake was connected to Signal on 2026-07-15.
-    Mapping rows are now read by header name, including `Questionnaire` and
-    `Client Portal`, and invalid Google HTML responses are retried instead of
-    being cached as an empty client list. Facebook pages found in a client's
-    Questionnaire appear as preselected source choices in both `Add to Compass`
-    and `Set up brand`; users can still choose the current Compass page or reveal a
-    manual fallback. Questionnaire content is preselected as optional,
-    first-party Brand Kit evidence, sanitized before storage to exclude contact
-    sections, persisted as a successful `manual_input` source, and prioritized
-    by the brand analyzer alongside social posts, ads, and images. The compact
-    source picker includes a collapsed evidence preview and follows the existing
-    Signal card styling. Full verification passes all 45 test files / 209 tests,
-    TypeScript, and the production build; the existing bundle-size warning
-    remains non-blocking.
+  - Onboarding Questionnaire intake was moved out of the mapping Sheet on
+    2026-07-23. Mapping rows are read by header name for `Client ID`, `Status`,
+    `Service Status`, and `Client Portal`; the `Questionnaire` column is no
+    longer read. `Add new client`, `Add to Compass`, and `Set up brand` require
+    users to provide a public Google Sheet URL before analysis can start. The
+    backend reads only the `1. Questionnaire` tab without Google credentials.
+    Answers are persisted as a successful `manual_input` source with kind
+    `onboarding_questionnaire`, loaded back into the selected Brand, and sent to
+    Hook Agent as historical onboarding context rather than a current campaign
+    brief. Intake also shows a Google Sheet extraction section listing the
+    supported fields and, for mapping clients, their extracted values.
   - A Google client-list regression was fixed on 2026-07-15. The injectable
     native `fetch` function had been stored and invoked as a repository method,
     causing Chrome to throw `Illegal invocation` before the Sheet request was
@@ -921,30 +918,30 @@ lime/orange semantic accents, soft borders, and medium information density.
 - `src/services/workspace/workspace-serializer.ts` and its tests - persist the
   success metric and prove backward compatibility plus review-comment storage.
 - `src/services/clients/merge-mapping-clients.ts` - replaces a visible em dash
-  fallback with a regular hyphen and carries Questionnaire evidence from the
+  fallback with a regular hyphen and carries the Client Portal URL from the
   mapping sheet into both existing and sheet-only brand records; client-name
-  matching now ignores punctuation and spacing to prevent duplicate Sheet and
+  matching ignores punctuation and spacing to prevent duplicate Sheet and
   Supabase rows.
 - `src/services/clients/plan-mapping-client-import.ts` and
   `scripts/import-active-mapping-clients.ts` - provide the tested, dry-run-first
   Active mapping-client sync used for the 2026-07-16 Supabase import.
 - `src/repositories/mapping-clients/google-sheet-mapping-client-repository.ts` -
-  validates and retries the published CSV, maps columns by header, extracts
-  Questionnaire Facebook pages, and creates sanitized Brand Kit evidence.
+  calls the authenticated backend mapping endpoint and maps the supported non-
+  Questionnaire fields.
 - `src/repositories/client-intake/supabase-client-intake-repository.ts` and
-  `src/server/client-ingestion/` - persist selected Questionnaire evidence and
-  prioritize it as first-party input during brand analysis; the repository now
-  also starts the authenticated Vercel ingestion trigger immediately after a
-  successful queue operation.
+  `src/server/client-ingestion/` - require and persist user-entered onboarding
+  Questionnaire evidence and prioritize it as first-party input during brand
+  analysis; the repository also starts the authenticated Vercel ingestion
+  trigger immediately after a successful queue operation.
 - `api/trigger-client-ingestion.ts` and
   `src/services/client-ingestion/trigger-client-ingestion.ts` - bridge the
   signed-in browser request to the Vercel `waitUntil` background worker without
   exposing service-role, Apify, or model secrets.
 - `src/domain/brand.ts`, `src/domain/client-ingestion.ts`, and
-  `src/ports/mapping-client-repository.ts` - type the Questionnaire source from
-  mapping through queued ingestion.
-- `src/styles/app.css` - compact Signal source-selection and Questionnaire
-  preview styling.
+  `src/ports/mapping-client-repository.ts` - separate the user-entered
+  onboarding Questionnaire from Google Sheet mapping metadata.
+- `src/styles/app.css` - compact Signal source-selection, Google Sheet
+  extraction summary, and required Questionnaire styling.
 - `src/styles/compass-redesign.css` - scoped creative-tech visual layer.
 - `src/main.tsx` - loads the redesign stylesheet after the legacy stylesheet.
 - `src/config/app.ts` - approved reference metadata.

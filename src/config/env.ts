@@ -14,6 +14,7 @@ export interface PublicEnv {
   qualityCheckEndpoint: string;
   guidelineAnalysisEndpoint: string;
   clientIngestionTriggerEndpoint: string;
+  googleOAuthClientId: string | null;
 }
 
 function optional(value: string | undefined): string | null {
@@ -67,7 +68,8 @@ export const env: PublicEnv = {
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/analyze-brand-guideline`,
   clientIngestionTriggerEndpoint:
     import.meta.env.VITE_CLIENT_INGESTION_TRIGGER_ENDPOINT ||
-    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/trigger-client-ingestion`
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/trigger-client-ingestion`,
+  googleOAuthClientId: optional(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID)
 };
 
 export function hasSupabaseEnv(

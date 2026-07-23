@@ -22,6 +22,8 @@ const requestBody = {
     { service: "ugc-video", count: 2 }
   ],
   brief: "ต้องการ creative เพื่อชวน B2B เข้าร่วม AI SEO webinar",
+  onboardingQuestionnaire:
+    "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B ที่เริ่มใช้ AI",
   attachments: [],
   uploadedMaterials: [
     {
@@ -220,10 +222,19 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(firstBody.input)).toContain(
       "THAI PROVABLE MOMENT"
     );
+    expect(JSON.stringify(firstBody.input)).toContain(
+      "HISTORICAL ONBOARDING CONTEXT ONLY"
+    );
     expect(secondBody.tools).toBeUndefined();
     expect(JSON.stringify(secondBody.input)).toContain("AI search behavior");
     expect(JSON.stringify(secondBody.input)).toContain(
       "ต้องการ creative เพื่อชวน B2B"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "NOT A CURRENT CAMPAIGN BRIEF"
     );
     expect(JSON.stringify(secondBody.input)).toContain(
       "CONTENT TYPE CREATIVE RULES"
@@ -254,6 +265,10 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(secondBody.input)).toContain(
       "ugc-video: คิดเป็น creator-led vertical video"
     );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "openingScript = คำพูด+action+ข้อความบนจอ"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain("ugcBrief");
     expect(JSON.stringify(secondBody.input)).toContain(
       "single-static: รักษามาตรฐานเดิม"
     );

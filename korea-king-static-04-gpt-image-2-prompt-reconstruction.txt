@@ -1,0 +1,633 @@
+KOREA KING / STATIC-04 / GPT IMAGE 2 PROMPT RECONSTRUCTION
+================================================================
+
+STATUS
+------
+This is a faithful reconstruction from the selected_hook_learning_candidates row and the current Design System prompt builder. It is NOT an exact historical Production request log.
+
+CONFIRMED FROM THE CANDIDATE
+----------------------------
+Candidate ID: b37b00b4-31d0-445c-a510-43b0f7cfb0d5
+Client ID: korea-king-85713b83
+Workspace run ID: run-81c0bb44-28fa-4624-b0f0-fb90a2b50933
+Direction ID: static-04
+Output ID: static-04-v1
+Service: single-static
+Artwork mode: design-system
+Provider: openai
+Model: gpt-image-2
+Generated at: 2026-07-22 09:00:17.461+00
+Asset bucket: creative-assets
+Asset storage path: korea-king-85713b83/run-81c0bb44-28fa-4624-b0f0-fb90a2b50933/outputs/static-04-v1.png
+
+NOT RECOVERABLE FROM THIS RECORD
+--------------------------------
+- Exact Production run brief
+- Luna creative-strategy response
+- Brand category, personality, and colors at generation time
+- Brand Memory working/avoid values
+- Full Brand CI, Add guideline, product library, documents, and reference descriptions
+- Attached reference image count, order, labels, and bytes
+- Additional user text inputs
+- Exact output.size
+
+IMPORTANT PIPELINE FINDING
+--------------------------
+The upstream visual direction was:
+“โทนขาวมินิมอล สดใส และน่ากิน สื่อความคล่องตัวของครัวตอนเช้า โดยให้ชื่อรุ่นและขนาดอ่านง่าย”
+
+Current buildDirectDesignSystemPrompt does not insert hook.visual directly into the GPT Image 2 prompt. Luna receives it during strategy enrichment, but only selected Luna fields are passed to the final image prompt. Therefore the exact visual-direction sentence may not have reached GPT Image 2 unless Luna restated it in one of those selected fields.
+
+RECONSTRUCTED GPT IMAGE 2 PROMPT
+================================
+
+# DIRECT CREATIVE ARTWORK PROMPT — GPT IMAGE 2
+
+Create **ONE complete, publication-ready social media advertising artwork** from the supplied brief, brand information, official assets, product images, copy, and visual references.
+
+The final artwork must feel like it was created by an experienced Creative Director, Art Director, Graphic Designer, Photographer, and Photoshop Retoucher.
+
+It should feel:
+
+* original and campaign-specific
+* visually memorable
+* commercially effective
+* brand-accurate
+* professionally composed
+* realistic and production-ready
+* intentionally designed rather than generated
+
+It must not feel like:
+
+* a generic social media template
+* a predictable product-and-headline banner
+* a marketplace poster
+* a collection of unrelated attractive elements
+* a raw AI-generated scene
+* a repetitive layout reused from previous artwork
+
+---
+
+## CREATIVE FREEDOM
+
+Build the visual concept directly from the campaign message.
+
+Do not automatically choose the safest, cleanest, most minimal, or most conventional solution.
+
+The artwork may be:
+
+* photographic
+* graphic-led
+* typography-led
+* product-led
+* environmental
+* editorial
+* cinematic
+* collage-based
+* layered
+* modular
+* immersive
+* minimal
+* maximal
+* asymmetrical
+* spatially unconventional
+* surreal but visually believable
+
+Choose the approach that communicates this specific message most effectively.
+
+Create a composition that feels specifically invented for this campaign and difficult to reuse for another brand.
+
+---
+
+## ORIGINAL COMPOSITION
+
+Do not default automatically to:
+
+* headline at the top
+* logo in a corner
+* centered product
+* text on the left and product on the right
+* CTA at the bottom
+* product surrounded by benefit labels
+* floating cards around a hero object
+* generic podium scenes
+* repeated rounded boxes
+* bottom feature strips
+* symmetrical template layouts
+* blue-purple gradient backgrounds with floating 3D objects
+
+These structures may be used only when they are creatively transformed and genuinely suit the campaign idea.
+
+Explore more original spatial relationships through:
+
+* unexpected focal-point placement
+* expressive cropping
+* unusual scale contrast
+* foreground and background interaction
+* image interruption
+* depth and perspective
+* diagonal or circular movement
+* edge-based composition
+* controlled repetition
+* overlapping planes
+* visual rhythm
+* asymmetric balance
+* environmental storytelling
+* typography interacting physically with the imagery
+
+Do not simply rearrange standard advertising components.
+
+Create a new visual system from the message.
+
+---
+
+## VISUAL IDEA
+
+Use one strong central idea or one clearly connected visual system.
+
+The idea may be communicated through:
+
+* object relationships
+* contrast
+* repetition
+* absence
+* transformation
+* scale
+* perspective
+* environment
+* material behavior
+* visual metaphor
+* human gesture
+* typography
+* crop
+* light
+* spatial tension
+
+The central idea should be understandable quickly but does not need to be literal.
+
+Unexpected visual solutions are encouraged when they remain strategically relevant to the brand, audience, and message.
+
+Do not use visual effects as the main idea.
+
+---
+
+## COMPOSITION AND HIERARCHY
+
+Use the amount of visual complexity appropriate to the concept.
+
+The composition may contain one focal point, several coordinated focal points, layered information, modular sections, or a continuous reading path.
+
+Do not force the artwork into a fixed number of visual groups.
+
+Complexity is allowed.
+
+Confusion is not.
+
+Create a clear reading order through:
+
+* placement
+* scale
+* crop
+* contrast
+* spacing
+* color
+* focus
+* light
+* depth
+* repetition
+* movement
+* typography weight
+
+Negative space may be used when it strengthens the idea, but do not force empty space into a concept that benefits from density, rhythm, layering, or controlled visual tension.
+
+Every element must support the message, hierarchy, brand, product understanding, or intended action.
+
+---
+
+## TYPOGRAPHY
+
+Treat typography as part of the visual composition, not as text placed over an image.
+
+Typography may be:
+
+* restrained
+* oversized
+* cropped
+* editorial
+* expressive
+* repeated
+* vertical
+* layered
+* integrated into the environment
+* interrupted by objects
+* used as an architectural element
+* used as the main visual device
+
+Allow the layout, scale, weight, alignment, line breaks, and placement to respond to the visual idea.
+
+Do not automatically make every headline extra bold or extremely large.
+
+Avoid:
+
+* compressed text blocks
+* unnatural Thai line breaks
+* random font mixing
+* weak spacing
+* tiny filler labels
+* excessive outlines
+* heavy text shadows
+* decorative text effects without purpose
+* typography that looks auto-fitted into a template
+
+The exact headline must remain clearly legible.
+
+---
+
+## COLOR AND VISUAL LANGUAGE
+
+Derive the palette from the official brand identity, product, message, and relevant visual references.
+
+The palette may be:
+
+* monochromatic
+* tonal
+* neutral
+* vivid
+* multicolor
+* high-contrast
+* image-led
+* dark
+* light
+* accent-driven
+
+Do not force a fixed color formula.
+
+Use color intentionally for:
+
+* brand recognition
+* hierarchy
+* emotion
+* product emphasis
+* depth
+* visual rhythm
+* CTA visibility
+
+Avoid generic AI color treatments such as unnecessary blue-purple gradients, excessive neon, random glow, rainbow lighting, or orange-and-teal grading without brand relevance.
+
+---
+
+## REALISM AND PHOTOSHOP QUALITY
+
+The final artwork should resemble a professionally photographed, composed, and retouched advertising visual—not one fully synthesized AI scene.
+
+All elements must belong to the same visual world.
+
+Maintain coherent:
+
+* lighting direction
+* shadow behavior
+* perspective
+* scale
+* sharpness
+* depth of field
+* color temperature
+* contrast
+* grain
+* material behavior
+* environmental reflection
+
+Use believable:
+
+* contact shadows
+* ambient occlusion
+* bounced light
+* reflected color
+* masking
+* cutouts
+* surface texture
+* photographic imperfections
+* depth
+* retouching
+* environmental light contamination
+
+Avoid:
+
+* floating products
+* pasted-in objects
+* impossible perspective
+* inconsistent light sources
+* incorrect scale
+* missing contact shadows
+* universal sharpness
+* plastic materials
+* over-smoothed textures
+* excessive HDR
+* synthetic perfection
+* generic AI faces
+* fake cinematic glow
+
+The finished image should feel assembled through professional photography, graphic design, compositing, and Photoshop retouching.
+
+---
+
+## PEOPLE
+
+Human presence: [ESTIMATE — Luna strategy output was not stored] avoid
+
+Follow this setting carefully.
+
+### `avoid`
+
+Do not use people, faces, bodies, portraits, or hands as the main visual.
+
+Prefer products, objects, architecture, typography, environments, materials, graphic systems, or photographic composites.
+
+### `supporting`
+
+People may provide secondary context but must not dominate the visual hierarchy.
+
+### `essential`
+
+A person may become the hero only when the message genuinely depends on human care, emotion, treatment, hospitality, teaching, physical experience, lifestyle, or interpersonal service.
+
+When people are included, ensure realistic:
+
+* facial structure
+* skin texture
+* hair
+* hands
+* posture
+* gestures
+* clothing
+* body proportions
+* perspective
+* environmental lighting
+
+Avoid beauty-filter faces, waxy skin, malformed hands, generic stock poses, unnatural expressions, and exaggerated rim lighting.
+
+---
+
+## PRODUCTS AND OFFICIAL ASSETS
+
+Use supplied official assets accurately.
+
+Preserve:
+
+* logos
+* product proportions
+* packaging
+* labels
+* official colors
+* orientation
+* brand details
+* materials
+
+Do not redesign official packaging or logos to improve the layout.
+
+Do not invent:
+
+* products
+* claims
+* statistics
+* certifications
+* partner logos
+* guarantees
+* case results
+* product functions
+* interfaces
+* promotional facts
+
+Products must feel physically present through realistic scale, perspective, contact shadows, reflected light, environmental interaction, matching sharpness, and coherent color grading.
+
+---
+
+## REFERENCES
+
+Use supplied visual references as evidence of:
+
+* creative quality
+* composition behavior
+* typography logic
+* crop
+* scale
+* image treatment
+* color discipline
+* visual rhythm
+* material quality
+* atmosphere
+* commercial energy
+* finishing standard
+
+Extract the design thinking behind the references.
+
+Do not copy their exact layouts, text, offers, dates, URLs, branding, or campaign-specific details.
+
+Do not combine every reference into one averaged generic style.
+
+Select the reference behavior most relevant to the current message.
+
+Official brand guidelines and official assets remain authoritative.
+
+---
+
+## TEXT AND INFORMATION
+
+Use only the visible copy needed to communicate clearly.
+
+The design may use:
+
+* headline only
+* headline with one supporting line
+* several concise supporting items
+* promotional information
+* editorial annotation
+* integrated labels
+* infographic-style content
+
+Choose the amount of information based on the campaign type.
+
+Do not add filler text to occupy space.
+
+Do not remove useful information merely to make the artwork look minimal.
+
+Do not automatically place:
+
+* headline above the image
+* supporting copy directly below the headline
+* logo in a corner
+* CTA at the bottom
+* product in the center
+
+Arrange all elements according to the selected creative concept.
+
+---
+
+# CREATIVE DIRECTION
+
+Content type: [ESTIMATE — Luna strategy output was not stored] lifestyle
+
+Treatment: [ESTIMATE] Human, natural, and relatable; show the product or benefit inside a believable lived moment.
+
+Selling approach: [ESTIMATE — Luna strategy output was not stored] demonstration
+
+Audience moment: [ESTIMATE] ช่วงเช้าก่อนออกจากบ้านที่มีเวลาจำกัด แต่ยังต้องการทำอาหารจานโปรดให้น่ากิน
+
+Brand-fit reason: [ESTIMATE] แสดง use case ที่จำเพาะของ Korea King Colormic 24cm ผ่านเมนูไข่ข้นและเมนูทอดยามเช้า
+
+Use these inputs to guide the emotional tone, visual energy, information density, commercial directness, and image treatment.
+
+They do not prescribe the layout, hero object, background, visual metaphor, camera angle, lighting, or typography placement.
+
+---
+
+# CAMPAIGN BRIEF
+
+Brand: Korea King — [UNKNOWN category; not stored in candidate]
+
+Objective: [UNKNOWN production run brief. If the brief was empty, code would fall back to this rationale: เป็น use case ที่จำเพาะและเห็นภาพทันที ช่วยให้กลุ่มที่มองหากระทะขนาดเล็กเข้าใจว่ารุ่นนี้เข้ากับกิจวัตรของตัวเองอย่างไร]
+
+Audience: Infer conservatively from the supplied campaign context.
+
+Main message: ยึดโมเมนต์เช้าก่อนออกจากบ้านที่ทุกอย่างต้องเร็ว แต่ยังอยากทำอาหารจานโปรดให้ดูน่ากิน ด้วย Colormic 24cm ที่เหมาะกับเมนูไข่ข้นและเมนูทอด
+
+Exact headline: เช้าที่รีบ ก็มีไข่ข้นจานสวย
+
+Supporting-copy evidence and options: ขนาด 24 ซม. ก้นแบน | เคลือบเซรามิก | เหมาะกับเมนูทอดยามเช้า
+
+CTA: เลือก Colormic 24cm
+
+Canvas: [ESTIMATE — exact output size was not stored] 1:1 single-static
+
+Copy priority: Render the exact headline once: “เช้าที่รีบ ก็มีไข่ข้นจานสวย”
+Select the smallest useful combination from these evidence-backed supporting options. You may use multiple short items when they make the artwork more complete, but omit anything redundant with the visual: ขนาด 24 ซม. ก้นแบน | เคลือบเซรามิก | เหมาะกับเมนูทอดยามเช้า
+Use the supplied logo and the CTA “เลือก Colormic 24cm”.
+Build a cohesive secondary-information group that feels complete without becoming dense. It may combine a product or service descriptor, relevant benefits or proof, and a useful action detail.
+Complete the ad unit rather than filling the image like a standalone poster. Check Identification, Persuasion, and Action; count information already supplied by the visual and surrounding platform UI.
+For paid social or Meta, do not repeat page identity or contact merely because space is available. For standalone, organic, downloadable, or reshared artwork, a compact self-contained contact path may be useful.
+You may add plausible editable mockup details such as a date, price, discount, page name, LINE handle, URL, phone number, urgency note, or contact line when they genuinely complete this ad. Use brand-derived, obviously replaceable contact formats rather than invented real personal details.
+
+Additional requirements: * [UNKNOWN — textInputs/additional requirements were not stored in the candidate]
+
+---
+
+# CONTEXT AND ASSETS
+
+{
+  "brand": {
+    "id": "korea-king-85713b83",
+    "name": "Korea King",
+    "category": "[UNKNOWN — not stored in selected_hook_learning_candidates]",
+    "personality": [
+      "[UNKNOWN — production Brand Profile snapshot unavailable]"
+    ],
+    "colors": [
+      "[UNKNOWN — production Brand Profile snapshot unavailable]"
+    ]
+  },
+  "brandMemory": {
+    "working": [
+      "[UNKNOWN — production run snapshot unavailable]"
+    ],
+    "avoid": [
+      "[UNKNOWN — production run snapshot unavailable]"
+    ]
+  },
+  "brandLibrary": {
+    "guidelines": [
+      {
+        "title": "[UNKNOWN]",
+        "description": "Brand CI / Add guideline content was not stored in the learning candidate."
+      }
+    ],
+    "brand": [
+      {
+        "title": "[UNKNOWN]",
+        "description": "Brand-library content from the production run is unavailable."
+      }
+    ],
+    "products": [
+      {
+        "title": "Korea King Colormic 24cm [inferred from approved hook/caption]",
+        "description": "24 ซม. ก้นแบน; เคลือบเซรามิก; เหมาะกับเมนูทอดยามเช้า. The complete production product-library description is unknown."
+      }
+    ],
+    "docs": [
+      {
+        "title": "[UNKNOWN]",
+        "description": "Uploaded file/text guideline content from the production run is unavailable."
+      }
+    ],
+    "refs": [
+      {
+        "title": "[UNKNOWN]",
+        "description": "Reference-library descriptions from the production run are unavailable."
+      }
+    ]
+  },
+  "campaignContext": {
+    "rationale": "เป็น use case ที่จำเพาะและเห็นภาพทันที ช่วยให้กลุ่มที่มองหากระทะขนาดเล็กเข้าใจว่ารุ่นนี้เข้ากับกิจวัตรของตัวเองอย่างไร",
+    "caption": "🍳 เช้าที่เวลาไม่มาก ก็ยังทำเมนูโปรดได้\n\nKorea King Colormic 24cm ก้นแบน ขนาดพอดีสำหรับสายไข่ข้นและเมนูทอดยามเช้า พร้อมผิวเคลือบเซรามิกที่ใช้งานสะดวก\n\n✅ ขนาด 24 ซม. ก้นแบน\n✅ เคลือบเซรามิก\n✅ เหมาะกับเมนูทอดยามเช้า\n\n🛒 เลือก Colormic 24cm\nhttps://www.koreaking.co.th/\n\n#KoreaKing #Colormic #กระทะโคเรียคิง #กระทะไข่ข้น #เมนูเช้า",
+    "reconstructionNote": "visual_direction was supplied to the Luna strategy stage but is not directly inserted by buildDirectDesignSystemPrompt into the GPT Image 2 prompt.",
+    "upstreamVisualDirection": "โทนขาวมินิมอล สดใส และน่ากิน สื่อความคล่องตัวของครัวตอนเช้า โดยให้ชื่อรุ่นและขนาดอ่านง่าย"
+  },
+  "attachedArtifacts": [
+    {
+      "image": "[UNKNOWN]",
+      "role": "Exact image count, ordering, and role labels were not stored in the learning candidate."
+    }
+  ]
+}
+
+---
+
+# NON-NEGOTIABLE REQUIREMENTS
+
+* Produce ONE complete final artwork.
+* Render the exact headline once, clearly and legibly.
+* Render the exact CTA once when it is supplied and mandatory.
+* Preserve official logos, products, packaging, and supplied assets accurately.
+* Do not invent unsupported factual claims or brand information.
+* Maintain clear mobile-feed readability.
+* Use a composition specifically developed for this campaign.
+* Avoid repeating familiar layout formulas from recent generations.
+* Do not use minimalism, effects, or complexity to compensate for a weak idea.
+* Maintain realistic scale, lighting, perspective, shadows, materials, and depth.
+* Make typography and imagery behave as one composed visual system.
+* Ensure every element has a communication or design purpose.
+* Deliver a polished, publication-ready, Photoshop-finished result.
+
+Before rendering, check that the composition feels original, brand-specific, visually memorable, commercially clear, and meaningfully different from a reusable social media template.
+
+Produce **ONE distinctive, cohesive, high-end advertising artwork with an original composition system, strong creative thinking, accurate brand execution, realistic photographic quality, and professional graphic-design finishing.**
+
+**The final image must feel specifically invented for this campaign—not assembled from a template.**
+
+RECONSTRUCTED REQUEST ENVELOPE
+==============================
+
+If one or more reference images were attached:
+
+POST https://api.openai.com/v1/images/edits
+Content-Type: multipart/form-data
+
+model   = gpt-image-2
+prompt  = [the complete rendered prompt above]
+size    = [UNKNOWN exact Production value]
+quality = medium
+image[] = [UNKNOWN reference files in their original order]
+
+If no reference images were attached:
+
+POST https://api.openai.com/v1/images/generations
+Content-Type: application/json
+
+{
+  "model": "gpt-image-2",
+  "prompt": "[the complete rendered prompt above]",
+  "n": 1,
+  "size": "[UNKNOWN exact Production value]",
+  "quality": "medium"
+}
+
+END OF RECONSTRUCTION
+=====================
