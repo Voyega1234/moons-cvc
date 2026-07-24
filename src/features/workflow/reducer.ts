@@ -354,10 +354,10 @@ export function workflowActionToast(
         "Client feedback routed",
         `Sent directly to ${
           action.targetRole === "graphicDesign"
-            ? "GD"
+            ? "the Artwork queue"
             : action.targetRole === "clientService"
-              ? "CS"
-              : "GD and CS"
+              ? "the Concept queue"
+              : "the Artwork and Concept queues"
         } with the full client context.`
       );
     case "mark-delivered":

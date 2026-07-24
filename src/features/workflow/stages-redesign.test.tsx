@@ -2691,11 +2691,11 @@ describe("redesigned workflow stages", () => {
     await user.click(stage.getByRole("button", { name: "Route changes" }));
     expect(
       stage.getByText(
-        "Choose GD, CS, or Both and add one clear change instruction."
+        "Choose Artwork, Concept, or Both and add one clear change instruction."
       )
     ).toBeTruthy();
 
-    await user.click(stage.getByRole("button", { name: "CS" }));
+    await user.click(stage.getByRole("button", { name: "Concept" }));
     await user.type(
       stage.getByRole("textbox", { name: "Change instruction" }),
       "Make the product benefit easier to scan."

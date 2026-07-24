@@ -8879,7 +8879,7 @@ export function ClientStage({
     const comment = revisionComment.trim();
     if (!revisionTarget || !comment) {
       setRevisionError(
-        "Choose GD, CS, or Both and add one clear change instruction."
+        "Choose Artwork, Concept, or Both and add one clear change instruction."
       );
       return;
     }
@@ -9112,7 +9112,7 @@ export function ClientStage({
               {revisionOutput.revisionCount + 1}
             </div>
             <div className="compass-qc-change-type-field">
-              <span>Who needs to make the change?</span>
+              <span>What needs to change?</span>
               <div>
                 {(isUgcOutput(revisionOutput)
                   ? (["clientService"] as const)
@@ -9129,9 +9129,9 @@ export function ClientStage({
                     }}
                   >
                     {target === "graphicDesign"
-                      ? "GD"
+                      ? "Artwork"
                       : target === "clientService"
-                        ? "CS"
+                        ? "Concept"
                         : "Both"}
                   </button>
                 ))}
@@ -9139,12 +9139,12 @@ export function ClientStage({
             </div>
             <div className="compass-qc-route-preview">
               {revisionTarget === "graphicDesign"
-                ? "Fix owner: GD · Update and replace the artwork in Internal QC."
+                ? "Artwork change · Update and replace the visual in Internal QC."
                 : revisionTarget === "clientService"
-                  ? "Fix owner: CS · Update the hook, caption, script, or client-facing details."
+                  ? "Concept change · Update the concept, hook, caption, script, or client-facing details."
                   : revisionTarget === "both"
-                    ? "Fix route: GD → CS · Artwork first, then copy."
-                    : "Choose GD, CS, or Both to route this request."}
+                    ? "Both · Update the artwork first, then the concept and copy."
+                    : "Choose Artwork, Concept, or Both to route this request."}
             </div>
             <label className="output-modal-prompt-label">
               <span>Change instruction</span>
