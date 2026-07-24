@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ArtworkMode } from "../../domain/creative-run.js";
+import {
+  defaultAlbumFormat,
+  type AlbumFormat,
+  type ArtworkMode
+} from "../../domain/creative-run.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 
 type FetchLike = typeof fetch;
@@ -29,6 +33,7 @@ export interface ImagePromptAgentInput {
     colors: readonly string[];
   } | null;
   service: string;
+  albumFormat?: AlbumFormat;
   brief: string;
   hook: ImagePromptAgentHook;
   textInputs: readonly string[];
@@ -228,6 +233,10 @@ function renderStandardPrompt(
   input: ImagePromptAgentInput
 ): string {
   const compactInput = {
+    workingBrief: {
+      priority: "highest",
+      instruction: input.brief || "Not provided."
+    },
     brand: {
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
@@ -255,13 +264,7 @@ function renderStandardPrompt(
     },
     ...(input.service === "album-post"
       ? {
-          albumMaster: {
-            grid: "one 2:1 cover across the top; two 1:1 panels below",
-            panel1: input.hook.formatBeats?.[0] ?? "hook and main visual",
-            panel2: input.hook.formatBeats?.[1] ?? "mechanism or proof",
-            panel3: input.hook.formatBeats?.[2] ?? "offer and CTA",
-            cropSafety: "each panel self-contained; no essential element crosses a seam"
-          }
+          albumMaster: albumMasterInput(input)
         }
       : {}),
     ...(input.textInputs.length
@@ -272,9 +275,58 @@ function renderStandardPrompt(
   return [
     source.trim(),
     "",
+    "WORKING BRIEF PRIORITY",
+    "The runtime workingBrief is the highest-priority creative instruction. Follow its explicit requirements for visual cleanliness, text density, element count, composition, mood, and exclusions even when references, defaults, or optional completion rules suggest otherwise. Preserve only immutable approved copy and official asset fidelity when resolving a conflict.",
+    "",
     "AUTHORITATIVE COMPACT CAMPAIGN INPUT",
     JSON.stringify(compactInput, null, 2)
   ].join("\n");
+}
+
+function albumMasterInput(input: ImagePromptAgentInput) {
+  const format = input.albumFormat ?? defaultAlbumFormat;
+  const beats = input.hook.formatBeats ?? [];
+  const common = {
+    format,
+    cropSafety:
+      "each panel self-contained; no essential element crosses a seam"
+  };
+  if (format === "three-vertical") {
+    return {
+      ...common,
+      grid: "large 1:2 vertical cover on the left; two 1:1 panels stacked on the right",
+      panel1: "cover hook and main visual",
+      panel2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "support and proof",
+      panel3: beats[2] ?? "offer and CTA"
+    };
+  }
+  if (format === "three-horizontal") {
+    return {
+      ...common,
+      grid: "large 2:1 horizontal cover across the top; two 1:1 panels below",
+      panel1: "cover hook and main visual",
+      panel2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "support and proof",
+      panel3: beats[2] ?? "offer and CTA"
+    };
+  }
+  if (format === "four-vertical") {
+    return {
+      ...common,
+      grid: "large 2:3 vertical cover on the left; three 1:1 panels stacked on the right",
+      panel1: "cover hook and main visual",
+      panel2: beats[0] ?? "opening support",
+      panel3: beats[1] ?? "mechanism or proof",
+      panel4: beats[2] ?? "offer and CTA"
+    };
+  }
+  return {
+    ...common,
+    grid: "four equal 1:1 panels in a 2 by 2 grid",
+    panel1: "cover hook and main visual",
+    panel2: beats[0] ?? "opening support",
+    panel3: beats[1] ?? "mechanism or proof",
+    panel4: beats[2] ?? "offer and CTA"
+  };
 }
 
 function buildCompactReference(label: string, index: number) {
@@ -397,14 +449,23 @@ function buildReferenceLibraryRuntimeInputBlock(
       }
     : null;
   const runtimeInput = {
+    workingBrief: {
+      priority: "highest",
+      instruction: input.brief || "Not provided."
+    },
     brand: {
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
       personality: input.brand?.personality ?? [],
       colors: input.brand?.colors ?? []
     },
-    output: { service: compactServiceName(input.service), ratio: input.canvasRatio },
-    brief: input.brief || "Not provided.",
+    output: {
+      service: compactServiceName(input.service),
+      ratio: input.canvasRatio,
+      ...(input.service === "album-post"
+        ? { albumFormat: input.albumFormat ?? defaultAlbumFormat }
+        : {})
+    },
     approved: {
       headline: input.hook.hook,
       concept: input.hook.concept,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  isPublishedGoogleSheetUrl,
   parseGoogleSheetUrl,
   readMappingClientsFromGoogleSheet,
   readOnboardingQuestionnaireFromGoogleSheet
@@ -24,9 +25,68 @@ describe("parseGoogleSheetUrl", () => {
       parseGoogleSheetUrl("https://example.com/spreadsheets/d/sheet-123")
     ).toThrow("docs.google.com");
   });
+
+  it("recognizes a Publish to web CSV URL", () => {
+    expect(
+      isPublishedGoogleSheetUrl(
+        "https://docs.google.com/spreadsheets/d/e/published-id/pub?gid=147531213&single=true&output=csv"
+      )
+    ).toBe(true);
+  });
 });
 
 describe("readMappingClientsFromGoogleSheet", () => {
+  it("reads a published CSV mapping tab without Google credentials", async () => {
+    const publishedUrl =
+      "https://docs.google.com/spreadsheets/d/e/published-id/pub?gid=147531213&single=true&output=csv";
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        [
+          "",
+          "No,Client ID,Status,Service Status,Client Portal",
+          "1269,Vitalife,Inactive,,",
+          '1270,"Tri Petch, Isuzu Leasing",Inactive,,'
+        ].join("\n"),
+        { headers: { "Content-Type": "text/csv" } }
+      )
+    );
+
+    await expect(
+      readMappingClientsFromGoogleSheet({
+        sheetUrl: publishedUrl,
+        accessToken: "",
+        fetchImpl
+      })
+    ).resolves.toEqual({
+      clients: [
+        {
+          clientId: "Vitalife",
+          status: "Inactive",
+          serviceStatus: ""
+        },
+        {
+          clientId: "Tri Petch, Isuzu Leasing",
+          status: "Inactive",
+          serviceStatus: ""
+        }
+      ],
+      extraction: {
+        spreadsheetTitle: "Published mapping sheet",
+        sheetTitle: "gid 147531213",
+        rowCount: 2,
+        fields: [
+          "Client ID",
+          "Status",
+          "Service Status",
+          "Client Portal"
+        ]
+      }
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(publishedUrl, {
+      cache: "no-store"
+    });
+  });
+
   it("reads the selected tab and reports exactly which fields were extracted", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

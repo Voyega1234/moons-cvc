@@ -56,7 +56,54 @@ function NotificationHarness({
   );
 }
 
+function BrandListHarness() {
+  const { brands: availableBrands, error, refresh } = useBrands();
+  return (
+    <>
+      <button type="button" onClick={() => void refresh()}>
+        Refresh brands
+      </button>
+      {availableBrands.map((brand) => (
+        <span key={brand.id}>{brand.name}</span>
+      ))}
+      {error ? <span role="alert">{error.message}</span> : null}
+    </>
+  );
+}
+
 describe("brand ingestion notifications", () => {
+  it("forces a fresh mapping-sheet read when the client list is refreshed", async () => {
+    const user = userEvent.setup();
+    const fixture = brands[0];
+    if (!fixture) throw new Error("Mock brand fixture is missing.");
+    const repository = new MutableBrandRepository(fixture);
+    const mappingList = vi
+      .fn<MappingClientRepository["list"]>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          clientId: "Vitalife",
+          status: "Inactive",
+          serviceStatus: ""
+        }
+      ]);
+
+    render(
+      <BrandProvider
+        repository={repository}
+        mappingRepository={{ list: mappingList }}
+      >
+        <BrandListHarness />
+      </BrandProvider>
+    );
+
+    await waitFor(() => expect(mappingList).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "Refresh brands" }));
+
+    expect(await screen.findByText("Vitalife")).toBeTruthy();
+    expect(mappingList).toHaveBeenLastCalledWith({ forceRefresh: true });
+  });
+
   it("adds an unread mailbox item when an active ingestion becomes ready", async () => {
     const user = userEvent.setup();
     const fixture = brands[0];

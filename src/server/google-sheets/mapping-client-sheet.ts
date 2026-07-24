@@ -28,6 +28,10 @@ export async function readMappingClientsFromGoogleSheet({
   accessToken: string;
   fetchImpl?: typeof fetch;
 }): Promise<MappingSheetResult> {
+  if (isPublishedGoogleSheetUrl(sheetUrl)) {
+    return readMappingClientsFromPublishedCsv(sheetUrl, fetchImpl);
+  }
+
   const source = parseGoogleSheetUrl(sheetUrl);
   const metadata = await googleJson(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(source.spreadsheetId)}?fields=properties.title,sheets.properties`,
@@ -49,17 +53,52 @@ export async function readMappingClientsFromGoogleSheet({
     fetchImpl
   );
   const rows = readRows(valuesPayload);
-  const [header = [], ...dataRows] = rows;
+  return mappingSheetResultFromRows(
+    rows,
+    spreadsheetTitle,
+    selectedSheet.title
+  );
+}
+
+async function readMappingClientsFromPublishedCsv(
+  sheetUrl: string,
+  fetchImpl: typeof fetch
+): Promise<MappingSheetResult> {
+  const response = await fetchImpl(sheetUrl.trim(), { cache: "no-store" });
+  const csv = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Published mapping Google Sheet read failed: HTTP ${response.status}`
+    );
+  }
+  const url = new URL(sheetUrl.trim());
+  const gid = url.searchParams.get("gid");
+  return mappingSheetResultFromRows(
+    parseCsvRows(csv),
+    "Published mapping sheet",
+    gid ? `gid ${gid}` : "Published tab"
+  );
+}
+
+function mappingSheetResultFromRows(
+  rows: readonly string[][],
+  spreadsheetTitle: string,
+  sheetTitle: string
+): MappingSheetResult {
+  const headerIndex = rows.findIndex(
+    (row) => findColumnIndex(row, "Client ID") >= 0
+  );
+  if (headerIndex < 0) {
+    throw new Error('Google Sheet must contain a "Client ID" column.');
+  }
+  const header = rows[headerIndex] ?? [];
+  const dataRows = rows.slice(headerIndex + 1);
   const indexes = {
     clientId: findColumnIndex(header, "Client ID"),
     status: findColumnIndex(header, "Status"),
     serviceStatus: findColumnIndex(header, "Service Status"),
     clientPortal: findColumnIndex(header, "Client Portal")
   };
-  if (indexes.clientId < 0) {
-    throw new Error('Google Sheet must contain a "Client ID" column.');
-  }
-
   const clients = dataRows
     .map((row) => {
       const clientPortalUrl = cell(row, indexes.clientPortal);
@@ -84,11 +123,65 @@ export async function readMappingClientsFromGoogleSheet({
     clients,
     extraction: {
       spreadsheetTitle,
-      sheetTitle: selectedSheet.title,
+      sheetTitle,
       rowCount: clients.length,
       fields: supportedHeaders
     }
   };
+}
+
+export function isPublishedGoogleSheetUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return (
+      url.hostname === "docs.google.com" &&
+      /^\/spreadsheets\/d\/e\/[^/]+\/pub$/.test(url.pathname) &&
+      url.searchParams.get("output")?.toLowerCase() === "csv"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function parseCsvRows(value: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '"') {
+      if (quoted && value[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (!quoted && character === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if (!quoted && (character === "\n" || character === "\r")) {
+      if (character === "\r" && value[index + 1] === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += character;
+  }
+
+  if (cell || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  if (rows[0]?.[0]) rows[0][0] = rows[0][0].replace(/^\uFEFF/, "");
+  return rows;
 }
 
 export async function readOnboardingQuestionnaireFromGoogleSheet({

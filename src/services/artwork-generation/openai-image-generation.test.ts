@@ -15,6 +15,7 @@ const run: WorkflowState = {
   createdAt: "2026-06-26T00:00:00.000Z",
   updatedAt: "2026-06-26T00:00:00.000Z",
   stage: "directions",
+  albumFormat: "three-horizontal",
   brand: {
     id: "flora",
     name: "Flora Daily",
@@ -130,6 +131,7 @@ describe("buildArtworkGenerationRequest", () => {
     const albumDirection = {
       ...direction,
       service: "album-post" as const,
+      albumFormat: "four-grid" as const,
       formatBeats: ["Cover tension", "Proof mechanism", "Offer close"]
     };
 
@@ -137,6 +139,7 @@ describe("buildArtworkGenerationRequest", () => {
       run: {
         ...run,
         artworkMode: "design-system",
+        albumFormat: "auto",
         service: "album-post",
         creativeMix: [
           { id: "album", service: "album-post", quantity: 1 }
@@ -148,6 +151,8 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.artworkMode).toBe("design-system");
+    expect(request.albumFormat).toBe("auto");
+    expect(request.selectedHooks[0]?.albumFormat).toBe("four-grid");
     expect(request.service).toBe("album-post");
     expect(request.selectedHooks[0]?.formatBeats).toEqual([
       "Cover tension",
@@ -666,6 +671,10 @@ describe("buildArtworkGenerationRequest", () => {
         label: "Reference mood"
       }
     ]);
+    expect(n8nRequest.workingBrief).toEqual({
+      priority: "highest",
+      instruction: "Launch a soft summer bouquet offer."
+    });
     expect(n8nRequest.selectedHooks).toEqual(request.selectedHooks);
     expect(n8nRequest.brandMemory).toEqual(request.brandMemory);
   });

@@ -4,6 +4,7 @@ import {
   type GoogleWorkspaceAuthEnv
 } from "./google-workspace-auth.js";
 import {
+  isPublishedGoogleSheetUrl,
   readMappingClientsFromGoogleSheet,
   readOnboardingQuestionnaireFromGoogleSheet
 } from "./mapping-client-sheet.js";
@@ -51,17 +52,18 @@ export async function handleMappingClientsRequest({
       return jsonResponse({ ok: true, questionnaire });
     }
 
-    const subjectEmail = resolveSubjectEmail(auth.email, env);
-    const accessToken = await createSheetsAccessToken({
-      env,
-      subjectEmail,
-      oidcToken,
-      fetchImpl
-    });
     const sheetUrl = required(
       env.MAPPING_CLIENTS_GOOGLE_SHEET_URL,
       "MAPPING_CLIENTS_GOOGLE_SHEET_URL"
     );
+    const accessToken = isPublishedGoogleSheetUrl(sheetUrl)
+      ? ""
+      : await createSheetsAccessToken({
+          env,
+          subjectEmail: resolveSubjectEmail(auth.email, env),
+          oidcToken,
+          fetchImpl
+        });
     const result = await readMappingClientsFromGoogleSheet({
       sheetUrl,
       accessToken,
@@ -114,6 +116,9 @@ function required(value: string | undefined, name: string): string {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    }
   });
 }

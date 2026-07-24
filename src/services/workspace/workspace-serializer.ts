@@ -1,10 +1,13 @@
 import {
+  albumFormatPreferences,
+  albumFormats,
   angleExportGroups,
   artworkModes,
   artworkOutputSizes,
   creativeStages,
   ctaActionTypes,
   defaultArtworkOutputSize,
+  defaultAlbumFormatPreference,
   emptyApprovalComments,
   hookIdeaModes,
   imagePromptModels,
@@ -137,6 +140,10 @@ function parseRun(value: unknown): WorkflowState | null {
     value.imagePromptModel === undefined
       ? "gpt-5.6-terra"
       : parseMember(value.imagePromptModel, imagePromptModels);
+  const albumFormat =
+    value.albumFormat === undefined
+      ? defaultAlbumFormatPreference
+      : parseMember(value.albumFormat, albumFormatPreferences);
   const outputSize =
     value.outputSize === undefined
       ? defaultArtworkOutputSize
@@ -184,6 +191,7 @@ function parseRun(value: unknown): WorkflowState | null {
     !hookIdeaMode ||
     !artworkMode ||
     !imagePromptModel ||
+    !albumFormat ||
     !outputSize ||
     !successMetric ||
     quantity === null ||
@@ -265,6 +273,7 @@ function parseRun(value: unknown): WorkflowState | null {
     hookIdeaMode,
     artworkMode,
     imagePromptModel,
+    albumFormat,
     outputSize,
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
@@ -571,6 +580,10 @@ function parseDirections(
         : parseStringArray(item.supportingPoints);
     const formatBeats =
       item.formatBeats === undefined ? [] : parseStringArray(item.formatBeats);
+    const albumFormat =
+      item.albumFormat === undefined
+        ? undefined
+        : parseMember(item.albumFormat, albumFormats);
     const ugcBrief =
       item.ugcBrief === undefined ? undefined : parseUgcVideoBrief(item.ugcBrief);
     const ctaActionType =
@@ -604,6 +617,7 @@ function parseDirections(
       cta === null ||
       supportingPoints === null ||
       formatBeats === null ||
+      (item.albumFormat !== undefined && !albumFormat) ||
       ugcBrief === null ||
       (item.ctaActionType !== undefined && !ctaActionType) ||
       ctaDestination === null ||
@@ -635,6 +649,7 @@ function parseDirections(
         service ?? undefined,
         formatBeats
       ),
+      albumFormat: albumFormat ?? undefined,
       ugcBrief: ugcBrief ?? undefined,
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,

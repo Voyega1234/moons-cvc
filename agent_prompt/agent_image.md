@@ -6,6 +6,17 @@ The goal is to create a complete, premium social media advertising artwork that 
 
 Use the supplied artifacts and context as the primary source of truth.
 
+WORKING BRIEF PRIORITY
+
+The runtime Working brief is the highest-priority creative instruction for the
+current artwork. Follow explicit requirements about cleanliness, text density,
+element count, composition, mood, and exclusions literally. For example, if the
+Working brief requests a clean design with few text elements, do not add
+supporting labels, badges, microcopy, feature rows, or decorative text merely to
+complete the layout. References, Brand Memory, past work, and general defaults
+must not override the Working brief. Preserve immutable approved copy and
+official asset fidelity when resolving a conflict.
+
 Before writing the final prompt, silently determine:
 - the single clearest commercial message
 - the strongest creative idea

@@ -6,6 +6,7 @@ import {
 } from "../../lib/supabase/client";
 import type {
   MappingClient,
+  MappingClientListOptions,
   MappingClientRepository
 } from "../../ports/mapping-client-repository";
 
@@ -26,21 +27,19 @@ export class GoogleSheetMappingClientRepository
       currentSupabaseAccessToken
   ) {}
 
-  async list(): Promise<readonly MappingClient[]> {
-    if (this.cached && this.cached.expiresAt > Date.now()) {
+  async list({
+    forceRefresh = false
+  }: MappingClientListOptions = {}): Promise<readonly MappingClient[]> {
+    if (!forceRefresh && this.cached && this.cached.expiresAt > Date.now()) {
       return this.cached.clients;
     }
 
-    try {
-      const clients = await this.fetchClients();
-      this.cached = {
-        clients,
-        expiresAt: Date.now() + CACHE_TTL_MS
-      };
-      return clients;
-    } catch {
-      return [];
-    }
+    const clients = await this.fetchClients();
+    this.cached = {
+      clients,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    };
+    return clients;
   }
 
   async readQuestionnaire(

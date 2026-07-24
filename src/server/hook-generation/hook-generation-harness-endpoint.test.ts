@@ -9,6 +9,7 @@ import type { PastPostsClient } from "./past-posts";
 const requestBody = {
   runId: "run-1",
   hookIdeaMode: "fresh-research",
+  albumFormat: "auto" as const,
   brand: {
     id: "convert-cake",
     name: "Convert Cake",
@@ -162,6 +163,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   subheadlineHighlight: "visibility กับยอดขาย",
                   why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
                   visual: "Founder มอง search result + AI answer บนจอ",
+                  albumFormat: "three-horizontal",
                   cta: "จองที่นั่ง Webinar",
                   caption: "AI SEO ไม่ใช่เรื่องอนาคตสำหรับ B2B แล้ว",
                   score: 91,
@@ -260,6 +262,12 @@ describe("handleHookGenerationHarnessRequest", () => {
       "album-post: คิดเป็น swipeable story"
     );
     expect(JSON.stringify(secondBody.input)).toContain(
+      "Album layout preference: auto"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
+      "เลือก albumFormat ให้เหมาะกับแนวคิด"
+    );
+    expect(JSON.stringify(secondBody.input)).toContain(
       "3 supporting topics"
     );
     expect(JSON.stringify(secondBody.input)).toContain(
@@ -325,6 +333,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   concept: "Standard brand-led idea",
                   why: "Uses supplied context only",
                   visual: "Clean and direct",
+                  albumFormat: "three-horizontal",
                   cta: "ดูรายละเอียด",
                   caption: "เริ่มจากข้อมูลที่แบรนด์ยืนยันแล้ว",
                   score: 85,
@@ -391,6 +400,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   subheadlineHighlight: "visibility กับยอดขาย",
                   why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
                   visual: "Founder มอง search result + AI answer บนจอ",
+                  albumFormat: "three-horizontal",
                   cta: "จองที่นั่ง Webinar",
                   caption: "AI SEO ไม่ใช่เรื่องอนาคตสำหรับ B2B แล้ว",
                   score: 91,
@@ -531,6 +541,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   subheadlineHighlight: "มุมใหม่",
                   why: "Distinct from the previous batch",
                   visual: "Clean, modern.",
+                  albumFormat: "three-horizontal",
                   cta: "ดูรายละเอียด",
                   caption: "แคปชั่นใหม่",
                   score: 88,

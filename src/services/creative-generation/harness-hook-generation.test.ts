@@ -11,6 +11,7 @@ const run: WorkflowState = {
   createdAt: "2026-07-09T00:00:00.000Z",
   updatedAt: "2026-07-09T00:00:00.000Z",
   stage: "brief",
+  albumFormat: "three-horizontal",
   brand: {
     id: "convert-cake",
     name: "Convert Cake",
@@ -80,6 +81,7 @@ describe("buildHookGenerationHarnessRequest", () => {
 
     expect(request.brand?.name).toBe("Convert Cake");
     expect(request.hookIdeaMode).toBe("standard");
+    expect(request.albumFormat).toBe("three-horizontal");
     expect(request.brief).toBe("Generate hooks for AI SEO webinar.");
     expect(request.onboardingQuestionnaire).toBe(
       "Onboarding questionnaire — historical onboarding context only; not the current campaign brief.\n\n" +

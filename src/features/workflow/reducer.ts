@@ -1,4 +1,6 @@
 import {
+  defaultAlbumFormat,
+  defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
   emptyApprovalGate,
   inferredReferenceImageRole,
@@ -45,6 +47,10 @@ function assignDirectionsToMix(
     return {
       ...direction,
       service,
+      albumFormat:
+        service === "album-post"
+          ? direction.albumFormat ?? defaultAlbumFormat
+          : undefined,
       formatBeats: normalizeFormatBeatsForService(
         service,
         direction.formatBeats
@@ -137,6 +143,7 @@ export function createInitialWorkflowState({
     hookIdeaMode: "standard",
     artworkMode: "design-system",
     imagePromptModel: "gpt-5.6-terra",
+    albumFormat: defaultAlbumFormatPreference,
     outputSize: defaultArtworkOutputSize,
     quantity: 6,
     successMetric: "CVR",
@@ -441,6 +448,8 @@ export function workflowReducer(
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":
       return { ...state, imagePromptModel: action.model };
+    case "set-album-format":
+      return resetCreativeWork({ ...state, albumFormat: action.format });
     case "set-output-size":
       return { ...state, outputSize: action.size };
     case "set-quantity":
@@ -709,6 +718,12 @@ export function workflowReducer(
             cta,
             supportingPoints: [],
             formatBeats: [],
+            albumFormat:
+              action.service === "album-post"
+                ? state.albumFormat === "auto"
+                  ? defaultAlbumFormat
+                  : state.albumFormat
+                : undefined,
             ctaActionType: "other" as const,
             caption: [hook, subheadline, cta].join("\n\n"),
             selected: false,

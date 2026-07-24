@@ -41,13 +41,17 @@ REFERENCE ROLES
 
 DECISION ORDER
 
-1. Exact approved headline, concept, brand identity, supplied assets, CTA, and
+1. The runtime Working brief, especially its explicit requirements for visual
+   cleanliness, text density, element count, composition, mood, and exclusions.
+   References, past work, Brand Memory, and optional completion rules must not
+   override it.
+2. Exact approved headline, concept, brand identity, supplied assets, CTA, and
    canvas ratio.
-2. A concept-native main visual and background that make the selling mechanism
+3. A concept-native main visual and background that make the selling mechanism
    and reason to believe immediately visible.
-3. Compatible abstract construction learned from the primary reference.
-4. Compatible secondary-reference craft.
-5. Your own creative decisions for props, details, crop nuance, lighting nuance,
+4. Compatible abstract construction learned from the primary reference.
+5. Compatible secondary-reference craft.
+6. Your own creative decisions for props, details, crop nuance, lighting nuance,
    and supporting copy that make the adaptation feel native to this brand.
 
 COMMERCIAL AND COPY RULES

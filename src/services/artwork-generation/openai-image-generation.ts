@@ -5,6 +5,7 @@ import {
   emptyApprovalGate,
   inferredReferenceImageRole,
   outputFormatForService,
+  type AlbumFormatPreference,
   referenceImageRoleLabels,
   type ArtworkOutputSize,
   type CreativeDirection,
@@ -77,6 +78,7 @@ export interface ArtworkGenerationRequest {
   model: "gpt-image-2";
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
+  albumFormat?: AlbumFormatPreference;
   runId: string;
   assetVersion?: number;
   brand: {
@@ -99,6 +101,7 @@ export interface ArtworkGenerationRequest {
     | "cta"
     | "supportingPoints"
     | "formatBeats"
+    | "albumFormat"
     | "ctaActionType"
     | "ctaDestination"
     | "contactLine"
@@ -153,6 +156,7 @@ type ArtworkRegenerationDirection = Pick<
   | "cta"
   | "supportingPoints"
   | "formatBeats"
+  | "albumFormat"
   | "ctaActionType"
   | "ctaDestination"
   | "contactLine"
@@ -368,6 +372,7 @@ export function buildArtworkRegenerationRequest({
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
+    albumFormat: run.albumFormat,
     runId: run.id,
     assetVersion: nextArtworkAssetVersion(run),
     brand: buildBrandIdentity(run.brand),
@@ -456,6 +461,7 @@ export function buildArtworkGenerationRequests({
         cta,
         supportingPoints,
         formatBeats,
+        albumFormat,
         ctaActionType,
         ctaDestination,
         contactLine,
@@ -469,6 +475,7 @@ export function buildArtworkGenerationRequests({
         cta,
         supportingPoints,
         formatBeats,
+        albumFormat,
         ctaActionType,
         ctaDestination,
         contactLine,
@@ -551,6 +558,7 @@ function buildArtworkRequest({
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
+    albumFormat: run.albumFormat,
     runId: run.id,
     assetVersion: nextArtworkAssetVersion(run),
     brand: buildBrandIdentity(run.brand),

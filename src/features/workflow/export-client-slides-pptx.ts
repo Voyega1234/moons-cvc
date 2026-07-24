@@ -1,10 +1,12 @@
 import type PptxGenJS from "pptxgenjs";
 import { env } from "../../config/env";
-import type {
-  CreativeDirection,
-  CreativeOutput,
-  ReferenceImageSelection,
-  UgcVideoBrief
+import {
+  resolveAlbumFormat,
+  type AlbumFormat,
+  type CreativeDirection,
+  type CreativeOutput,
+  type ReferenceImageSelection,
+  type UgcVideoBrief
 } from "../../domain/creative-run";
 import { inferredReferenceImageRole } from "../../domain/creative-run";
 import { directionSubheadline } from "../../domain/subheadline-highlight";
@@ -23,6 +25,15 @@ export interface ClientSlideItem {
 }
 
 export type ClientSlideImageResolver = (url: string) => Promise<string>;
+type ClientSlidesState = Pick<
+  WorkflowState,
+  | "brand"
+  | "outputs"
+  | "directions"
+  | "outputSize"
+  | "referenceImages"
+  | "albumFormat"
+>;
 
 const COLORS = {
   ink: "191B27",
@@ -613,17 +624,13 @@ function addArtworkPreview(
 function addAlbumArtworkPreview(
   slide: PptxGenJS.Slide,
   imageData: readonly string[],
-  brandName: string
+  brandName: string,
+  format: AlbumFormat
 ) {
-  const box = { x: 0.65, y: 0.83, w: 5.85 };
-  const half = box.w / 2;
-  const placements = [
-    { x: box.x, y: box.y, w: box.w, h: half },
-    { x: box.x, y: box.y + half, w: half, h: half },
-    { x: box.x + half, y: box.y + half, w: half, h: half }
-  ];
+  const box = { x: 0.65, y: 0.83, w: 5.85, h: 5.85 };
+  const placements = albumSlidePlacements(box, format);
 
-  imageData.slice(0, 3).forEach((data, index) => {
+  imageData.slice(0, placements.length).forEach((data, index) => {
     const placement = placements[index];
     if (!placement) return;
     slide.addImage({
@@ -634,6 +641,70 @@ function addAlbumArtworkPreview(
   });
 }
 
+function albumSlidePlacements(
+  box: { x: number; y: number; w: number; h: number },
+  format: AlbumFormat
+) {
+  const halfWidth = box.w / 2;
+  const halfHeight = box.h / 2;
+  if (format === "three-vertical") {
+    return [
+      { x: box.x, y: box.y, w: halfWidth, h: box.h },
+      { x: box.x + halfWidth, y: box.y, w: halfWidth, h: halfHeight },
+      {
+        x: box.x + halfWidth,
+        y: box.y + halfHeight,
+        w: halfWidth,
+        h: halfHeight
+      }
+    ];
+  }
+  if (format === "three-horizontal") {
+    return [
+      { x: box.x, y: box.y, w: box.w, h: halfHeight },
+      { x: box.x, y: box.y + halfHeight, w: halfWidth, h: halfHeight },
+      {
+        x: box.x + halfWidth,
+        y: box.y + halfHeight,
+        w: halfWidth,
+        h: halfHeight
+      }
+    ];
+  }
+  if (format === "four-vertical") {
+    const railWidth = box.w / 3;
+    const leadWidth = box.w - railWidth;
+    const rowHeight = box.h / 3;
+    return [
+      { x: box.x, y: box.y, w: leadWidth, h: box.h },
+      { x: box.x + leadWidth, y: box.y, w: railWidth, h: rowHeight },
+      {
+        x: box.x + leadWidth,
+        y: box.y + rowHeight,
+        w: railWidth,
+        h: rowHeight
+      },
+      {
+        x: box.x + leadWidth,
+        y: box.y + rowHeight * 2,
+        w: railWidth,
+        h: rowHeight
+      }
+    ];
+  }
+  return [
+    { x: box.x, y: box.y, w: halfWidth, h: halfHeight },
+    { x: box.x + halfWidth, y: box.y, w: halfWidth, h: halfHeight },
+    { x: box.x, y: box.y + halfHeight, w: halfWidth, h: halfHeight },
+    {
+      x: box.x + halfWidth,
+      y: box.y + halfHeight,
+      w: halfWidth,
+      h: halfHeight
+    }
+  ];
+}
+
 function addClientSlide(
   pptx: PptxGenJS,
   item: ClientSlideItem,
@@ -641,6 +712,7 @@ function addClientSlide(
   slideNumber: number,
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
+  albumFormat: AlbumFormat,
   imageData: readonly string[] = []
 ) {
   const { output, direction } = item;
@@ -669,7 +741,7 @@ function addClientSlide(
     line: { color: COLORS.line, width: 1 }
   });
   if (isAlbumOutput(output) && imageData.length > 1) {
-    addAlbumArtworkPreview(slide, imageData, brandName);
+    addAlbumArtworkPreview(slide, imageData, brandName, albumFormat);
   } else if (imageData[0]) {
     addArtworkPreview(
       slide,
@@ -761,10 +833,7 @@ function addClientSlide(
 }
 
 export async function buildPmApprovedClientSlidesPptx(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >,
+  state: ClientSlidesState,
   resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
   const items = pmApprovedClientSlideItems(state);
@@ -782,10 +851,7 @@ export async function buildPmApprovedClientSlidesPptx(
 }
 
 export async function buildCreateStageSlidesPptx(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >,
+  state: ClientSlidesState,
   resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
   const items = createStageClientSlideItems(state);
@@ -803,10 +869,7 @@ export async function buildCreateStageSlidesPptx(
 }
 
 async function buildClientSlidesPptx(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >,
+  state: ClientSlidesState,
   items: readonly ClientSlideItem[],
   resolveImage: ClientSlideImageResolver,
   subject: string,
@@ -857,6 +920,7 @@ async function buildClientSlidesPptx(
       index + 1,
       items.length,
       state.outputSize,
+      resolveAlbumFormat(state.albumFormat, item.direction?.albumFormat),
       imageData
     );
   }
@@ -865,10 +929,7 @@ async function buildClientSlidesPptx(
 }
 
 export async function downloadCreateStageSlides(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >
+  state: ClientSlidesState
 ): Promise<void> {
   const pptx = await buildCreateStageSlidesPptx(state);
   await pptx.writeFile({
@@ -878,10 +939,7 @@ export async function downloadCreateStageSlides(
 }
 
 export async function downloadPmApprovedClientSlides(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >
+  state: ClientSlidesState
 ): Promise<void> {
   const pptx = await buildPmApprovedClientSlidesPptx(state);
   await pptx.writeFile({
@@ -914,10 +972,7 @@ async function openPptxInGoogleSlides(
 }
 
 export async function openCreateStageSlidesInGoogleSlides(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >
+  state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
   return openPptxInGoogleSlides(
     () => buildCreateStageSlidesPptx(state),
@@ -926,10 +981,7 @@ export async function openCreateStageSlidesInGoogleSlides(
 }
 
 export async function openPmApprovedClientSlidesInGoogleSlides(
-  state: Pick<
-    WorkflowState,
-    "brand" | "outputs" | "directions" | "outputSize" | "referenceImages"
-  >
+  state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
   return openPptxInGoogleSlides(
     () => buildPmApprovedClientSlidesPptx(state),

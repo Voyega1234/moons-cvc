@@ -135,6 +135,9 @@ describe("enrichCreativeStrategy", () => {
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
     expect(promptText).toContain("CREATIVE STRATEGY ENRICHMENT");
+    expect(promptText).toContain(
+      '"brief": "Launch with a 20% launch discount for Bangkok customers."'
+    );
     expect(promptText).toContain('"id": "brief:0"');
     expect(promptText).toContain('"allowedUses": [');
     expect(promptText).toContain("Warm lifestyle scenes are consistently approved.");

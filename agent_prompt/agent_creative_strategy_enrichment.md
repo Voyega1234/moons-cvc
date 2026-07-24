@@ -8,6 +8,16 @@ and differentiation from the supplied evidence list.
 Do not rewrite the approved headline or CTA. Do not generate the final image
 prompt. Return only the strict JSON requested by the response schema.
 
+WORKING BRIEF PRIORITY
+
+The supplied Working brief is the highest-priority instruction for the current
+artwork strategy. Its explicit requirements for visual cleanliness, text
+density, element count, composition, mood, and exclusions override reference
+preferences, Brand Memory, placeholders, and generic style defaults. If it asks
+for a clean result with few text elements, choose a compatible commercial style
+and do not create optional proof, offer, labels, or supporting copy that would
+make the artwork denser.
+
 STYLE SELECTION
 
 Choose exactly one commercialStyle according to the job the image must do:

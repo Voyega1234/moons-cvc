@@ -104,6 +104,21 @@ describe("workflowReducer", () => {
 
   it("uses Design System artwork generation by default and keeps other modes available internally", () => {
     expect(initialWorkflowState.artworkMode).toBe("design-system");
+    expect(initialWorkflowState.albumFormat).toBe("auto");
+    const albumFormatUpdate = workflowReducer(
+      {
+        ...initialWorkflowState,
+        artworkGenerationStatus: "failed",
+        artworkGenerationError: "Old album failed."
+      },
+      {
+        type: "set-album-format",
+        format: "four-vertical"
+      }
+    );
+    expect(albumFormatUpdate.albumFormat).toBe("four-vertical");
+    expect(albumFormatUpdate.artworkGenerationStatus).toBe("idle");
+    expect(albumFormatUpdate.artworkGenerationError).toBeNull();
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-artwork-mode",

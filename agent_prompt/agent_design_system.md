@@ -441,7 +441,14 @@ They do not prescribe the layout, hero object, background, visual metaphor, came
 
 Brand: {{BRAND_NAME_AND_CATEGORY}}
 
-Objective: {{OBJECTIVE}}
+Working brief (HIGHEST PRIORITY): {{OBJECTIVE}}
+
+The Working brief controls visual cleanliness, text density, element count,
+composition, mood, and exclusions. Follow those requirements literally.
+References, Brand Memory, creative-direction defaults, and optional completion
+copy must not override them. If it requests a clean design with few text
+elements, omit optional labels, badges, feature rows, contact details,
+supporting microcopy, and decorative text.
 
 Audience: Infer conservatively from the supplied campaign context.
 

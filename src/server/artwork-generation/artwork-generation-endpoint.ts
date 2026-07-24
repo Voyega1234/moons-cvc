@@ -3,13 +3,18 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 import {
+  albumFormatPreferences,
+  albumFormats,
   artworkModes,
   artworkOutputSizes,
   ctaActionTypes,
+  defaultAlbumFormatPreference,
   emptyApprovalComments,
   emptyApprovalGate,
   imagePromptModels,
   outputFormatForService,
+  resolveAlbumFormat,
+  type AlbumFormat,
   type ArtworkOutputSize,
   type CtaActionType
 } from "../../domain/creative-run.js";
@@ -583,6 +588,10 @@ async function generateOutputForHook({
   fetchImpl: FetchLike;
 }): Promise<readonly ArtworkOutput[]> {
   const isAlbum = input.service === "album-post";
+  const albumFormat = resolveAlbumFormat(
+    input.albumFormat ?? defaultAlbumFormatPreference,
+    hook.albumFormat
+  );
   const generationSize: ArtworkOutputSize = isAlbum
     ? "2048x2048"
     : input.output.size;
@@ -616,6 +625,7 @@ async function generateOutputForHook({
           hook,
           references: promptReferences,
           canvasRatio,
+          albumFormat,
           strategy
         })
       : await resolveImagePrompt({
@@ -630,6 +640,7 @@ async function generateOutputForHook({
           artworkReferences,
           strategy,
           canvasRatio,
+          albumFormat,
           fetchImpl
         });
   const promptParts =
@@ -642,7 +653,12 @@ async function generateOutputForHook({
             buildConceptAlignmentInstruction(hook),
             prompt
           ];
-  const imagePrompt = [...promptParts, isAlbum ? buildAlbumMasterInstruction(hook) : null]
+  const imagePrompt = [
+    ...promptParts,
+    isAlbum
+      ? buildAlbumMasterInstruction(hook, albumFormat)
+      : null
+  ]
     .filter(Boolean)
     .join("\n\n");
   const imageRequestDebug = buildImageRequestDebugBundle({
@@ -695,7 +711,7 @@ async function generateOutputForHook({
       debugLogDirectory,
       writeDebugLog
     });
-    const panels = await splitAlbumMaster(imageBytes);
+    const panels = await splitAlbumMaster(imageBytes, albumFormat);
     return Promise.all(
       panels.map((panel) =>
         persistArtworkOutput({
@@ -734,21 +750,53 @@ async function generateOutputForHook({
   ];
 }
 
-function buildAlbumMasterInstruction(hook: SelectedHook): string {
+function buildAlbumMasterInstruction(
+  hook: SelectedHook,
+  format: AlbumFormat
+): string {
   const beats = hook.formatBeats ?? [];
+  const layout = albumLayoutPrompt(format);
+  const panelInstructions =
+    format === "three-horizontal" || format === "three-vertical"
+      ? [
+          `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
+          `Panel 2 develops the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`,
+          `Panel 3 closes the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+        ]
+      : [
+          `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
+          `Panel 2 develops ${beats[0] ?? "the opening supporting point"}.`,
+          `Panel 3 develops ${beats[1] ?? "the mechanism or proof"}.`,
+          `Panel 4 closes the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+        ];
   return [
-    "ALBUM MASTER — overrides any conflicting single-image layout regardless of artwork mode:",
-    "Create one seamless 1:1 master artboard divided into an exact invisible 2×2 grid. Panel 1 occupies the full top row (2:1). Panel 2 is the bottom-left square. Panel 3 is the bottom-right square. Do not draw borders, gutters, crop marks, panel numbers, or mockup frames.",
-    `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, brand recognition, and ${beats[0] ?? "the opening hook"}.`,
-    `Panel 2 develops the mechanism or proof using ${beats[1] ?? "one compact supporting point"}.`,
-    `Panel 3 closes the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`,
-    "Each crop must remain legible and compositionally complete when viewed alone. Keep text, logo, CTA, faces, products, and essential proof at least 8% inside every crop edge and never cross either seam. Connect the set only through background flow, lighting, palette, perspective, or non-essential shapes. Use one coherent visual world across all three panels."
+    "ALBUM MASTER - overrides any conflicting single-image layout regardless of artwork mode:",
+    layout,
+    "Do not draw borders, gutters, crop marks, panel numbers, or mockup frames.",
+    ...panelInstructions,
+    "Each crop must remain legible and compositionally complete when viewed alone. Keep text, logo, CTA, faces, products, and essential proof at least 8% inside every crop edge and never cross a seam. Connect the set only through background flow, lighting, palette, perspective, or non-essential shapes. Use one coherent visual world across every panel."
   ].join("\n");
 }
 
+function albumLayoutPrompt(
+  format: AlbumFormat
+): string {
+  switch (format) {
+    case "three-vertical":
+      return "Create one seamless 1:1 master artboard with a large 1:2 vertical Panel 1 on the left and two equal 1:1 square panels stacked on the right.";
+    case "three-horizontal":
+      return "Create one seamless 1:1 master artboard with a large 2:1 horizontal Panel 1 across the top and two equal 1:1 square panels along the bottom.";
+    case "four-vertical":
+      return "Create one seamless 1:1 master artboard with a large 2:3 vertical Panel 1 on the left and three equal 1:1 square panels stacked on the right.";
+    case "four-grid":
+      return "Create one seamless 1:1 master artboard divided into four equal 1:1 square panels in a 2 by 2 grid.";
+  }
+}
+
 async function splitAlbumMaster(
-  imageBytes: Buffer
-): Promise<readonly { index: 1 | 2 | 3; bytes: Buffer }[]> {
+  imageBytes: Buffer,
+  format: AlbumFormat
+): Promise<readonly { index: 1 | 2 | 3 | 4; bytes: Buffer }[]> {
   const metadata = await sharp(imageBytes).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error("Could not read the generated album master dimensions.");
@@ -756,12 +804,7 @@ async function splitAlbumMaster(
   const side = Math.min(metadata.width, metadata.height);
   const left = Math.floor((metadata.width - side) / 2);
   const top = Math.floor((metadata.height - side) / 2);
-  const half = Math.floor(side / 2);
-  const regions = [
-    { index: 1 as const, left, top, width: side, height: half, outWidth: 1920, outHeight: 960 },
-    { index: 2 as const, left, top: top + half, width: half, height: half, outWidth: 960, outHeight: 960 },
-    { index: 3 as const, left: left + half, top: top + half, width: half, height: half, outWidth: 960, outHeight: 960 }
-  ];
+  const regions = albumCropRegions({ left, top, side, format });
 
   return Promise.all(
     regions.map(async (region) => ({
@@ -778,6 +821,54 @@ async function splitAlbumMaster(
         .toBuffer()
     }))
   );
+}
+
+export function albumCropRegions({
+  left,
+  top,
+  side,
+  format
+}: {
+  left: number;
+  top: number;
+  side: number;
+  format: AlbumFormat;
+}) {
+  const half = Math.floor(side / 2);
+  if (format === "three-vertical") {
+    return [
+      { index: 1 as const, left, top, width: half, height: side, outWidth: 960, outHeight: 1920 },
+      { index: 2 as const, left: left + half, top, width: side - half, height: half, outWidth: 960, outHeight: 960 },
+      { index: 3 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
+    ];
+  }
+  if (format === "three-horizontal") {
+    return [
+      { index: 1 as const, left, top, width: side, height: half, outWidth: 1920, outHeight: 960 },
+      { index: 2 as const, left, top: top + half, width: half, height: side - half, outWidth: 960, outHeight: 960 },
+      { index: 3 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
+    ];
+  }
+  if (format === "four-grid") {
+    return [
+      { index: 1 as const, left, top, width: half, height: half, outWidth: 960, outHeight: 960 },
+      { index: 2 as const, left: left + half, top, width: side - half, height: half, outWidth: 960, outHeight: 960 },
+      { index: 3 as const, left, top: top + half, width: half, height: side - half, outWidth: 960, outHeight: 960 },
+      { index: 4 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
+    ];
+  }
+
+  const railWidth = Math.floor(side / 3);
+  const leadWidth = side - railWidth;
+  const firstHeight = Math.ceil(side / 3);
+  const secondHeight = Math.ceil((side - firstHeight) / 2);
+  const thirdHeight = side - firstHeight - secondHeight;
+  return [
+    { index: 1 as const, left, top, width: leadWidth, height: side, outWidth: 1280, outHeight: 1920 },
+    { index: 2 as const, left: left + leadWidth, top, width: railWidth, height: firstHeight, outWidth: 640, outHeight: 640 },
+    { index: 3 as const, left: left + leadWidth, top: top + firstHeight, width: railWidth, height: secondHeight, outWidth: 640, outHeight: 640 },
+    { index: 4 as const, left: left + leadWidth, top: top + firstHeight + secondHeight, width: railWidth, height: thirdHeight, outWidth: 640, outHeight: 640 }
+  ];
 }
 
 async function persistArtworkOutput({
@@ -1063,12 +1154,14 @@ async function buildDirectDesignSystemPrompt({
   hook,
   references,
   canvasRatio,
+  albumFormat,
   strategy
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
   references: readonly ReferenceImageInput[];
   canvasRatio: string;
+  albumFormat: AlbumFormat;
   strategy?: CreativeStrategyEnrichment;
 }): Promise<string> {
   const artifactMap = references.map((reference, index) => ({
@@ -1118,6 +1211,7 @@ async function buildDirectDesignSystemPrompt({
       refs: compactPromptLibrary(input.brandLibrary.refs, 6, 280)
     },
     campaignContext: {
+      workingBrief: compactPromptText(input.brief, 1_500),
       rationale: compactPromptText(hook.why, 1_000),
       caption: compactPromptText(hook.caption, 1_500)
     },
@@ -1170,7 +1264,8 @@ async function buildDirectDesignSystemPrompt({
       "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
       "{{ON_ARTWORK_COPY_PRIORITY}}": buildDesignSystemCopyPriority(
         input.service,
-        hook
+        hook,
+        albumFormat
       ),
       "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
         .slice(0, 5)
@@ -1201,7 +1296,8 @@ function isEditableBrandGuidelineItem(item: { title: string }): boolean {
 
 function buildDesignSystemCopyPriority(
   service: ArtworkGenerationRequest["service"],
-  hook: SelectedHook
+  hook: SelectedHook,
+  albumFormat: AlbumFormat
 ): string {
   const supportingOptions =
     hook.supportingPoints?.filter((point) => point.trim()) ?? [];
@@ -1218,7 +1314,7 @@ function buildDesignSystemCopyPriority(
   ];
   if (service === "album-post" && hook.formatBeats?.length) {
     lines.push(
-      `Album story beats may be distributed across the three crops: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}`
+      `Album story beats must be distributed across the ${albumFormat.startsWith("three-") ? "three" : "four"} crops in the selected ${albumFormat} layout: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}`
     );
   }
   return lines.join("\n");
@@ -1599,6 +1695,7 @@ async function resolveImagePrompt({
   artworkReferences,
   strategy,
   canvasRatio,
+  albumFormat,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
@@ -1612,6 +1709,7 @@ async function resolveImagePrompt({
   artworkReferences: readonly StoredArtworkReference[];
   strategy?: CreativeStrategyEnrichment;
   canvasRatio: string;
+  albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
 }): Promise<string> {
   return generateImagePrompt({
@@ -1634,6 +1732,7 @@ async function resolveImagePrompt({
     input: {
       brand: input.brand,
       service: input.service,
+      albumFormat,
       brief: input.brief,
       hook,
       textInputs: input.textInputs,
@@ -1824,6 +1923,17 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
   ) {
     throw new Error("imagePromptModel is not supported.");
   }
+  const albumFormat =
+    value.albumFormat === undefined
+      ? defaultAlbumFormatPreference
+      : readString(value.albumFormat, "albumFormat");
+  if (
+    !albumFormatPreferences.includes(
+      albumFormat as (typeof albumFormatPreferences)[number]
+    )
+  ) {
+    throw new Error("albumFormat is not supported.");
+  }
   const runId = readString(value.runId, "runId");
   const assetVersion =
     value.assetVersion === undefined
@@ -1852,6 +1962,7 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     artworkMode: artworkMode as ArtworkGenerationRequest["artworkMode"],
     imagePromptModel:
       imagePromptModel as ArtworkGenerationRequest["imagePromptModel"],
+    albumFormat: albumFormat as ArtworkGenerationRequest["albumFormat"],
     runId,
     assetVersion,
     brand: value.brand == null ? null : parseBrand(value.brand),
@@ -1971,6 +2082,14 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
       hook.formatBeats,
       `selectedHooks[${index}].formatBeats`
     ),
+    ...(hook.albumFormat === undefined
+      ? {}
+      : {
+          albumFormat: readConcreteAlbumFormat(
+            hook.albumFormat,
+            `selectedHooks[${index}].albumFormat`
+          )
+        }),
     ...(hook.ctaActionType === undefined
       ? {}
       : {
@@ -1987,6 +2106,19 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
       : {}),
     caption: readString(hook.caption, `selectedHooks[${index}].caption`)
   };
+}
+
+function readConcreteAlbumFormat(
+  value: unknown,
+  field: string
+): AlbumFormat {
+  if (
+    typeof value !== "string" ||
+    !albumFormats.includes(value as AlbumFormat)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as AlbumFormat;
 }
 
 function readCtaActionType(value: unknown, field: string): CtaActionType {

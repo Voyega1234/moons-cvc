@@ -6,6 +6,10 @@ import type {
 } from "./openai-image-generation";
 
 export interface N8nArtworkGenerationRequest extends ArtworkGenerationRequest {
+  workingBrief: {
+    priority: "highest";
+    instruction: string;
+  };
   logoUrl: string | null;
   referenceImageUrls: readonly {
     url: string;
@@ -57,6 +61,10 @@ export function buildN8nArtworkGenerationRequest({
 
   return {
     ...request,
+    workingBrief: {
+      priority: "highest",
+      instruction: request.brief
+    },
     logoUrl:
       (selectedLogoUrl?.kind === "url" ? selectedLogoUrl.url : null) ??
       brand?.library.brand.find(

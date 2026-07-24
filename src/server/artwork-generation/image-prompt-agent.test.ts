@@ -66,6 +66,12 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(
       '"headline": "Flowers that make the room feel softer"'
     );
+    expect(promptText).toContain("WORKING BRIEF PRIORITY");
+    expect(promptText).toContain('"workingBrief": {');
+    expect(promptText).toContain('"priority": "highest"');
+    expect(promptText).toContain(
+      '"instruction": "Launch a soft summer bouquet offer."'
+    );
     expect(promptText).toContain("AUTHORITATIVE COMPACT CAMPAIGN INPUT");
     expect(promptText).toContain('"personality": [');
     expect(promptText).toContain('"colors": [');
@@ -125,7 +131,30 @@ describe("generateImagePrompt", () => {
     expect(promptText).not.toContain('"visualDirection"');
   });
 
-  it("describes the three-panel master grid for Standard album posts", async () => {
+  it.each([
+    [
+      "three-vertical",
+      "large 1:2 vertical cover on the left; two 1:1 panels stacked on the right",
+      '"panel3": "Offer"'
+    ],
+    [
+      "three-horizontal",
+      "large 2:1 horizontal cover across the top; two 1:1 panels below",
+      '"panel3": "Offer"'
+    ],
+    [
+      "four-vertical",
+      "large 2:3 vertical cover on the left; three 1:1 panels stacked on the right",
+      '"panel4": "Offer"'
+    ],
+    [
+      "four-grid",
+      "four equal 1:1 panels in a 2 by 2 grid",
+      '"panel4": "Offer"'
+    ]
+  ] as const)(
+    "describes the %s master grid for Standard album posts",
+    async (albumFormat, grid, finalPanel) => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push({
@@ -145,6 +174,7 @@ describe("generateImagePrompt", () => {
       input: {
         ...baseInput,
         service: "album-post",
+        albumFormat,
         hook: {
           ...baseInput.hook,
           formatBeats: ["Hook", "Proof", "Offer"]
@@ -156,14 +186,13 @@ describe("generateImagePrompt", () => {
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
     expect(promptText).toContain('"albumMaster"');
-    expect(promptText).toContain(
-      '"grid": "one 2:1 cover across the top; two 1:1 panels below"'
-    );
-    expect(promptText).toContain('"panel2": "Proof"');
+    expect(promptText).toContain(`"grid": "${grid}"`);
+    expect(promptText).toContain(finalPanel);
     expect(promptText).toContain(
       '"cropSafety": "each panel self-contained; no essential element crosses a seam"'
     );
-  });
+    }
+  );
 
   it("writes a sanitized trace with the exact agent input and returned prompt", async () => {
     const traces: unknown[] = [];
@@ -330,6 +359,11 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain("REFERENCE ART DIRECTOR");
     expect(promptText).toContain(
       "RUNTIME EXECUTION CONTRACT — REFERENCE-LIBRARY MODE"
+    );
+    expect(promptText).toContain('"workingBrief": {');
+    expect(promptText).toContain('"priority": "highest"');
+    expect(promptText).toContain(
+      '"instruction": "Launch a soft summer bouquet offer."'
     );
     expect(promptText).toContain(
       "Primary artwork contributes abstract composition grammar"

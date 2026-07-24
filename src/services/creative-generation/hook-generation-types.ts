@@ -1,9 +1,11 @@
 import type { Brand } from "../../domain/brand";
 import type {
+  AlbumFormatPreference,
   HookIdeaMode,
   UploadedCreativeMaterial
 } from "../../domain/creative-run";
 import {
+  albumFormats,
   ctaActionTypes,
   normalizeFormatBeatsForService,
   serviceTypes,
@@ -17,6 +19,7 @@ import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight"
 export interface HookGenerationInput {
   brand: Brand | null;
   hookIdeaMode: HookIdeaMode;
+  albumFormat?: AlbumFormatPreference;
   service: WorkflowState["service"];
   quantity: number;
   contentTypeQuotas?: readonly { service: ServiceType; count: number }[];
@@ -46,6 +49,7 @@ export interface RawDirection {
   cta?: unknown;
   supportingPoints?: unknown;
   formatBeats?: unknown;
+  albumFormat?: unknown;
   ugcBrief?: unknown;
   ctaActionType?: unknown;
   ctaDestination?: unknown;
@@ -90,6 +94,11 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
         )
       : []
   );
+  const albumFormat =
+    typeof raw.albumFormat === "string" &&
+    albumFormats.includes(raw.albumFormat as (typeof albumFormats)[number])
+      ? (raw.albumFormat as (typeof albumFormats)[number])
+      : undefined;
   const why =
     typeof raw.why === "string" && raw.why
       ? raw.why
@@ -133,6 +142,7 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
         )
       : [],
     formatBeats,
+    ...(albumFormat ? { albumFormat } : {}),
     ...(ugcBrief ? { ugcBrief } : {}),
     ...(typeof raw.ctaActionType === "string" &&
     ctaActionTypes.includes(raw.ctaActionType as (typeof ctaActionTypes)[number])

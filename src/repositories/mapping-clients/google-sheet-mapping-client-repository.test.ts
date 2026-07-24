@@ -39,7 +39,7 @@ describe("GoogleSheetMappingClientRepository", () => {
     });
   });
 
-  it("returns an empty list without caching a failed backend response", async () => {
+  it("surfaces a failed backend response without caching it", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -59,8 +59,64 @@ describe("GoogleSheetMappingClientRepository", () => {
       async () => null
     );
 
+    await expect(repository.list()).rejects.toThrow("Not configured.");
     await expect(repository.list()).resolves.toEqual([]);
-    await expect(repository.list()).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("bypasses the five-minute cache when a refresh is requested", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            clients: [
+              {
+                clientId: "Existing client",
+                status: "Active",
+                serviceStatus: "Active"
+              }
+            ]
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            clients: [
+              {
+                clientId: "Existing client",
+                status: "Active",
+                serviceStatus: "Active"
+              },
+              {
+                clientId: "Vitalife",
+                status: "Inactive",
+                serviceStatus: ""
+              }
+            ]
+          })
+        )
+      );
+    const repository = new GoogleSheetMappingClientRepository(
+      "/api/mapping-clients",
+      fetchImpl,
+      async () => "supabase-token"
+    );
+
+    await expect(repository.list()).resolves.toHaveLength(1);
+    await expect(repository.list()).resolves.toHaveLength(1);
+    await expect(
+      repository.list({ forceRefresh: true })
+    ).resolves.toEqual([
+      expect.objectContaining({ clientId: "Existing client" }),
+      expect.objectContaining({
+        clientId: "Vitalife",
+        status: "Inactive"
+      })
+    ]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 

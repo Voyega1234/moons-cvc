@@ -36,10 +36,15 @@ import {
   type BrandProduct
 } from "../../domain/brand-memory";
 import {
+  albumFormatLabel,
+  albumFormatPanelCount,
+  albumFormats,
   artworkOutputSizeLabel,
   artworkOutputSizes,
   creativeMaterialRoles,
+  resolveAlbumFormat,
   type ApprovalRole,
+  type AlbumFormat,
   type ArtworkMode,
   type CreativeOutput,
   type CreativeMaterialRole,
@@ -269,7 +274,10 @@ export function StartStage({ state, dispatch }: StageProps) {
               type="button"
               aria-haspopup="listbox"
               aria-expanded={state.brandMenuOpen}
-              onClick={() => dispatch({ type: "toggle-brand-menu" })}
+              onClick={() => {
+                if (!state.brandMenuOpen) void refresh();
+                dispatch({ type: "toggle-brand-menu" });
+              }}
             >
               <span className="select-left">
                 <span className="avatar compass-brand-select-avatar">
@@ -3828,7 +3836,7 @@ const successMetricObjectives: Record<
 
 const serviceDescriptions: Record<ServiceType, string> = {
   "single-static": "1:1 or 4:5 performance artwork",
-  "album-post": "4:5 swipeable story",
+  "album-post": "3 or 4-image Facebook album",
   "motion-static": "A lightweight animated execution",
   resize: "Adapt approved work to another placement",
   "ugc-video": "9:16 creator-led video concept"
@@ -4152,6 +4160,74 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 );
               })}
             </div>
+            {fixedMixItems.some(
+              (item) => item.service === "album-post" && item.quantity > 0
+            ) ? (
+              <div className="compass-album-format-picker">
+                <div className="compass-album-format-head">
+                  <div>
+                    <b>Album format</b>
+                    <p>
+                      Sets the story layout, image agent composition, and final
+                      crops.
+                    </p>
+                  </div>
+                  <span>
+                    {state.albumFormat === "auto"
+                      ? "Best layout per idea"
+                      : `${albumFormatPanelCount(state.albumFormat)} images`}
+                  </span>
+                </div>
+                <div
+                  className="compass-album-format-options"
+                  role="group"
+                  aria-label="Album format"
+                >
+                  <button
+                    className={`compass-album-format-auto ${
+                      state.albumFormat === "auto" ? "active" : ""
+                    }`}
+                    type="button"
+                    aria-label="Automatically choose the best album format for each idea"
+                    aria-pressed={state.albumFormat === "auto"}
+                    onClick={() =>
+                      dispatch({ type: "set-album-format", format: "auto" })
+                    }
+                  >
+                    <span
+                      className="compass-album-format-auto-icon"
+                      aria-hidden="true"
+                    >
+                      <Sparkle size={20} weight="fill" />
+                    </span>
+                    <span>
+                      <b>Auto · best for each idea</b>
+                      <small>
+                        The Hook Agent chooses from all four layouts using the
+                        concept and visual direction.
+                      </small>
+                    </span>
+                  </button>
+                  {albumFormats.map((format) => (
+                    <button
+                      className={
+                        state.albumFormat === format ? "active" : ""
+                      }
+                      type="button"
+                      aria-label={albumFormatLabel(format)}
+                      aria-pressed={state.albumFormat === format}
+                      key={format}
+                      onClick={() =>
+                        dispatch({ type: "set-album-format", format })
+                      }
+                    >
+                      <AlbumFormatDiagram format={format} />
+                      <span>{albumFormatLabel(format)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
           <section className="compass-workflow-module brief-editor-module">
             <div className="compass-module-head">
@@ -4513,6 +4589,22 @@ export function BriefStage({ state, dispatch }: StageProps) {
         </div>
       ) : null}
     </DecisionCard>
+  );
+}
+
+function AlbumFormatDiagram({ format }: { format: AlbumFormat }) {
+  return (
+    <span
+      className={`compass-album-format-diagram ${format}`}
+      aria-hidden="true"
+    >
+      {Array.from(
+        { length: albumFormatPanelCount(format) },
+        (_, index) => (
+          <i key={index} />
+        )
+      )}
+    </span>
   );
 }
 
@@ -5295,6 +5387,16 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   <span className="compass-angle-format-pill">
                     {group.contentType}
                   </span>
+                  {group.service === "album-post" ? (
+                    <span className="compass-angle-format-pill">
+                      {albumFormatLabel(
+                        resolvedAlbumFormatForDirection(
+                          state.albumFormat,
+                          direction
+                        )
+                      )}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="compass-angle-meta-line">
                   {direction.pillar || "Creative concept"}
@@ -5647,6 +5749,26 @@ function HookEditModal({
                   }))
                 }
               />
+            </label>
+          ) : null}
+          {draft.service === "album-post" ? (
+            <label>
+              <span>Album layout</span>
+              <select
+                value={draft.albumFormat ?? "three-horizontal"}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    albumFormat: event.target.value as AlbumFormat
+                  }))
+                }
+              >
+                {albumFormats.map((format) => (
+                  <option key={format} value={format}>
+                    {albumFormatLabel(format)}
+                  </option>
+                ))}
+              </select>
             </label>
           ) : null}
           <label>
@@ -6388,15 +6510,20 @@ function outputSectionTitle(format: string): string {
 
 function AlbumMosaic({
   outputs,
-  direction
+  direction,
+  format
 }: {
   outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
+  format: AlbumFormat;
 }) {
-  const panels = sortAlbumOutputs(outputs).slice(0, 3);
+  const panels = sortAlbumOutputs(outputs).slice(
+    0,
+    albumFormatPanelCount(format)
+  );
 
   return (
-    <div className="compass-album-mosaic">
+    <div className={`compass-album-mosaic ${format}`}>
       {panels.map((output, index) =>
         output.assetUrl ? (
           <img
@@ -6414,6 +6541,13 @@ function AlbumMosaic({
       )}
     </div>
   );
+}
+
+function resolvedAlbumFormatForDirection(
+  preference: WorkflowState["albumFormat"],
+  direction: WorkflowState["directions"][number] | undefined
+): AlbumFormat {
+  return resolveAlbumFormat(preference, direction?.albumFormat);
 }
 
 function OutputGrid({
@@ -6565,6 +6699,10 @@ function OutputGrid({
                           <AlbumMosaic
                             outputs={reviewOutputs}
                             direction={direction}
+                            format={resolvedAlbumFormatForDirection(
+                              state.albumFormat,
+                              direction
+                            )}
                           />
                         ) : isUgcOutput(output) ? (
                           <UgcTemplatePreview direction={direction} />
@@ -6736,6 +6874,10 @@ function OutputGrid({
           outputs={previewOutputs}
           direction={previewDirection}
           index={state.outputs.indexOf(previewOutput)}
+          albumFormat={resolvedAlbumFormatForDirection(
+            state.albumFormat,
+            previewDirection
+          )}
           onClose={() => setPreviewOutputId(null)}
         />
       ) : null}
@@ -6881,12 +7023,14 @@ function CreativePreviewModal({
   outputs,
   direction,
   index,
+  albumFormat,
   onClose
 }: {
   output: CreativeOutput;
   outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
   index: number;
+  albumFormat: AlbumFormat;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -6922,7 +7066,11 @@ function CreativePreviewModal({
         </div>
         <div className="output-modal-image">
           {album ? (
-            <AlbumMosaic outputs={outputs} direction={direction} />
+            <AlbumMosaic
+              outputs={outputs}
+              direction={direction}
+              format={albumFormat}
+            />
           ) : isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} />
           ) : output.assetUrl ? (
@@ -7097,7 +7245,14 @@ function OutputRegenerateModal({
         </div>
         <div className="output-modal-image">
           {album ? (
-            <AlbumMosaic outputs={outputs} direction={direction} />
+            <AlbumMosaic
+              outputs={outputs}
+              direction={direction}
+              format={resolvedAlbumFormatForDirection(
+                run.albumFormat,
+                direction
+              )}
+            />
           ) : isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} />
           ) : output.assetUrl ? (
@@ -7985,7 +8140,14 @@ function QcSlide({
           {isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} compact />
           ) : album ? (
-            <AlbumMosaic outputs={orderedOutputs} direction={direction} />
+            <AlbumMosaic
+              outputs={orderedOutputs}
+              direction={direction}
+              format={resolvedAlbumFormatForDirection(
+                run.albumFormat,
+                direction
+              )}
+            />
           ) : output.assetUrl ? (
             <img
               className="compass-qc-focus-image"

@@ -9,6 +9,42 @@ const baseEnv = {
 };
 
 describe("handleMappingClientsRequest", () => {
+  it("reads a published CSV mapping URL without OIDC or ADC", async () => {
+    const publishedUrl =
+      "https://docs.google.com/spreadsheets/d/e/published-id/pub?gid=147531213&single=true&output=csv";
+    const createSheetsAccessToken = vi.fn(async () => "must-not-be-used");
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        [
+          "",
+          "No,Client ID,Status,Service Status",
+          "1269,Vitalife,Inactive,"
+        ].join("\n"),
+        { headers: { "Content-Type": "text/csv" } }
+      )
+    );
+
+    const response = await handleMappingClientsRequest({
+      request: new Request("http://localhost/api/mapping-clients"),
+      env: { MAPPING_CLIENTS_GOOGLE_SHEET_URL: publishedUrl },
+      fetchImpl,
+      createSheetsAccessToken
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      clients: [
+        {
+          clientId: "Vitalife",
+          status: "Inactive",
+          serviceStatus: ""
+        }
+      ]
+    });
+    expect(createSheetsAccessToken).not.toHaveBeenCalled();
+  });
+
   it('reads the Client Portal "1. Questionnaire" tab on demand', async () => {
     const createSheetsAccessToken = vi.fn(async () => "sheets-token");
     const fetchImpl = vi.fn<typeof fetch>(async () =>

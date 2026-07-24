@@ -3185,6 +3185,161 @@
   border-radius: 9px;
 }
 
+.compass-app .compass-album-format-picker {
+  padding: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.compass-app .compass-album-format-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.compass-app .compass-album-format-head b {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compass-app .compass-album-format-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.compass-app .compass-album-format-head > span {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.compass-app .compass-album-format-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compass-app .compass-album-format-options > button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.compass-app .compass-album-format-options > button.compass-album-format-auto {
+  grid-column: 1 / -1;
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.compass-app .compass-album-format-auto-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+
+.compass-app .compass-album-format-auto > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-album-format-auto > span:last-child b {
+  font-size: 11px;
+}
+
+.compass-app .compass-album-format-auto > span:last-child small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.compass-app .compass-album-format-options > button:hover {
+  border-color: #b8c1d2;
+}
+
+.compass-app .compass-album-format-options > button:active {
+  transform: translateY(1px);
+}
+
+.compass-app .compass-album-format-options > button.active {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.compass-app .compass-album-format-options > button > span:last-child {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.compass-app .compass-album-format-diagram {
+  width: 44px;
+  aspect-ratio: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-album-format-diagram i {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  background: #b8c4dd;
+}
+
+.compass-app .compass-album-format-options > button.active .compass-album-format-diagram i {
+  background: var(--accent);
+}
+
+.compass-app .compass-album-format-diagram.three-horizontal {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.compass-app .compass-album-format-diagram.three-horizontal i:first-child {
+  grid-column: 1 / -1;
+}
+
+.compass-app .compass-album-format-diagram.three-vertical {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.compass-app .compass-album-format-diagram.three-vertical i:first-child {
+  grid-row: 1 / -1;
+}
+
+.compass-app .compass-album-format-diagram.four-vertical {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.compass-app .compass-album-format-diagram.four-vertical i:first-child {
+  grid-row: 1 / -1;
+}
+
+.compass-app .compass-album-format-diagram.four-grid {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
 .compass-app .brief-editor-module .textarea-wrap {
   padding: 14px 15px 16px;
 }
@@ -4991,8 +5146,21 @@
   background: #fff;
 }
 
-.compass-app .compass-album-mosaic > :first-child {
+.compass-app .compass-album-mosaic.three-horizontal > :first-child {
   grid-column: 1 / -1;
+}
+
+.compass-app .compass-album-mosaic.three-vertical > :first-child {
+  grid-row: 1 / -1;
+}
+
+.compass-app .compass-album-mosaic.four-vertical {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.compass-app .compass-album-mosaic.four-vertical > :first-child {
+  grid-row: 1 / -1;
 }
 
 .compass-app .compass-album-mosaic img,
@@ -7458,6 +7626,10 @@
 
   .compass-app .compass-plan-row {
     grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .compass-app .compass-album-format-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .compass-app .compass-angle-group-head {

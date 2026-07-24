@@ -7,6 +7,7 @@ import type {
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import type {
   ApprovalRole,
+  AlbumFormatPreference,
   AngleExportGroup,
   ArtworkMode,
   CreativeDirection,
@@ -64,6 +65,7 @@ export interface WorkflowState {
   hookIdeaMode: HookIdeaMode;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
+  albumFormat: AlbumFormatPreference;
   outputSize: ArtworkOutputSize;
   /** Compatibility alias for the total creative-mix quantity. */
   quantity: number;
@@ -101,6 +103,7 @@ export type WorkflowAction =
   | { type: "set-hook-idea-mode"; mode: HookIdeaMode }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
+  | { type: "set-album-format"; format: AlbumFormatPreference }
   | { type: "set-output-size"; size: ArtworkOutputSize }
   | { type: "set-quantity"; quantity: number }
   | { type: "apply-monthly-quota" }

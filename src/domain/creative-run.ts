@@ -22,6 +22,42 @@ export const serviceTypes = [
 
 export type ServiceType = (typeof serviceTypes)[number];
 
+export const albumFormats = [
+  "three-vertical",
+  "three-horizontal",
+  "four-vertical",
+  "four-grid"
+] as const;
+export type AlbumFormat = (typeof albumFormats)[number];
+export const albumFormatPreferences = ["auto", ...albumFormats] as const;
+export type AlbumFormatPreference = (typeof albumFormatPreferences)[number];
+export const defaultAlbumFormat: AlbumFormat = "three-horizontal";
+export const defaultAlbumFormatPreference: AlbumFormatPreference = "auto";
+
+export function resolveAlbumFormat(
+  preference: AlbumFormatPreference,
+  suggested?: AlbumFormat
+): AlbumFormat {
+  return preference === "auto" ? suggested ?? defaultAlbumFormat : preference;
+}
+
+export function albumFormatPanelCount(format: AlbumFormat): 3 | 4 {
+  return format.startsWith("three-") ? 3 : 4;
+}
+
+export function albumFormatLabel(format: AlbumFormat): string {
+  switch (format) {
+    case "three-vertical":
+      return "3 images · Vertical lead";
+    case "three-horizontal":
+      return "3 images · Horizontal lead";
+    case "four-vertical":
+      return "4 images · Vertical lead";
+    case "four-grid":
+      return "4 images · Grid";
+  }
+}
+
 export function outputFormatForService(service: ServiceType): string {
   switch (service) {
     case "single-static":
@@ -207,6 +243,8 @@ export interface CreativeDirection {
   supportingPoints?: readonly string[];
   /** Format-native story beats. Album/UGC/video directions use exactly three. */
   formatBeats?: readonly string[];
+  /** Album layout selected for this idea when the run uses automatic selection. */
+  albumFormat?: AlbumFormat;
   /** Production-ready detail generated only for UGC video directions. */
   ugcBrief?: UgcVideoBrief;
   /** Intended conversion route for the CTA. Optional for saved legacy runs. */
@@ -267,6 +305,7 @@ export interface CreativeRun {
   stage: CreativeStage;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
+  albumFormat: AlbumFormatPreference;
   outputSize: ArtworkOutputSize;
   brief: CreativeBrief;
   directions: readonly CreativeDirection[];

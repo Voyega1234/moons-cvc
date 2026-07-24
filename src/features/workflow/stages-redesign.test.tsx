@@ -970,6 +970,15 @@ describe("redesigned workflow stages", () => {
       stage.getByRole("spinbutton", { name: "Album quantity" })
     ).toBeTruthy();
     expect(
+      stage.getByRole("button", {
+        name: "Automatically choose the best album format for each idea"
+      })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(
+      stage.getByRole("button", { name: "4 images · Grid" })
+    ).toBeTruthy();
+    expect(
       (stage.getByRole("textbox", {
         name: /Working brief/i
       }) as HTMLTextAreaElement).value
@@ -984,6 +993,14 @@ describe("redesigned workflow stages", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-success-metric",
       metric: "ROAS"
+    });
+
+    await user.click(
+      stage.getByRole("button", { name: "4 images · Vertical lead" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-album-format",
+      format: "four-vertical"
     });
 
     await user.click(

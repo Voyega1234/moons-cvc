@@ -77,11 +77,17 @@ export function BrandProvider({
   const notifiedStalls = useRef(new Map<string, string>());
   const statusesInitialized = useRef(false);
 
-  const loadBrands = useCallback(async (showLoading: boolean) => {
+  const loadBrands = useCallback(async (
+    showLoading: boolean,
+    forceMappingRefresh = false
+  ) => {
     if (showLoading) {
       setValue((current) => ({ ...current, loading: true, error: null }));
     }
-    return Promise.all([repository.list(), mappingRepository.list()])
+    return Promise.all([
+      repository.list(),
+      mappingRepository.list({ forceRefresh: forceMappingRefresh })
+    ])
       .then(([brands, mappingClients]) => {
         const mergedBrands = filterBrandsForAccess(
           mergeMappingClients(brands, mappingClients),
@@ -136,15 +142,15 @@ export function BrandProvider({
       .catch((error: unknown) => {
         const nextError =
           error instanceof Error ? error : new Error("Could not load brands.");
-        setValue((current) =>
-          showLoading
-            ? { brands: [], loading: false, error: nextError }
-            : { ...current, loading: false, error: nextError }
-        );
+        setValue((current) => ({
+          ...current,
+          loading: false,
+          error: nextError
+        }));
       });
   }, [access, mappingRepository, repository]);
 
-  const refresh = useCallback(() => loadBrands(true), [loadBrands]);
+  const refresh = useCallback(() => loadBrands(true, true), [loadBrands]);
   const readMappingQuestionnaire = useCallback(
     async (sheetUrl: string) =>
       mappingRepository.readQuestionnaire?.(sheetUrl) ?? null,
@@ -162,6 +168,12 @@ export function BrandProvider({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const refreshOnFocus = () => void loadBrands(false, true);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [loadBrands]);
 
   const hasActiveIngestion = value.brands.some((brand) =>
     brand.ingestionStatus

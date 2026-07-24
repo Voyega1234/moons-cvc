@@ -170,6 +170,12 @@ describe("workspace serializer", () => {
       type: "apply-run-action",
       runId: workspace.activeRunId,
       now: "2026-06-23T10:05:47.000Z",
+      action: { type: "set-album-format", format: "four-grid" }
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-06-23T10:05:48.000Z",
       action: { type: "set-output-size", size: "2048x1152" }
     });
     workspace = workspaceReducer(workspace, {
@@ -216,6 +222,9 @@ describe("workspace serializer", () => {
     );
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"
+    );
+    expect(restored?.runsById["album-run"]?.albumFormat).toBe(
+      "four-grid"
     );
     expect(restored?.runsById["album-run"]?.outputSize).toBe("2048x1152");
     expect(restored?.runsById["album-run"]?.successMetric).toBe("ROAS");

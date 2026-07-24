@@ -66,6 +66,7 @@ export function useGenerateHooks(
         : generateDirectionsFromWebhook({
             brand: state.brand,
             hookIdeaMode: state.hookIdeaMode,
+            albumFormat: state.albumFormat,
             service: contentTypeQuotas[0]?.service ?? state.service,
             quantity: totalHookGenerationQuantity(state),
             contentTypeQuotas,
@@ -153,6 +154,7 @@ export function useGenerateMoreHooks(
           : generateDirectionsFromWebhook({
               brand: targetedState.brand,
               hookIdeaMode: targetedState.hookIdeaMode,
+              albumFormat: targetedState.albumFormat,
               service,
               quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
@@ -251,6 +253,7 @@ export function useRegenerateHook(
           : generateDirectionsFromWebhook({
               brand: targetedState.brand,
               hookIdeaMode: targetedState.hookIdeaMode,
+              albumFormat: targetedState.albumFormat,
               service,
               quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
@@ -373,6 +376,7 @@ export function useRegenerateAllHooks(
               : await generateDirectionsFromWebhook({
                   brand: targetedState.brand,
                   hookIdeaMode: targetedState.hookIdeaMode,
+                  albumFormat: targetedState.albumFormat,
                   service,
                   quantity: totalHookGenerationQuantity(targetedState),
                   contentTypeQuotas,

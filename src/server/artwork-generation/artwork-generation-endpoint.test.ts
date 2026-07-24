@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
+  albumCropRegions,
   handleArtworkGenerationRequest,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
@@ -115,6 +116,62 @@ function fakeStorage(): {
 }
 
 describe("handleArtworkGenerationRequest", () => {
+  it.each([
+    [
+      "three-vertical",
+      [
+        [960, 1920],
+        [960, 960],
+        [960, 960]
+      ]
+    ],
+    [
+      "three-horizontal",
+      [
+        [1920, 960],
+        [960, 960],
+        [960, 960]
+      ]
+    ],
+    [
+      "four-vertical",
+      [
+        [1280, 1920],
+        [640, 640],
+        [640, 640],
+        [640, 640]
+      ]
+    ],
+    [
+      "four-grid",
+      [
+        [960, 960],
+        [960, 960],
+        [960, 960],
+        [960, 960]
+      ]
+    ]
+  ] as const)("defines exact %s album crop outputs", (format, expected) => {
+    const regions = albumCropRegions({
+      left: 0,
+      top: 0,
+      side: 2048,
+      format
+    });
+    expect(
+      regions.map(({ outWidth, outHeight }) => [outWidth, outHeight])
+    ).toEqual(expected);
+    expect(
+      regions.every(
+        ({ left, top, width, height }) =>
+          left >= 0 &&
+          top >= 0 &&
+          left + width <= 2048 &&
+          top + height <= 2048
+      )
+    ).toBe(true);
+  });
+
   it("requires a Supabase user token when backend Supabase env is configured", async () => {
     const response = await handleArtworkGenerationRequest({
       request: buildRequest(),
@@ -514,7 +571,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies[0]).toMatchObject({ size: "2048x2048" });
     expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER");
     expect(imageBodies[0]?.prompt).toContain(
-      "Panel 1 occupies the full top row (2:1)"
+      "large 2:1 horizontal Panel 1 across the top"
     );
     const payload = (await response.json()) as {
       outputs: { id: string; format: string; assetStoragePath: string }[];
@@ -543,7 +600,7 @@ describe("handleArtworkGenerationRequest", () => {
     ]);
   });
 
-  it("uses the same three-panel album pipeline in Design System mode", async () => {
+  it("uses the selected four-panel album pipeline in Design System mode", async () => {
     const master = await sharp({
       create: {
         width: 2048,
@@ -598,9 +655,11 @@ describe("handleArtworkGenerationRequest", () => {
           ...requestBody,
           artworkMode: "design-system",
           service: "album-post",
+          albumFormat: "auto",
           selectedHooks: [
             {
               ...requestBody.selectedHooks[0],
+              albumFormat: "four-vertical",
               formatBeats: ["เปิดปัญหา", "อธิบายหลักฐาน", "ปิดด้วยข้อเสนอ"]
             }
           ]
@@ -622,21 +681,26 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies[0]?.prompt).toContain("เปิดปัญหา");
     expect(imageBodies[0]?.prompt).toContain("อธิบายหลักฐาน");
     expect(imageBodies[0]?.prompt).toContain("ปิดด้วยข้อเสนอ");
+    expect(imageBodies[0]?.prompt).toContain(
+      "large 2:3 vertical Panel 1 on the left"
+    );
     const payload = (await response.json()) as {
       outputs: { id: string; format: string }[];
     };
     expect(payload.outputs.map((output) => output.id)).toEqual([
       "hook-1-album-1-v1",
       "hook-1-album-2-v1",
-      "hook-1-album-3-v1"
+      "hook-1-album-3-v1",
+      "hook-1-album-4-v1"
     ]);
     const panelMetadata = await Promise.all(
       uploaded.slice(1).map(({ body }) => sharp(body).metadata())
     );
     expect(panelMetadata.map(({ width, height }) => [width, height])).toEqual([
-      [1920, 960],
-      [960, 960],
-      [960, 960]
+      [1280, 1920],
+      [640, 640],
+      [640, 640],
+      [640, 640]
     ]);
   });
 
@@ -1349,7 +1413,15 @@ describe("handleArtworkGenerationRequest", () => {
       "The Human presence policy overrides reference subject matter"
     );
     expect(prompt).toContain("realistic contact shadows");
-    expect(prompt).toContain("Objective: Launch a soft summer bouquet offer.");
+    expect(prompt).toContain(
+      "Working brief (HIGHEST PRIORITY): Launch a soft summer bouquet offer."
+    );
+    expect(prompt).toContain(
+      "The Working brief controls visual cleanliness, text density, element count"
+    );
+    expect(prompt).toContain(
+      '"workingBrief": "Launch a soft summer bouquet offer."'
+    );
     expect(prompt).toContain(
       "Exact headline: Flowers that make the room feel softer"
     );

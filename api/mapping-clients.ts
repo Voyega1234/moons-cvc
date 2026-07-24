@@ -46,6 +46,7 @@ export default async function handler(
 
   response.status(workerResponse.status);
   response.setHeader("Content-Type", "application/json");
+  response.setHeader("Cache-Control", "no-store");
   response.json(parseJsonBody(bodyText));
 }
 

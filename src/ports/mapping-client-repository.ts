@@ -7,8 +7,14 @@ export interface MappingClient {
   clientPortalUrl?: string;
 }
 
+export interface MappingClientListOptions {
+  forceRefresh?: boolean;
+}
+
 export interface MappingClientRepository {
-  list(): Promise<readonly MappingClient[]>;
+  list(
+    options?: MappingClientListOptions
+  ): Promise<readonly MappingClient[]>;
   readQuestionnaire?(
     sheetUrl: string
   ): Promise<OnboardingQuestionnaireSource | null>;

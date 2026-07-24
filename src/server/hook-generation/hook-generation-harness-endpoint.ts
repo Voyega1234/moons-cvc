@@ -2,8 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  albumFormatPreferences,
+  albumFormats,
   ctaActionTypes,
+  defaultAlbumFormatPreference,
   serviceTypes,
+  type AlbumFormat,
+  type AlbumFormatPreference,
   type CtaActionType,
   type HookIdeaMode,
   type ServiceType,
@@ -87,6 +92,7 @@ interface GeneratedDirection extends RawDirection {
   cta: string;
   supportingPoints: readonly string[];
   formatBeats: readonly string[];
+  albumFormat: AlbumFormat;
   ugcBrief?: UgcVideoBrief;
   ctaActionType: CtaActionType;
   ctaDestination: string;
@@ -311,7 +317,16 @@ async function runGenerationStep({
     schema: hookGenerationSchema
   });
 
-  return parseHookGenerationResult(extractResponseText(payload));
+  const result = parseHookGenerationResult(extractResponseText(payload));
+  const preference = input.albumFormat ?? defaultAlbumFormatPreference;
+  if (preference === "auto") return result;
+  return {
+    directions: result.directions.map((direction) =>
+      direction.service === "album-post"
+        ? { ...direction, albumFormat: preference }
+        : direction
+    )
+  };
 }
 
 async function runSubheadlineHighlightStep({
@@ -584,7 +599,9 @@ function buildGenerationPrompt(
     "",
     "CONTENT TYPE EXECUTION — แต่ละ format ต้องคิดคนละแบบ ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
     "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
-    "- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดีสำหรับภาพด้านใน 3 ใบ; แต่ละ topic ต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic.",
+    albumHookInstruction(
+      input.albumFormat ?? defaultAlbumFormatPreference
+    ),
     "- ugc-video: คิดเป็น creator-led vertical video ที่ฟังเหมือนคนจริงพูด ไม่ใช่ headline บนโปสเตอร์. Hook ต้องเปิดเรื่องได้ใน 1-3 วินาที. formatBeats ต้องมี 3 beat พอดี: opening situation/tension → demonstration/proof → brand-fit action/close.",
     "  สำหรับ ugc-video ให้สร้าง ugcBrief เพิ่มเติม: product = ชื่อสินค้า/บริการที่มีหลักฐานตรง, duration = ความยาวที่เหมาะสม เช่น 15–30 วินาที, objective = เป้าหมายวิดีโอที่ชัด, moodAndTone = mood/tone 3–5 คำพร้อมคำอธิบายสั้น, productionStyle = วิธีถ่ายและตัดต่อที่ creator ทำตามได้, referenceDirection = ลักษณะ reference visual ที่ควรหา/แนบโดยไม่อ้างชื่อ creator จริง, openingScript = คำพูด+action+ข้อความบนจอสำหรับช่วงเปิด, showcaseScript = คำพูด+action+proof/demo ช่วงกลาง, closingScript = คำพูด+action+CTA ช่วงปิด. แต่ละ script ต้อง production-ready 2–5 ประโยค กระชับ เป็นภาษาคนจริง และห้ามแต่ง claim. สำหรับ service อื่นให้คืนทุก field ใน ugcBrief เป็น string ว่าง.",
     "- motion-static: คิดเป็น short motion creative. Hook ต้องทำงานกับ movement/reveal. formatBeats ต้องมี 3 beat พอดี: opening frame → motion/reveal → resolved message/CTA.",
@@ -653,7 +670,7 @@ function buildGenerationPrompt(
     "",
     "## Compass output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
+    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; albumFormat = the exact album layout chosen for this idea according to the album rules above (for non-album services return three-horizontal); formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
     "Format-beat validation: album-post, ugc-video, and motion-static must return exactly 3 non-empty formatBeats. single-static and resize must return an empty array. Album formatBeats are the three inside-slide supporting topics—not hidden rationale and not generic filler.",
     "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
@@ -716,6 +733,7 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     `Service: ${input.service}`,
     `Selected output quantity later: ${input.quantity}`,
     `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
+    `Album layout preference: ${input.albumFormat ?? defaultAlbumFormatPreference}`,
     "",
     "User Brief — HIGHEST PRIORITY:",
     input.brief,
@@ -872,6 +890,7 @@ const hookGenerationSchema = {
           visual: { type: "string" },
           cta: { type: "string" },
           supportingPoints: stringArraySchema,
+          albumFormat: { type: "string", enum: albumFormats },
           formatBeats: {
             type: "array",
             maxItems: 3,
@@ -921,6 +940,7 @@ const hookGenerationSchema = {
           "visual",
           "cta",
           "supportingPoints",
+          "albumFormat",
           "formatBeats",
           "ugcBrief",
           "ctaActionType",
@@ -982,6 +1002,7 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   return {
     runId,
     hookIdeaMode: readHookIdeaMode(value.hookIdeaMode),
+    albumFormat: readAlbumFormat(value.albumFormat),
     brand: value.brand === null ? null : parseBrand(value.brand),
     service: service as HookGenerationHarnessRequest["service"],
     quantity,
@@ -1012,6 +1033,45 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readAlbumFormat(value: unknown): AlbumFormatPreference {
+  if (value === undefined) return defaultAlbumFormatPreference;
+  if (
+    typeof value === "string" &&
+    albumFormatPreferences.includes(value as AlbumFormatPreference)
+  ) {
+    return value as AlbumFormatPreference;
+  }
+  throw new Error("albumFormat is invalid.");
+}
+
+function albumHookInstruction(
+  preference: AlbumFormatPreference
+): string {
+  if (preference === "auto") {
+    return [
+      "- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. เลือก albumFormat ให้เหมาะกับแนวคิดของ direction นี้โดยตรง ห้ามสุ่มและห้ามใช้ default เดียวทุกไอเดีย:",
+      "  - three-vertical: ใช้เมื่อมี hero subject/product แนวตั้งหนึ่งจุดที่เด่นมาก และมีสอง supporting moments.",
+      "  - three-horizontal: ใช้เมื่อแนวคิดเด่นที่ panorama, before-after, wide reveal หรือ cover แนวนอน แล้วมีสอง supporting moments.",
+      "  - four-vertical: ใช้เมื่อมี hero แนวตั้งหนึ่งจุด แล้วต้องเล่าต่อด้วย proof/detail/step อีกสามส่วน.",
+      "  - four-grid: ใช้เมื่อเป็น comparison, list, steps หรือข้อมูลสี่ส่วนที่มีน้ำหนักใกล้กัน.",
+      "  Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดี; แต่ละ topicต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic."
+    ].join("\n");
+  }
+  const format = preference;
+  const layout =
+    format === "three-vertical"
+      ? "3 images: vertical cover on the left with two square panels on the right"
+      : format === "three-horizontal"
+        ? "3 images: horizontal cover on top with two square panels below"
+        : format === "four-vertical"
+          ? "4 images: vertical cover on the left with three square panels on the right"
+          : "4 images: four square panels in a 2 by 2 grid";
+  const beatUse = format.startsWith("three-")
+    ? "The first two supporting topics may share the middle panel; the final topic and CTA close on the last panel."
+    : "Place one supporting topic in each of the three panels after the cover.";
+  return `- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. Selected layout is ${layout}. Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดี; แต่ละ topic ต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ${beatUse} ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic.`;
 }
 
 function readHookIdeaMode(value: unknown): HookIdeaMode {
@@ -1251,6 +1311,10 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
                 direction.supportingPoints,
                 `directions[${index}].supportingPoints`
               ),
+        albumFormat: readGeneratedAlbumFormat(
+          direction.albumFormat,
+          `directions[${index}].albumFormat`
+        ),
         formatBeats,
         ...(ugcBrief ? { ugcBrief } : {}),
         ctaActionType:
@@ -1287,6 +1351,19 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       };
     })
   };
+}
+
+function readGeneratedAlbumFormat(
+  value: unknown,
+  field: string
+): AlbumFormat {
+  if (
+    typeof value !== "string" ||
+    !albumFormats.includes(value as AlbumFormat)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as AlbumFormat;
 }
 
 function validateFormatBeats(
