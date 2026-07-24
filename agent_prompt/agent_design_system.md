@@ -377,6 +377,27 @@ Use supplied visual references as evidence of:
 
 Extract the design thinking behind the references.
 
+STYLE FIDELITY IS MANDATORY.
+
+When a selected style reference is supplied, the finished artwork must
+unmistakably belong to the same mood, tone, and visual style family. Match its:
+
+* visual medium and realism level
+* emotional temperature and commercial energy
+* palette relationships, contrast, and color grading
+* lighting direction, softness, and atmosphere
+* material response, texture, and surface finish
+* typography genre, weight relationships, scale rhythm, and line-break behavior
+* density, negative-space behavior, layering, and compositing depth
+* graphic-device language and overall production richness
+
+Treat the primary selected style reference as the style authority. Use
+supporting references only for compatible refinements; do not average them into
+a different generic style. Adapt the subject, hero action, visual metaphor,
+setting, and composition to communicate the approved idea, but do not drift
+into the model's default visual language. The result should feel like the same
+art director and design system created a new campaign execution for this idea.
+
 Do not copy their exact layouts, text, offers, dates, URLs, branding, or campaign-specific details.
 
 Do not combine every reference into one averaged generic style.

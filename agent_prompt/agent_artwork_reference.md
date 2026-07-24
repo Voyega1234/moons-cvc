@@ -24,11 +24,15 @@ REFERENCE ROLES
   DNA. Study their recurring minimal-versus-dense character, premium/playful
   mood, visual medium, font genre, language mix, casing, type hierarchy,
   whitespace, grid, palette roles, lighting, graphic devices, CTA behavior, and
-  finish. Transfer compatible brand traits, never their campaign content,
+  finish. The new artwork must unmistakably remain in that same mood, tone, and
+  visual style family while adapting the subject and composition to the approved
+  idea. Transfer compatible brand traits, never their campaign content,
   recognizable layout, main visual, background, people, props, or readable copy.
 - The primary Creative Compass artwork reference contributes only abstract design grammar:
   compatible zone proportions, hierarchy, visual medium, hero-to-type scale,
-  density, layering rhythm, and commercial construction.
+  density, layering rhythm, palette logic, lighting atmosphere, material
+  language, typography behavior, and commercial construction. Preserve its
+  recognizable style family and production richness.
 - The secondary Creative Compass artwork reference contributes only compatible craft:
   typography behavior, lighting, material response, texture, compositing, and
   finish. It must not introduce a competing layout or visual idea.
@@ -115,6 +119,17 @@ typography-led work stays typography-led. Do not simplify a crafted reference
 into generic UI cards, floating glass, miniature SaaS objects, a blue tech glow,
 or an empty type poster unless that visual grammar is genuinely present in the
 primary reference and serves the concept.
+
+STYLE-FIDELITY GATE
+
+The final execution must look as though the same art director and design system
+created a new campaign for the approved idea. Match the primary reference's
+mood, emotional temperature, visual medium, palette relationships, contrast,
+lighting character, texture, material response, typography rhythm, density,
+layering, and finishing standard. Change the campaign-specific subject,
+metaphor, action, setting, and exact arrangement so they serve the new idea.
+Reject any draft that fits the idea but drifts into a different or generic AI
+style.
 
 TYPOGRAPHY
 

@@ -95,6 +95,46 @@ describe("workflow rules", () => {
     );
   });
 
+  it("allows drafts to enter and complete Internal QC without automated QA", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let run = createInitialWorkflowState({
+      id: "run-optional-qa",
+      now: "2026-07-24T00:00:00.000Z"
+    });
+    run = workflowReducer(run, { type: "select-brand", brand });
+    run = workflowReducer(run, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    run = workflowReducer(run, { type: "auto-select-directions" });
+    run = workflowReducer(run, { type: "create-outputs" });
+    const output = run.outputs[0];
+    if (!output) throw new Error("Expected a generated output.");
+
+    expect(run.qaComplete).toBe(false);
+    expect(isStageComplete(run, "studio")).toBe(true);
+    expect(
+      workflowActionBlockReason(run, { type: "set-stage", stage: "approval" })
+    ).toBeNull();
+    expect(
+      workflowActionBlockReason(run, {
+        type: "approve-role",
+        role: "graphicDesign"
+      })
+    ).toBeNull();
+    expect(
+      workflowActionBlockReason(run, {
+        type: "review-output",
+        id: output.id,
+        role: "graphicDesign",
+        decision: "approved",
+        comment: ""
+      })
+    ).toBeNull();
+  });
+
   it("requires a comment whenever an internal reviewer rejects", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -223,6 +263,7 @@ describe("workflow rules", () => {
       workflowActionBlockReason(run, {
         type: "request-client-change",
         id: output.id,
+        targetRole: "graphicDesign",
         comment: " "
       })
     ).toBe("Add a comment before requesting changes.");
@@ -230,6 +271,7 @@ describe("workflow rules", () => {
       workflowActionBlockReason(run, {
         type: "request-client-change",
         id: output.id,
+        targetRole: "graphicDesign",
         comment: "Make the product larger."
       })
     ).toBeNull();

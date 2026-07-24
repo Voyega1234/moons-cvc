@@ -43,17 +43,21 @@ describe("artwork reference library", () => {
     expect(selected.searchText).toMatch(/beauty|clinic|skin/i);
   });
 
-  it("prioritizes an album or multi-panel artwork for album posts", () => {
-    const selected = selectArtworkReferencePattern({
+  it("does not force a combined-grid reference for standalone album images", () => {
+    const albumSelected = selectArtworkReferencePattern({
       service: "album-post",
       canvasRatio: "1:1",
-      brief: "Explain several customer use cases in multiple panels.",
+      brief: "Launch a focused commercial campaign.",
+      hook
+    });
+    const staticSelected = selectArtworkReferencePattern({
+      service: "single-static",
+      canvasRatio: "1:1",
+      brief: "Launch a focused commercial campaign.",
       hook
     });
 
-    expect(`${selected.sourceFile} ${selected.searchText}`).toMatch(
-      /album|multi-panel/i
-    );
+    expect(albumSelected.id).toBe(staticSelected.id);
   });
 
   it("matches short AI only as a complete term", () => {

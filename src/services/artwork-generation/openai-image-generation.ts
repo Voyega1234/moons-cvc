@@ -16,6 +16,7 @@ import {
   creativeMixItems,
   creativeMixServiceAt,
   directionServiceAt,
+  selectedBrandProducts,
   type WorkflowState
 } from "../../features/workflow/model";
 import type {
@@ -397,7 +398,7 @@ export function buildArtworkRegenerationRequest({
       ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
-    ...buildBrandContext(run.brand),
+    ...buildBrandContext(run),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
@@ -572,7 +573,7 @@ function buildArtworkRequest({
       ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
-    ...buildBrandContext(run.brand),
+    ...buildBrandContext(run),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
@@ -769,10 +770,11 @@ async function mapWithConcurrency<Input, Output>(
   return results;
 }
 
-function buildBrandContext(brand: WorkflowState["brand"]): Pick<
+function buildBrandContext(run: WorkflowState): Pick<
   ArtworkGenerationRequest,
   "brandMemory" | "brandLibrary"
 > {
+  const brand = run.brand;
   return {
     brandMemory: {
       working: brand?.memory.working ?? [],
@@ -780,7 +782,7 @@ function buildBrandContext(brand: WorkflowState["brand"]): Pick<
     },
     brandLibrary: {
       brand: compactLibraryItems(brand?.library.brand ?? []),
-      products: compactLibraryItems(brand?.library.products ?? []),
+      products: compactLibraryItems(selectedBrandProducts(run)),
       docs: compactLibraryItems(brand?.library.docs ?? []),
       refs: compactLibraryItems(brand?.library.refs ?? [])
     }

@@ -14,6 +14,7 @@ import {
 import {
   creativeMixItems,
   hookGenerationContentTypeQuotas,
+  selectedBrandProducts,
   totalHookGenerationQuantity
 } from "../../features/workflow/model";
 import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionnaire-hook-context";
@@ -136,7 +137,7 @@ export function buildHookGenerationHarnessRequest({
     },
     brandLibrary: {
       brand: compactLibraryItems(brand?.library.brand ?? []),
-      products: compactLibraryItems(brand?.library.products ?? []),
+      products: compactLibraryItems(selectedBrandProducts(run)),
       docs: compactLibraryItems(brand?.library.docs ?? []),
       refs: compactLibraryItems(brand?.library.refs ?? [])
     }

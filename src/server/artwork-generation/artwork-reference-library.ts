@@ -130,7 +130,7 @@ export function selectArtworkReferencePatterns(
   const context = [
     input.brandName,
     input.brandCategory,
-    input.service,
+    input.service === "album-post" ? "static" : input.service,
     input.brief,
     input.hook.hook,
     input.hook.concept,
@@ -146,7 +146,7 @@ export function selectArtworkReferencePatterns(
     .join(" ");
   const contextTokens = tokenize(context);
   const intendedMode = inferMode(context);
-  const intendedLayouts = inferLayouts(context, input.service);
+  const intendedLayouts = inferLayouts(context);
   const preferredTypography = inferTypography(intendedMode, context);
   const thaiCopy = /[\u0E00-\u0E7F]/u.test(context);
 
@@ -170,10 +170,6 @@ export function selectArtworkReferencePatterns(
     }
     if (sameBrandFamily(input.brandName, pattern.client)) score += 14;
 
-    if (input.service === "album-post") {
-      if (/\balbum\b/iu.test(pattern.searchText)) score += 9;
-      if (pattern.layoutArchetype === "marketplace_promo") score += 3;
-    }
     if (
       matchesAny(context, ["minimal", "minimalist", "restrained", "clean"]) &&
       pattern.elementBudget.total_text_blocks <= 8
@@ -321,7 +317,7 @@ function inferMode(context: string): ArtworkMode {
   return "standard_commercial";
 }
 
-function inferLayouts(context: string, service: string): ReadonlySet<string> {
+function inferLayouts(context: string): ReadonlySet<string> {
   const layouts = new Set<string>();
   if (
     matchesAny(context, [
@@ -349,10 +345,6 @@ function inferLayouts(context: string, service: string): ReadonlySet<string> {
   if (matchesAny(context, ["luxury", "premium", "product", "craftsmanship"])) {
     layouts.add("product_stage_plinth");
     layouts.add("editorial_premium");
-    layouts.add("architectural_plane_split");
-  }
-  if (service === "album-post") {
-    layouts.add("marketplace_promo");
     layouts.add("architectural_plane_split");
   }
   return layouts;

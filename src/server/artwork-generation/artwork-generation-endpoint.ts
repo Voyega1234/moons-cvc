@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import sharp from "sharp";
 import {
   albumFormatPreferences,
   albumFormats,
@@ -593,7 +592,7 @@ async function generateOutputForHook({
     hook.albumFormat
   );
   const generationSize: ArtworkOutputSize = isAlbum
-    ? "2048x2048"
+    ? albumPanelGenerationSize(albumFormat, 1)
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
   const strategy =
@@ -653,14 +652,68 @@ async function generateOutputForHook({
             buildConceptAlignmentInstruction(hook),
             prompt
           ];
-  const imagePrompt = [
-    ...promptParts,
-    isAlbum
-      ? buildAlbumMasterInstruction(hook, albumFormat)
-      : null
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  if (isAlbum) {
+    const assetVersion = input.assetVersion ?? 1;
+    const panelPlans = buildAlbumPanelPlans(hook, albumFormat);
+    return mapWithConcurrency(panelPlans, 2, async (panel) => {
+      const panelPrompt = [
+        ...promptParts,
+        buildAlbumPanelInstruction(hook, albumFormat, panel)
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const panelHook = { ...hook, id: `${hook.id}-album-${panel.index}` };
+      const imageRequestDebug = buildImageRequestDebugBundle({
+        model,
+        runId: input.runId,
+        hook: panelHook,
+        prompt: panelPrompt,
+        size: panel.size,
+        quality: "medium",
+        references: generationReferences
+      });
+      await writeDebugLog(
+        debugLogDirectory,
+        imageRequestDebug.entry,
+        imageRequestDebug.assets
+      );
+      const image =
+        generationReferences.length > 0
+          ? await editImage({
+              apiKey,
+              model,
+              prompt: panelPrompt,
+              size: panel.size,
+              quality: "medium",
+              referenceImages: generationReferences,
+              fetchImpl
+            })
+          : await generateImage({
+              apiKey,
+              model,
+              prompt: panelPrompt,
+              size: panel.size,
+              fetchImpl
+            });
+
+      return persistArtworkOutput({
+        input,
+        hook: panelHook,
+        outputId: `${hook.id}-album-${panel.index}-v${assetVersion}`,
+        directionId: hook.id,
+        assetVersion,
+        format,
+        model,
+        imageBytes: Buffer.from(image.base64, "base64"),
+        mimeType: image.mimeType,
+        storage,
+        debugLogDirectory,
+        writeDebugLog
+      });
+    });
+  }
+
+  const imagePrompt = promptParts.filter(Boolean).join("\n\n");
   const imageRequestDebug = buildImageRequestDebugBundle({
     model,
     runId: input.runId,
@@ -694,44 +747,6 @@ async function generateOutputForHook({
           fetchImpl
         });
 
-  const imageBytes = Buffer.from(image.base64, "base64");
-  if (isAlbum) {
-    const assetVersion = input.assetVersion ?? 1;
-    await persistArtworkOutput({
-      input,
-      hook: { ...hook, id: `${hook.id}-album-master` },
-      outputId: `${hook.id}-album-master-v${assetVersion}`,
-      directionId: hook.id,
-      assetVersion,
-      format,
-      model,
-      imageBytes,
-      mimeType: image.mimeType,
-      storage,
-      debugLogDirectory,
-      writeDebugLog
-    });
-    const panels = await splitAlbumMaster(imageBytes, albumFormat);
-    return Promise.all(
-      panels.map((panel) =>
-        persistArtworkOutput({
-          input,
-          hook: { ...hook, id: `${hook.id}-album-${panel.index}` },
-          outputId: `${hook.id}-album-${panel.index}-v${assetVersion}`,
-          directionId: hook.id,
-          assetVersion,
-          format,
-          model,
-          imageBytes: panel.bytes,
-          mimeType: "image/png",
-          storage,
-          debugLogDirectory,
-          writeDebugLog
-        })
-      )
-    );
-  }
-
   return [
     await persistArtworkOutput({
       input,
@@ -741,7 +756,7 @@ async function generateOutputForHook({
       assetVersion: input.assetVersion ?? 1,
       format,
       model,
-      imageBytes,
+      imageBytes: Buffer.from(image.base64, "base64"),
       mimeType: image.mimeType,
       storage,
       debugLogDirectory,
@@ -750,125 +765,85 @@ async function generateOutputForHook({
   ];
 }
 
-function buildAlbumMasterInstruction(
+interface AlbumPanelPlan {
+  index: 1 | 2 | 3 | 4;
+  size: ArtworkOutputSize;
+  purpose: string;
+}
+
+function buildAlbumPanelPlans(
   hook: SelectedHook,
   format: AlbumFormat
-): string {
+): readonly AlbumPanelPlan[] {
   const beats = hook.formatBeats ?? [];
-  const layout = albumLayoutPrompt(format);
-  const panelInstructions =
-    format === "three-horizontal" || format === "three-vertical"
-      ? [
-          `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
-          `Panel 2 develops the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`,
-          `Panel 3 closes the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
-        ]
-      : [
-          `Panel 1 is the standalone cover: exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
-          `Panel 2 develops ${beats[0] ?? "the opening supporting point"}.`,
-          `Panel 3 develops ${beats[1] ?? "the mechanism or proof"}.`,
-          `Panel 4 closes the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
-        ];
+  const cover: AlbumPanelPlan = {
+    index: 1,
+    size: albumPanelGenerationSize(format, 1),
+    purpose: `Standalone cover with the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`
+  };
+  if (format === "three-horizontal" || format === "three-vertical") {
+    return [
+      cover,
+      {
+        index: 2,
+        size: "1024x1024",
+        purpose: `Develop the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`
+      },
+      {
+        index: 3,
+        size: "1024x1024",
+        purpose: `Close the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+      }
+    ];
+  }
   return [
-    "ALBUM MASTER - overrides any conflicting single-image layout regardless of artwork mode:",
-    layout,
-    "Do not draw borders, gutters, crop marks, panel numbers, or mockup frames.",
-    ...panelInstructions,
-    "Each crop must remain legible and compositionally complete when viewed alone. Keep text, logo, CTA, faces, products, and essential proof at least 8% inside every crop edge and never cross a seam. Connect the set only through background flow, lighting, palette, perspective, or non-essential shapes. Use one coherent visual world across every panel."
-  ].join("\n");
-}
-
-function albumLayoutPrompt(
-  format: AlbumFormat
-): string {
-  switch (format) {
-    case "three-vertical":
-      return "Create one seamless 1:1 master artboard with a large 1:2 vertical Panel 1 on the left and two equal 1:1 square panels stacked on the right.";
-    case "three-horizontal":
-      return "Create one seamless 1:1 master artboard with a large 2:1 horizontal Panel 1 across the top and two equal 1:1 square panels along the bottom.";
-    case "four-vertical":
-      return "Create one seamless 1:1 master artboard with a large 2:3 vertical Panel 1 on the left and three equal 1:1 square panels stacked on the right.";
-    case "four-grid":
-      return "Create one seamless 1:1 master artboard divided into four equal 1:1 square panels in a 2 by 2 grid.";
-  }
-}
-
-async function splitAlbumMaster(
-  imageBytes: Buffer,
-  format: AlbumFormat
-): Promise<readonly { index: 1 | 2 | 3 | 4; bytes: Buffer }[]> {
-  const metadata = await sharp(imageBytes).metadata();
-  if (!metadata.width || !metadata.height) {
-    throw new Error("Could not read the generated album master dimensions.");
-  }
-  const side = Math.min(metadata.width, metadata.height);
-  const left = Math.floor((metadata.width - side) / 2);
-  const top = Math.floor((metadata.height - side) / 2);
-  const regions = albumCropRegions({ left, top, side, format });
-
-  return Promise.all(
-    regions.map(async (region) => ({
-      index: region.index,
-      bytes: await sharp(imageBytes)
-        .extract({
-          left: region.left,
-          top: region.top,
-          width: region.width,
-          height: region.height
-        })
-        .resize(region.outWidth, region.outHeight, { fit: "fill" })
-        .png()
-        .toBuffer()
-    }))
-  );
-}
-
-export function albumCropRegions({
-  left,
-  top,
-  side,
-  format
-}: {
-  left: number;
-  top: number;
-  side: number;
-  format: AlbumFormat;
-}) {
-  const half = Math.floor(side / 2);
-  if (format === "three-vertical") {
-    return [
-      { index: 1 as const, left, top, width: half, height: side, outWidth: 960, outHeight: 1920 },
-      { index: 2 as const, left: left + half, top, width: side - half, height: half, outWidth: 960, outHeight: 960 },
-      { index: 3 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
-    ];
-  }
-  if (format === "three-horizontal") {
-    return [
-      { index: 1 as const, left, top, width: side, height: half, outWidth: 1920, outHeight: 960 },
-      { index: 2 as const, left, top: top + half, width: half, height: side - half, outWidth: 960, outHeight: 960 },
-      { index: 3 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
-    ];
-  }
-  if (format === "four-grid") {
-    return [
-      { index: 1 as const, left, top, width: half, height: half, outWidth: 960, outHeight: 960 },
-      { index: 2 as const, left: left + half, top, width: side - half, height: half, outWidth: 960, outHeight: 960 },
-      { index: 3 as const, left, top: top + half, width: half, height: side - half, outWidth: 960, outHeight: 960 },
-      { index: 4 as const, left: left + half, top: top + half, width: side - half, height: side - half, outWidth: 960, outHeight: 960 }
-    ];
-  }
-
-  const railWidth = Math.floor(side / 3);
-  const leadWidth = side - railWidth;
-  const firstHeight = Math.ceil(side / 3);
-  const secondHeight = Math.ceil((side - firstHeight) / 2);
-  const thirdHeight = side - firstHeight - secondHeight;
-  return [
-    { index: 1 as const, left, top, width: leadWidth, height: side, outWidth: 1280, outHeight: 1920 },
-    { index: 2 as const, left: left + leadWidth, top, width: railWidth, height: firstHeight, outWidth: 640, outHeight: 640 },
-    { index: 3 as const, left: left + leadWidth, top: top + firstHeight, width: railWidth, height: secondHeight, outWidth: 640, outHeight: 640 },
-    { index: 4 as const, left: left + leadWidth, top: top + firstHeight + secondHeight, width: railWidth, height: thirdHeight, outWidth: 640, outHeight: 640 }
+    cover,
+    {
+      index: 2,
+      size: "1024x1024",
+      purpose: `Develop ${beats[0] ?? "the opening supporting point"}.`
+    },
+    {
+      index: 3,
+      size: "1024x1024",
+      purpose: `Develop ${beats[1] ?? "the mechanism or proof"}.`
+    },
+    {
+      index: 4,
+      size: "1024x1024",
+      purpose: `Close the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+    }
   ];
+}
+
+function albumPanelGenerationSize(
+  format: AlbumFormat,
+  panelIndex: number
+): ArtworkOutputSize {
+  if (panelIndex !== 1) return "1024x1024";
+  if (format === "three-horizontal") return "1536x1024";
+  if (format === "three-vertical" || format === "four-vertical") {
+    return "1024x1536";
+  }
+  return "1024x1024";
+}
+
+function buildAlbumPanelInstruction(
+  hook: SelectedHook,
+  format: AlbumFormat,
+  panel: AlbumPanelPlan
+): string {
+  const imageCount = format.startsWith("three-") ? 3 : 4;
+  return [
+    `ALBUM IMAGE ${panel.index} OF ${imageCount} — standalone ${canvasRatioFromSize(panel.size)} artwork:`,
+    panel.purpose,
+    "Use the entire canvas for this one image. Do not create a collage, grid, mosaic, contact sheet, split screen, adjacent panel, visible separator, crop guide, mockup frame, or preview of the other album images.",
+    "Keep this image compositionally complete when viewed alone. Keep text, logo, CTA, faces, products, and essential proof at least 8% inside the canvas edge.",
+    `Maintain the same brand system, palette, typography behavior, lighting, materials, and campaign world across all ${imageCount} album images, while giving this image its own clear composition.`,
+    panel.index === 1
+      ? `Render the exact cover headline “${hook.hook}”.`
+      : "Do not repeat the cover headline unless it is essential for comprehension."
+  ].join("\n");
 }
 
 async function persistArtworkOutput({
@@ -1057,7 +1032,7 @@ function buildReferenceLibraryImageInstruction(
   return [
     "ORIGINAL EXECUTION:",
     ...roles,
-    "Study the attached Creative Compass artwork references directly. Use the primary artwork only for compatible abstract composition grammar, hierarchy, visual medium, density, layering rhythm, typography behavior, and commercial construction. Use the secondary artwork only for compatible lighting, material response, texture, compositing, typography craft, and finish. Invent a new main visual, visual metaphor, subject, action, camera angle, background, environment, props, and scene logic from the approved idea. Do not reconstruct, trace, or lightly reskin either reference's recognizable content or arrangement. Preserve attached official client assets exactly. Unless the brief or official brand system clearly requires darkness, use a bright off-white, pale neutral, or softly tinted background and keep dark brand color to accents or one contained zone. Protect 30–40% genuine low-detail negative space with one obvious quiet area; keep 8–10% outer margins; keep the main visual near 30–40% of the canvas and below half. Limit the composition to one headline, one compact proof/support group, one CTA, and one logo. Keep every generated element coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment."
+    "Study the attached Creative Compass artwork references directly. STYLE FIDELITY IS MANDATORY: the result must unmistakably remain in the primary artwork's mood, tone, and visual style family. Match its visual medium, realism level, palette relationships, contrast, lighting atmosphere, texture, material response, typography rhythm, density, layering, compositing depth, and production richness. Use the secondary artwork only for compatible craft and finish that does not create a competing style. Invent a new main visual, visual metaphor, subject, action, camera angle, background, environment, props, scene logic, and idea-specific arrangement from the approved concept. The execution must feel like the same art director and design system created a new campaign for this idea, not like a generic reskin or the model's default house style. Do not reconstruct, trace, or lightly reskin either reference's recognizable content or arrangement. Preserve attached official client assets exactly. Unless the brief or official brand system clearly requires darkness, use a bright off-white, pale neutral, or softly tinted background and keep dark brand color to accents or one contained zone. Protect 30–40% genuine low-detail negative space with one obvious quiet area; keep 8–10% outer margins; keep the main visual near 30–40% of the canvas and below half. Limit the composition to one headline, one compact proof/support group, one CTA, and one logo. Keep every generated element coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment."
   ].join("\n");
 }
 
@@ -1098,6 +1073,12 @@ function buildReferenceFidelityInstruction(
   const pastWorkStyleReferences = clientReferences.filter((reference) =>
     reference.label?.toLowerCase().includes("past work style reference")
   );
+  const selectedStyleReferences = clientReferences.filter((reference) => {
+    const label = reference.label?.toLowerCase() ?? "";
+    return label.includes("· style ·") ||
+      label.includes("style reference") ||
+      label.includes("past work style reference");
+  });
   const referenceMap = references.map(
     (reference, index) =>
       `Image ${index + 1} — ${reference.label ?? "Reference image"}`
@@ -1115,6 +1096,11 @@ function buildReferenceFidelityInstruction(
     ...(clientReferences.length
       ? [
           "Use supplied client references as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish."
+        ]
+      : []),
+    ...(selectedStyleReferences.length
+      ? [
+          "STYLE FIDELITY IS MANDATORY: the finished artwork must unmistakably belong to the same mood, tone, and visual style family as the primary selected style reference. Match its visual medium and realism level, emotional temperature, palette relationships, contrast, lighting atmosphere, material response, texture, typography rhythm, density, negative-space behavior, layering, compositing depth, graphic-device language, and production richness. Supporting style references may refine only compatible details; never average them into a different generic style. Adapt the subject, hero action, visual metaphor, setting, and composition to the approved idea while keeping the reference's recognizable style system. The result should feel like the same art director created a new campaign execution for this idea, not like the model returned to its default house style."
         ]
       : []),
     ...(pastWorkStyleReferences.length
@@ -1314,7 +1300,7 @@ function buildDesignSystemCopyPriority(
   ];
   if (service === "album-post" && hook.formatBeats?.length) {
     lines.push(
-      `Album story beats must be distributed across the ${albumFormat.startsWith("three-") ? "three" : "four"} crops in the selected ${albumFormat} layout: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}`
+      `Album story beats must be distributed across ${albumFormat.startsWith("three-") ? "three" : "four"} separate standalone images in the selected ${albumFormat} sequence: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}. Never combine the images into one master, grid, collage, mosaic, or contact sheet.`
     );
   }
   return lines.join("\n");

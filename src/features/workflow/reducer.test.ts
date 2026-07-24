@@ -6,7 +6,7 @@ import {
   workflowReducer
 } from "./reducer";
 import { buildDirectionFixtures } from "./test-fixtures";
-import type { WorkflowState } from "./model";
+import { selectedBrandProducts, type WorkflowState } from "./model";
 
 function passingQaResults(state: WorkflowState) {
   return state.outputs.map((output) => ({
@@ -933,6 +933,34 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
+  it("includes every brand product by default and persists explicit product choices", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    const firstProduct = brand.library.products[0];
+    if (!firstProduct) throw new Error("Mock product fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    expect(selectedBrandProducts(state)).toEqual(brand.library.products);
+
+    state = workflowReducer(state, {
+      type: "toggle-product-context",
+      id: firstProduct.id
+    });
+    expect(selectedBrandProducts(state)).toEqual(
+      brand.library.products.slice(1)
+    );
+
+    state = workflowReducer(state, {
+      type: "toggle-product-context",
+      id: firstProduct.id
+    });
+    expect(selectedBrandProducts(state)).toEqual(brand.library.products);
+    expect(state.selectedProductIds).toBeUndefined();
+  });
+
   it("assigns reference roles and keeps only one primary reference", () => {
     const first = {
       id: "reference-1",
@@ -1105,6 +1133,53 @@ describe("workflowReducer", () => {
     expect(synced.brand?.library.docs).toEqual(items);
   });
 
+  it("syncs newly added products into the active brand library", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    const state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    const items = [
+      {
+        id: "product-1",
+        title: "New product",
+        description: ""
+      }
+    ];
+
+    const synced = workflowReducer(state, {
+      type: "sync-brand-products",
+      items
+    });
+
+    expect(synced.brand?.library.products).toEqual(items);
+  });
+
+  it("syncs uploaded references into the active brand library", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    const state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    const items = [
+      {
+        id: "reference-1",
+        title: "Approved visual direction",
+        description: "",
+        assetUrl: "https://example.com/reference.png"
+      }
+    ];
+
+    const synced = workflowReducer(state, {
+      type: "sync-brand-references",
+      items
+    });
+
+    expect(synced.brand?.library.refs).toEqual(items);
+  });
+
   it("routes a commented client change request back to Internal QC", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -1139,13 +1214,44 @@ describe("workflowReducer", () => {
     state = workflowReducer(state, {
       type: "request-client-change",
       id: revisionOutput.id,
+      targetRole: "graphicDesign",
       comment: "   "
     });
     expect(state).toBe(beforeBlankRequest);
 
+    const clientServiceRevision = workflowReducer(state, {
+      type: "request-client-change",
+      id: revisionOutput.id,
+      targetRole: "clientService",
+      comment: "Update the caption."
+    }).outputs.find((output) => output.id === revisionOutput.id);
+    expect(clientServiceRevision?.approval.graphicDesign).toBe("approved");
+    expect(clientServiceRevision?.approval.clientService).toBe("rejected");
+    expect(clientServiceRevision?.approval.projectManager).toBeNull();
+    expect(clientServiceRevision?.approvalComments.clientService).toBe(
+      "Update the caption."
+    );
+
+    const bothRevision = workflowReducer(state, {
+      type: "request-client-change",
+      id: revisionOutput.id,
+      targetRole: "both",
+      comment: "Update the artwork and caption."
+    }).outputs.find((output) => output.id === revisionOutput.id);
+    expect(bothRevision?.approval.graphicDesign).toBe("rejected");
+    expect(bothRevision?.approval.clientService).toBeNull();
+    expect(bothRevision?.approval.projectManager).toBeNull();
+    expect(bothRevision?.approvalComments.graphicDesign).toBe(
+      "Update the artwork and caption."
+    );
+    expect(bothRevision?.approvalComments.clientService).toBe(
+      "Update the artwork and caption."
+    );
+
     state = workflowReducer(state, {
       type: "request-client-change",
       id: revisionOutput.id,
+      targetRole: "graphicDesign",
       comment: "Make the product benefit easier to scan."
     });
 
@@ -1157,8 +1263,10 @@ describe("workflowReducer", () => {
     expect(state.clientSent).toBe(false);
     expect(updatedRevision?.status).toBe("needs-revision");
     expect(updatedRevision?.clientStatus).toBe("revision");
-    expect(updatedRevision?.approval.projectManager).toBe("rejected");
-    expect(updatedRevision?.approvalComments.projectManager).toBe(
+    expect(updatedRevision?.approval.graphicDesign).toBe("rejected");
+    expect(updatedRevision?.approval.clientService).toBeNull();
+    expect(updatedRevision?.approval.projectManager).toBeNull();
+    expect(updatedRevision?.approvalComments.graphicDesign).toBe(
       "Make the product benefit easier to scan."
     );
     expect(state.outputs[0]?.clientStatus).toBe("approved");
@@ -1166,9 +1274,23 @@ describe("workflowReducer", () => {
     state = workflowReducer(state, {
       type: "review-output",
       id: revisionOutput.id,
-      role: "projectManager",
+      role: "graphicDesign",
       decision: "approved",
       comment: "Client change completed."
+    });
+    state = workflowReducer(state, {
+      type: "review-output",
+      id: revisionOutput.id,
+      role: "clientService",
+      decision: "approved",
+      comment: ""
+    });
+    state = workflowReducer(state, {
+      type: "review-output",
+      id: revisionOutput.id,
+      role: "projectManager",
+      decision: "approved",
+      comment: ""
     });
     state = workflowReducer(state, { type: "send-client" });
 

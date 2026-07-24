@@ -74,6 +74,11 @@ export interface WorkflowState {
   attachments: readonly string[];
   uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
+  /**
+   * Product IDs included in generation context. Undefined means every product,
+   * which keeps existing runs and newly selected brands backwards compatible.
+   */
+  selectedProductIds?: readonly string[];
   ideaGenerationStatus: IdeaGenerationStatus;
   ideaGenerationError: string | null;
   artworkGenerationStatus: ArtworkGenerationStatus;
@@ -94,7 +99,9 @@ export type WorkflowAction =
   | { type: "select-brand"; brand: Brand }
   | { type: "set-library-section"; section: LibrarySection }
   | { type: "sync-brand-rules"; items: readonly LibraryItem[] }
+  | { type: "sync-brand-products"; items: readonly LibraryItem[] }
   | { type: "sync-brand-guidelines"; items: readonly LibraryItem[] }
+  | { type: "sync-brand-references"; items: readonly LibraryItem[] }
   | {
       type: "sync-onboarding-questionnaire";
       questionnaire: OnboardingQuestionnaireSource;
@@ -118,6 +125,7 @@ export type WorkflowAction =
       changes: Partial<Pick<UploadedCreativeMaterial, "role" | "description">>;
     }
   | { type: "remove-uploaded-material"; id: string }
+  | { type: "toggle-product-context"; id: string }
   | { type: "select-reference-image"; item: ReferenceImageSelection }
   | {
       type: "sync-brand-logo-reference";
@@ -206,7 +214,12 @@ export type WorkflowAction =
     }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
-  | { type: "request-client-change"; id: string; comment: string }
+  | {
+      type: "request-client-change";
+      id: string;
+      targetRole: Exclude<ApprovalRole, "projectManager"> | "both";
+      comment: string;
+    }
   | { type: "mark-delivered" }
   | { type: "mark-done" };
 
@@ -216,6 +229,16 @@ export interface WorkspaceState {
   runOrder: readonly string[];
   runsById: Readonly<Record<string, WorkflowState>>;
   toast: WorkspaceToast | null;
+}
+
+export function selectedBrandProducts(
+  state: Pick<WorkflowState, "brand" | "selectedProductIds">
+): readonly LibraryItem[] {
+  const products = state.brand?.library.products ?? [];
+  if (state.selectedProductIds === undefined) return products;
+
+  const selectedIds = new Set(state.selectedProductIds);
+  return products.filter((product) => selectedIds.has(product.id));
 }
 
 export type WorkspaceAction =

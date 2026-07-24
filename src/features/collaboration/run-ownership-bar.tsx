@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { ArrowRight, LockKey, Plus, UserSwitch, X } from "@phosphor-icons/react";
+import { ArrowRight, LockKey, UserSwitch, X } from "@phosphor-icons/react";
 import {
   canEditRun,
   departmentLabel
@@ -9,12 +9,10 @@ import { useWorkspace } from "../../app/providers/workspace-provider";
 
 export function RunOwnershipBar({
   runId,
-  onCreateProject,
   busy = false,
   completed = false
 }: {
   runId: string;
-  onCreateProject: () => void;
   busy?: boolean;
   completed?: boolean;
 }) {
@@ -116,17 +114,6 @@ export function RunOwnershipBar({
         </span>
         {ownership ? (
           <span className="compass-ownership-version">Version {ownership.version}</span>
-        ) : null}
-        {ownershipReady && !editable ? (
-          <button
-            className="btn small"
-            type="button"
-            title="Create a separate project for this client"
-            onClick={onCreateProject}
-          >
-            <Plus size={14} weight="bold" aria-hidden="true" />
-            Create my project
-          </button>
         ) : null}
         {canHandoff && ownership && !completed ? (
           <button

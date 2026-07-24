@@ -107,6 +107,41 @@ describe("workspace serializer", () => {
     ]);
   });
 
+  it("preserves explicit Product truth selections", () => {
+    const brand = brands[0];
+    const selectedProduct = brand?.library.products[1];
+    if (!brand || !selectedProduct) {
+      throw new Error("Mock brand product fixture is missing.");
+    }
+
+    let workspace = createInitialWorkspaceState({
+      runId: "product-context-run",
+      now: "2026-07-20T12:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-20T12:01:00.000Z",
+      action: { type: "select-brand", brand }
+    });
+    for (const product of brand.library.products) {
+      if (product.id === selectedProduct.id) continue;
+      workspace = workspaceReducer(workspace, {
+        type: "apply-run-action",
+        runId: workspace.activeRunId,
+        now: "2026-07-20T12:02:00.000Z",
+        action: { type: "toggle-product-context", id: product.id }
+      });
+    }
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-20T12:03:00.000Z")
+    );
+    expect(
+      restored?.runsById[restored.activeRunId]?.selectedProductIds
+    ).toEqual([selectedProduct.id]);
+  });
+
   it("round-trips parallel run data and removes transient UI state", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

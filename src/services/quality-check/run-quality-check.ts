@@ -1,6 +1,9 @@
 import { env } from "../../config/env";
 import type { CreativeQualityReport } from "../../domain/quality-check";
-import type { WorkflowState } from "../../features/workflow/model";
+import {
+  selectedBrandProducts,
+  type WorkflowState
+} from "../../features/workflow/model";
 import { isBuildQualityCheckOutput } from "../../features/workflow/rules";
 import { getSupabaseClient } from "../../lib/supabase/client";
 
@@ -36,7 +39,7 @@ export async function runQualityCheck(
           name: run.brand.name,
           category: run.brand.category,
           brandKit: run.brand.library.brand.map(formatLibraryItem),
-          products: run.brand.library.products.map(formatLibraryItem),
+          products: selectedBrandProducts(run).map(formatLibraryItem),
           documents: run.brand.library.docs.map(formatLibraryItem),
           working: run.brand.memory.working,
           avoid: run.brand.memory.avoid

@@ -244,7 +244,7 @@ describe("workspaceReducer", () => {
     });
   });
 
-  it("prevents internal review before QA completes", () => {
+  it("allows internal review before optional QA completes", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
 
@@ -259,11 +259,11 @@ describe("workspaceReducer", () => {
 
     const result = update(workspace, { type: "approve-all" });
 
-    expect(getActiveRun(result).approved).toBe(false);
+    expect(getActiveRun(result).approved).toBe(true);
     expect(result.toast).toEqual({
-      title: "Action needed",
-      message: "Run QA before internal approval.",
-      tone: "warning"
+      title: "All approvals complete",
+      message: "Every asset is approved for Client Review.",
+      tone: "success"
     });
   });
 

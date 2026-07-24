@@ -72,6 +72,42 @@ const run: WorkflowState = {
 };
 
 describe("buildArtworkGenerationRequest", () => {
+  it("sends only products selected in Product truth", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        brand: run.brand
+          ? {
+              ...run.brand,
+              library: {
+                ...run.brand.library,
+                products: [
+                  {
+                    id: "bouquet",
+                    title: "Weekly bouquet",
+                    description: "Subscription hero"
+                  },
+                  {
+                    id: "vase",
+                    title: "Minimal vase",
+                    description: "Supporting home accessory"
+                  }
+                ]
+              }
+            }
+          : null,
+        selectedProductIds: ["vase"]
+      }
+    });
+
+    expect(request.brandLibrary.products).toEqual([
+      {
+        title: "Minimal vase",
+        description: "Supporting home accessory"
+      }
+    ]);
+  });
+
   it("orders the primary reference first and includes its selected role", () => {
     expect(
       artworkReferencesFromSelections([

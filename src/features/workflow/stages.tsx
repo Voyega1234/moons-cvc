@@ -16,6 +16,7 @@ import {
   FileArrowUp,
   MagnifyingGlass,
   PencilSimple,
+  Plus,
   Sparkle,
   TextT,
   X
@@ -43,6 +44,8 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   creativeMaterialRoles,
+  inferredReferenceImageRole,
+  referenceImageRoleLabels,
   resolveAlbumFormat,
   type ApprovalRole,
   type AlbumFormat,
@@ -104,7 +107,11 @@ import type {
   WorkspaceAction,
   WorkspaceState
 } from "./model";
-import { creativeMixItems, totalCreativeMixQuantity } from "./model";
+import {
+  creativeMixItems,
+  selectedBrandProducts,
+  totalCreativeMixQuantity
+} from "./model";
 import { WorkflowMaterialPack } from "./material-pack";
 import {
   approvalRolesForOutput,
@@ -1991,12 +1998,12 @@ function BrandProfileSectionContent({
         />
       ) : null}
       {section === "refs" ? (
-        <MemoryList
-          title="References"
-          description="Upload visuals or links, then mark them inspiration, avoid, competitor, or past winner."
-          action="Add reference"
-          upload="Upload reference"
-          items={brand.library.refs}
+        <BrandReferencesMemoryList
+          clientId={brand.id}
+          initialItems={brand.library.refs}
+          onSaved={(items) =>
+            dispatch({ type: "sync-brand-references", items })
+          }
         />
       ) : null}
       {section === "past" ? (
@@ -3278,60 +3285,66 @@ function BrandLogoCard({
   );
 }
 
-function MemoryList({
-  title,
-  description,
-  action,
-  upload,
-  items
+function BrandReferencesMemoryList({
+  clientId,
+  initialItems,
+  onSaved
 }: {
-  title: string;
-  description: string;
-  action: string;
-  upload: string;
-  items: WorkflowState["brand"] extends null
-    ? never
-    : NonNullable<WorkflowState["brand"]>["library"]["brand"];
+  clientId: string;
+  initialItems: readonly LibraryItem[];
+  onSaved: (items: readonly LibraryItem[]) => void;
 }) {
+  const repository = useBrandMemoryRepository();
+  const [items, setItems] = useState(initialItems);
+
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  async function uploadReference(file: File): Promise<void> {
+    const saved = await repository.createReferenceImage({ clientId, file });
+    const nextItems = [saved, ...items.filter((item) => item.id !== saved.id)];
+    setItems(nextItems);
+    onSaved(nextItems);
+  }
+
   return (
-    <section className="memory-editor">
+    <section className="memory-editor compass-brand-references">
       <header>
         <div>
-          <h4>{title}</h4>
-          <p>{description}</p>
+          <h4>References</h4>
+          <p>
+            Upload approved visual references for creative direction and image
+            generation.
+          </p>
         </div>
-        <div className="memory-actions">
-          <button
-            className="btn secondary"
-            type="button"
-            disabled
-            title="Coming soon"
-          >
-            {upload}
-          </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled
-            title="Coming soon"
-          >
-            {action}
-          </button>
-        </div>
+        <InlineUploadForm
+          actionLabel="Upload reference"
+          onUpload={uploadReference}
+        />
       </header>
       {items.length ? (
-        <div className="memory-item-list">
+        <div className="compass-brand-reference-grid">
           {items.map((item) => (
-            <article className="memory-item" key={item.id}>
-              <b>{item.title}</b>
-              <p>{item.description}</p>
+            <article className="compass-brand-reference-card" key={item.id}>
+              {item.assetUrl ? (
+                <img src={item.assetUrl} alt={item.title} />
+              ) : (
+                <div className="compass-brand-reference-placeholder">
+                  No preview
+                </div>
+              )}
+              <div>
+                <b>{item.title}</b>
+                <p>{item.description || "Visual reference"}</p>
+              </div>
             </article>
           ))}
         </div>
       ) : (
         <div className="empty">
-          <b>No {title.toLowerCase()} yet.</b>
-          <p>Add memory here before using it in generation.</p>
+          <b>No references yet.</b>
+          <p>Upload a PNG, JPEG, or WEBP image to add the first reference.</p>
         </div>
       )}
     </section>
@@ -3966,12 +3979,18 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "main-object": "Main object",
   product: "Product",
   "supporting-component": "Supporting component",
-  "client-context": "Client context"
+  "client-context": "Person / client context"
 };
 
 export function BriefStage({ state, dispatch }: StageProps) {
   const brandMemoryRepository = useBrandMemoryRepository();
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [materialsInitialCategory, setMaterialsInitialCategory] =
+    useState<ReferenceLibraryCategory | null>(null);
+  const [referenceUploadPending, setReferenceUploadPending] = useState(false);
+  const [referenceUploadError, setReferenceUploadError] = useState<
+    string | null
+  >(null);
   const [materialUploadPending, setMaterialUploadPending] = useState(false);
   const [materialUploadError, setMaterialUploadError] = useState<string | null>(
     null
@@ -3984,26 +4003,67 @@ export function BriefStage({ state, dispatch }: StageProps) {
   const { generate, loading, error } = useGenerateHooks(state, dispatch);
   const workingCount = state.brand?.memory.working.length ?? 0;
   const avoidCount = state.brand?.memory.avoid.length ?? 0;
-  const productTitle = state.brand?.library.products[0]?.title;
+  const brandProducts = state.brand?.library.products ?? [];
+  const activeProducts = selectedBrandProducts(state);
+  const activeProductIds = new Set(activeProducts.map((product) => product.id));
   const availableReferenceCount = state.brand?.library.refs.length ?? 0;
-  const signalItems = [
-    {
-      label: "Brand memory",
-      detail: state.brand
-        ? `${workingCount} working cues and ${avoidCount} guardrails loaded.`
-        : "Choose a brand to load its memory."
-    },
-    {
-      label: "Product truth",
-      detail: productTitle ?? "No product material loaded yet."
-    },
-    {
-      label: "Reference context",
-      detail: state.referenceImages.length
-        ? `${state.referenceImages.length} selected ${pluralize(state.referenceImages.length, "reference")}.`
-        : `${availableReferenceCount} ${pluralize(availableReferenceCount, "reference")} available in the library.`
+  const materialCount = state.uploadedMaterials.length;
+
+  function openMaterials(
+    category: ReferenceLibraryCategory | null = null
+  ): void {
+    setMaterialsInitialCategory(category);
+    setMaterialsOpen(true);
+  }
+
+  async function saveReferenceImage(file: File) {
+    const clientId = state.brand?.id;
+    if (!clientId) return;
+
+    const saved = await brandMemoryRepository.createReferenceImage({
+      clientId,
+      file
+    });
+    dispatch({
+      type: "sync-brand-references",
+      items: [
+        saved,
+        ...(state.brand?.library.refs ?? []).filter(
+          (reference) => reference.id !== saved.id
+        )
+      ]
+    });
+
+    const selectedReference = libraryItemsWithImages([saved], "style")[0];
+    if (
+      selectedReference &&
+      !state.referenceImages.some(
+        (reference) => reference.id === selectedReference.id
+      )
+    ) {
+      dispatch({ type: "toggle-reference-image", item: selectedReference });
     }
-  ];
+  }
+
+  async function handleReferenceUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setReferenceUploadPending(true);
+    setReferenceUploadError(null);
+    try {
+      await saveReferenceImage(file);
+    } catch (caught) {
+      setReferenceUploadError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not upload the reference."
+      );
+    } finally {
+      setReferenceUploadPending(false);
+    }
+  }
 
   const mixItems = creativeMixItems(state);
   const totalDeliverables = totalCreativeMixQuantity(state);
@@ -4011,27 +4071,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
     .map((service) => mixItems.find((item) => item.service === service))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const fixedMixReady = fixedMixItems.length === briefServiceTypes.length;
-  const materialSummary = [
-    {
-      label: "Brand files",
-      detail: state.attachments.length + state.uploadedMaterials.length
-        ? `${state.attachments.length + state.uploadedMaterials.length} ${pluralize(state.attachments.length + state.uploadedMaterials.length, "file")} attached`
-        : "No files yet"
-    },
-    {
-      label: "Selected references",
-      detail: state.referenceImages.length
-        ? `${state.referenceImages.length} selected`
-        : "None selected"
-    },
-    {
-      label: "Library references",
-      detail: availableReferenceCount
-        ? `${availableReferenceCount} available`
-        : "No references yet"
-    }
-  ];
-
   useEffect(() => {
     if (!fixedMixReady) dispatch({ type: "apply-monthly-quota" });
   }, [dispatch, fixedMixReady]);
@@ -4308,14 +4347,179 @@ export function BriefStage({ state, dispatch }: StageProps) {
         </div>
         <aside className="compass-context-stack">
           <section className="compass-context-card">
-            <h3>Signal stack</h3>
+            <h3>Brief materials</h3>
             <div className="compass-signal-list">
-              {signalItems.map((item) => (
-                <div className="compass-signal-line" key={item.label}>
-                  <b>{item.label}</b>
-                  <span>{item.detail}</span>
-                </div>
-              ))}
+              <div className="compass-signal-line">
+                <b>Brand memory</b>
+                <span>
+                  {state.brand
+                    ? `${workingCount} working cues and ${avoidCount} guardrails loaded.`
+                    : "Choose a brand to load its memory."}
+                </span>
+              </div>
+              <div className="compass-signal-disclosure-wrap">
+                <details className="compass-signal-disclosure" open>
+                  <summary>
+                    <span className="compass-signal-summary-copy">
+                      <b>Product truth</b>
+                      <span>
+                        {brandProducts.length
+                          ? `${activeProducts.length} of ${brandProducts.length} ${pluralize(brandProducts.length, "product")} selected.`
+                          : "No product material loaded yet."}
+                      </span>
+                    </span>
+                    <span className="compass-signal-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </summary>
+                  <div className="compass-signal-detail">
+                    {brandProducts.length ? (
+                      <div className="compass-product-truth-list">
+                        {brandProducts.map((product) => (
+                          <label
+                            className="compass-product-truth-option"
+                            key={product.id}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={activeProductIds.has(product.id)}
+                              aria-label={`Use product ${product.title}`}
+                              onChange={() =>
+                                dispatch({
+                                  type: "toggle-product-context",
+                                  id: product.id
+                                })
+                              }
+                            />
+                            <span>
+                              <b>{product.title}</b>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>No products are available in this brand library.</p>
+                    )}
+                  </div>
+                </details>
+                <button
+                  className="compass-signal-add"
+                  type="button"
+                  aria-label="Add Product truth"
+                  title="Add Product truth"
+                  onClick={() => openMaterials("product")}
+                >
+                  <Plus size={13} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="compass-signal-disclosure-wrap">
+                <details className="compass-signal-disclosure" open>
+                  <summary>
+                    <span className="compass-signal-summary-copy">
+                      <b>Reference context</b>
+                      <span>
+                        {state.referenceImages.length
+                          ? `${state.referenceImages.length} selected ${pluralize(state.referenceImages.length, "reference")}.`
+                          : `No active references · ${availableReferenceCount} available in the library.`}
+                      </span>
+                    </span>
+                    <span className="compass-signal-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </summary>
+                  <div className="compass-signal-detail">
+                    {state.referenceImages.length ? (
+                      <div className="compass-active-context-list">
+                        {state.referenceImages.map((reference) => (
+                          <article key={reference.id}>
+                            <img src={reference.url} alt="" />
+                            <span>
+                              <b>{reference.label}</b>
+                              <small>
+                                {reference.primary ? "Primary · " : ""}
+                                {
+                                  referenceImageRoleLabels[
+                                    inferredReferenceImageRole(reference)
+                                  ]
+                                }
+                              </small>
+                            </span>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>No references are active in this brief.</p>
+                    )}
+                  </div>
+                </details>
+                <button
+                  className="compass-signal-add"
+                  type="button"
+                  aria-label="Add Reference"
+                  title="Add Reference"
+                  onClick={() => openMaterials("reference")}
+                >
+                  <Plus size={13} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="compass-signal-disclosure-wrap">
+                <details className="compass-signal-disclosure">
+                  <summary>
+                    <span className="compass-signal-summary-copy">
+                      <b>Materials</b>
+                      <span>
+                      {materialCount
+                          ? `${materialCount} source ${pluralize(materialCount, "image")} included.`
+                          : "No uploaded materials yet."}
+                      </span>
+                    </span>
+                    <span className="compass-signal-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </summary>
+                  <div className="compass-signal-detail">
+                    {materialCount ? (
+                      <div className="compass-active-material-list">
+                        {state.uploadedMaterials.map((material) => (
+                          <article key={material.id}>
+                            <b>{material.name}</b>
+                            <span>
+                              {creativeMaterialRoleLabels[material.role]}
+                              {material.description
+                                ? ` · ${material.description}`
+                                : ""}
+                            </span>
+                          </article>
+                        ))}
+                        {state.attachments.map((name) => (
+                          <article key={name}>
+                            <b>{name}</b>
+                            <span>Attached file</span>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>No materials are active in this brief.</p>
+                    )}
+                    <button
+                      className="compass-signal-manage"
+                      type="button"
+                      onClick={() => openMaterials()}
+                    >
+                      Manage references &amp; materials
+                    </button>
+                  </div>
+                </details>
+                <button
+                  className="compass-signal-add"
+                  type="button"
+                  aria-label="Add Materials"
+                  title="Add Materials"
+                  onClick={() => openMaterials("material")}
+                >
+                  <Plus size={13} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </section>
           <section className="compass-context-card">
@@ -4353,24 +4557,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
               one second and arguable in one sentence.
             </p>
           </section>
-          <section className="compass-context-card compass-material-card">
-            <h3>Brief materials</h3>
-            <button
-              className="compass-material-summary-open"
-              type="button"
-              aria-label="Manage brief materials"
-              onClick={() => setMaterialsOpen(true)}
-            >
-              <span className="compass-material-summary">
-                {materialSummary.map((item) => (
-                  <span className="compass-material-summary-line" key={item.label}>
-                    <b>{item.label}</b>
-                    <span>{item.detail}</span>
-                  </span>
-                ))}
-              </span>
-            </button>
-          </section>
         </aside>
       </div>
       {materialsOpen ? (
@@ -4389,7 +4575,8 @@ export function BriefStage({ state, dispatch }: StageProps) {
               <div>
                 <h3 id="brief-materials-title">Brief materials</h3>
                 <p>
-                  Choose library references and manage files for this brief in one place.
+                  Choose visual references, source materials, and supporting
+                  files for this brief.
                 </p>
               </div>
               <button
@@ -4415,9 +4602,12 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 </span>
                 <span>
                   <b>
-                    {state.attachments.length + state.uploadedMaterials.length}
+                    {state.uploadedMaterials.length}
                   </b>{" "}
-                  uploads
+                  materials
+                </span>
+                <span>
+                  <b>{state.attachments.length}</b> brief files
                 </span>
               </div>
             </div>
@@ -4434,7 +4624,12 @@ export function BriefStage({ state, dispatch }: StageProps) {
                   <span>Brand library</span>
                 </header>
                 <div className="compass-brief-material-section-body">
-                  <ReferenceLibraryPicker state={state} dispatch={dispatch} />
+                  <ReferenceLibraryPicker
+                    state={state}
+                    dispatch={dispatch}
+                    initialOpenCategory={materialsInitialCategory}
+                    onUploadReferenceImage={saveReferenceImage}
+                  />
                 </div>
               </section>
               <div className="compass-brief-materials-side">
@@ -4447,11 +4642,38 @@ export function BriefStage({ state, dispatch }: StageProps) {
                       <h4 id="brief-selected-references-title">
                         References in Brief materials
                       </h4>
-                      <p>These images will be sent with this brief.</p>
+                      <p>
+                        These guide style and composition; they are not source
+                        objects.
+                      </p>
                     </div>
-                    <span>{state.referenceImages.length} selected</span>
+                    <div className="compass-brief-section-head-actions">
+                      <span>{state.referenceImages.length} selected</span>
+                      <label
+                        className={`btn small secondary compass-reference-upload ${
+                          referenceUploadPending ? "disabled" : ""
+                        }`}
+                      >
+                        {referenceUploadPending
+                          ? "Uploading…"
+                          : "Upload reference"}
+                        <input
+                          className="file-input"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          aria-label="Upload reference"
+                          disabled={referenceUploadPending}
+                          onChange={handleReferenceUpload}
+                        />
+                      </label>
+                    </div>
                   </header>
                   <div className="compass-brief-material-section-body">
+                    {referenceUploadError ? (
+                      <p className="error-text" role="alert">
+                        {referenceUploadError}
+                      </p>
+                    ) : null}
                     {state.referenceImages.length ? (
                       <div className="compass-selected-reference-grid">
                         {state.referenceImages.map((reference) => (
@@ -4497,15 +4719,14 @@ export function BriefStage({ state, dispatch }: StageProps) {
                   <header className="compass-brief-material-section-head">
                     <div>
                       <h4 id="brief-uploaded-materials-title">
-                        Uploaded materials
+                        Materials
                       </h4>
                       <p>
-                        Add product, client, or supporting files for this brief.
+                        Upload the exact products, people, or objects you want
+                        used in the artwork.
                       </p>
                     </div>
-                    <span>
-                      {state.attachments.length + state.uploadedMaterials.length} uploaded
-                    </span>
+                    <span>{state.uploadedMaterials.length} images</span>
                   </header>
                   <div className="compass-brief-material-section-body">
                     <div className="compass-brief-material-modal-body">
@@ -4513,7 +4734,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         <label className="btn secondary compass-brief-add-files">
                           {materialUploadPending
                             ? "Uploading…"
-                            : "Add product / client images"}
+                            : "Add material images"}
                           <input
                             className="file-input"
                             type="file"
@@ -4523,25 +4744,11 @@ export function BriefStage({ state, dispatch }: StageProps) {
                             onChange={handleCreativeMaterialUpload}
                           />
                         </label>
-                        <label className="compass-brief-document-upload">
-                          Attach other files
-                          <input
-                            className="file-input"
-                            type="file"
-                            multiple
-                            onChange={(event) =>
-                              dispatch({
-                                type: "attach-files",
-                                names: getFileNames(event.target.files)
-                              })
-                            }
-                          />
-                        </label>
                       </div>
                       <p className="compass-creative-material-helper">
-                        The Hook agent will inspect these images before proposing
-                        ideas. The image agent will receive them as source
-                        references.
+                        The Hook Agent inspects these images before proposing
+                        ideas. The Image Agent receives them as source materials
+                        and uses each image according to its assigned role.
                       </p>
                       {materialUploadError ? (
                         <p className="error-text" role="alert">
@@ -4615,6 +4822,40 @@ export function BriefStage({ state, dispatch }: StageProps) {
                           ))}
                         </div>
                       ) : null}
+                      {!state.uploadedMaterials.length ? (
+                        <div className="compass-signal-memory-empty">
+                          <div>
+                            <b>No material images added.</b>
+                            <span>
+                              Add a product, person, or object that should appear
+                              in the generated artwork.
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="compass-brief-files-block">
+                        <div>
+                          <b>Brief files</b>
+                          <span>
+                            Documents support the brief but are not used as
+                            visual source materials.
+                          </span>
+                        </div>
+                        <label className="compass-brief-document-upload">
+                          Attach documents
+                          <input
+                            className="file-input"
+                            type="file"
+                            multiple
+                            onChange={(event) =>
+                              dispatch({
+                                type: "attach-files",
+                                names: getFileNames(event.target.files)
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
                       {state.attachments.length ? (
                         <div className="chips compass-attachment-chips">
                           {state.attachments.map((name) => (
@@ -4622,15 +4863,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
                               {name}
                             </span>
                           ))}
-                        </div>
-                      ) : !state.uploadedMaterials.length ? (
-                        <div className="compass-signal-memory-empty">
-                          <div>
-                            <b>No working files attached.</b>
-                            <span>
-                              Add only files that should influence this brief.
-                            </span>
-                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -4661,7 +4893,12 @@ function AlbumFormatDiagram({ format }: { format: AlbumFormat }) {
   );
 }
 
-type ReferenceLibraryCategory = "guideline" | "logo" | "product" | "reference";
+type ReferenceLibraryCategory =
+  | "guideline"
+  | "logo"
+  | "product"
+  | "material"
+  | "reference";
 
 const REFERENCE_LIBRARY_CATEGORIES: readonly [
   ReferenceLibraryCategory,
@@ -4669,7 +4906,8 @@ const REFERENCE_LIBRARY_CATEGORIES: readonly [
 ][] = [
   ["guideline", "Brand guideline"],
   ["logo", "Logo / CI assets"],
-  ["product", "Product materials"],
+  ["product", "Product truth"],
+  ["material", "Materials"],
   ["reference", "Reference board"]
 ];
 
@@ -4707,17 +4945,18 @@ function extractColorSwatches(rule: LibraryItem | undefined): readonly string[] 
 function ReferenceLibraryPicker({
   state,
   dispatch,
-  initialOpenCategory = null
+  initialOpenCategory = null,
+  onUploadReferenceImage
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   initialOpenCategory?: ReferenceLibraryCategory | null;
+  onUploadReferenceImage: (file: File) => Promise<void>;
 }) {
   const repository = useBrandMemoryRepository();
   const [brandRules, setBrandRules] = useState<readonly LibraryItem[]>([]);
   const [products, setProducts] = useState<readonly BrandProduct[]>([]);
   const [pastWork, setPastWork] = useState<readonly BrandPastWorkItem[]>([]);
-  const [refImages, setRefImages] = useState<readonly LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [openCategory, setOpenCategory] =
     useState<ReferenceLibraryCategory | null>(initialOpenCategory);
@@ -4733,14 +4972,12 @@ function ReferenceLibraryPicker({
       setBrandRules([]);
       setProducts([]);
       setPastWork([]);
-      setRefImages([]);
       setLoading(false);
       return;
     }
 
     let active = true;
     setLoading(true);
-    setRefImages(brand?.library.refs ?? []);
 
     void Promise.all([
       repository.listBrandRules(clientId),
@@ -4818,18 +5055,22 @@ function ReferenceLibraryPicker({
       claimNotes: ""
     });
     setProducts((current) => [...current, saved]);
-  }
-
-  async function uploadReferenceImage(file: File) {
-    if (!clientId) return;
-    const saved = await repository.createReferenceImage({ clientId, file });
-    setRefImages((current) => [saved, ...current]);
-    const selectedReference = libraryItemsWithImages([saved], "style")[0];
-    if (
-      selectedReference &&
-      !state.referenceImages.some((item) => item.id === selectedReference.id)
-    ) {
-      dispatch({ type: "toggle-reference-image", item: selectedReference });
+    const savedLibraryItem: LibraryItem = {
+      id: saved.id,
+      title: saved.name,
+      description: saved.description
+    };
+    dispatch({
+      type: "sync-brand-products",
+      items: [
+        ...(brand?.library.products ?? []).filter(
+          (item) => item.id !== saved.id
+        ),
+        savedLibraryItem
+      ]
+    });
+    if (state.selectedProductIds !== undefined) {
+      dispatch({ type: "toggle-product-context", id: saved.id });
     }
   }
 
@@ -4842,8 +5083,9 @@ function ReferenceLibraryPicker({
     guideline: libraryItemsWithImages(brand?.library.docs ?? [], "content"),
     logo: logoRule ? libraryItemsWithImages([logoRule], "logo") : [],
     product: [],
+    material: [],
     reference: [
-      ...libraryItemsWithImages(refImages, "style"),
+      ...libraryItemsWithImages(brand?.library.refs ?? [], "style"),
       ...pastWork
         .filter(
           (item): item is BrandPastWorkItem & { imageUrl: string } =>
@@ -4887,6 +5129,31 @@ function ReferenceLibraryPicker({
             actionLabel="Add product"
             onAdd={addProduct}
           />
+        </div>
+      );
+    }
+
+    if (key === "material") {
+      return (
+        <div className="reference-category-body">
+          {state.uploadedMaterials.length ? (
+            <div className="reference-grid">
+              {state.uploadedMaterials.map((material) => (
+                <article
+                  className="reference-item checked compass-library-material-item"
+                  key={material.id}
+                >
+                  <img src={material.url} alt={material.name} />
+                  <span>{material.name}</span>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="repository-message">
+              No materials added to this brief yet. Add product, person, or
+              object images in the Materials panel.
+            </p>
+          )}
         </div>
       );
     }
@@ -4996,7 +5263,7 @@ function ReferenceLibraryPicker({
         {key === "reference" && clientId ? (
           <InlineUploadForm
             actionLabel="Upload reference image"
-            onUpload={uploadReferenceImage}
+            onUpload={onUploadReferenceImage}
           />
         ) : null}
       </div>
@@ -6270,7 +6537,7 @@ export function StudioStage({
     <DecisionCard
       eyebrow="04 / Build"
       title="Review the creative set."
-      helper="Refine each draft, run a quality check, and resolve any guided improvements before sending the work to Internal QC."
+      helper="Review the drafts, then send them directly to Internal QC. The automated quality check is optional."
       status={
         regeneratingAllArtwork
           ? regenerateAllArtworkProgress?.total
@@ -6279,7 +6546,7 @@ export function StudioStage({
           : checking
           ? "Checking quality…"
           : !state.qaComplete
-            ? "Not checked"
+            ? "Quality check optional"
             : failedCount
               ? `${readyCount} ready · ${failedCount} suggestion${failedCount === 1 ? "" : "s"}`
               : `${readyCount} / ${creativeCount} ready`
@@ -6332,7 +6599,7 @@ export function StudioStage({
             {slidesImporting ? "Importing to Google…" : "Open in Google Slides"}
           </button>
           <button
-            className={`btn ${state.qaComplete ? "secondary" : "primary"}`}
+            className="btn secondary"
             type="button"
             disabled={
               !canEdit ||
@@ -6347,11 +6614,11 @@ export function StudioStage({
             {checking
               ? "Checking…"
               : state.qaComplete
-                ? "Recheck drafts"
-                : "Run quality check"}
+                ? "Check again (optional)"
+                : "Quality check (optional)"}
           </button>
           <button
-            className={`btn ${state.qaComplete ? "primary" : "secondary"}`}
+            className="btn primary"
             type="button"
             disabled={
               !canEdit ||
@@ -6373,7 +6640,7 @@ export function StudioStage({
             <h3>Creative set · {state.brand?.name ?? "Selected brand"}</h3>
             <p>
               {!state.qaComplete
-                ? "Review the hook, visual direction, and caption for every draft."
+                ? "Review the hook, visual direction, and caption. You can send the drafts directly to Internal QC."
                 : failedCount
                   ? `Quality check found ${failedCount} guided improvement${failedCount === 1 ? "" : "s"}.`
                   : "Every draft passed the automated quality check and is ready for Internal QC."}
@@ -6561,14 +6828,16 @@ function outputSectionTitle(format: string): string {
   return format;
 }
 
-function AlbumMosaic({
+function AlbumPanelPreview({
   outputs,
   direction,
-  format
+  format,
+  compact = false
 }: {
   outputs: readonly CreativeOutput[];
   direction: WorkflowState["directions"][number] | undefined;
   format: AlbumFormat;
+  compact?: boolean;
 }) {
   const panels = sortAlbumOutputs(outputs).slice(
     0,
@@ -6576,22 +6845,37 @@ function AlbumMosaic({
   );
 
   return (
-    <div className={`compass-album-mosaic ${format}`}>
+    <div
+      aria-label={`${panels.length}-image album preview`}
+      className={`compass-album-panels ${compact ? "compact" : ""}`}
+    >
       {panels.map((output, index) =>
         output.assetUrl ? (
-          <img
-            src={output.assetUrl}
-            alt={`${direction?.hook ?? "Album creative"} panel ${index + 1}`}
-            loading="lazy"
-            decoding="async"
-            key={output.id}
-          />
+          <div className="compass-album-panel" key={output.id}>
+            <img
+              src={output.assetUrl}
+              alt={`${direction?.hook ?? "Album creative"} image ${index + 1}`}
+              loading="lazy"
+              decoding="async"
+            />
+            <span>
+              {index + 1} / {panels.length}
+            </span>
+          </div>
         ) : (
-          <div className="compass-album-panel-empty" key={output.id}>
-            Panel unavailable
+          <div
+            className="compass-album-panel compass-album-panel-empty"
+            key={output.id}
+          >
+            Image unavailable
           </div>
         )
       )}
+      {compact && panels.length > 1 ? (
+        <span className="compass-album-image-count">
+          {panels.length} images
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -6749,13 +7033,14 @@ function OutputGrid({
                         onClick={() => setPreviewOutputId(output.id)}
                       >
                         {album ? (
-                          <AlbumMosaic
+                          <AlbumPanelPreview
                             outputs={reviewOutputs}
                             direction={direction}
                             format={resolvedAlbumFormatForDirection(
                               state.albumFormat,
                               direction
                             )}
+                            compact
                           />
                         ) : isUgcOutput(output) ? (
                           <UgcTemplatePreview direction={direction} />
@@ -7119,7 +7404,7 @@ function CreativePreviewModal({
         </div>
         <div className="output-modal-image">
           {album ? (
-            <AlbumMosaic
+            <AlbumPanelPreview
               outputs={outputs}
               direction={direction}
               format={albumFormat}
@@ -7262,7 +7547,7 @@ function OutputRegenerateModal({
         caught instanceof Error ? caught.message : "Could not regenerate image.";
       setError(
         imageReplaced
-          ? `Image regenerated, but automatic quality check failed: ${message} Close this window and run Recheck drafts.`
+          ? `Image regenerated, but the optional quality check failed: ${message} You can retry it from Build or continue to Internal QC.`
           : message
       );
     } finally {
@@ -7298,7 +7583,7 @@ function OutputRegenerateModal({
         </div>
         <div className="output-modal-image">
           {album ? (
-            <AlbumMosaic
+            <AlbumPanelPreview
               outputs={outputs}
               direction={direction}
               format={resolvedAlbumFormatForDirection(
@@ -7539,15 +7824,22 @@ function outputIsEligibleForRole(
   return approvalRolesForOutput(output).includes(role);
 }
 
-export function ApprovalStage({ state, dispatch }: StageProps) {
+export function ApprovalStage({
+  state,
+  dispatch,
+  canEdit = true
+}: StageProps & { canEdit?: boolean }) {
   const backAction: WorkflowAction = { type: "set-stage", stage: "studio" };
   const clientAction: WorkflowAction = { type: "set-stage", stage: "client" };
   const clientBlocked = workflowActionBlockReason(state, clientAction);
-  const [activeRole, setActiveRole] = useState<ApprovalRole>(() =>
-    state.outputs.some((output) => output.clientStatus === "revision")
-      ? "projectManager"
-      : "graphicDesign"
-  );
+  const [activeRole, setActiveRole] = useState<ApprovalRole>(() => {
+    const revisionOutput = state.outputs.find(
+      (output) => output.clientStatus === "revision"
+    );
+    return revisionOutput
+      ? currentApprovalRole(revisionOutput) ?? "graphicDesign"
+      : "graphicDesign";
+  });
   const [clientSlidesImporting, setClientSlidesImporting] = useState(false);
   const [clientSlidesError, setClientSlidesError] = useState<string | null>(null);
   const [clientGoogleSlidesUrl, setClientGoogleSlidesUrl] = useState<string | null>(
@@ -7627,7 +7919,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
           <button
             className="btn secondary"
             type="button"
-            disabled={Boolean(approveRoleBlocked)}
+            disabled={!canEdit || Boolean(approveRoleBlocked)}
             title={approveRoleBlocked ?? undefined}
             onClick={() => dispatch(approveRoleAction)}
           >
@@ -7854,6 +8146,7 @@ export function ApprovalStage({ state, dispatch }: StageProps) {
                         run={state}
                         role={activeRole}
                         dispatch={dispatch}
+                        canEdit={canEdit}
                         key={output.id}
                       />
                     );
@@ -7893,12 +8186,14 @@ function ApprovalDecisionField({
   output,
   outputs,
   role,
-  dispatch
+  dispatch,
+  canEdit
 }: {
   output: CreativeOutput;
   outputs: readonly CreativeOutput[];
   role: ApprovalRole;
   dispatch: Dispatch<WorkflowAction>;
+  canEdit: boolean;
 }) {
   const [mode, setMode] = useState<"approve" | "changes" | null>(null);
   const [changeType, setChangeType] = useState<"artwork" | "caption" | "both" | null>(null);
@@ -7918,6 +8213,7 @@ function ApprovalDecisionField({
   }, [role, output.id]);
 
   function submit() {
+    if (!canEdit) return;
     const actionableOutputs = outputs.filter(
       (candidate) => currentApprovalRole(candidate) === role
     );
@@ -7967,18 +8263,25 @@ function ApprovalDecisionField({
           <button
             className="btn secondary small"
             type="button"
+            disabled={!canEdit}
             onClick={() => open("changes", ugc ? "both" : "artwork")}
           >
             {ugc ? "Needs UGC update" : "Request design changes"}
           </button>
         ) : role === "projectManager" ? (
-          <button className="btn secondary small" type="button" onClick={() => open("changes")}>
+          <button
+            className="btn secondary small"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => open("changes")}
+          >
             Request changes
           </button>
         ) : null}
         <button
           className="btn primary small"
           type="button"
+          disabled={!canEdit}
           onClick={() => open("approve")}
         >
           Approve → {nextLabel}
@@ -8093,7 +8396,8 @@ function QcSlide({
   direction,
   run,
   role,
-  dispatch
+  dispatch,
+  canEdit
 }: {
   index: number;
   output: CreativeOutput;
@@ -8102,12 +8406,14 @@ function QcSlide({
   run: WorkflowState;
   role: ApprovalRole;
   dispatch: Dispatch<WorkflowAction>;
+  canEdit: boolean;
 }) {
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [editingCopy, setEditingCopy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const roleConfig =
     REVIEW_ROLES.find(({ key }) => key === role) ?? REVIEW_ROLES[0]!;
   const roleShort = reviewRoleShort(role);
@@ -8119,8 +8425,15 @@ function QcSlide({
       ? "rejected"
       : null;
   const decisionClass = decision ?? "pending";
+  const clientRevisionRole =
+    output.clientStatus === "revision" ? currentApprovalRole(output) : null;
+  const clientRevisionComment =
+    (clientRevisionRole
+      ? output.approvalComments[clientRevisionRole]
+      : "") || output.approvalComments.projectManager;
 
   const handleReplace = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!canEdit) return;
     const files = Array.from(event.target.files ?? []).sort((left, right) =>
       left.name.localeCompare(right.name, undefined, {
         numeric: true,
@@ -8189,17 +8502,23 @@ function QcSlide({
       className={`compass-qc-focus-card ${decision === "rejected" || outputs.some((candidate) => candidate.status === "needs-revision") ? "work-required" : ""}`}
     >
       <div className="compass-qc-focus-asset">
-        <div className="compass-qc-focus-visual">
+        <button
+          className="compass-qc-focus-visual compass-view-preview-button"
+          type="button"
+          aria-label={`Open ${album ? "album " : ""}creative ${index + 1} preview`}
+          onClick={() => setPreviewing(true)}
+        >
           {isUgcOutput(output) ? (
             <UgcTemplatePreview direction={direction} compact />
           ) : album ? (
-            <AlbumMosaic
+            <AlbumPanelPreview
               outputs={orderedOutputs}
               direction={direction}
               format={resolvedAlbumFormatForDirection(
                 run.albumFormat,
                 direction
               )}
+              compact
             />
           ) : output.assetUrl ? (
             <img
@@ -8217,7 +8536,7 @@ function QcSlide({
               </div>
             </div>
           )}
-        </div>
+        </button>
         {direction?.caption ? (
           <div className="compass-qc-focus-caption">
             <span>{isUgcOutput(output) ? "Caption / script direction" : "Caption"}</span>
@@ -8262,11 +8581,10 @@ function QcSlide({
           </div>
         </div>
         <QcApprovalTrail output={output} outputs={outputs} />
-        {output.clientStatus === "revision" &&
-        output.approvalComments.projectManager ? (
+        {output.clientStatus === "revision" && clientRevisionComment ? (
           <div className="compass-qc-work-note client-request">
             <b>Client changes requested</b>
-            <p>{output.approvalComments.projectManager}</p>
+            <p>{clientRevisionComment}</p>
           </div>
         ) : decision === "rejected" && output.approvalComments[role] ? (
           <div className="compass-qc-work-note">
@@ -8290,7 +8608,7 @@ function QcSlide({
                     : "Download Image"}
               </button>
               <label
-                className={`btn secondary small upload-inline ${uploading ? "disabled" : ""}`}
+                className={`btn secondary small upload-inline ${uploading || !canEdit ? "disabled" : ""}`}
                 title={album ? `Choose ${orderedOutputs.length} panel files in order.` : undefined}
               >
                 {uploading
@@ -8303,12 +8621,17 @@ function QcSlide({
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   multiple={album}
-                  disabled={uploading}
+                  disabled={uploading || !canEdit}
                   onChange={handleReplace}
                 />
               </label>
               </> : role === "clientService" ? (
-                <button className="btn secondary small" type="button" onClick={() => setEditingCopy(true)}>
+                <button
+                  className="btn secondary small"
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setEditingCopy(true)}
+                >
                   {isUgcOutput(output) ? "Edit script & flow" : "Edit copy"}
                 </button>
               ) : null}
@@ -8322,6 +8645,7 @@ function QcSlide({
             outputs={outputs}
             role={role}
             dispatch={dispatch}
+            canEdit={canEdit}
           />
         </div>
       </div>
@@ -8331,6 +8655,19 @@ function QcSlide({
           direction={direction}
           dispatch={dispatch}
           onClose={() => setEditingCopy(false)}
+        />
+      ) : null}
+      {previewing ? (
+        <CreativePreviewModal
+          output={output}
+          outputs={orderedOutputs}
+          direction={direction}
+          index={index}
+          albumFormat={resolvedAlbumFormatForDirection(
+            run.albumFormat,
+            direction
+          )}
+          onClose={() => setPreviewing(false)}
         />
       ) : null}
     </article>
@@ -8471,55 +8808,94 @@ function clientCreativeTitle(output: CreativeOutput, index: number): string {
   return `${label} ${String(index + 1).padStart(2, "0")}`;
 }
 
-export function ClientStage({ state, dispatch }: StageProps) {
+type ClientRevisionTarget = "graphicDesign" | "clientService" | "both";
+
+export function ClientStage({
+  state,
+  dispatch,
+  canEdit = true
+}: StageProps & { canEdit?: boolean }) {
   const sendClientAction: WorkflowAction = { type: "send-client" };
   const sendClientBlocked = workflowActionBlockReason(state, sendClientAction);
   const backAction: WorkflowAction = { type: "set-stage", stage: "approval" };
   const deliverAction: WorkflowAction = { type: "mark-delivered" };
   const deliverBlocked = workflowActionBlockReason(state, deliverAction);
-  const approvedCount = state.outputs.filter(
-    (output) => output.clientStatus === "approved"
+  const creativeGroups = groupOutputsForReview(state.outputs);
+  const approvedCount = creativeGroups.filter((outputs) =>
+    outputs.every((output) => output.clientStatus === "approved")
   ).length;
   const allApproved =
-    state.outputs.length > 0 && approvedCount === state.outputs.length;
+    creativeGroups.length > 0 && approvedCount === creativeGroups.length;
   const [revisionOutputId, setRevisionOutputId] = useState<string | null>(null);
+  const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
+  const [revisionTarget, setRevisionTarget] =
+    useState<ClientRevisionTarget | null>(null);
   const [revisionComment, setRevisionComment] = useState("");
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const revisionOutput = state.outputs.find(
     (output) => output.id === revisionOutputId
   );
+  const revisionOutputs = revisionOutput
+    ? state.outputs.filter((output) =>
+        isAlbumOutput(revisionOutput)
+          ? output.directionId === revisionOutput.directionId &&
+            isAlbumOutput(output)
+          : output.id === revisionOutput.id
+      )
+    : [];
   const revisionDirection = state.directions.find(
     (direction) => direction.id === revisionOutput?.directionId
   );
+  const previewOutput = state.outputs.find(
+    (output) => output.id === previewOutputId
+  );
+  const previewOutputs = previewOutput
+    ? state.outputs.filter((output) =>
+        isAlbumOutput(previewOutput)
+          ? output.directionId === previewOutput.directionId &&
+            isAlbumOutput(output)
+          : output.id === previewOutput.id
+      )
+    : [];
+  const previewDirection = state.directions.find(
+    (direction) => direction.id === previewOutput?.directionId
+  );
 
   useEffect(() => {
-    if (!state.clientSent && !sendClientBlocked) {
+    if (canEdit && !state.clientSent && !sendClientBlocked) {
       dispatch(sendClientAction);
     }
-  }, [dispatch, sendClientBlocked, state.clientSent]);
+  }, [canEdit, dispatch, sendClientBlocked, state.clientSent]);
 
   function closeRevisionDialog() {
     setRevisionOutputId(null);
+    setRevisionTarget(null);
     setRevisionComment("");
     setRevisionError(null);
   }
 
   function submitRevisionRequest() {
-    if (!revisionOutput) return;
+    if (!canEdit || !revisionOutput) return;
     const comment = revisionComment.trim();
-    if (!comment) {
-      setRevisionError("Add a comment before requesting changes.");
+    if (!revisionTarget || !comment) {
+      setRevisionError(
+        "Choose GD, CS, or Both and add one clear change instruction."
+      );
       return;
     }
-    dispatch({
-      type: "request-client-change",
-      id: revisionOutput.id,
-      comment
+    revisionOutputs.forEach((output) => {
+      dispatch({
+        type: "request-client-change",
+        id: output.id,
+        targetRole: revisionTarget,
+        comment
+      });
     });
     closeRevisionDialog();
   }
 
   function approveAllClientOutputs() {
+    if (!canEdit) return;
     state.outputs.forEach((output) => {
       if (output.clientStatus !== "approved") {
         dispatch({ type: "approve-output", id: output.id });
@@ -8532,7 +8908,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
       eyebrow="06 / Client"
       title="Make feedback easy to act on."
       helper="The client sees the idea, not the production clutter. Every requested change records what needs fixing and routes it correctly."
-      status={`${approvedCount} / ${state.outputs.length} approved`}
+      status={`${approvedCount} / ${creativeGroups.length} approved`}
       statusClass={allApproved ? "green" : "blue"}
       className="compass-stage-client"
       actions={
@@ -8548,7 +8924,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
             <button
               className="btn compass-client-approve-all"
               type="button"
-              disabled={!state.clientSent}
+              disabled={!canEdit || !state.clientSent}
               onClick={approveAllClientOutputs}
             >
               Approve all demo assets
@@ -8556,7 +8932,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
             <button
               className="btn primary"
               type="button"
-              disabled={Boolean(deliverBlocked)}
+              disabled={!canEdit || Boolean(deliverBlocked)}
               title={deliverBlocked ?? undefined}
               onClick={() => dispatch(deliverAction)}
             >
@@ -8567,17 +8943,52 @@ export function ClientStage({ state, dispatch }: StageProps) {
       }
     >
       <div className="client-grid compass-client-grid">
-        {state.outputs.map((output, index) => {
+        {creativeGroups.map((outputs, index) => {
+          const output = outputs[0];
+          if (!output) return null;
+          const album = isAlbumOutput(output);
           const direction = state.directions.find(
             (candidate) => candidate.id === output.directionId
           );
+          const clientStatus = outputs.some(
+            (candidate) => candidate.clientStatus === "revision"
+          )
+            ? "revision"
+            : outputs.every(
+                  (candidate) => candidate.clientStatus === "approved"
+                )
+              ? "approved"
+              : "sent";
+          const approveBlocked = outputs
+            .map((candidate) =>
+              workflowActionBlockReason(state, {
+                type: "approve-output",
+                id: candidate.id
+              })
+            )
+            .find(Boolean);
           return (
             <article
-              className={`client-card compass-client-card ${output.clientStatus}`}
+              className={`client-card compass-client-card ${clientStatus}`}
               key={output.id}
             >
-              <div className="preview-area compass-client-preview">
-                {output.assetUrl ? (
+              <button
+                className="preview-area compass-client-preview compass-view-preview-button"
+                type="button"
+                aria-label={`Open ${album ? "album " : ""}creative ${index + 1} preview`}
+                onClick={() => setPreviewOutputId(output.id)}
+              >
+                {album ? (
+                  <AlbumPanelPreview
+                    outputs={outputs}
+                    direction={direction}
+                    format={resolvedAlbumFormatForDirection(
+                      state.albumFormat,
+                      direction
+                    )}
+                    compact
+                  />
+                ) : output.assetUrl ? (
                   <img
                     className="generated-preview"
                     src={output.assetUrl}
@@ -8595,7 +9006,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
                     </div>
                   </div>
                 )}
-              </div>
+              </button>
               <div className="client-card-body compass-client-card-body">
                 <div className="compass-client-card-copy">
                   <h3>{clientCreativeTitle(output, index)}</h3>
@@ -8605,43 +9016,41 @@ export function ClientStage({ state, dispatch }: StageProps) {
                   <button
                     className="btn small"
                     type="button"
-                    disabled={!state.clientSent}
+                    disabled={!canEdit || !state.clientSent}
                     onClick={() => {
                       setRevisionOutputId(output.id);
+                      setRevisionTarget(
+                        isUgcOutput(output) ? "clientService" : null
+                      );
                       setRevisionComment("");
                       setRevisionError(null);
                     }}
                   >
-                    Request change
+                    Request changes
                   </button>
                   <button
                     className="btn small compass-client-approve"
                     type="button"
-                    disabled={
-                      Boolean(
-                        workflowActionBlockReason(state, {
-                          type: "approve-output",
-                          id: output.id
-                        })
-                      )
-                    }
-                    title={
-                      workflowActionBlockReason(state, {
-                        type: "approve-output",
-                        id: output.id
-                      }) ?? undefined
-                    }
+                    disabled={!canEdit || Boolean(approveBlocked)}
+                    title={approveBlocked ?? undefined}
                     onClick={() => {
-                      dispatch({ type: "approve-output", id: output.id });
+                      outputs.forEach((candidate) => {
+                        if (candidate.clientStatus !== "approved") {
+                          dispatch({
+                            type: "approve-output",
+                            id: candidate.id
+                          });
+                        }
+                      });
                     }}
                   >
                     Approve
                   </button>
                 </div>
-                {output.clientStatus === "approved" ||
-                output.clientStatus === "revision" ? (
+                {clientStatus === "approved" ||
+                clientStatus === "revision" ? (
                   <div className="compass-client-decision-note">
-                    {output.clientStatus === "approved"
+                    {clientStatus === "approved"
                       ? "Approved and ready for delivery."
                       : "Feedback recorded and routed back to Internal QC."}
                   </div>
@@ -8651,10 +9060,23 @@ export function ClientStage({ state, dispatch }: StageProps) {
           );
         })}
       </div>
+      {previewOutput ? (
+        <CreativePreviewModal
+          output={previewOutput}
+          outputs={previewOutputs}
+          direction={previewDirection}
+          index={state.outputs.indexOf(previewOutput)}
+          albumFormat={resolvedAlbumFormatForDirection(
+            state.albumFormat,
+            previewDirection
+          )}
+          onClose={() => setPreviewOutputId(null)}
+        />
+      ) : null}
       {revisionOutput ? (
         <div className="output-modal-backdrop" onClick={closeRevisionDialog}>
           <div
-            className="output-modal compass-client-revision-modal"
+            className="output-modal compass-qc-decision-modal compass-client-revision-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="client-revision-title"
@@ -8663,8 +9085,8 @@ export function ClientStage({ state, dispatch }: StageProps) {
           >
             <div className="output-modal-head">
               <div>
-                <p className="eyebrow">Client feedback</p>
-                <h3 id="client-revision-title">Request a change</h3>
+                <p className="eyebrow">Client decision</p>
+                <h3 id="client-revision-title">Request changes</h3>
               </div>
               <button
                 className="btn ghost"
@@ -8678,12 +9100,54 @@ export function ClientStage({ state, dispatch }: StageProps) {
               className="output-modal-reference-note"
               id="client-revision-description"
             >
-              Feedback stays attached to{" "}
-              {revisionDirection?.hook ?? "this creative"} and returns it to
-              Internal QC.
+              Choose the Internal QC owner for{" "}
+              {revisionDirection?.hook ?? "this creative"}
+              {revisionOutputs.length > 1
+                ? ` and all ${revisionOutputs.length} album images`
+                : ""}{" "}
+              so the request goes directly to the right team.
             </p>
+            <div className="compass-qc-decision-meta">
+              <b>Client request</b> · {qcContentTypeLabel(revisionOutput)} · V
+              {revisionOutput.revisionCount + 1}
+            </div>
+            <div className="compass-qc-change-type-field">
+              <span>Who needs to make the change?</span>
+              <div>
+                {(isUgcOutput(revisionOutput)
+                  ? (["clientService"] as const)
+                  : (["graphicDesign", "clientService", "both"] as const)
+                ).map((target) => (
+                  <button
+                    className={revisionTarget === target ? "on" : ""}
+                    type="button"
+                    aria-pressed={revisionTarget === target}
+                    key={target}
+                    onClick={() => {
+                      setRevisionTarget(target);
+                      if (revisionError) setRevisionError(null);
+                    }}
+                  >
+                    {target === "graphicDesign"
+                      ? "GD"
+                      : target === "clientService"
+                        ? "CS"
+                        : "Both"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="compass-qc-route-preview">
+              {revisionTarget === "graphicDesign"
+                ? "Fix owner: GD · Update and replace the artwork in Internal QC."
+                : revisionTarget === "clientService"
+                  ? "Fix owner: CS · Update the hook, caption, script, or client-facing details."
+                  : revisionTarget === "both"
+                    ? "Fix route: GD → CS · Artwork first, then copy."
+                    : "Choose GD, CS, or Both to route this request."}
+            </div>
             <label className="output-modal-prompt-label">
-              <span>Required comment</span>
+              <span>Change instruction</span>
               <textarea
                 autoFocus
                 value={revisionComment}
@@ -8712,7 +9176,7 @@ export function ClientStage({ state, dispatch }: StageProps) {
                 type="button"
                 onClick={submitRevisionRequest}
               >
-                Route to Internal QC
+                Route changes
               </button>
             </div>
           </div>
@@ -9152,10 +9616,12 @@ export function Overview({
   dispatch,
   workspace,
   workspaceDispatch,
+  canCreate = true,
   onOpenStudio
 }: StageProps & {
   workspace: WorkspaceState;
   workspaceDispatch: Dispatch<WorkspaceAction>;
+  canCreate?: boolean;
   onOpenStudio: () => void;
 }) {
   const { brands, loading, error } = useBrands();
@@ -9289,6 +9755,7 @@ export function Overview({
       workspaceDispatch({ type: "switch-run", id: run.id });
       return;
     }
+    if (!canCreate) return;
     if (canSelectBrand(brand)) {
       workspaceDispatch({
         type: "create-run",
@@ -9518,6 +9985,12 @@ export function Overview({
                     <button
                       className="btn small"
                       type="button"
+                      disabled={!run && !canCreate}
+                      title={
+                        !run && !canCreate
+                          ? "Viewers cannot start new projects."
+                          : undefined
+                      }
                       onClick={() => openProject(brand, run)}
                     >
                       {run ? "Open" : "Start"}

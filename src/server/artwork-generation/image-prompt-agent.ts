@@ -264,7 +264,7 @@ function renderStandardPrompt(
     },
     ...(input.service === "album-post"
       ? {
-          albumMaster: albumMasterInput(input)
+          albumSequence: albumSequenceInput(input)
         }
       : {}),
     ...(input.textInputs.length
@@ -283,49 +283,49 @@ function renderStandardPrompt(
   ].join("\n");
 }
 
-function albumMasterInput(input: ImagePromptAgentInput) {
+function albumSequenceInput(input: ImagePromptAgentInput) {
   const format = input.albumFormat ?? defaultAlbumFormat;
   const beats = input.hook.formatBeats ?? [];
   const common = {
     format,
-    cropSafety:
-      "each panel self-contained; no essential element crosses a seam"
+    delivery:
+      "separate standalone image files; never a combined master, grid, collage, mosaic, or contact sheet"
   };
   if (format === "three-vertical") {
     return {
       ...common,
-      grid: "large 1:2 vertical cover on the left; two 1:1 panels stacked on the right",
-      panel1: "cover hook and main visual",
-      panel2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "support and proof",
-      panel3: beats[2] ?? "offer and CTA"
+      imageCount: 3,
+      image1: "portrait cover with hook and main visual",
+      image2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "square support and proof",
+      image3: beats[2] ?? "square offer and CTA"
     };
   }
   if (format === "three-horizontal") {
     return {
       ...common,
-      grid: "large 2:1 horizontal cover across the top; two 1:1 panels below",
-      panel1: "cover hook and main visual",
-      panel2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "support and proof",
-      panel3: beats[2] ?? "offer and CTA"
+      imageCount: 3,
+      image1: "landscape cover with hook and main visual",
+      image2: [beats[0], beats[1]].filter(Boolean).join(" + ") || "square support and proof",
+      image3: beats[2] ?? "square offer and CTA"
     };
   }
   if (format === "four-vertical") {
     return {
       ...common,
-      grid: "large 2:3 vertical cover on the left; three 1:1 panels stacked on the right",
-      panel1: "cover hook and main visual",
-      panel2: beats[0] ?? "opening support",
-      panel3: beats[1] ?? "mechanism or proof",
-      panel4: beats[2] ?? "offer and CTA"
+      imageCount: 4,
+      image1: "portrait cover with hook and main visual",
+      image2: beats[0] ?? "square opening support",
+      image3: beats[1] ?? "square mechanism or proof",
+      image4: beats[2] ?? "square offer and CTA"
     };
   }
   return {
     ...common,
-    grid: "four equal 1:1 panels in a 2 by 2 grid",
-    panel1: "cover hook and main visual",
-    panel2: beats[0] ?? "opening support",
-    panel3: beats[1] ?? "mechanism or proof",
-    panel4: beats[2] ?? "offer and CTA"
+    imageCount: 4,
+    image1: "square cover with hook and main visual",
+    image2: beats[0] ?? "square opening support",
+    image3: beats[1] ?? "square mechanism or proof",
+    image4: beats[2] ?? "square offer and CTA"
   };
 }
 

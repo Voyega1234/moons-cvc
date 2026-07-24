@@ -36,12 +36,8 @@ export function isStageComplete(
       );
     case "studio":
       return (
-        run.qaComplete &&
-        run.outputs.every(
-          (output) =>
-            !isBuildQualityCheckOutput(output) ||
-            output.status !== "needs-revision"
-        )
+        run.outputs.length > 0 &&
+        run.artworkGenerationStatus === "idle"
       );
     case "approval":
       return run.approved;
@@ -163,13 +159,9 @@ export function workflowActionBlockReason(
       return run.outputs.length > 0 ? null : "Create outputs before QA.";
     case "approve-all":
       if (!run.outputs.length) return "Create outputs before internal QC.";
-      if (!run.qaComplete) return "Run QA before internal approval.";
-      return run.outputs.some((output) => output.status === "needs-revision")
-        ? "Resolve every quality suggestion before internal approval."
-        : null;
+      return null;
     case "approve-role":
       if (!run.outputs.length) return "Create outputs before internal QC.";
-      if (!run.qaComplete) return "Run QA before internal review.";
       {
         const roleOutputs = run.outputs.filter(
           (output) => currentApprovalRole(output) === action.role
@@ -177,12 +169,9 @@ export function workflowActionBlockReason(
         if (!roleOutputs.length) {
           return `No creatives are waiting for ${approvalRoleLabel(action.role)} review.`;
         }
-        return roleOutputs.some((output) => output.status === "needs-revision")
-          ? "Resolve every quality suggestion in this queue before approval."
-          : null;
+        return null;
       }
     case "review-output":
-      if (!run.qaComplete) return "Run QA before internal review.";
       if (action.decision === "rejected" && !action.comment.trim()) {
         return "Add a comment before rejecting.";
       }
@@ -232,11 +221,14 @@ export function workflowActionBlockReason(
         ? null
         : "Output not found.";
     case "request-client-change":
-      if (!run.clientSent) return "Send to client first.";
       if (!action.comment.trim()) return "Add a comment before requesting changes.";
-      return run.outputs.some((output) => output.id === action.id)
-        ? null
-        : "Output not found.";
+      {
+        const output = run.outputs.find((item) => item.id === action.id);
+        if (!output) return "Output not found.";
+        return output.clientStatus === "queued"
+          ? "Send to client first."
+          : null;
+      }
     case "mark-delivered":
       return isClientReviewComplete(run)
         ? null

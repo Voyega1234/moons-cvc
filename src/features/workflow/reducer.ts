@@ -351,8 +351,14 @@ export function workflowActionToast(
       );
     case "request-client-change":
       return warningToast(
-        "Client feedback recorded",
-        "The request was routed to Internal QC with its context."
+        "Client feedback routed",
+        `Sent directly to ${
+          action.targetRole === "graphicDesign"
+            ? "GD"
+            : action.targetRole === "clientService"
+              ? "CS"
+              : "GD and CS"
+        } with the full client context.`
       );
     case "mark-delivered":
       return successToast(
@@ -400,6 +406,10 @@ export function workflowReducer(
         brand: action.brand,
         brandMenuOpen: false,
         brandSearch: "",
+        selectedProductIds:
+          state.brand?.id === action.brand.id
+            ? state.selectedProductIds
+            : undefined,
         referenceImages:
           state.brand?.id === action.brand.id ? state.referenceImages : []
       };
@@ -415,6 +425,16 @@ export function workflowReducer(
             }
           }
         : state;
+    case "sync-brand-products":
+      return state.brand
+        ? {
+            ...state,
+            brand: {
+              ...state.brand,
+              library: { ...state.brand.library, products: action.items }
+            }
+          }
+        : state;
     case "sync-brand-guidelines":
       return state.brand
         ? {
@@ -422,6 +442,16 @@ export function workflowReducer(
             brand: {
               ...state.brand,
               library: { ...state.brand.library, docs: action.items }
+            }
+          }
+        : state;
+    case "sync-brand-references":
+      return state.brand
+        ? {
+            ...state,
+            brand: {
+              ...state.brand,
+              library: { ...state.brand.library, refs: action.items }
             }
           }
         : state;
@@ -524,6 +554,28 @@ export function workflowReducer(
           (item) => item.id !== action.id
         )
       };
+    case "toggle-product-context": {
+      const products = state.brand?.library.products ?? [];
+      if (!products.some((product) => product.id === action.id)) return state;
+
+      const selectedIds = new Set(
+        state.selectedProductIds ?? products.map((product) => product.id)
+      );
+      if (selectedIds.has(action.id)) selectedIds.delete(action.id);
+      else selectedIds.add(action.id);
+
+      const nextSelectedIds = products
+        .map((product) => product.id)
+        .filter((id) => selectedIds.has(id));
+
+      return {
+        ...state,
+        selectedProductIds:
+          nextSelectedIds.length === products.length
+            ? undefined
+            : nextSelectedIds
+      };
+    }
     case "select-reference-image":
       return state.referenceImages.some((item) => item.id === action.item.id)
         ? state
@@ -1045,13 +1097,18 @@ export function workflowReducer(
       };
     case "request-client-change": {
       const comment = action.comment.trim();
+      const targetOutput = state.outputs.find(
+        (output) => output.id === action.id
+      );
       if (
         !comment ||
-        !state.clientSent ||
-        !state.outputs.some((output) => output.id === action.id)
+        !targetOutput ||
+        targetOutput.clientStatus === "queued"
       ) {
         return state;
       }
+      const startsWithGraphicDesign =
+        action.targetRole === "graphicDesign" || action.targetRole === "both";
       const outputs = state.outputs.map((output) =>
         output.id === action.id
           ? {
@@ -1060,11 +1117,22 @@ export function workflowReducer(
               clientStatus: "revision" as const,
               approval: {
                 ...output.approval,
-                projectManager: "rejected" as const
+                graphicDesign: startsWithGraphicDesign
+                  ? ("rejected" as const)
+                  : output.approval.graphicDesign,
+                clientService: startsWithGraphicDesign
+                  ? null
+                  : ("rejected" as const),
+                projectManager: null
               },
               approvalComments: {
                 ...output.approvalComments,
-                projectManager: comment
+                ...(startsWithGraphicDesign ? { graphicDesign: comment } : {}),
+                ...(action.targetRole === "clientService" ||
+                action.targetRole === "both"
+                  ? { clientService: comment }
+                  : {}),
+                projectManager: ""
               }
             }
           : output

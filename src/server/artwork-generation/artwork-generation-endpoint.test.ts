@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import sharp from "sharp";
 import {
-  albumCropRegions,
   handleArtworkGenerationRequest,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
@@ -116,62 +114,6 @@ function fakeStorage(): {
 }
 
 describe("handleArtworkGenerationRequest", () => {
-  it.each([
-    [
-      "three-vertical",
-      [
-        [960, 1920],
-        [960, 960],
-        [960, 960]
-      ]
-    ],
-    [
-      "three-horizontal",
-      [
-        [1920, 960],
-        [960, 960],
-        [960, 960]
-      ]
-    ],
-    [
-      "four-vertical",
-      [
-        [1280, 1920],
-        [640, 640],
-        [640, 640],
-        [640, 640]
-      ]
-    ],
-    [
-      "four-grid",
-      [
-        [960, 960],
-        [960, 960],
-        [960, 960],
-        [960, 960]
-      ]
-    ]
-  ] as const)("defines exact %s album crop outputs", (format, expected) => {
-    const regions = albumCropRegions({
-      left: 0,
-      top: 0,
-      side: 2048,
-      format
-    });
-    expect(
-      regions.map(({ outWidth, outHeight }) => [outWidth, outHeight])
-    ).toEqual(expected);
-    expect(
-      regions.every(
-        ({ left, top, width, height }) =>
-          left >= 0 &&
-          top >= 0 &&
-          left + width <= 2048 &&
-          top + height <= 2048
-      )
-    ).toBe(true);
-  });
-
   it("requires a Supabase user token when backend Supabase env is configured", async () => {
     const response = await handleArtworkGenerationRequest({
       request: buildRequest(),
@@ -495,17 +437,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies[0]).toMatchObject({ size: "3840x2160" });
   });
 
-  it("generates one Standard album master and returns three exact panel crops", async () => {
-    const master = await sharp({
-      create: {
-        width: 2048,
-        height: 2048,
-        channels: 3,
-        background: { r: 240, g: 245, b: 250 }
-      }
-    })
-      .png()
-      .toBuffer();
+  it("generates three standalone Standard album images without a master grid", async () => {
     const imageBodies: Record<string, unknown>[] = [];
     const uploaded: { path: string; body: Buffer }[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -516,14 +448,22 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse("A cohesive three-panel album master.");
+        return promptAgentResponse("A cohesive three-image album sequence.");
       }
       if (href.includes("/v1/images/generations")) {
         imageBodies.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
         return new Response(
-          JSON.stringify({ data: [{ b64_json: master.toString("base64") }] }),
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from(
+                  `standalone-${imageBodies.length}`
+                ).toString("base64")
+              }
+            ]
+          }),
           { status: 200 }
         );
       }
@@ -567,12 +507,25 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(imageBodies).toHaveLength(1);
-    expect(imageBodies[0]).toMatchObject({ size: "2048x2048" });
-    expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER");
-    expect(imageBodies[0]?.prompt).toContain(
-      "large 2:1 horizontal Panel 1 across the top"
+    expect(imageBodies).toHaveLength(3);
+    expect(imageBodies.map((body) => body.size)).toEqual([
+      "1536x1024",
+      "1024x1024",
+      "1024x1024"
+    ]);
+    expect(imageBodies.map((body) => body.prompt)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("ALBUM IMAGE 1 OF 3"),
+        expect.stringContaining("ALBUM IMAGE 2 OF 3"),
+        expect.stringContaining("ALBUM IMAGE 3 OF 3")
+      ])
     );
+    imageBodies.forEach((body) => {
+      expect(body.prompt).toContain(
+        "Do not create a collage, grid, mosaic, contact sheet"
+      );
+      expect(body.prompt).not.toContain("ALBUM MASTER");
+    });
     const payload = (await response.json()) as {
       outputs: { id: string; format: string; assetStoragePath: string }[];
     };
@@ -585,32 +538,13 @@ describe("handleArtworkGenerationRequest", () => {
       true
     );
     expect(uploaded.map(({ path }) => path)).toEqual([
-      "flora/run-1/outputs/hook-1-album-master-v1.png",
       "flora/run-1/outputs/hook-1-album-1-v1.png",
       "flora/run-1/outputs/hook-1-album-2-v1.png",
       "flora/run-1/outputs/hook-1-album-3-v1.png"
     ]);
-    const panelMetadata = await Promise.all(
-      uploaded.slice(1).map(({ body }) => sharp(body).metadata())
-    );
-    expect(panelMetadata.map(({ width, height }) => [width, height])).toEqual([
-      [1920, 960],
-      [960, 960],
-      [960, 960]
-    ]);
   });
 
-  it("uses the selected four-panel album pipeline in Design System mode", async () => {
-    const master = await sharp({
-      create: {
-        width: 2048,
-        height: 2048,
-        channels: 3,
-        background: { r: 232, g: 238, b: 246 }
-      }
-    })
-      .png()
-      .toBuffer();
+  it("uses the selected four-image standalone album pipeline in Design System mode", async () => {
     const imageBodies: Record<string, unknown>[] = [];
     const uploaded: { path: string; body: Buffer }[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -628,7 +562,15 @@ describe("handleArtworkGenerationRequest", () => {
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
         return new Response(
-          JSON.stringify({ data: [{ b64_json: master.toString("base64") }] }),
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from(
+                  `standalone-${imageBodies.length}`
+                ).toString("base64")
+              }
+            ]
+          }),
           { status: 200 }
         );
       }
@@ -675,15 +617,30 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(imageBodies).toHaveLength(1);
-    expect(imageBodies[0]).toMatchObject({ size: "2048x2048" });
-    expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER");
-    expect(imageBodies[0]?.prompt).toContain("เปิดปัญหา");
-    expect(imageBodies[0]?.prompt).toContain("อธิบายหลักฐาน");
-    expect(imageBodies[0]?.prompt).toContain("ปิดด้วยข้อเสนอ");
-    expect(imageBodies[0]?.prompt).toContain(
-      "large 2:3 vertical Panel 1 on the left"
+    expect(imageBodies).toHaveLength(4);
+    expect(imageBodies.map((body) => body.size)).toEqual([
+      "1024x1536",
+      "1024x1024",
+      "1024x1024",
+      "1024x1024"
+    ]);
+    expect(imageBodies.map((body) => body.prompt)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("ALBUM IMAGE 1 OF 4"),
+        expect.stringContaining("ALBUM IMAGE 2 OF 4"),
+        expect.stringContaining("ALBUM IMAGE 3 OF 4"),
+        expect.stringContaining("ALBUM IMAGE 4 OF 4")
+      ])
     );
+    expect(imageBodies[1]?.prompt).toContain("เปิดปัญหา");
+    expect(imageBodies[2]?.prompt).toContain("อธิบายหลักฐาน");
+    expect(imageBodies[3]?.prompt).toContain("ปิดด้วยข้อเสนอ");
+    imageBodies.forEach((body) => {
+      expect(body.prompt).toContain(
+        "Do not create a collage, grid, mosaic, contact sheet"
+      );
+      expect(body.prompt).not.toContain("ALBUM MASTER");
+    });
     const payload = (await response.json()) as {
       outputs: { id: string; format: string }[];
     };
@@ -693,15 +650,9 @@ describe("handleArtworkGenerationRequest", () => {
       "hook-1-album-3-v1",
       "hook-1-album-4-v1"
     ]);
-    const panelMetadata = await Promise.all(
-      uploaded.slice(1).map(({ body }) => sharp(body).metadata())
-    );
-    expect(panelMetadata.map(({ width, height }) => [width, height])).toEqual([
-      [1280, 1920],
-      [640, 640],
-      [640, 640],
-      [640, 640]
-    ]);
+    expect(uploaded.map(({ path }) => path).some((path) =>
+      path.includes("album-master")
+    )).toBe(false);
   });
 
   it("generates two selected hooks at a time while preserving their order", async () => {
@@ -880,6 +831,12 @@ describe("handleArtworkGenerationRequest", () => {
       "PAST-WORK VISUAL DNA:"
     );
     expect(editCalls[0]?.body.get("prompt")).toContain(
+      "STYLE FIDELITY IS MANDATORY"
+    );
+    expect(editCalls[0]?.body.get("prompt")).toContain(
+      "same mood, tone, and visual style family"
+    );
+    expect(editCalls[0]?.body.get("prompt")).toContain(
       "preferred Thai/English/mixed language behavior"
     );
     expect(editCalls[0]?.body.get("prompt")).toContain(
@@ -997,6 +954,10 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(generationPrompt).toContain(
       "Study the attached Creative Compass artwork references directly"
+    );
+    expect(generationPrompt).toContain("STYLE FIDELITY IS MANDATORY");
+    expect(generationPrompt).toContain(
+      "same art director and design system created a new campaign for this idea"
     );
     expect(generationPrompt).toContain(
       "coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment"
@@ -1444,6 +1405,10 @@ describe("handleArtworkGenerationRequest", () => {
       '"role": "Supporting reference · Style · Workshop CTA"'
     );
     expect(prompt).toContain("Extract the design thinking behind the references");
+    expect(prompt).toContain("STYLE FIDELITY IS MANDATORY");
+    expect(prompt).toContain(
+      "same mood, tone, and visual style family"
+    );
     expect(prompt).toContain('"brandMemory"');
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');

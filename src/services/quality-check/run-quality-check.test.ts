@@ -53,6 +53,7 @@ describe("runQualityCheck", () => {
         brand
       }),
       brief: "Promote the workday bundle.",
+      selectedProductIds: [brand.library.products[0]?.id ?? ""],
       referenceImages: [
         {
           id: "reference-1",
@@ -117,6 +118,7 @@ describe("runQualityCheck", () => {
       }[];
     };
     expect(request.brandContext.name).toBe("BoneFit");
+    expect(request.brandContext.products).toHaveLength(1);
     expect(request.brandContext.products[0]).toContain("Posture support");
     expect(request.referenceImages).toEqual([
       {

@@ -10,6 +10,7 @@ import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-
 import { MockBrandRepository } from "../../repositories/brands/mock-brand-repository";
 import { MockClientIntakeRepository } from "../../repositories/client-intake/mock-client-intake-repository";
 import { createInitialWorkflowState, workflowReducer } from "./reducer";
+import type { WorkflowAction, WorkflowState } from "./model";
 import {
   ApprovalStage,
   BriefStage,
@@ -469,6 +470,77 @@ describe("redesigned workflow stages", () => {
     expect(
       within(dialog).getByText("Used in Hook Agent context")
     ).toBeTruthy();
+  });
+
+  it("uploads a reference from Manage brand materials and syncs the library", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const createReferenceImage = vi.spyOn(
+      memoryRepository,
+      "createReferenceImage"
+    );
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn().mockReturnValue("blob:brand-reference")
+    });
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const dialog = stage.getByRole("dialog", {
+      name: "Manage brand materials"
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: /References/ })
+    );
+
+    const file = new File(["image"], "approved-moodboard.png", {
+      type: "image/png"
+    });
+    await user.upload(
+      within(dialog).getByLabelText("Upload reference"),
+      file
+    );
+
+    await waitFor(() =>
+      expect(createReferenceImage).toHaveBeenCalledWith({
+        clientId: state.brand?.id,
+        file
+      })
+    );
+    expect(
+      within(dialog).getByRole("img", { name: "approved-moodboard.png" })
+    ).toBeTruthy();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-brand-references",
+      items: [
+        expect.objectContaining({
+          title: "approved-moodboard.png",
+          assetUrl: "blob:brand-reference"
+        }),
+        ...(state.brand?.library.refs ?? [])
+      ]
+    });
   });
 
   it("adds a guideline from the Memory header through file or pasted text", async () => {
@@ -947,8 +1019,18 @@ describe("redesigned workflow stages", () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const uploadedReference = {
+      id: "uploaded-reference",
+      title: "Uploaded reference.png",
+      description: "",
+      assetUrl: "https://assets.example.com/uploaded-reference.png"
+    };
+    const createReferenceImage = vi
+      .spyOn(memoryRepository, "createReferenceImage")
+      .mockResolvedValue(uploadedReference);
     const view = render(
-      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+      <BrandMemoryProvider repository={memoryRepository}>
         <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
       </BrandMemoryProvider>
     );
@@ -964,9 +1046,46 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("heading", { name: "Creative brief" })
     ).toBeTruthy();
-    expect(stage.getByRole("heading", { name: "Signal stack" })).toBeTruthy();
+    expect(stage.getByRole("heading", { name: "Brief materials" })).toBeTruthy();
     expect(
       stage.getByRole("heading", { name: "Primary success metric" })
+    ).toBeTruthy();
+    const productTruthOptions = stage.getAllByRole("checkbox", {
+      name: /Use product/
+    }) as HTMLInputElement[];
+    expect(productTruthOptions).toHaveLength(
+      state.brand?.library.products.length ?? 0
+    );
+    expect(productTruthOptions.every((option) => option.checked)).toBe(true);
+    const productTruth = stage
+      .getByText("Product truth")
+      .closest("details");
+    const firstProductDescription =
+      state.brand?.library.products[0]?.description;
+    if (!productTruth || !firstProductDescription) {
+      throw new Error("Expected Product truth fixture.");
+    }
+    expect((productTruth as HTMLDetailsElement).open).toBe(true);
+    expect(
+      within(productTruth).queryByText(firstProductDescription)
+    ).toBeNull();
+    const referenceContext = stage
+      .getByText("Reference context")
+      .closest("details");
+    const materialsContext = stage
+      .getByRole("button", { name: "Add Materials" })
+      .closest(".compass-signal-disclosure-wrap")
+      ?.querySelector("details");
+    expect((referenceContext as HTMLDetailsElement | null)?.open).toBe(true);
+    expect((materialsContext as HTMLDetailsElement | null)?.open).toBe(false);
+    expect(
+      stage.getByRole("button", { name: "Add Product truth" })
+    ).toBeTruthy();
+    expect(
+      stage.getByRole("button", { name: "Add Reference" })
+    ).toBeTruthy();
+    expect(
+      stage.getByRole("button", { name: "Add Materials" })
     ).toBeTruthy();
     expect(
       stage.getByRole("button", { name: /CTR/i }).getAttribute("aria-pressed")
@@ -1015,10 +1134,62 @@ describe("redesigned workflow stages", () => {
       metric: "ROAS"
     });
 
+    const firstProduct = state.brand?.library.products[0];
+    if (!firstProduct) throw new Error("Expected a product fixture.");
     await user.click(
-      stage.getByRole("button", { name: "Manage brief materials" })
+      stage.getByRole("checkbox", {
+        name: `Use product ${firstProduct.title}`
+      })
     );
-    const materialsDialog = stage.getByRole("dialog", {
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "toggle-product-context",
+      id: firstProduct.id
+    });
+
+    await user.click(
+      stage.getByRole("button", { name: "Add Product truth" })
+    );
+    let materialsDialog = stage.getByRole("dialog", {
+      name: "Brief materials"
+    });
+    expect(
+      within(materialsDialog)
+        .getByRole("button", { name: "Product truth" })
+        .getAttribute("aria-expanded")
+    ).toBe("true");
+    await user.click(
+      stage.getByRole("button", { name: "Close brief materials" })
+    );
+
+    await user.click(stage.getByRole("button", { name: "Add Reference" }));
+    materialsDialog = stage.getByRole("dialog", {
+      name: "Brief materials"
+    });
+    expect(
+      within(materialsDialog)
+        .getByRole("button", { name: "Reference board" })
+        .getAttribute("aria-expanded")
+    ).toBe("true");
+    await user.click(
+      stage.getByRole("button", { name: "Close brief materials" })
+    );
+
+    await user.click(stage.getByRole("button", { name: "Add Materials" }));
+    materialsDialog = stage.getByRole("dialog", { name: "Brief materials" });
+    expect(
+      within(materialsDialog)
+        .getByRole("button", { name: "Materials" })
+        .getAttribute("aria-expanded")
+    ).toBe("true");
+    await user.click(
+      stage.getByRole("button", { name: "Close brief materials" })
+    );
+
+    expect(
+      stage.queryByRole("button", { name: "Manage brief materials" })
+    ).toBeNull();
+    await user.click(stage.getByRole("button", { name: "Add Reference" }));
+    materialsDialog = stage.getByRole("dialog", {
       name: "Brief materials"
     });
     expect(materialsDialog).toBeTruthy();
@@ -1026,13 +1197,52 @@ describe("redesigned workflow stages", () => {
       within(materialsDialog).getByRole("heading", { name: "Use from library" })
     ).toBeTruthy();
     expect(
+      within(materialsDialog).getByRole("button", { name: "Materials" })
+    ).toBeTruthy();
+    const referenceFile = new File(["reference"], "Uploaded reference.png", {
+      type: "image/png"
+    });
+    await user.upload(
+      within(materialsDialog).getByLabelText("Upload reference"),
+      referenceFile
+    );
+    await waitFor(() =>
+      expect(createReferenceImage).toHaveBeenCalledWith({
+        clientId: state.brand?.id,
+        file: referenceFile
+      })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-brand-references",
+      items: [uploadedReference, ...(state.brand?.library.refs ?? [])]
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "toggle-reference-image",
+      item: {
+        id: "library-uploaded-reference",
+        url: uploadedReference.assetUrl,
+        label: uploadedReference.title,
+        role: "style"
+      }
+    });
+    expect(
       within(materialsDialog).getByRole("heading", {
         name: "References in Brief materials"
       })
     ).toBeTruthy();
     expect(
-      within(materialsDialog).getByRole("heading", { name: "Uploaded materials" })
+      within(materialsDialog).getByRole("heading", { name: "Materials" })
     ).toBeTruthy();
+    expect(
+      within(materialsDialog).getByText(
+        "Upload the exact products, people, or objects you want used in the artwork."
+      )
+    ).toBeTruthy();
+    expect(
+      within(materialsDialog).queryByRole("button", {
+        name: "Product materials"
+      })
+    ).toBeNull();
     await user.click(
       stage.getByRole("button", { name: "Close brief materials" })
     );
@@ -1651,7 +1861,7 @@ describe("redesigned workflow stages", () => {
     ).toBe(true);
   });
 
-  it("combines three album panels into one review card and preview", async () => {
+  it("groups three album images into one review card and shows standalone previews", async () => {
     const user = userEvent.setup();
     const base = buildCreativeState();
     const sourceOutput = base.outputs[0];
@@ -1680,8 +1890,11 @@ describe("redesigned workflow stages", () => {
       albumSection.querySelectorAll(".compass-build-review-card")
     ).toHaveLength(1);
     expect(
-      albumSection.querySelectorAll(".compass-album-mosaic img")
+      albumSection.querySelectorAll(".compass-album-panels img")
     ).toHaveLength(3);
+    expect(
+      albumSection.querySelector(".compass-album-panels.compact")
+    ).toBeTruthy();
     expect(within(albumSection).getAllByRole("textbox", {
       name: "Edit caption"
     })).toHaveLength(1);
@@ -1709,7 +1922,8 @@ describe("redesigned workflow stages", () => {
     const dialog = stage.getByRole("dialog", {
       name: "Album creative preview"
     });
-    expect(dialog.querySelectorAll(".compass-album-mosaic img")).toHaveLength(3);
+    expect(dialog.querySelectorAll(".compass-album-panels img")).toHaveLength(3);
+    expect(dialog.querySelector(".compass-album-panels.compact")).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
   });
 
@@ -1734,6 +1948,32 @@ describe("redesigned workflow stages", () => {
       stage.queryByText("Clear, distinct, and ready for human review.")
     ).toBeNull();
     expect(stage.getAllByText("AI draft")).toHaveLength(state.outputs.length);
+  });
+
+  it("sends unchecked drafts directly to Internal QC", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+    const sendButton = stage.getByRole("button", {
+      name: "Send to Internal QC →"
+    }) as HTMLButtonElement;
+
+    expect(state.qaComplete).toBe(false);
+    expect(sendButton.disabled).toBe(false);
+    expect(
+      stage.getByRole("button", { name: "Quality check (optional)" })
+    ).toBeTruthy();
+
+    await user.click(sendButton);
+
+    await waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "set-stage",
+        stage: "approval"
+      });
+    });
   });
 
   it("shows the score and compact review returned by real QA", () => {
@@ -2113,6 +2353,43 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("keeps Internal QC inspection available to viewers without approval controls", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={state} dispatch={dispatch} canEdit={false} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    expect(
+      (
+        stage.getByRole("button", {
+          name: `Approve all · ${state.outputs.filter(
+            (output) => !output.format.toUpperCase().includes("UGC")
+          ).length}`
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+    expect(
+      stage
+        .getAllByRole("button", { name: "Approve → CS" })
+        .every((button) => (button as HTMLButtonElement).disabled)
+    ).toBe(true);
+
+    await user.click(
+      stage.getByRole("button", { name: /Open creative 1 preview/i })
+    );
+    expect(
+      stage.getByRole("dialog", { name: "Creative 1 preview" })
+    ).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Close" }));
+    expect(stage.queryByRole("dialog")).toBeNull();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("reviews and counts a three-panel album as one QC creative", async () => {
     const user = userEvent.setup();
     const base = buildCreativeState();
@@ -2135,7 +2412,7 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(1);
-    expect(view.container.querySelectorAll(".compass-album-mosaic img")).toHaveLength(3);
+    expect(view.container.querySelectorAll(".compass-album-panels img")).toHaveLength(3);
     expect(stage.getByRole("button", { name: "Approve all · 1" })).toBeTruthy();
     expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(1);
     expect(
@@ -2257,6 +2534,140 @@ describe("redesigned workflow stages", () => {
     ]);
   });
 
+  it("groups an album into one Client card and applies decisions to every image", async () => {
+    const user = userEvent.setup();
+    const base = buildClientState();
+    const source = base.outputs[0];
+    if (!source) throw new Error("Expected a creative output fixture.");
+    const albumOutputs = [1, 2, 3].map((panel) => ({
+      ...source,
+      id: `${source.directionId}-album-${panel}-v1`,
+      format: "Album post",
+      clientStatus: "sent" as const,
+      assetUrl: `https://example.com/client-album-${panel}.png`
+    }));
+    const state = { ...base, outputs: albumOutputs };
+    const dispatch = vi.fn();
+    const view = render(<ClientStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    expect(
+      view.container.querySelectorAll(".compass-client-card")
+    ).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll(
+        ".compass-client-card .compass-album-panels img"
+      )
+    ).toHaveLength(3);
+    expect(stage.getAllByRole("button", { name: "Request changes" })).toHaveLength(
+      1
+    );
+    expect(stage.getAllByRole("button", { name: "Approve" })).toHaveLength(1);
+    expect(stage.getByText("0 / 1 approved")).toBeTruthy();
+
+    await user.click(stage.getByRole("button", { name: "Approve" }));
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
+      albumOutputs.map((output) => ({
+        type: "approve-output",
+        id: output.id
+      }))
+    );
+
+    dispatch.mockClear();
+    await user.click(stage.getByRole("button", { name: "Request changes" }));
+    expect(
+      stage
+        .getByRole("dialog", { name: "Request changes" })
+        .classList.contains("compass-qc-decision-modal")
+    ).toBe(true);
+    await user.click(stage.getByRole("button", { name: "Both" }));
+    await user.type(
+      stage.getByRole("textbox", { name: "Change instruction" }),
+      "Make the album story easier to follow."
+    );
+    await user.click(stage.getByRole("button", { name: "Route changes" }));
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
+      albumOutputs.map((output) => ({
+        type: "request-client-change",
+        id: output.id,
+        targetRole: "both",
+        comment: "Make the album story easier to follow."
+      }))
+    );
+    const routedAlbum = dispatch.mock.calls.reduce<WorkflowState>(
+      (current, [action]) =>
+        workflowReducer(current, action as WorkflowAction),
+      state
+    );
+    expect(
+      routedAlbum.outputs.every(
+        (output) =>
+          output.clientStatus === "revision" &&
+          output.approval.graphicDesign === "rejected"
+      )
+    ).toBe(true);
+  });
+
+  it("lets viewers open Client artwork while keeping feedback actions disabled", async () => {
+    const user = userEvent.setup();
+    const state = buildClientState();
+    const dispatch = vi.fn();
+    const view = render(
+      <ClientStage state={state} dispatch={dispatch} canEdit={false} />
+    );
+    const stage = within(view.container);
+
+    expect(
+      stage
+        .getAllByRole("button", { name: "Request changes" })
+        .every((button) => (button as HTMLButtonElement).disabled)
+    ).toBe(true);
+    expect(
+      stage
+        .getAllByRole("button", { name: "Approve" })
+        .every((button) => (button as HTMLButtonElement).disabled)
+    ).toBe(true);
+
+    await user.click(
+      stage.getByRole("button", { name: /Open creative 1 preview/i })
+    );
+    expect(
+      stage.getByRole("dialog", { name: "Creative 1 preview" })
+    ).toBeTruthy();
+    await user.click(stage.getByRole("button", { name: "Close" }));
+    expect(stage.queryByRole("dialog")).toBeNull();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("opens a client revision in the selected Internal QC queue instead of PM", () => {
+    const state = buildClientState();
+    const output = state.outputs[0];
+    if (!output) throw new Error("Expected a creative output fixture.");
+    const routed = workflowReducer(state, {
+      type: "request-client-change",
+      id: output.id,
+      targetRole: "clientService",
+      comment: "Make the client-facing message more precise."
+    });
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ApprovalStage state={routed} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    expect(
+      stage.getByRole("heading", { name: "Assets in CS review" })
+    ).toBeTruthy();
+    expect(
+      stage.getByText("Make the client-facing message more precise.")
+    ).toBeTruthy();
+    expect(
+      stage.queryByRole("heading", { name: "Assets in PM review" })
+    ).toBeNull();
+  });
+
   it("requires client feedback before routing a creative to Internal QC", async () => {
     const user = userEvent.setup();
     const state = buildClientState();
@@ -2270,27 +2681,31 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("button", { name: "← Back to Internal QC" })
     ).toBeTruthy();
-    expect(stage.getAllByRole("button", { name: "Request change" })).toHaveLength(
+    expect(stage.getAllByRole("button", { name: "Request changes" })).toHaveLength(
       state.outputs.length
     );
 
-    await user.click(stage.getAllByRole("button", { name: "Request change" })[0]!);
-    expect(stage.getByRole("dialog", { name: "Request a change" })).toBeTruthy();
+    await user.click(stage.getAllByRole("button", { name: "Request changes" })[0]!);
+    expect(stage.getByRole("dialog", { name: "Request changes" })).toBeTruthy();
 
-    await user.click(stage.getByRole("button", { name: "Route to Internal QC" }));
+    await user.click(stage.getByRole("button", { name: "Route changes" }));
     expect(
-      stage.getByText("Add a comment before requesting changes.")
+      stage.getByText(
+        "Choose GD, CS, or Both and add one clear change instruction."
+      )
     ).toBeTruthy();
 
+    await user.click(stage.getByRole("button", { name: "CS" }));
     await user.type(
-      stage.getByRole("textbox", { name: "Required comment" }),
+      stage.getByRole("textbox", { name: "Change instruction" }),
       "Make the product benefit easier to scan."
     );
-    await user.click(stage.getByRole("button", { name: "Route to Internal QC" }));
+    await user.click(stage.getByRole("button", { name: "Route changes" }));
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "request-client-change",
       id: firstOutput.id,
+      targetRole: "clientService",
       comment: "Make the product benefit easier to scan."
     });
     expect(stage.queryByRole("dialog")).toBeNull();

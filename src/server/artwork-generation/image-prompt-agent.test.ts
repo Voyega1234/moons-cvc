@@ -134,27 +134,27 @@ describe("generateImagePrompt", () => {
   it.each([
     [
       "three-vertical",
-      "large 1:2 vertical cover on the left; two 1:1 panels stacked on the right",
-      '"panel3": "Offer"'
+      "portrait cover with hook and main visual",
+      '"image3": "Offer"'
     ],
     [
       "three-horizontal",
-      "large 2:1 horizontal cover across the top; two 1:1 panels below",
-      '"panel3": "Offer"'
+      "landscape cover with hook and main visual",
+      '"image3": "Offer"'
     ],
     [
       "four-vertical",
-      "large 2:3 vertical cover on the left; three 1:1 panels stacked on the right",
-      '"panel4": "Offer"'
+      "portrait cover with hook and main visual",
+      '"image4": "Offer"'
     ],
     [
       "four-grid",
-      "four equal 1:1 panels in a 2 by 2 grid",
-      '"panel4": "Offer"'
+      "square cover with hook and main visual",
+      '"image4": "Offer"'
     ]
   ] as const)(
-    "describes the %s master grid for Standard album posts",
-    async (albumFormat, grid, finalPanel) => {
+    "describes the %s standalone image sequence for Standard album posts",
+    async (albumFormat, firstImage, finalImage) => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push({
@@ -185,12 +185,13 @@ describe("generateImagePrompt", () => {
     const promptText = (
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
-    expect(promptText).toContain('"albumMaster"');
-    expect(promptText).toContain(`"grid": "${grid}"`);
-    expect(promptText).toContain(finalPanel);
+    expect(promptText).toContain('"albumSequence"');
+    expect(promptText).toContain(`"image1": "${firstImage}"`);
+    expect(promptText).toContain(finalImage);
     expect(promptText).toContain(
-      '"cropSafety": "each panel self-contained; no essential element crosses a seam"'
+      '"delivery": "separate standalone image files; never a combined master, grid, collage, mosaic, or contact sheet"'
     );
+    expect(promptText).not.toContain('"albumMaster"');
     }
   );
 

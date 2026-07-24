@@ -24,6 +24,11 @@ const run: WorkflowState = {
           id: "p1",
           title: "AI SEO Workshop",
           description: "Webinar for B2B owners"
+        },
+        {
+          id: "p2",
+          title: "Creative Strategy Workshop",
+          description: "Workshop for marketing teams"
         }
       ],
       docs: [],
@@ -123,6 +128,19 @@ describe("buildHookGenerationHarnessRequest", () => {
       { service: "single-static", count: 5 },
       { service: "album-post", count: 3 },
       { service: "ugc-video", count: 4 }
+    ]);
+  });
+
+  it("sends only products selected in Product truth", () => {
+    const request = buildHookGenerationHarnessRequest({
+      run: { ...run, selectedProductIds: ["p2"] }
+    });
+
+    expect(request.brandLibrary.products).toEqual([
+      {
+        title: "Creative Strategy Workshop",
+        description: "Workshop for marketing teams"
+      }
     ]);
   });
 

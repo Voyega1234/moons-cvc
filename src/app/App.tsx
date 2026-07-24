@@ -94,6 +94,9 @@ export function App() {
   canEditRef.current = runCanEdit;
   ownershipVerifiedRef.current = ownershipVerified;
   const [editWarning, setEditWarning] = useState<string | null>(null);
+  const [viewerStageByRunId, setViewerStageByRunId] = useState<
+    Record<string, CreativeStage>
+  >({});
   const visibleToast = persistenceError
     ? {
         title: "Workspace could not be saved",
@@ -135,8 +138,33 @@ export function App() {
     },
     [state.id]
   );
+  const interactiveDispatch = useCallback<Dispatch<WorkflowAction>>(
+    (action) => {
+      if (action.type === "set-stage" && !canEditRef.current) {
+        setEditWarning(null);
+        setViewerStageByRunId((current) => ({
+          ...current,
+          [state.id]: action.stage
+        }));
+        return;
+      }
+      dispatch(action);
+    },
+    [dispatch, state.id]
+  );
+  const visibleStage = runCanEdit
+    ? state.stage
+    : viewerStageByRunId[state.id] ?? state.stage;
+  const visibleState =
+    visibleStage === state.stage ? state : { ...state, stage: visibleStage };
 
   const createRun = useCallback((keepBrand: boolean) => {
+    if (!canEditRef.current) {
+      setEditWarning(
+        "Viewers can inspect every stage, but cannot create or recreate projects."
+      );
+      return;
+    }
     workspaceDispatch({
       type: "create-run",
       id: createId("run"),
@@ -151,8 +179,8 @@ export function App() {
     CLEAR_TOAST_ACTION
   );
 
-  const stage = stages.find((candidate) => candidate.id === state.stage);
-  if (!stage) throw new Error(`Unknown stage: ${state.stage}`);
+  const stage = stages.find((candidate) => candidate.id === visibleState.stage);
+  if (!stage) throw new Error(`Unknown stage: ${visibleState.stage}`);
 
   return (
     <div
@@ -160,16 +188,17 @@ export function App() {
     >
       <NavigationRail
         workspace={workspace}
-        state={state}
-        dispatch={dispatch}
+        state={visibleState}
+        dispatch={interactiveDispatch}
         workspaceDispatch={workspaceDispatch}
         createRun={createRun}
+        canEdit={runCanEdit}
       />
       <div className="compass-page">
         <Header
           workspace={workspace}
-          state={state}
-          dispatch={dispatch}
+          state={visibleState}
+          dispatch={interactiveDispatch}
           workspaceDispatch={workspaceDispatch}
           createRun={createRun}
           canEdit={runCanEdit}
@@ -184,6 +213,7 @@ export function App() {
                 dispatch={dispatch}
                 workspace={workspace}
                 workspaceDispatch={workspaceDispatch}
+                canCreate={runCanEdit}
                 onOpenStudio={() =>
                   workspaceDispatch({ type: "set-view", view: "studio" })
                 }
@@ -191,15 +221,14 @@ export function App() {
             ) : (
               <>
                 <RunOwnershipBar
-                  runId={state.id}
-                  completed={state.done}
-                  onCreateProject={() => createRun(true)}
+                  runId={visibleState.id}
+                  completed={visibleState.done}
                   busy={
-                    state.ideaGenerationStatus === "running" ||
-                    state.artworkGenerationStatus === "running"
+                    visibleState.ideaGenerationStatus === "running" ||
+                    visibleState.artworkGenerationStatus === "running"
                   }
                 />
-                {state.stage === "start" ? (
+                {visibleState.stage === "start" ? (
                   <section className="hero compass-hero">
                     <div className="compass-hero-copy">
                       <span className="compass-kicker">
@@ -217,8 +246,8 @@ export function App() {
                       </p>
                       <div className="compass-hero-meta">
                         <span className="compass-status-pill">
-                          {state.brand
-                            ? `${state.brand.name} workspace ready`
+                          {visibleState.brand
+                            ? `${visibleState.brand.name} workspace ready`
                             : "Waiting for a brand"}
                         </span>
                         <span className="compass-status-pill">
@@ -293,11 +322,16 @@ export function App() {
                 ) : null}
                 <fieldset
                   className="compass-run-edit-scope"
-                  disabled={!runCanEdit && state.stage !== "studio"}
+                  disabled={
+                    !runCanEdit &&
+                    !["studio", "approval", "client"].includes(
+                      visibleState.stage
+                    )
+                  }
                 >
                   <CurrentStage
-                    state={state}
-                    dispatch={dispatch}
+                    state={visibleState}
+                    dispatch={interactiveDispatch}
                     canEdit={runCanEdit}
                     onCreateRun={() => createRun(true)}
                   />
@@ -337,13 +371,15 @@ export function NavigationRail({
   state,
   dispatch,
   workspaceDispatch,
-  createRun
+  createRun,
+  canEdit
 }: {
   workspace: WorkspaceState;
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
+  canEdit: boolean;
 }) {
   const learnAction: WorkflowAction = { type: "set-stage", stage: "summary" };
   const learnBlocked = workflowActionBlockReason(state, learnAction);
@@ -404,6 +440,7 @@ export function NavigationRail({
       <button
         className="compass-rail-create"
         type="button"
+        disabled={!canEdit}
         aria-label="New project"
         title="Create a project and choose a client"
         onClick={() => createRun(false)}
@@ -489,6 +526,7 @@ function Header({
               type="button"
               title="Refresh studio"
               aria-label="Refresh studio"
+              disabled={!canEdit}
               onClick={() => createRun(false)}
             >
               <ArrowClockwise size={18} weight="bold" aria-hidden="true" />
@@ -501,6 +539,7 @@ function Header({
               workspace={workspace}
               workspaceDispatch={workspaceDispatch}
               createRun={createRun}
+              canEdit={canEdit}
             />
             <MemoryRibbon state={state} />
           </>
@@ -843,11 +882,13 @@ export function NotificationMailbox({
 function RunBar({
   workspace,
   workspaceDispatch,
-  createRun
+  createRun,
+  canEdit
 }: {
   workspace: WorkspaceState;
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
+  canEdit: boolean;
 }) {
   return (
     <div className="runs-bar">
@@ -884,6 +925,7 @@ function RunBar({
                 <button
                   className="run-x"
                   type="button"
+                  disabled={!canEdit}
                   title="Close this run"
                   aria-label={`Close ${run.brand?.name ?? "new"} run`}
                   onClick={() =>
@@ -900,6 +942,7 @@ function RunBar({
       <button
         className="runs-new"
         type="button"
+        disabled={!canEdit}
         onClick={() => createRun(true)}
       >
         + New creative
@@ -908,7 +951,7 @@ function RunBar({
   );
 }
 
-function Journey({
+export function Journey({
   state,
   dispatch,
   canEdit
@@ -931,15 +974,14 @@ function Journey({
       </div>
       <div className="journey" role="tablist" aria-label="Creative run steps">
         {stages.map((stage, index) => {
-          const locked = index > highestUnlocked;
+          const locked = canEdit && index > highestUnlocked;
           const navigationAction: WorkflowAction = {
             type: "set-stage",
             stage: stage.id
           };
-          const blockedReason = workflowActionBlockReason(
-            state,
-            navigationAction
-          );
+          const blockedReason = canEdit
+            ? workflowActionBlockReason(state, navigationAction)
+            : null;
           const active = stage.id === state.stage;
           const done = index < activeIndex;
           return (
@@ -955,7 +997,7 @@ function Journey({
                     ? `${stage.name} (current)`
                     : stage.name
               }
-              disabled={locked || !canEdit}
+              disabled={locked}
               title={blockedReason ?? undefined}
               className={`${active ? "active" : ""} ${done ? "done" : ""} ${locked ? "locked" : ""}`}
               onClick={() => dispatch(navigationAction)}
@@ -1055,9 +1097,9 @@ function CurrentStage({
     case "studio":
       return <StudioStage {...props} canEdit={canEdit} />;
     case "approval":
-      return <ApprovalStage {...props} />;
+      return <ApprovalStage {...props} canEdit={canEdit} />;
     case "client":
-      return <ClientStage {...props} />;
+      return <ClientStage {...props} canEdit={canEdit} />;
     case "summary":
       return <SummaryStage {...props} onCreateRun={onCreateRun} />;
   }

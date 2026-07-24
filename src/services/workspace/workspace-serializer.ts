@@ -156,6 +156,10 @@ function parseRun(value: unknown): WorkflowState | null {
   const brief = parseString(value.brief, true);
   const attachments = parseStringArray(value.attachments);
   const uploadedMaterials = parseUploadedMaterials(value.uploadedMaterials);
+  const selectedProductIds =
+    value.selectedProductIds === undefined
+      ? undefined
+      : parseStringArray(value.selectedProductIds);
   const persistedIdeaGenerationStatus =
     value.ideaGenerationStatus === undefined
       ? "idle"
@@ -198,6 +202,7 @@ function parseRun(value: unknown): WorkflowState | null {
     brief === null ||
     !attachments ||
     !uploadedMaterials ||
+    (value.selectedProductIds !== undefined && !selectedProductIds) ||
     !persistedIdeaGenerationStatus ||
     !persistedArtworkGenerationStatus ||
     (persistedIdeaGenerationError === null &&
@@ -281,6 +286,7 @@ function parseRun(value: unknown): WorkflowState | null {
     attachments,
     uploadedMaterials,
     referenceImages,
+    ...(selectedProductIds == null ? {} : { selectedProductIds }),
     ideaGenerationStatus,
     ideaGenerationError,
     artworkGenerationStatus,
