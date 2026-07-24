@@ -871,6 +871,15 @@ describe("handleArtworkGenerationRequest", () => {
       "ONE CAMPAIGN WORLD IS MANDATORY"
     );
     expect(imageBodies[0]?.prompt).toContain(
+      "render exactly one CTA across the entire master"
+    );
+    expect(imageBodies[0]?.prompt).toContain(
+      "located only in the closing supporting area"
+    );
+    expect(imageBodies[0]?.prompt).toContain(
+      "the CTA text must appear once, not twice"
+    );
+    expect(imageBodies[0]?.prompt).toContain(
       "not a collage of separate mini-posters"
     );
     expect(imageBodies[0]?.prompt).not.toContain("Panel 1");
@@ -1759,6 +1768,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("preferredHeroType");
     expect(prompt).not.toContain("ALBUM MASTER GRID");
     expect(prompt).not.toContain("ONE CAMPAIGN WORLD IS MANDATORY");
+    expect(prompt).not.toContain("CTA UNIQUENESS IS MANDATORY");
     expect(prompt).not.toContain("The prescribed layout is non-negotiable");
     expect(prompt).not.toContain(
       "Do not render sequence labels, page numbers, step numbers"

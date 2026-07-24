@@ -15,6 +15,7 @@ import {
   ApprovalStage,
   BriefStage,
   ClientStage,
+  downloadAlbumArchive,
   downloadOutputAsset,
   DirectionsStage,
   missingBrandIdentityInputs,
@@ -192,6 +193,55 @@ describe("redesigned workflow stages", () => {
     expect(createObjectUrl).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:creative-download");
+  });
+
+  it("downloads every album panel inside one zip file", async () => {
+    const baseOutput = buildCreativeState().outputs[0]!;
+    const outputs = [1, 2, 3].map((panel) => ({
+      ...baseOutput,
+      id: `${baseOutput.id}-album-${panel}`,
+      format: "Album post",
+      assetUrl: `https://storage.example.com/album-panel-${panel}.png`,
+      assetStoragePath: `run/outputs/album-panel-${panel}.png`
+    }));
+    const panelBlobs = outputs.map(
+      (_, panel) => new Blob([`panel-${panel + 1}`], { type: "image/png" })
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        const panelIndex = outputs.findIndex((output) => output.assetUrl === url);
+        return Promise.resolve({
+          ok: panelIndex >= 0,
+          status: panelIndex >= 0 ? 200 : 404,
+          blob: vi.fn().mockResolvedValue(panelBlobs[panelIndex])
+        });
+      })
+    );
+    const createObjectUrl = vi.fn().mockReturnValue("blob:album-download");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    });
+    let downloadedFileName = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadedFileName = this.download;
+    });
+
+    await downloadAlbumArchive(outputs, 2);
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(createObjectUrl.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ type: "application/zip" })
+    );
+    expect(downloadedFileName).toBe("compass-album-3.zip");
   });
 
   it("presents Signal with the reference workspace and memory composition", async () => {

@@ -795,13 +795,13 @@ function buildAlbumMasterInstruction(
       ? [
           `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
           `The first supporting area develops the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`,
-          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and contains the album's only CTA: the exact text “${hook.cta}”.`
         ]
       : [
           `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
           `The opening supporting area develops ${beats[0] ?? "the opening supporting point"}.`,
           `The evidence supporting area develops ${beats[1] ?? "the mechanism or proof"}.`,
-          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and contains the album's only CTA: the exact text “${hook.cta}”.`
         ];
   return [
     "ALBUM MASTER GRID - highest-priority layout instruction:",
@@ -810,6 +810,7 @@ function buildAlbumMasterInstruction(
     "Render one square master artwork containing the complete album. Keep every panel inside its own rectangular area.",
     "Use subtle, straight, continuous separators so the panel boundaries remain machine-detectable. Never bend, stagger, overlap, or interrupt a separator.",
     ...panelInstructions,
+    `CTA UNIQUENESS IS MANDATORY: render exactly one CTA across the entire master, located only in the closing supporting area. Do not place a CTA, button, signup banner, action strip, or duplicate of “${hook.cta}” in the cover, opening support, evidence support, header, footer, or any other area. Perform a final count before rendering: the CTA text must appear once, not twice.`,
     "Do not render sequence labels, page numbers, step numbers, or decorative numerals such as 01, 02, 03, or 04. Positional words in this instruction are structural notes only and must never become visible copy. Keep only verified dates, prices, metrics, or quantities required by the approved campaign content.",
     "Keep text, logo, CTA, faces, products, and essential proof at least 8% inside each panel boundary. Never place essential content across a separator.",
     "ONE CAMPAIGN WORLD IS MANDATORY: art-direct the complete master as one composition, not a collage of separate mini-posters. Every area must share the same brand palette, typography family, lighting logic, camera or illustration language, depth, material treatment, icon style, and production finish.",
