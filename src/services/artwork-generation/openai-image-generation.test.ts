@@ -647,6 +647,10 @@ describe("buildArtworkGenerationRequest", () => {
         "https://example.supabase.co/storage/v1/object/sign/creative-assets/flora/run-1/output.png",
       assetStoragePath: "flora/run-1/outputs/hook-1-v1.png",
       assetBucket: "creative-assets",
+      albumMasterAssetUrl:
+        "https://example.supabase.co/storage/v1/object/sign/creative-assets/flora/run-1/output-master.png",
+      albumMasterAssetStoragePath:
+        "flora/run-1/outputs/hook-1-album-master-v1.png",
       provider: "openai",
       model: "gpt-image-2",
       revisionCount: 0,
@@ -656,6 +660,10 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(output.assetUrl).toContain("creative-assets");
     expect(output.assetStoragePath).toBe("flora/run-1/outputs/hook-1-v1.png");
+    expect(output.albumMasterAssetUrl).toContain("output-master.png");
+    expect(output.albumMasterAssetStoragePath).toBe(
+      "flora/run-1/outputs/hook-1-album-master-v1.png"
+    );
     expect(output.model).toBe("gpt-image-2");
   });
 

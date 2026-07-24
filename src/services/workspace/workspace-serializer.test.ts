@@ -620,6 +620,28 @@ describe("workspace serializer", () => {
         id: firstOutput.id
       }
     });
+    const currentRun = workspace.runsById[workspace.activeRunId];
+    if (!currentRun) throw new Error("Expected the active run.");
+    workspace = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [workspace.activeRunId]: {
+          ...currentRun,
+          outputs: currentRun.outputs.map((output) =>
+            output.id === firstOutput.id
+              ? {
+                  ...output,
+                  albumMasterAssetUrl:
+                    "https://example.com/album-master.png",
+                  albumMasterAssetStoragePath:
+                    "brand/run/outputs/album-master.png"
+                }
+              : output
+          )
+        }
+      }
+    };
 
     const restored = deserializeWorkspace(
       serializeWorkspace(workspace, "2026-06-23T10:04:00.000Z")
@@ -638,6 +660,12 @@ describe("workspace serializer", () => {
     );
     expect(restoredOutput?.status).toBe("needs-revision");
     expect(restoredOutput?.savedToReferences).toBe(true);
+    expect(restoredOutput?.albumMasterAssetUrl).toBe(
+      "https://example.com/album-master.png"
+    );
+    expect(restoredOutput?.albumMasterAssetStoragePath).toBe(
+      "brand/run/outputs/album-master.png"
+    );
     expect(restored?.runsById["run-1"]?.directions[0]).toMatchObject({
       service: "single-static",
       subheadline: "Subheadline 1",

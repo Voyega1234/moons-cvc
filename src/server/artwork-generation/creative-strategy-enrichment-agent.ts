@@ -164,50 +164,68 @@ export async function enrichCreativeStrategy({
   const inputText = buildInputText(await loadPrompt(), input, evidence);
 
   try {
-    const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: resolvedModel,
-        store: false,
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_text", text: inputText }]
+    let requestText = inputText;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: resolvedModel,
+          store: false,
+          input: [
+            {
+              role: "user",
+              content: [{ type: "input_text", text: requestText }]
+            }
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "moons_creative_strategy_enrichment",
+              strict: true,
+              schema: enrichmentSchema
+            }
           }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "moons_creative_strategy_enrichment",
-            strict: true,
-            schema: enrichmentSchema
-          }
-        }
-      })
-    });
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(
-        `OpenAI creative strategy enrichment failed: ${response.status}`
-      );
+      if (!response.ok) {
+        throw new Error(
+          `OpenAI creative strategy enrichment failed: ${response.status}`
+        );
+      }
+
+      const payload = await readJsonResponse(response);
+      const responseText = extractResponseText(payload);
+      const raw = JSON.parse(responseText) as unknown;
+      try {
+        const strategy = parseAndValidateStrategy(raw, evidence);
+
+        await writeTraceSafely(writeTrace, {
+          createdAt: new Date().toISOString(),
+          model: resolvedModel,
+          status: "succeeded",
+          inputText,
+          response: strategy
+        });
+        return strategy;
+      } catch (error) {
+        if (attempt === 0 && isRetryableClaimConsistencyError(error)) {
+          requestText = buildClaimConsistencyRetryText(
+            inputText,
+            responseText,
+            readableError(error)
+          );
+          continue;
+        }
+        throw error;
+      }
     }
 
-    const payload = await readJsonResponse(response);
-    const raw = JSON.parse(extractResponseText(payload)) as unknown;
-    const strategy = parseAndValidateStrategy(raw, evidence);
-
-    await writeTraceSafely(writeTrace, {
-      createdAt: new Date().toISOString(),
-      model: resolvedModel,
-      status: "succeeded",
-      inputText,
-      response: strategy
-    });
-    return strategy;
+    throw new Error("Creative strategy enrichment retry was exhausted.");
   } catch (error) {
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
@@ -218,6 +236,32 @@ export async function enrichCreativeStrategy({
     });
     throw error;
   }
+}
+
+function isRetryableClaimConsistencyError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /^(offer|proof|differentiator) with source none must be empty\.$/.test(
+      error.message
+    )
+  );
+}
+
+function buildClaimConsistencyRetryText(
+  inputText: string,
+  previousResponse: string,
+  validationError: string
+): string {
+  return [
+    inputText,
+    "",
+    "VALIDATION RETRY",
+    `The previous JSON failed validation: ${validationError}`,
+    "Return the complete corrected JSON object. When any claim uses source \"none\", both text and evidenceId must be empty strings. Keep all grounded valid fields unchanged.",
+    "",
+    "PREVIOUS INVALID JSON",
+    previousResponse
+  ].join("\n");
 }
 
 export function buildCreativeStrategyEvidence(

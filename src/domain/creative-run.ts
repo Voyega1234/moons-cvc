@@ -289,6 +289,8 @@ export interface CreativeOutput {
   assetUrl?: string;
   assetStoragePath?: string;
   assetBucket?: string;
+  albumMasterAssetUrl?: string;
+  albumMasterAssetStoragePath?: string;
   provider?: string;
   model?: string;
   revisionCount: number;

@@ -581,6 +581,7 @@ function BrandMaterialsSummary({
     ["CI", brand?.library.brand.length ?? 0, "brand"],
     ["Guideline", brand?.library.docs.length ?? 0, "docs"],
     ["Reference style", brand?.library.refs.length ?? 0, "refs"],
+    ["Materials", state.uploadedMaterials.length, "materials"],
     [
       "Business context",
       (brand?.memory.working.length ?? 0) + (brand?.memory.avoid.length ?? 0),
@@ -1315,6 +1316,7 @@ type BrandProfileSection =
   | "products"
   | "docs"
   | "refs"
+  | "materials"
   | "past"
   | "learning"
   | "questionnaire";
@@ -1324,6 +1326,11 @@ const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["products", "Products", "Offers, benefits, audience, claim notes"],
   ["docs", "Guideline", "Editable guideline text, files, briefs, and factsheets"],
   ["refs", "References", "Visual inspiration, avoid, competitors"],
+  [
+    "materials",
+    "Materials",
+    "Products, people, and objects used directly in generated artwork"
+  ],
   ["past", "Past work", "Delivered runs and approved learnings"],
   ["learning", "Brand learning", "What's working and what to avoid"],
   [
@@ -1805,6 +1812,7 @@ function BrandLibraryModal({
     products: brand.library.products.length,
     docs: brand.library.docs.length,
     refs: brand.library.refs.length,
+    materials: state.uploadedMaterials.length,
     past: 0,
     learning: brand.memory.working.length + brand.memory.avoid.length,
     questionnaire: brand.onboardingQuestionnaire ? 1 : 0
@@ -2005,6 +2013,9 @@ function BrandProfileSectionContent({
             dispatch({ type: "sync-brand-references", items })
           }
         />
+      ) : null}
+      {section === "materials" ? (
+        <BrandMaterialsMemoryList state={state} dispatch={dispatch} />
       ) : null}
       {section === "past" ? (
         <PastWorkPreview state={state} clientId={brand.id} />
@@ -3982,6 +3993,173 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "client-context": "Person / client context"
 };
 
+function CreativeMaterialsEditor({
+  state,
+  dispatch
+}: StageProps) {
+  const [uploadPending, setUploadPending] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    if (state.uploadedMaterials.length + files.length > 8) {
+      setUploadError("Use up to 8 creative material images per brief.");
+      return;
+    }
+
+    setUploadPending(true);
+    setUploadError(null);
+    try {
+      const items = await Promise.all(
+        files.map((file) =>
+          uploadCreativeMaterial({
+            runId: state.id,
+            brandId: state.brand?.id,
+            file
+          })
+        )
+      );
+      dispatch({ type: "add-uploaded-materials", items });
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not upload the image."
+      );
+    } finally {
+      setUploadPending(false);
+    }
+  }
+
+  return (
+    <div className="compass-creative-material-editor">
+      <div className="compass-creative-material-upload-row">
+        <label className="btn secondary compass-brief-add-files">
+          {uploadPending ? "Uploading…" : "Add material images"}
+          <input
+            className="file-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            disabled={uploadPending}
+            onChange={handleUpload}
+          />
+        </label>
+      </div>
+      <p className="compass-creative-material-helper">
+        The Hook Agent inspects these images before proposing ideas. The Image
+        Agent receives them as source materials and uses each image according
+        to its assigned role.
+      </p>
+      {uploadError ? (
+        <p className="error-text" role="alert">
+          {uploadError}
+        </p>
+      ) : null}
+      {state.uploadedMaterials.length ? (
+        <div className="compass-creative-material-grid">
+          {state.uploadedMaterials.map((material) => (
+            <article
+              className="compass-creative-material-card"
+              key={material.id}
+            >
+              <img src={material.url} alt={material.name} />
+              <div className="compass-creative-material-fields">
+                <div className="compass-creative-material-name">
+                  <b>{material.name}</b>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${material.name}`}
+                    onClick={() =>
+                      dispatch({
+                        type: "remove-uploaded-material",
+                        id: material.id
+                      })
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+                <label>
+                  Use as
+                  <select
+                    value={material.role}
+                    onChange={(event) =>
+                      dispatch({
+                        type: "update-uploaded-material",
+                        id: material.id,
+                        changes: {
+                          role: event.target.value as CreativeMaterialRole
+                        }
+                      })
+                    }
+                  >
+                    {creativeMaterialRoles.map((role) => (
+                      <option value={role} key={role}>
+                        {creativeMaterialRoleLabels[role]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Usage note <span>(optional)</span>
+                  <input
+                    value={material.description}
+                    placeholder="e.g. Keep this bottle as the hero object"
+                    onChange={(event) =>
+                      dispatch({
+                        type: "update-uploaded-material",
+                        id: material.id,
+                        changes: {
+                          description: event.target.value
+                        }
+                      })
+                    }
+                  />
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="compass-signal-memory-empty">
+          <div>
+            <b>No material images added.</b>
+            <span>
+              Add a product, person, or object that should appear in the
+              generated artwork.
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BrandMaterialsMemoryList({
+  state,
+  dispatch
+}: StageProps) {
+  return (
+    <section className="memory-editor compass-brand-materials">
+      <header>
+        <div>
+          <h4>Materials</h4>
+          <p>
+            The same source images shown in Brief materials. Changes made here
+            are included in the current creative brief.
+          </p>
+        </div>
+        <span className="pill blue">
+          {state.uploadedMaterials.length} image
+          {state.uploadedMaterials.length === 1 ? "" : "s"}
+        </span>
+      </header>
+      <CreativeMaterialsEditor state={state} dispatch={dispatch} />
+    </section>
+  );
+}
+
 export function BriefStage({ state, dispatch }: StageProps) {
   const brandMemoryRepository = useBrandMemoryRepository();
   const [materialsOpen, setMaterialsOpen] = useState(false);
@@ -3991,10 +4169,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
   const [referenceUploadError, setReferenceUploadError] = useState<
     string | null
   >(null);
-  const [materialUploadPending, setMaterialUploadPending] = useState(false);
-  const [materialUploadError, setMaterialUploadError] = useState<string | null>(
-    null
-  );
   const backAction: WorkflowAction = { type: "set-stage", stage: "start" };
   const generateBlocked = workflowActionBlockReason(state, {
     type: "generate-directions",
@@ -4099,39 +4273,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
       active = false;
     };
   }, [brandMemoryRepository, dispatch, state.brand]);
-
-  async function handleCreativeMaterialUpload(
-    event: ChangeEvent<HTMLInputElement>
-  ) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    if (!files.length) return;
-    if (state.uploadedMaterials.length + files.length > 8) {
-      setMaterialUploadError("Use up to 8 creative material images per brief.");
-      return;
-    }
-
-    setMaterialUploadPending(true);
-    setMaterialUploadError(null);
-    try {
-      const items = await Promise.all(
-        files.map((file) =>
-          uploadCreativeMaterial({
-            runId: state.id,
-            brandId: state.brand?.id,
-            file
-          })
-        )
-      );
-      dispatch({ type: "add-uploaded-materials", items });
-    } catch (caught) {
-      setMaterialUploadError(
-        caught instanceof Error ? caught.message : "Could not upload the image."
-      );
-    } finally {
-      setMaterialUploadPending(false);
-    }
-  }
 
   return (
     <DecisionCard
@@ -4730,109 +4871,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
                   </header>
                   <div className="compass-brief-material-section-body">
                     <div className="compass-brief-material-modal-body">
-                      <div className="compass-creative-material-upload-row">
-                        <label className="btn secondary compass-brief-add-files">
-                          {materialUploadPending
-                            ? "Uploading…"
-                            : "Add material images"}
-                          <input
-                            className="file-input"
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp"
-                            multiple
-                            disabled={materialUploadPending}
-                            onChange={handleCreativeMaterialUpload}
-                          />
-                        </label>
-                      </div>
-                      <p className="compass-creative-material-helper">
-                        The Hook Agent inspects these images before proposing
-                        ideas. The Image Agent receives them as source materials
-                        and uses each image according to its assigned role.
-                      </p>
-                      {materialUploadError ? (
-                        <p className="error-text" role="alert">
-                          {materialUploadError}
-                        </p>
-                      ) : null}
-                      {state.uploadedMaterials.length ? (
-                        <div className="compass-creative-material-grid">
-                          {state.uploadedMaterials.map((material) => (
-                            <article
-                              className="compass-creative-material-card"
-                              key={material.id}
-                            >
-                              <img src={material.url} alt={material.name} />
-                              <div className="compass-creative-material-fields">
-                                <div className="compass-creative-material-name">
-                                  <b>{material.name}</b>
-                                  <button
-                                    type="button"
-                                    aria-label={`Remove ${material.name}`}
-                                    onClick={() =>
-                                      dispatch({
-                                        type: "remove-uploaded-material",
-                                        id: material.id
-                                      })
-                                    }
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                                <label>
-                                  Use as
-                                  <select
-                                    value={material.role}
-                                    onChange={(event) =>
-                                      dispatch({
-                                        type: "update-uploaded-material",
-                                        id: material.id,
-                                        changes: {
-                                          role: event.target
-                                            .value as CreativeMaterialRole
-                                        }
-                                      })
-                                    }
-                                  >
-                                    {creativeMaterialRoles.map((role) => (
-                                      <option value={role} key={role}>
-                                        {creativeMaterialRoleLabels[role]}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label>
-                                  Usage note <span>(optional)</span>
-                                  <input
-                                    value={material.description}
-                                    placeholder="e.g. Keep this bottle as the hero object"
-                                    onChange={(event) =>
-                                      dispatch({
-                                        type: "update-uploaded-material",
-                                        id: material.id,
-                                        changes: {
-                                          description: event.target.value
-                                        }
-                                      })
-                                    }
-                                  />
-                                </label>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      ) : null}
-                      {!state.uploadedMaterials.length ? (
-                        <div className="compass-signal-memory-empty">
-                          <div>
-                            <b>No material images added.</b>
-                            <span>
-                              Add a product, person, or object that should appear
-                              in the generated artwork.
-                            </span>
-                          </div>
-                        </div>
-                      ) : null}
+                      <CreativeMaterialsEditor
+                        state={state}
+                        dispatch={dispatch}
+                      />
                       <div className="compass-brief-files-block">
                         <div>
                           <b>Brief files</b>
@@ -6843,14 +6885,26 @@ function AlbumPanelPreview({
     0,
     albumFormatPanelCount(format)
   );
+  const masterAssetUrl = panels.find(
+    (output) => output.albumMasterAssetUrl
+  )?.albumMasterAssetUrl;
 
   return (
     <div
       aria-label={`${panels.length}-image album preview`}
-      className={`compass-album-panels ${compact ? "compact" : ""}`}
+      className={`compass-album-panels format-${format} ${compact ? "compact" : ""}`}
     >
-      {panels.map((output, index) =>
-        output.assetUrl ? (
+      {masterAssetUrl ? (
+        <img
+          className="compass-album-master-image"
+          src={masterAssetUrl}
+          alt={`${direction?.hook ?? "Album creative"} master grid`}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        panels.map((output, index) =>
+          output.assetUrl ? (
           <div className="compass-album-panel" key={output.id}>
             <img
               src={output.assetUrl}
@@ -6858,9 +6912,6 @@ function AlbumPanelPreview({
               loading="lazy"
               decoding="async"
             />
-            <span>
-              {index + 1} / {panels.length}
-            </span>
           </div>
         ) : (
           <div
@@ -6869,13 +6920,9 @@ function AlbumPanelPreview({
           >
             Image unavailable
           </div>
+          )
         )
       )}
-      {compact && panels.length > 1 ? (
-        <span className="compass-album-image-count">
-          {panels.length} images
-        </span>
-      ) : null}
     </div>
   );
 }

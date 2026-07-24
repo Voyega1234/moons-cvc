@@ -229,6 +229,72 @@ describe("enrichCreativeStrategy", () => {
     expect(result.requiresTextReview).toBe(true);
   });
 
+  it("retries once when a source-none claim is not empty", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const traces: unknown[] = [];
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        calls.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        const differentiator =
+          calls.length === 1
+            ? {
+                text: "Hand-arranged seasonal stems",
+                evidenceId: "",
+                source: "none"
+              }
+            : { text: "", evidenceId: "", source: "none" };
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify(
+              strategy({
+                differentiator,
+                evidenceStatus: "mixed",
+                missingEvidence: ["verified differentiator"]
+              })
+            )
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const result = await enrichCreativeStrategy({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input,
+      loadPrompt: async () => "PROMPT",
+      writeTrace: async (trace) => {
+        traces.push(trace);
+      }
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryPrompt = (
+      calls[1]?.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(retryPrompt).toContain(
+      "differentiator with source none must be empty."
+    );
+    expect(retryPrompt).toContain(
+      'When any claim uses source "none", both text and evidenceId must be empty strings.'
+    );
+    expect(result.differentiator).toEqual({
+      text: "",
+      evidenceId: "",
+      source: "none"
+    });
+    expect(traces).toEqual([
+      expect.objectContaining({
+        status: "succeeded",
+        response: expect.objectContaining({
+          differentiator: { text: "", evidenceId: "", source: "none" }
+        })
+      })
+    ]);
+  });
+
   it("builds evidence separately from creative-preference memory and style references", () => {
     const evidence = buildCreativeStrategyEvidence(input);
 

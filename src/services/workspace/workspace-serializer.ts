@@ -736,6 +736,14 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
         : parseString(item.assetStoragePath);
     const assetBucket =
       item.assetBucket === undefined ? undefined : parseString(item.assetBucket);
+    const albumMasterAssetUrl =
+      item.albumMasterAssetUrl === undefined
+        ? undefined
+        : parseString(item.albumMasterAssetUrl);
+    const albumMasterAssetStoragePath =
+      item.albumMasterAssetStoragePath === undefined
+        ? undefined
+        : parseString(item.albumMasterAssetStoragePath);
     const provider =
       item.provider === undefined ? undefined : parseString(item.provider);
     const model = item.model === undefined ? undefined : parseString(item.model);
@@ -758,6 +766,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       assetUrl === null ||
       assetStoragePath === null ||
       assetBucket === null ||
+      albumMasterAssetUrl === null ||
+      albumMasterAssetStoragePath === null ||
       provider === null ||
       model === null ||
       savedToReferences === null
@@ -777,6 +787,10 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       ...(assetUrl ? { assetUrl } : {}),
       ...(assetStoragePath ? { assetStoragePath } : {}),
       ...(assetBucket ? { assetBucket } : {}),
+      ...(albumMasterAssetUrl ? { albumMasterAssetUrl } : {}),
+      ...(albumMasterAssetStoragePath
+        ? { albumMasterAssetStoragePath }
+        : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
       ...(savedToReferences !== undefined ? { savedToReferences } : {})

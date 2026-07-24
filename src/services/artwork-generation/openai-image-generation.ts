@@ -873,6 +873,12 @@ export function normalizeArtworkOutput(output: CreativeOutput): CreativeOutput {
       ? { assetStoragePath: output.assetStoragePath }
       : {}),
     ...(output.assetBucket ? { assetBucket: output.assetBucket } : {}),
+    ...(output.albumMasterAssetUrl
+      ? { albumMasterAssetUrl: output.albumMasterAssetUrl }
+      : {}),
+    ...(output.albumMasterAssetStoragePath
+      ? { albumMasterAssetStoragePath: output.albumMasterAssetStoragePath }
+      : {}),
     ...(output.provider ? { provider: output.provider } : {}),
     ...(output.model ? { model: output.model } : {}),
     revisionCount: output.revisionCount,

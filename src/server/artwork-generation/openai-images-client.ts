@@ -16,6 +16,21 @@ export interface GenerateImageOptions {
 const OPENAI_IMAGES_GENERATIONS_ENDPOINT =
   "https://api.openai.com/v1/images/generations";
 const OPENAI_IMAGES_EDITS_ENDPOINT = "https://api.openai.com/v1/images/edits";
+export const OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS = 30_000;
+
+export function fitOpenAIImagePrompt(prompt: string): string {
+  if (prompt.length <= OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS) return prompt;
+
+  const marker =
+    "\n\n[Lower-priority context was shortened to fit the image provider prompt limit. Preserve the core brief and final requirements.]\n\n";
+  const available = OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS - marker.length;
+  const prefixLength = Math.floor(available * 0.64);
+  const suffixLength = available - prefixLength;
+
+  return `${prompt.slice(0, prefixLength).trimEnd()}${marker}${prompt
+    .slice(prompt.length - suffixLength)
+    .trimStart()}`.slice(0, OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS);
+}
 
 export interface ReferenceImageInput {
   bytes: Buffer;
@@ -44,7 +59,7 @@ export async function editImage({
 }: EditImageOptions): Promise<GeneratedImage> {
   const form = new FormData();
   form.set("model", model);
-  form.set("prompt", prompt);
+  form.set("prompt", fitOpenAIImagePrompt(prompt));
   form.set("size", size);
   form.set("quality", quality);
 
@@ -105,7 +120,7 @@ export async function generateImage({
     },
     body: JSON.stringify({
       model,
-      prompt,
+      prompt: fitOpenAIImagePrompt(prompt),
       n: 1,
       size,
       quality: "medium"

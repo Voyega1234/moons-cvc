@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import sharp from "sharp";
 import {
   albumFormatPreferences,
   albumFormats,
@@ -118,6 +119,7 @@ const ARTWORK_BUCKET = "creative-assets";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const ARTWORK_GENERATION_CONCURRENCY = 2;
 const IMAGE_PROMPT_MAX_CHARACTERS = 32_000;
+const IMAGE_PROMPT_TARGET_CHARACTERS = 30_000;
 
 interface ImageRequestDebugLog {
   createdAt: string;
@@ -400,7 +402,9 @@ async function reviseArtworkOutput({
     throw new Error("Could not load the current artwork for revision.");
   }
 
-  const prompt = buildArtworkRevisionPrompt(input.instructions);
+  const prompt = composeImagePrompt([
+    buildArtworkRevisionPrompt(input.instructions)
+  ]);
   const hook = { id: input.directionId };
   const imageRequestDebug = buildImageRequestDebugBundle({
     model,
@@ -592,7 +596,7 @@ async function generateOutputForHook({
     hook.albumFormat
   );
   const generationSize: ArtworkOutputSize = isAlbum
-    ? albumPanelGenerationSize(albumFormat, 1)
+    ? "2048x2048"
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
   const strategy =
@@ -654,66 +658,82 @@ async function generateOutputForHook({
           ];
   if (isAlbum) {
     const assetVersion = input.assetVersion ?? 1;
-    const panelPlans = buildAlbumPanelPlans(hook, albumFormat);
-    return mapWithConcurrency(panelPlans, 2, async (panel) => {
-      const panelPrompt = [
-        ...promptParts,
-        buildAlbumPanelInstruction(hook, albumFormat, panel)
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-      const panelHook = { ...hook, id: `${hook.id}-album-${panel.index}` };
-      const imageRequestDebug = buildImageRequestDebugBundle({
-        model,
-        runId: input.runId,
-        hook: panelHook,
-        prompt: panelPrompt,
-        size: panel.size,
-        quality: "medium",
-        references: generationReferences
-      });
-      await writeDebugLog(
-        debugLogDirectory,
-        imageRequestDebug.entry,
-        imageRequestDebug.assets
-      );
-      const image =
-        generationReferences.length > 0
-          ? await editImage({
-              apiKey,
-              model,
-              prompt: panelPrompt,
-              size: panel.size,
-              quality: "medium",
-              referenceImages: generationReferences,
-              fetchImpl
-            })
-          : await generateImage({
-              apiKey,
-              model,
-              prompt: panelPrompt,
-              size: panel.size,
-              fetchImpl
-            });
-
-      return persistArtworkOutput({
-        input,
-        hook: panelHook,
-        outputId: `${hook.id}-album-${panel.index}-v${assetVersion}`,
-        directionId: hook.id,
-        assetVersion,
-        format,
-        model,
-        imageBytes: Buffer.from(image.base64, "base64"),
-        mimeType: image.mimeType,
-        storage,
-        debugLogDirectory,
-        writeDebugLog
-      });
+    const masterPrompt = composeImagePrompt(
+      promptParts,
+      buildAlbumMasterInstruction(hook, albumFormat)
+    );
+    const masterHook = { ...hook, id: `${hook.id}-album-master` };
+    const imageRequestDebug = buildImageRequestDebugBundle({
+      model,
+      runId: input.runId,
+      hook: masterHook,
+      prompt: masterPrompt,
+      size: generationSize,
+      quality: "medium",
+      references: generationReferences
     });
+    await writeDebugLog(
+      debugLogDirectory,
+      imageRequestDebug.entry,
+      imageRequestDebug.assets
+    );
+    const image =
+      generationReferences.length > 0
+        ? await editImage({
+            apiKey,
+            model,
+            prompt: masterPrompt,
+            size: generationSize,
+            quality: "medium",
+            referenceImages: generationReferences,
+            fetchImpl
+          })
+        : await generateImage({
+            apiKey,
+            model,
+            prompt: masterPrompt,
+            size: generationSize,
+            fetchImpl
+          });
+    const imageBytes = Buffer.from(image.base64, "base64");
+    const masterOutput = await persistArtworkOutput({
+      input,
+      hook: masterHook,
+      outputId: `${hook.id}-album-master-v${assetVersion}`,
+      directionId: hook.id,
+      assetVersion,
+      format,
+      model,
+      imageBytes,
+      mimeType: image.mimeType,
+      storage,
+      debugLogDirectory,
+      writeDebugLog
+    });
+    const panels = await splitAlbumMaster(imageBytes, albumFormat);
+    return Promise.all(
+      panels.map(async (panel) => ({
+        ...(await persistArtworkOutput({
+          input,
+          hook: { ...hook, id: `${hook.id}-album-${panel.index}` },
+          outputId: `${hook.id}-album-${panel.index}-v${assetVersion}`,
+          directionId: hook.id,
+          assetVersion,
+          format,
+          model,
+          imageBytes: panel.bytes,
+          mimeType: "image/png",
+          storage,
+          debugLogDirectory,
+          writeDebugLog
+        })),
+        albumMasterAssetUrl: masterOutput.assetUrl,
+        albumMasterAssetStoragePath: masterOutput.assetStoragePath
+      }))
+    );
   }
 
-  const imagePrompt = promptParts.filter(Boolean).join("\n\n");
+  const imagePrompt = composeImagePrompt(promptParts);
   const imageRequestDebug = buildImageRequestDebugBundle({
     model,
     runId: input.runId,
@@ -765,85 +785,467 @@ async function generateOutputForHook({
   ];
 }
 
-interface AlbumPanelPlan {
-  index: 1 | 2 | 3 | 4;
-  size: ArtworkOutputSize;
-  purpose: string;
-}
-
-function buildAlbumPanelPlans(
+function buildAlbumMasterInstruction(
   hook: SelectedHook,
   format: AlbumFormat
-): readonly AlbumPanelPlan[] {
+): string {
   const beats = hook.formatBeats ?? [];
-  const cover: AlbumPanelPlan = {
-    index: 1,
-    size: albumPanelGenerationSize(format, 1),
-    purpose: `Standalone cover with the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`
+  const panelInstructions =
+    format === "three-horizontal" || format === "three-vertical"
+      ? [
+          `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
+          `The first supporting area develops the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`,
+          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+        ]
+      : [
+          `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
+          `The opening supporting area develops ${beats[0] ?? "the opening supporting point"}.`,
+          `The evidence supporting area develops ${beats[1] ?? "the mechanism or proof"}.`,
+          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+        ];
+  return [
+    "ALBUM MASTER GRID - highest-priority layout instruction:",
+    albumLayoutPrompt(format),
+    "The prescribed layout is non-negotiable. Do not rotate it, mirror it, replace it with a top-and-bottom mosaic, or invent another grid.",
+    "Render one square master artwork containing the complete album. Keep every panel inside its own rectangular area.",
+    "Use subtle, straight, continuous separators so the panel boundaries remain machine-detectable. Never bend, stagger, overlap, or interrupt a separator.",
+    ...panelInstructions,
+    "Do not render sequence labels, page numbers, step numbers, or decorative numerals such as 01, 02, 03, or 04. Positional words in this instruction are structural notes only and must never become visible copy. Keep only verified dates, prices, metrics, or quantities required by the approved campaign content.",
+    "Keep text, logo, CTA, faces, products, and essential proof at least 8% inside each panel boundary. Never place essential content across a separator.",
+    "ONE CAMPAIGN WORLD IS MANDATORY: art-direct the complete master as one composition, not a collage of separate mini-posters. Every area must share the same brand palette, typography family, lighting logic, camera or illustration language, depth, material treatment, icon style, and production finish.",
+    "Build the supporting areas as continuations or close crops of the cover's visual world. Reuse its environment, texture, motifs, shapes, and image-making technique. Controlled tonal variation is allowed within the same palette, but never switch to an unrelated background, photographic genre, illustration style, 3D material, or lighting setup.",
+    "Create hierarchy through scale, crop, whitespace, and information density rather than making each area look like a different campaign."
+  ].join("\n");
+}
+
+function albumLayoutPrompt(format: AlbumFormat): string {
+  switch (format) {
+    case "three-vertical":
+      return "Use a vertical cover occupying the full left half and two equal supporting panels stacked on the right half.";
+    case "three-horizontal":
+      return "Use a horizontal cover occupying the full top half and two equal supporting panels side by side across the bottom half.";
+    case "four-vertical":
+      return "Use a large vertical cover occupying the full left two-thirds and three equal supporting panels stacked on the right one-third.";
+    case "four-grid":
+      return "Use exactly four equal panels in a strict two-by-two grid.";
+  }
+}
+
+interface AlbumBoundaryDetection {
+  vertical?: number;
+  horizontal?: number;
+  secondaryVertical?: number;
+  secondaryHorizontal?: number;
+}
+
+interface AlbumCropRegion {
+  index: 1 | 2 | 3 | 4;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  maxWidth: number;
+  maxHeight: number;
+}
+
+async function splitAlbumMaster(
+  imageBytes: Buffer,
+  format: AlbumFormat
+): Promise<readonly { index: 1 | 2 | 3 | 4; bytes: Buffer }[]> {
+  const metadata = await sharp(imageBytes).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error("Could not read the generated album master dimensions.");
+  }
+
+  const side = Math.min(metadata.width, metadata.height);
+  const left = Math.floor((metadata.width - side) / 2);
+  const top = Math.floor((metadata.height - side) / 2);
+  const analysisSize = 512;
+  const analysis = await sharp(imageBytes)
+    .extract({ left, top, width: side, height: side })
+    .resize(analysisSize, analysisSize, { fit: "fill" })
+    .greyscale()
+    .raw()
+    .toBuffer();
+  const detected = detectAlbumBoundaries({
+    pixels: analysis,
+    width: analysisSize,
+    height: analysisSize,
+    format
+  });
+  const scale = side / analysisSize;
+  const boundaries: AlbumBoundaryDetection = {
+    ...(detected.vertical !== undefined
+      ? { vertical: Math.round(detected.vertical * scale) }
+      : {}),
+    ...(detected.horizontal !== undefined
+      ? { horizontal: Math.round(detected.horizontal * scale) }
+      : {}),
+    ...(detected.secondaryVertical !== undefined
+      ? { secondaryVertical: Math.round(detected.secondaryVertical * scale) }
+      : {}),
+    ...(detected.secondaryHorizontal !== undefined
+      ? { secondaryHorizontal: Math.round(detected.secondaryHorizontal * scale) }
+      : {})
   };
-  if (format === "three-horizontal" || format === "three-vertical") {
-    return [
-      cover,
-      {
-        index: 2,
-        size: "1024x1024",
-        purpose: `Develop the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`
-      },
-      {
-        index: 3,
-        size: "1024x1024",
-        purpose: `Close the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
+  const regions = albumCropRegions({
+    left,
+    top,
+    side,
+    format,
+    boundaries
+  });
+
+  return Promise.all(
+    regions.map(async (region) => ({
+      index: region.index,
+      bytes: await sharp(imageBytes)
+        .extract({
+          left: region.left,
+          top: region.top,
+          width: region.width,
+          height: region.height
+        })
+        .resize({
+          width: region.maxWidth,
+          height: region.maxHeight,
+          fit: "inside"
+        })
+        .png()
+        .toBuffer()
+    }))
+  );
+}
+
+export function detectAlbumBoundaries({
+  pixels,
+  width,
+  height,
+  format
+}: {
+  pixels: Uint8Array;
+  width: number;
+  height: number;
+  format: AlbumFormat;
+}): AlbumBoundaryDetection {
+  const vertical = (
+    expected: number,
+    radius: number,
+    yStart = 0,
+    yEnd = height
+  ) =>
+    findContinuousBoundary({
+      pixels,
+      width,
+      height,
+      axis: "vertical",
+      expected,
+      radius,
+      crossStart: yStart,
+      crossEnd: yEnd
+    });
+  const horizontal = (
+    expected: number,
+    radius: number,
+    xStart = 0,
+    xEnd = width
+  ) =>
+    findContinuousBoundary({
+      pixels,
+      width,
+      height,
+      axis: "horizontal",
+      expected,
+      radius,
+      crossStart: xStart,
+      crossEnd: xEnd
+    });
+
+  if (format === "three-vertical") {
+    const seam = vertical(width * 0.5, width * 0.26);
+    return {
+      vertical: seam,
+      secondaryHorizontal: horizontal(
+        height * 0.5,
+        height * 0.24,
+        seam + 3,
+        width
+      )
+    };
+  }
+  if (format === "three-horizontal") {
+    const seam = horizontal(height * 0.5, height * 0.26);
+    return {
+      horizontal: seam,
+      secondaryVertical: vertical(
+        width * 0.5,
+        width * 0.24,
+        seam + 3,
+        height
+      )
+    };
+  }
+  if (format === "four-grid") {
+    return {
+      vertical: vertical(width * 0.5, width * 0.24),
+      horizontal: horizontal(height * 0.5, height * 0.24)
+    };
+  }
+
+  const seam = vertical(width * (2 / 3), width * 0.34);
+  const first = horizontal(
+    height / 3,
+    height * 0.17,
+    seam + 3,
+    width
+  );
+  const second = horizontal(
+    height * (2 / 3),
+    height * 0.17,
+    seam + 3,
+    width
+  );
+  return {
+    vertical: seam,
+    secondaryHorizontal:
+      first < second - height * 0.12 ? first : Math.round(height / 3),
+    horizontal:
+      first < second - height * 0.12
+        ? second
+        : Math.round(height * (2 / 3))
+  };
+}
+
+function findContinuousBoundary({
+  pixels,
+  width,
+  height,
+  axis,
+  expected,
+  radius,
+  crossStart,
+  crossEnd
+}: {
+  pixels: Uint8Array;
+  width: number;
+  height: number;
+  axis: "vertical" | "horizontal";
+  expected: number;
+  radius: number;
+  crossStart: number;
+  crossEnd: number;
+}): number {
+  const axisLength = axis === "vertical" ? width : height;
+  const start = Math.max(6, Math.floor(expected - radius));
+  const end = Math.min(axisLength - 7, Math.ceil(expected + radius));
+  const scores: { position: number; raw: number; weighted: number }[] = [];
+
+  for (let position = start; position <= end; position += 1) {
+    const gradients: number[] = [];
+    const from = Math.max(2, Math.floor(crossStart));
+    const to = Math.min(
+      axis === "vertical" ? height - 2 : width - 2,
+      Math.ceil(crossEnd)
+    );
+    for (let cross = from; cross < to; cross += 2) {
+      let strongest = 0;
+      for (let offset = -4; offset <= 3; offset += 1) {
+        const first =
+          axis === "vertical"
+            ? pixels[cross * width + position + offset]
+            : pixels[(position + offset) * width + cross];
+        const second =
+          axis === "vertical"
+            ? pixels[cross * width + position + offset + 1]
+            : pixels[(position + offset + 1) * width + cross];
+        strongest = Math.max(
+          strongest,
+          Math.abs((first ?? 0) - (second ?? 0))
+        );
       }
+      gradients.push(strongest);
+    }
+    gradients.sort((a, b) => a - b);
+    const raw = gradients[Math.floor(gradients.length * 0.4)] ?? 0;
+    const proximity = 1 - 0.28 * (Math.abs(position - expected) / radius);
+    scores.push({ position, raw, weighted: raw * proximity });
+  }
+
+  const best = scores.reduce(
+    (current, candidate) =>
+      candidate.weighted > current.weighted ? candidate : current,
+    scores[0] ?? {
+      position: Math.round(expected),
+      raw: 0,
+      weighted: 0
+    }
+  );
+  const rawScores = scores.map((score) => score.raw).sort((a, b) => a - b);
+  const median = rawScores[Math.floor(rawScores.length / 2)] ?? 0;
+  if (best.raw < Math.max(4, median * 1.2)) return Math.round(expected);
+
+  const boundaryCluster = scores.filter(
+    (score) =>
+      Math.abs(score.position - best.position) <= 12 &&
+      score.raw >= best.raw * 0.85
+  );
+  return Math.round(
+    boundaryCluster.reduce((sum, score) => sum + score.position, 0) /
+      Math.max(1, boundaryCluster.length)
+  );
+}
+
+export function albumCropRegions({
+  left,
+  top,
+  side,
+  format,
+  boundaries
+}: {
+  left: number;
+  top: number;
+  side: number;
+  format: AlbumFormat;
+  boundaries: AlbumBoundaryDetection;
+}): readonly AlbumCropRegion[] {
+  const vertical = clampBoundary(boundaries.vertical, side / 2, side);
+  const horizontal = clampBoundary(boundaries.horizontal, side / 2, side);
+
+  if (format === "three-vertical") {
+    const rightHorizontal = clampBoundary(
+      boundaries.secondaryHorizontal,
+      side / 2,
+      side
+    );
+    return [
+      cropRegion(1, left, top, vertical, side, 1920),
+      cropRegion(
+        2,
+        left + vertical,
+        top,
+        side - vertical,
+        rightHorizontal,
+        960
+      ),
+      cropRegion(
+        3,
+        left + vertical,
+        top + rightHorizontal,
+        side - vertical,
+        side - rightHorizontal,
+        960
+      )
     ];
   }
+  if (format === "three-horizontal") {
+    const bottomVertical = clampBoundary(
+      boundaries.secondaryVertical,
+      side / 2,
+      side
+    );
+    return [
+      cropRegion(1, left, top, side, horizontal, 1920),
+      cropRegion(
+        2,
+        left,
+        top + horizontal,
+        bottomVertical,
+        side - horizontal,
+        960
+      ),
+      cropRegion(
+        3,
+        left + bottomVertical,
+        top + horizontal,
+        side - bottomVertical,
+        side - horizontal,
+        960
+      )
+    ];
+  }
+  if (format === "four-grid") {
+    return [
+      cropRegion(1, left, top, vertical, horizontal, 960),
+      cropRegion(2, left + vertical, top, side - vertical, horizontal, 960),
+      cropRegion(3, left, top + horizontal, vertical, side - horizontal, 960),
+      cropRegion(
+        4,
+        left + vertical,
+        top + horizontal,
+        side - vertical,
+        side - horizontal,
+        960
+      )
+    ];
+  }
+
+  const firstHorizontal = clampBoundary(
+    boundaries.secondaryHorizontal,
+    side / 3,
+    side
+  );
+  const secondHorizontal = clampBoundary(
+    boundaries.horizontal,
+    side * (2 / 3),
+    side
+  );
   return [
-    cover,
-    {
-      index: 2,
-      size: "1024x1024",
-      purpose: `Develop ${beats[0] ?? "the opening supporting point"}.`
-    },
-    {
-      index: 3,
-      size: "1024x1024",
-      purpose: `Develop ${beats[1] ?? "the mechanism or proof"}.`
-    },
-    {
-      index: 4,
-      size: "1024x1024",
-      purpose: `Close the story using ${beats[2] ?? "the offer or decision moment"} and the exact CTA “${hook.cta}”.`
-    }
+    cropRegion(1, left, top, vertical, side, 1920),
+    cropRegion(
+      2,
+      left + vertical,
+      top,
+      side - vertical,
+      firstHorizontal,
+      960
+    ),
+    cropRegion(
+      3,
+      left + vertical,
+      top + firstHorizontal,
+      side - vertical,
+      secondHorizontal - firstHorizontal,
+      960
+    ),
+    cropRegion(
+      4,
+      left + vertical,
+      top + secondHorizontal,
+      side - vertical,
+      side - secondHorizontal,
+      960
+    )
   ];
 }
 
-function albumPanelGenerationSize(
-  format: AlbumFormat,
-  panelIndex: number
-): ArtworkOutputSize {
-  if (panelIndex !== 1) return "1024x1024";
-  if (format === "three-horizontal") return "1536x1024";
-  if (format === "three-vertical" || format === "four-vertical") {
-    return "1024x1536";
-  }
-  return "1024x1024";
+function cropRegion(
+  index: AlbumCropRegion["index"],
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  maxEdge: number
+): AlbumCropRegion {
+  return {
+    index,
+    left: Math.round(left),
+    top: Math.round(top),
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+    maxWidth: maxEdge,
+    maxHeight: maxEdge
+  };
 }
 
-function buildAlbumPanelInstruction(
-  hook: SelectedHook,
-  format: AlbumFormat,
-  panel: AlbumPanelPlan
-): string {
-  const imageCount = format.startsWith("three-") ? 3 : 4;
-  return [
-    `ALBUM IMAGE ${panel.index} OF ${imageCount} — standalone ${canvasRatioFromSize(panel.size)} artwork:`,
-    panel.purpose,
-    "Use the entire canvas for this one image. Do not create a collage, grid, mosaic, contact sheet, split screen, adjacent panel, visible separator, crop guide, mockup frame, or preview of the other album images.",
-    "Keep this image compositionally complete when viewed alone. Keep text, logo, CTA, faces, products, and essential proof at least 8% inside the canvas edge.",
-    `Maintain the same brand system, palette, typography behavior, lighting, materials, and campaign world across all ${imageCount} album images, while giving this image its own clear composition.`,
-    panel.index === 1
-      ? `Render the exact cover headline “${hook.hook}”.`
-      : "Do not repeat the cover headline unless it is essential for comprehension."
-  ].join("\n");
+function clampBoundary(
+  value: number | undefined,
+  fallback: number,
+  side: number
+): number {
+  return Math.min(
+    side - 1,
+    Math.max(1, Math.round(value ?? fallback))
+  );
 }
 
 async function persistArtworkOutput({
@@ -1261,12 +1663,6 @@ async function buildDirectDesignSystemPrompt({
     }
   );
 
-  if (prompt.length > IMAGE_PROMPT_MAX_CHARACTERS) {
-    throw new Error(
-      `Design System prompt is too long (${prompt.length}/${IMAGE_PROMPT_MAX_CHARACTERS}).`
-    );
-  }
-
   return prompt;
 }
 
@@ -1300,7 +1696,7 @@ function buildDesignSystemCopyPriority(
   ];
   if (service === "album-post" && hook.formatBeats?.length) {
     lines.push(
-      `Album story beats must be distributed across ${albumFormat.startsWith("three-") ? "three" : "four"} separate standalone images in the selected ${albumFormat} sequence: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}. Never combine the images into one master, grid, collage, mosaic, or contact sheet.`
+      `Album story beats must be distributed across the ${albumFormat.startsWith("three-") ? "three" : "four"} clearly separated panels in the selected ${albumFormat} master grid: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}. Keep every panel independently readable and keep all essential content away from the separators.`
     );
   }
   return lines.join("\n");
@@ -1334,6 +1730,45 @@ function compactPromptText(value: string, maxCharacters: number): string {
   const clean = value.replace(/\s+/g, " ").trim();
   if (clean.length <= maxCharacters) return clean;
   return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
+}
+
+function composeImagePrompt(
+  parts: readonly (string | null | undefined)[],
+  protectedSuffix?: string
+): string {
+  const body = parts.filter(Boolean).join("\n\n");
+  const suffix = protectedSuffix?.trim();
+  const separator = suffix ? "\n\n" : "";
+  const fullPrompt = `${body}${separator}${suffix ?? ""}`;
+  if (fullPrompt.length <= IMAGE_PROMPT_TARGET_CHARACTERS) {
+    return fullPrompt;
+  }
+
+  const bodyBudget =
+    IMAGE_PROMPT_TARGET_CHARACTERS -
+    separator.length -
+    (suffix?.length ?? 0);
+  if (bodyBudget < 1_000) {
+    throw new Error(
+      `Required image instructions exceed the provider prompt limit (${fullPrompt.length}/${IMAGE_PROMPT_MAX_CHARACTERS}).`
+    );
+  }
+  return `${truncatePromptPreservingEnds(body, bodyBudget)}${separator}${suffix ?? ""}`;
+}
+
+function truncatePromptPreservingEnds(
+  prompt: string,
+  maxCharacters: number
+): string {
+  if (prompt.length <= maxCharacters) return prompt;
+  const marker =
+    "\n\n[Lower-priority reference context was shortened to fit the image provider limit. Preserve the working brief, exact approved copy, official assets, and final requirements.]\n\n";
+  const available = Math.max(0, maxCharacters - marker.length);
+  const prefixLength = Math.floor(available * 0.64);
+  const suffixLength = available - prefixLength;
+  return `${prompt.slice(0, prefixLength).trimEnd()}${marker}${prompt
+    .slice(prompt.length - suffixLength)
+    .trimStart()}`;
 }
 
 function loadDesignSystemPrompt(): Promise<string> {

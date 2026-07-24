@@ -381,6 +381,88 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("dialog", { name: "Manage brand materials" })).toBeNull();
   });
 
+  it("uses the same Materials data in Brand materials and Brief materials", async () => {
+    const material = {
+      id: "material-shared",
+      name: "Hero bottle.png",
+      mediaType: "image/png",
+      role: "main-object" as const,
+      description: "Keep the bottle label unchanged.",
+      url: "https://assets.example.com/hero-bottle.png"
+    };
+    const state = workflowReducer(buildCreativeState(), {
+      type: "add-uploaded-materials",
+      items: [material]
+    });
+    const dispatch = vi.fn();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const signalView = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const signalStage = within(signalView.container);
+    const materialsRow = signalStage
+      .getByText("Materials")
+      .closest<HTMLElement>(".compass-material-compact-row");
+    if (!materialsRow) throw new Error("Expected the Materials summary row.");
+
+    expect(within(materialsRow).getByText("1 item")).toBeTruthy();
+    fireEvent.click(within(materialsRow).getByRole("button", { name: "Add" }));
+
+    const libraryDialog = signalStage.getByRole("dialog", {
+      name: "Manage brand materials"
+    });
+    expect(within(libraryDialog).getByAltText(material.name)).toBeTruthy();
+    fireEvent.change(within(libraryDialog).getByRole("combobox"), {
+      target: { value: "product" }
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "update-uploaded-material",
+      id: material.id,
+      changes: { role: "product" }
+    });
+
+    signalView.unmount();
+    const briefView = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={{ ...state, stage: "brief" }} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const briefStage = within(briefView.container);
+    fireEvent.click(
+      briefStage.getByRole("button", { name: "Add Materials" })
+    );
+    const briefDialog = briefStage.getByRole("dialog", {
+      name: "Brief materials"
+    });
+    expect(
+      briefDialog.querySelector(
+        `.compass-creative-material-card img[alt="${material.name}"]`
+      )
+    ).toBeTruthy();
+    expect(within(briefDialog).getByDisplayValue(material.description)).toBeTruthy();
+    fireEvent.click(
+      within(briefDialog).getByRole("button", {
+        name: "Close brief materials"
+      })
+    );
+    briefView.unmount();
+  });
+
   it("adds an onboarding questionnaire later from Brand materials", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -1861,7 +1943,7 @@ describe("redesigned workflow stages", () => {
     ).toBe(true);
   });
 
-  it("groups three album images into one review card and shows standalone previews", async () => {
+  it("groups three album panels into one review card and shows the saved master", async () => {
     const user = userEvent.setup();
     const base = buildCreativeState();
     const sourceOutput = base.outputs[0];
@@ -1872,7 +1954,10 @@ describe("redesigned workflow stages", () => {
         ...sourceOutput,
         id: `${sourceOutput.directionId}-album-${panel}-v1`,
         format: "Album post",
-        assetUrl: `https://example.com/album-panel-${panel}.png`
+        assetUrl: `https://example.com/album-panel-${panel}.png`,
+        albumMasterAssetUrl: "https://example.com/album-master.png",
+        albumMasterAssetStoragePath:
+          "brand/run/outputs/album-master.png"
       }))
     };
     const dispatch = vi.fn();
@@ -1891,10 +1976,20 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(1);
     expect(
       albumSection.querySelectorAll(".compass-album-panels img")
-    ).toHaveLength(3);
+    ).toHaveLength(1);
+    expect(
+      albumSection.querySelector(".compass-album-master-image")
+    ).toBeTruthy();
     expect(
       albumSection.querySelector(".compass-album-panels.compact")
     ).toBeTruthy();
+    expect(
+      albumSection.querySelector(
+        ".compass-album-panels.format-three-horizontal"
+      )
+    ).toBeTruthy();
+    expect(albumSection.textContent).not.toContain("1 / 3");
+    expect(albumSection.textContent).not.toContain("3 images");
     expect(within(albumSection).getAllByRole("textbox", {
       name: "Edit caption"
     })).toHaveLength(1);
@@ -1922,7 +2017,8 @@ describe("redesigned workflow stages", () => {
     const dialog = stage.getByRole("dialog", {
       name: "Album creative preview"
     });
-    expect(dialog.querySelectorAll(".compass-album-panels img")).toHaveLength(3);
+    expect(dialog.querySelectorAll(".compass-album-panels img")).toHaveLength(1);
+    expect(dialog.querySelector(".compass-album-master-image")).toBeTruthy();
     expect(dialog.querySelector(".compass-album-panels.compact")).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
   });
