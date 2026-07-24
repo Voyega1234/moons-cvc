@@ -4,18 +4,24 @@ import {
   useEffect,
   useMemo,
   useState,
-  type FormEvent,
   type ReactNode
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { env } from "../../config/env";
+import {
+  captureGoogleProviderToken,
+  clearGoogleProviderToken
+} from "../../lib/google-workspace/provider-token";
 import {
   getSupabaseClient,
   isSupabaseConfigured
 } from "../../lib/supabase/client";
 
 const PRODUCTION_AUTH_REDIRECT_URL = "https://moons-cvc.vercel.app/";
-const CONVERT_CAKE_EMAIL_DOMAIN = "@convertcake.com";
+export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/spreadsheets.readonly"
+].join(" ");
 
 interface AuthContextValue {
   enabled: boolean;
@@ -25,7 +31,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function emailSignInRedirectUrl(
+export function googleSignInRedirectUrl(
   location: Pick<Location, "hostname" | "origin"> = window.location
 ): string {
   const hostname = location.hostname.toLowerCase();
@@ -37,7 +43,7 @@ export function emailSignInRedirectUrl(
 export function validateConvertCakeEmail(email: string): string | null {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return "Enter your email address.";
-  if (!normalized.endsWith(CONVERT_CAKE_EMAIL_DOMAIN)) {
+  if (!/^[^@\s]+@convertcake\.com$/.test(normalized)) {
     return "Use your @convertcake.com email.";
   }
   return null;
@@ -85,28 +91,39 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
   const client = getSupabaseClient();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
-  const [linkSent, setLinkSent] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
+    function applySession(nextSession: Session | null) {
+      if (!active) return;
+      const email = nextSession?.user.email ?? "";
+      const emailError = nextSession ? validateConvertCakeEmail(email) : null;
+      if (emailError) {
+        clearGoogleProviderToken();
+        setSession(null);
+        setError("Creative Compass is available only to @convertcake.com accounts.");
+        setLoading(false);
+        void client.auth.signOut();
+        return;
+      }
+      captureGoogleProviderToken(nextSession);
+      setSession(nextSession);
+      setLoading(false);
+    }
+
     const {
       data: { subscription }
     } = client.auth.onAuthStateChange((_event, nextSession) => {
-      if (!active) return;
-      setSession(nextSession);
-      setLoading(false);
+      applySession(nextSession);
     });
 
     void client.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active) return;
       if (sessionError) setError(sessionError.message);
-      setSession(data.session);
-      setLoading(false);
+      applySession(data.session);
     });
 
     return () => {
@@ -115,42 +132,27 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  function changeEmail() {
-    setLinkSent(false);
-    setMessage(null);
-    setError(null);
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function signInWithGoogle() {
     if (pending) return;
     setError(null);
-    setMessage(null);
     setPending(true);
 
     try {
-      const normalizedEmail = email.trim().toLowerCase();
-      const emailError = validateConvertCakeEmail(normalizedEmail);
-      if (emailError) throw new Error(emailError);
-      const wasResend = linkSent;
-      const { error: signInError } = await client.auth.signInWithOtp({
-        email: normalizedEmail,
+      const { error: signInError } = await client.auth.signInWithOAuth({
+        provider: "google",
         options: {
-          emailRedirectTo: emailSignInRedirectUrl(),
-          shouldCreateUser: true
+          redirectTo: googleSignInRedirectUrl(),
+          scopes: GOOGLE_WORKSPACE_OAUTH_SCOPES,
+          queryParams: {
+            hd: "convertcake.com",
+            include_granted_scopes: "true",
+            prompt: "consent"
+          }
         }
       });
       if (signInError) throw signInError;
-      setEmail(normalizedEmail);
-      setLinkSent(true);
-      setMessage(
-        wasResend
-          ? "A new login link is on its way."
-          : "Open the secure link in your email to continue."
-      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed.");
-    } finally {
       setPending(false);
     }
   }
@@ -160,6 +162,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
       enabled: true,
       session,
       signOut: async () => {
+        clearGoogleProviderToken();
         const { error: signOutError } = await client.auth.signOut();
         if (signOutError) throw signOutError;
       }
@@ -187,54 +190,33 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           <b>Find the idea<br />worth <em>scaling.</em></b>
           <p>One secure account for brand signals, creative decisions, and production memory.</p>
         </div>
-        <form className="auth-card" onSubmit={submit}>
+        <section className="auth-card">
           <p className="eyebrow">Convert Cake account</p>
-          <h1>{linkSent ? "Check your email" : "Sign in to Compass"}</h1>
+          <h1>Sign in to Creative Compass</h1>
           <p>
-            {linkSent
-              ? "We sent a secure login link to:"
-              : "Enter your Convert Cake email. No password required."}
+            Continue with your Convert Cake Google Workspace account.
           </p>
 
-          {linkSent ? (
-            <div className="auth-email-target">{email}</div>
-          ) : (
-            <label>
-              Email
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                disabled={pending}
-                value={email}
-                placeholder="name@convertcake.com"
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-          )}
-
-          <button className="btn primary" type="submit" disabled={pending}>
-            {pending
-              ? "Sending…"
-              : linkSent
-                ? "Resend login link"
-                : "Email me a login link"}
+          <button
+            className="btn primary auth-google-button"
+            type="button"
+            disabled={pending}
+            onClick={() => void signInWithGoogle()}
+          >
+            <img src="/google-g.svg" alt="" aria-hidden="true" />
+            {pending ? "Connecting to Google..." : "Continue with Google"}
           </button>
 
-          {linkSent ? (
-            <button
-              className="auth-text-button"
-              type="button"
-              disabled={pending}
-              onClick={changeEmail}
-            >
-              Use a different email
-            </button>
-          ) : null}
+          <div className="auth-google-access">
+            <b>Only @convertcake.com accounts</b>
+            <span>
+              Used to create Google Slides in your Drive and read onboarding
+              questionnaire Sheets.
+            </span>
+          </div>
 
-          {message ? <p className="auth-message" role="status">{message}</p> : null}
           {error ? <p className="auth-error" role="alert">{error}</p> : null}
-        </form>
+        </section>
       </section>
     </main>
   );

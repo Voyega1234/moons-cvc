@@ -167,4 +167,80 @@ describe("Workboard", () => {
       id: "nike-launch"
     });
   });
+
+  it("uses the latest client logo and category for an existing project", async () => {
+    const baseBrand = brands[0];
+    if (!baseBrand) throw new Error("Mock brand fixture is missing.");
+    const currentBrand = {
+      ...baseBrand,
+      category: "Current brand category",
+      ingestionStatus: "needs_review" as const,
+      library: {
+        ...baseBrand.library,
+        brand: [
+          ...baseBrand.library.brand.filter(
+            (item) => item.title.toLowerCase() !== "logo"
+          ),
+          {
+            id: "current-logo",
+            title: "Logo",
+            description: "Current client logo",
+            assetUrl: "https://storage.example.com/current-logo.png"
+          }
+        ]
+      }
+    };
+    const staleBrand = {
+      ...currentBrand,
+      category: "Awaiting brand ingestion",
+      library: {
+        ...currentBrand.library,
+        brand: currentBrand.library.brand.filter(
+          (item) => item.title.toLowerCase() !== "logo"
+        )
+      }
+    };
+    const currentRepository: BrandRepository = {
+      async list() {
+        return [currentBrand];
+      },
+      async getById(id) {
+        return id === currentBrand.id ? currentBrand : null;
+      }
+    };
+    let workspace = createInitialWorkspaceState({
+      runId: "stale-brand-project",
+      now: "2026-07-16T00:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "stale-brand-project",
+      action: { type: "select-brand", brand: staleBrand },
+      now: "2026-07-16T00:01:00.000Z"
+    });
+
+    render(
+      <BrandProvider
+        repository={currentRepository}
+        mappingRepository={mappingRepository}
+      >
+        <Overview
+          state={getActiveRun(workspace)}
+          dispatch={vi.fn()}
+          workspace={workspace}
+          workspaceDispatch={vi.fn()}
+          onOpenStudio={vi.fn()}
+        />
+      </BrandProvider>
+    );
+
+    const brandName = await screen.findByText(currentBrand.name);
+    const row = brandName.closest("article");
+    if (!row) throw new Error("Workboard project row was not found.");
+    expect(within(row).getByText("Current brand category")).toBeTruthy();
+    expect(row.querySelector("img")?.getAttribute("src")).toBe(
+      "https://storage.example.com/current-logo.png"
+    );
+    expect(within(row).queryByText("Awaiting brand ingestion")).toBeNull();
+  });
 });

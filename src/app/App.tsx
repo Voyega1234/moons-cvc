@@ -27,7 +27,8 @@ import {
   SignOut,
   X
 } from "@phosphor-icons/react";
-import { brandLogoUrl, type Brand } from "../domain/brand";
+import type { Brand } from "../domain/brand";
+import { BrandLogo } from "../shared/components/brand-logo";
 import {
   useBrands,
   type BrandNotification
@@ -260,7 +261,7 @@ export function App() {
                         </div>
                       </div>
                       <div className="compass-signal-card compass-signal-lime">
-                        <span>What compass is doing</span>
+                        <span>What Creative Compass is doing</span>
                         <div className="compass-orbit-wrap">
                           <div>
                             <b>
@@ -357,10 +358,10 @@ export function NavigationRail({
       <button
         className="compass-logo-button"
         type="button"
-        aria-label="Open Compass studio"
+        aria-label="Open Creative Compass studio"
         onClick={() => workspaceDispatch({ type: "set-view", view: "studio" })}
       >
-        compass
+        Creative Compass
       </button>
       <nav className="compass-rail-nav">
         <button
@@ -469,10 +470,10 @@ function Header({
             />
             <div className="client-pill">
               <span className="mini-avatar">
-                {brandLogoUrl(state.brand) ? (
-                  <img src={brandLogoUrl(state.brand)} alt="" />
+                {state.brand ? (
+                  <BrandLogo brand={state.brand} />
                 ) : (
-                  state.brand?.initials ?? "MO"
+                  "MO"
                 )}
               </span>
               <span className="client-pill-copy">
@@ -622,7 +623,7 @@ function WorkspaceSaveStatus({
             </div>
           ) : checkpointError ? null : (
             <p className="compass-recovery-empty">
-              No recovery points yet. Compass creates one before regeneration,
+              No recovery points yet. Creative Compass creates one before regeneration,
               image replacement, and Internal QC.
             </p>
           )}
@@ -649,15 +650,37 @@ function formatCheckpointTime(value: string): string {
   }).format(new Date(value));
 }
 
-function AccountMenu() {
+export function googleProfileImageUrl(
+  session: NonNullable<ReturnType<typeof useAuth>["session"]>
+): string | null {
+  const metadata = session.user.user_metadata;
+  const candidate =
+    typeof metadata.avatar_url === "string"
+      ? metadata.avatar_url
+      : typeof metadata.picture === "string"
+        ? metadata.picture
+        : "";
+
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function AccountMenu() {
   const { enabled, session, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
 
   if (!enabled || !session) return null;
 
   const email = session.user.email ?? "Signed-in account";
+  const avatarUrl = googleProfileImageUrl(session);
+  const showAvatar = avatarUrl && avatarUrl !== failedAvatarUrl;
 
   async function handleSignOut() {
     setPending(true);
@@ -682,7 +705,17 @@ function AccountMenu() {
           setError(null);
         }}
       >
-        <UserCircle size={20} weight="duotone" aria-hidden="true" />
+        {showAvatar ? (
+          <img
+            className="compass-account-avatar"
+            src={avatarUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={() => setFailedAvatarUrl(avatarUrl)}
+          />
+        ) : (
+          <UserCircle size={20} weight="duotone" aria-hidden="true" />
+        )}
       </button>
       {open ? (
         <div className="compass-account-popover" role="dialog" aria-label="Account">
@@ -973,11 +1006,7 @@ function MemoryRibbon({ state }: { state: WorkflowState }) {
       <div className="ribbon">
         <div className="ribbon-brand">
           <span className="big-avatar">
-            {brandLogoUrl(state.brand) ? (
-              <img src={brandLogoUrl(state.brand)} alt="" />
-            ) : (
-              state.brand.initials
-            )}
+            <BrandLogo brand={state.brand} />
           </span>
           <span>
             <b>{state.brand.name}</b>

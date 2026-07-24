@@ -239,7 +239,7 @@ describe("workspaceReducer", () => {
     expect(getActiveRun(result).brand).toBeNull();
     expect(result.toast).toEqual({
       title: "Action needed",
-      message: "This client has no Compass brand memory yet.",
+      message: "This client has no Creative Compass brand memory yet.",
       tone: "warning"
     });
   });

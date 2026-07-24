@@ -1,10 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { currentGoogleProviderToken } from "../../lib/google-workspace/provider-token";
 
 const authMocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  signInWithOtp: vi.fn(),
+  signInWithOAuth: vi.fn(),
   signOut: vi.fn(),
   authStateCallback: null as null | ((event: string, session: unknown) => void)
 }));
@@ -18,7 +19,7 @@ vi.mock("../../lib/supabase/client", () => ({
   getSupabaseClient: () => ({
     auth: {
       getSession: authMocks.getSession,
-      signInWithOtp: authMocks.signInWithOtp,
+      signInWithOAuth: authMocks.signInWithOAuth,
       signOut: authMocks.signOut,
       onAuthStateChange: (callback: (event: string, session: unknown) => void) => {
         authMocks.authStateCallback = callback;
@@ -40,42 +41,75 @@ describe("Supabase account flow", () => {
       data: { session: null },
       error: null
     });
-    authMocks.signInWithOtp.mockResolvedValue({ data: {}, error: null });
+    authMocks.signInWithOAuth.mockResolvedValue({ data: {}, error: null });
     authMocks.signOut.mockResolvedValue({ error: null });
+    window.localStorage.clear();
   });
 
-  it("emails a passwordless login link to a Convert Cake account", async () => {
+  it("starts Google OAuth with Drive, Sheets, and Convert Cake domain settings", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
-    await user.type(await screen.findByLabelText("Email"), "TEAM@convertcake.com");
-    expect(screen.queryByLabelText("Password")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Email me a login link" }));
+    const googleButton = await screen.findByRole("button", {
+      name: "Continue with Google"
+    });
+    expect(googleButton.querySelector("img")?.getAttribute("src")).toBe(
+      "/google-g.svg"
+    );
+    await user.click(googleButton);
 
-    expect(authMocks.signInWithOtp).toHaveBeenCalledWith({
-      email: "team@convertcake.com",
+    expect(authMocks.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
       options: {
-        emailRedirectTo: "http://localhost:3000",
-        shouldCreateUser: true
+        redirectTo: "http://localhost:3000",
+        scopes:
+          "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly",
+        queryParams: {
+          hd: "convertcake.com",
+          include_granted_scopes: "true",
+          prompt: "consent"
+        }
       }
     });
-    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
-    expect(screen.getByText("team@convertcake.com")).toBeTruthy();
+    expect(screen.getByText("Only @convertcake.com accounts")).toBeTruthy();
   });
 
-  it("can resend the link or return to edit the email", async () => {
-    const user = userEvent.setup();
+  it("rejects a restored session outside the Convert Cake domain", async () => {
+    authMocks.getSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "token",
+          user: { email: "outsider@example.com" }
+        }
+      },
+      error: null
+    });
+
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
-    await user.type(await screen.findByLabelText("Email"), "designer@convertcake.com");
-    await user.click(screen.getByRole("button", { name: "Email me a login link" }));
-    await user.click(await screen.findByRole("button", { name: "Resend login link" }));
+    expect(
+      await screen.findByText(
+        "Creative Compass is available only to @convertcake.com accounts."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("Private workspace")).toBeNull();
+    await waitFor(() => expect(authMocks.signOut).toHaveBeenCalled());
+  });
 
-    expect(authMocks.signInWithOtp).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("A new login link is on its way.")).toBeTruthy();
+  it("captures the Google provider token returned after OAuth", async () => {
+    render(<AuthProvider><div>Private workspace</div></AuthProvider>);
+    await screen.findByRole("button", { name: "Continue with Google" });
 
-    await user.click(screen.getByRole("button", { name: "Use a different email" }));
-    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    act(() => {
+      authMocks.authStateCallback?.("SIGNED_IN", {
+        access_token: "supabase-token",
+        provider_token: "google-provider-token",
+        user: { email: "designer@convertcake.com" }
+      });
+    });
+
+    expect(await screen.findByText("Private workspace")).toBeTruthy();
+    expect(currentGoogleProviderToken()).toBe("google-provider-token");
   });
 
   it("restores a session and exposes sign out to the account UI", async () => {

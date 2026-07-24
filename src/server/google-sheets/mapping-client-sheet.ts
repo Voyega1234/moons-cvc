@@ -186,17 +186,36 @@ function parseCsvRows(value: string): string[][] {
 
 export async function readOnboardingQuestionnaireFromGoogleSheet({
   sheetUrl,
+  accessToken,
   fetchImpl = fetch
 }: {
   sheetUrl: string;
+  accessToken: string;
   fetchImpl?: typeof fetch;
 }): Promise<OnboardingQuestionnaireSource | null> {
   const source = parseGoogleSheetUrl(sheetUrl);
-  const table = await googleVisualizationTable(
-    `https://docs.google.com/spreadsheets/d/${encodeURIComponent(source.spreadsheetId)}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(QUESTIONNAIRE_SHEET_TITLE)}`,
+  const metadata = await googleJson(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(source.spreadsheetId)}?fields=properties.title,sheets.properties`,
+    accessToken,
     fetchImpl
   );
-  const rows = readVisualizationRows(table);
+  const questionnaireSheet = readSheetProperties(metadata).find(
+    (sheet) => sheet.title === QUESTIONNAIRE_SHEET_TITLE
+  );
+  if (!questionnaireSheet) {
+    throw new Error(
+      `Google Sheet must contain a tab named "${QUESTIONNAIRE_SHEET_TITLE}".`
+    );
+  }
+  const range = encodeURIComponent(
+    `'${QUESTIONNAIRE_SHEET_TITLE.replaceAll("'", "''")}'`
+  );
+  const valuesPayload = await googleJson(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(source.spreadsheetId)}/values/${range}?majorDimension=ROWS`,
+    accessToken,
+    fetchImpl
+  );
+  const rows = readRows(valuesPayload);
   const extractedFields = extractQuestionnaireFields(rows);
   if (!extractedFields.length) {
     throw new Error(
@@ -214,60 +233,6 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
     sheetTitle: QUESTIONNAIRE_SHEET_TITLE,
     extractedFields
   };
-}
-
-async function googleVisualizationTable(
-  url: string,
-  fetchImpl: typeof fetch
-): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url);
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `Questionnaire Google Sheet must be shared as "Anyone with the link" (HTTP ${response.status}).`
-    );
-  }
-
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    throw new Error(
-      'Questionnaire Google Sheet did not return readable public data. Confirm it is shared as "Anyone with the link".'
-    );
-  }
-  if (!isRecord(payload) || payload.status !== "ok") {
-    throw new Error(
-      `Could not read the public "${QUESTIONNAIRE_SHEET_TITLE}" tab. Confirm the tab exists and the Sheet is shared as "Anyone with the link".`
-    );
-  }
-  if (!isRecord(payload.table)) {
-    throw new Error("Questionnaire Google Sheet returned invalid data.");
-  }
-  return payload.table;
-}
-
-function readVisualizationRows(
-  table: Record<string, unknown>
-): readonly string[][] {
-  return Array.isArray(table.rows)
-    ? table.rows.map((row) => {
-        if (!isRecord(row) || !Array.isArray(row.c)) return [];
-        return row.c.map(readVisualizationCell);
-      })
-    : [];
-}
-
-function readVisualizationCell(value: unknown): string {
-  if (!isRecord(value)) return "";
-  if (typeof value.f === "string") return value.f;
-  return typeof value.v === "string" ||
-    typeof value.v === "number" ||
-    typeof value.v === "boolean"
-    ? String(value.v)
-    : "";
 }
 
 const QUESTIONNAIRE_FIELD_PATTERN = /^\{\{([a-z0-9_]+)\}\}$/i;
@@ -430,6 +395,11 @@ async function googleJson(
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const text = await response.text();
+  if (response.status === 401) {
+    throw new Error(
+      "Google access has expired. Sign out, then sign in with Google again."
+    );
+  }
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -475,7 +445,9 @@ function readRows(payload: Record<string, unknown>): string[][] {
   return payload.values.map((row) =>
     Array.isArray(row)
       ? row.map((value) =>
-          typeof value === "string" || typeof value === "number"
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
             ? String(value)
             : ""
         )

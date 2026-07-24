@@ -25,7 +25,7 @@ export async function triggerClientIngestion({
       ? ` (${error.message})`
       : "";
     throw new Error(
-      `Could not reach the client ingestion API${detail}. For local development, start Compass with npm run dev:full.`
+      `Could not reach the client ingestion API${detail}. For local development, start Creative Compass with npm run dev:full.`
     );
   }
   const text = await response.text();

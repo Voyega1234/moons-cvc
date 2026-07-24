@@ -66,7 +66,7 @@ describe("triggerClientIngestion", () => {
         fetchImpl: fetchImpl as typeof fetch
       })
     ).rejects.toThrow(
-      "Could not reach the client ingestion API (Failed to fetch). For local development, start Compass with npm run dev:full."
+      "Could not reach the client ingestion API (Failed to fetch). For local development, start Creative Compass with npm run dev:full."
     );
   });
 });

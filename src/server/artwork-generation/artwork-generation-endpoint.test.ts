@@ -996,7 +996,7 @@ describe("handleArtworkGenerationRequest", () => {
       "Invent a new main visual, visual metaphor"
     );
     expect(generationPrompt).toContain(
-      "Study the attached Moons artwork references directly"
+      "Study the attached Creative Compass artwork references directly"
     );
     expect(generationPrompt).toContain(
       "coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment"
@@ -1027,14 +1027,14 @@ describe("handleArtworkGenerationRequest", () => {
             endpoint: "/v1/images/edits",
             multipartFields: expect.objectContaining({
               prompt: expect.stringContaining(
-                "Study the attached Moons artwork references directly"
+                "Study the attached Creative Compass artwork references directly"
               ),
               images: [
                 expect.objectContaining({
-                  label: "Moons artwork reference — primary"
+                  label: "Creative Compass artwork reference — primary"
                 }),
                 expect.objectContaining({
-                  label: "Moons artwork reference — secondary"
+                  label: "Creative Compass artwork reference — secondary"
                 })
               ]
             })
@@ -1400,19 +1400,19 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.getAll("image[]")).toHaveLength(2);
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
-    expect(prompt).toContain("# CONDENSED MASTER PROMPT");
-    expect(prompt).toContain("Communicate through **design intelligence**");
-    expect(prompt).toContain("meaningful negative space");
-    expect(prompt).toContain("320–390 px wide");
-    expect(prompt).toContain("split-screen before-and-after");
+    expect(prompt).toContain("# DIRECT CREATIVE ARTWORK PROMPT — GPT IMAGE 2");
+    expect(prompt).toContain(
+      "Create **ONE complete, publication-ready social media advertising artwork**"
+    );
+    expect(prompt).toContain("Build the visual concept directly from the campaign message");
+    expect(prompt).toContain("Create a composition that feels specifically invented");
+    expect(prompt).toContain("Maintain clear mobile-feed readability");
     expect(prompt).toContain("Content type: lifestyle");
     expect(prompt).toContain("Human, natural, and relatable");
     expect(prompt).toContain("Selling approach: desire");
-    expect(prompt).toContain("Human presence: essential");
     expect(prompt).toContain(
-      "The Human presence policy overrides reference subject matter"
+      "Products must feel physically present through realistic scale, perspective, contact shadows"
     );
-    expect(prompt).toContain("realistic contact shadows");
     expect(prompt).toContain(
       "Working brief (HIGHEST PRIORITY): Launch a soft summer bouquet offer."
     );
@@ -1426,10 +1426,6 @@ describe("handleArtworkGenerationRequest", () => {
       "Exact headline: Flowers that make the room feel softer"
     );
     expect(prompt).toContain("CTA: Order a bouquet");
-    expect(prompt).toContain("# TEXT DENSITY");
-    expect(prompt).toContain("zero to three short items in total");
-    expect(prompt).toContain("not a quota");
-    expect(prompt).toContain("do not enforce a one-item limit");
     expect(prompt).toContain("Identification");
     expect(prompt).toContain("Persuasion");
     expect(prompt).toContain("Action");
@@ -1439,24 +1435,15 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain("Select the smallest useful combination");
     expect(prompt).toContain("Same-day delivery in Bangkok");
     expect(prompt).toContain("Hand-arranged seasonal stems");
-    expect(prompt).toContain("LINE: @brandname");
-    expect(prompt).toContain("0XX-XXX-XXXX");
     expect(prompt).toContain("plausible editable mockup details");
-    expect(prompt).not.toContain(
-      "Choose no more than one short supporting or offer idea"
-    );
-    expect(prompt).toContain(
-      "When a layout needs temporary completion copy, you may create a plausible editable placeholder"
-    );
-    expect(prompt).toContain("multi-row bullets, feature cards, icon lists");
-    expect(prompt).toContain("THICK CONTEXT / ARTIFACTS");
+    expect(prompt).toContain("# CONTEXT AND ASSETS");
     expect(prompt).toContain(
       '"role": "Primary reference · Logo · Latest logo"'
     );
     expect(prompt).toContain(
       '"role": "Supporting reference · Style · Workshop CTA"'
     );
-    expect(prompt).toContain("Freely adapt compatible composition logic");
+    expect(prompt).toContain("Extract the design thinking behind the references");
     expect(prompt).toContain('"brandMemory"');
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');
@@ -1469,9 +1456,6 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain("Product truths");
     expect(prompt).not.toContain('"selectedEvidence"');
     expect(prompt).not.toContain("Style-only reference — study composition");
-    expect(prompt).toContain(
-      "Make those decisions from the brief, brand context, official assets"
-    );
     expect(prompt).not.toContain("Approved visual direction");
     expect(prompt).not.toContain("preferredLayout");
     expect(prompt).not.toContain("preferredHeroType");

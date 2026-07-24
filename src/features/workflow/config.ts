@@ -19,7 +19,7 @@ export const stages: readonly {
     id: "brief",
     name: "Brief",
     hero: "Brief.",
-    sub: "Give Compass the content mix, quantities, and brief."
+    sub: "Give Creative Compass the content mix, quantities, and brief."
   },
   {
     id: "directions",

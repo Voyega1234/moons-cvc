@@ -156,52 +156,48 @@ describe("readMappingClientsFromGoogleSheet", () => {
 });
 
 describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
-  it('reads the public "1. Questionnaire" tab without credentials', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      gvizResponse({
-        status: "ok",
-        table: {
-          cols: [{ label: "" }, { label: "" }, { label: "" }],
-          rows: [
+  it('reads the private "1. Questionnaire" tab with the signed-in Google token', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          properties: { title: "Client portal" },
+          sheets: [
             {
-              c: [
-                { v: "{{brand_name_en}}" },
-                null,
-                { v: "Centre Point Hotels Group" }
-              ]
-            },
-            {
-              c: [
-                { v: "{{billing_method_messenger}}" },
-                { v: true },
-                { v: "Messenger" }
-              ]
-            },
-            {
-              c: [
-                { v: "{{marketing_past_efforts}}" },
-                null,
-                { v: "e.g. Channels and campaigns" },
-                null,
-                { v: "Seasonal hotel promotions" }
-              ]
-            },
-            {
-              c: [
-                { v: "{{brand_media_channel_facebook}}" },
-                null,
-                { v: "Facebook: https://www.facebook.com/centrepointhotels" }
-              ]
+              properties: {
+                sheetId: 0,
+                title: "1. Questionnaire"
+              }
             }
           ]
-        }
-      })
-    );
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [
+            ["{{brand_name_en}}", "", "Centre Point Hotels Group"],
+            ["{{billing_method_messenger}}", true, "Messenger"],
+            [
+              "{{marketing_past_efforts}}",
+              "",
+              "e.g. Channels and campaigns",
+              "",
+              "Seasonal hotel promotions"
+            ],
+            [
+              "{{brand_media_channel_facebook}}",
+              "",
+              "Facebook: https://www.facebook.com/centrepointhotels"
+            ]
+          ]
+        })
+      );
 
     await expect(
       readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl:
           "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=0",
+        accessToken: "google-provider-token",
         fetchImpl
       })
     ).resolves.toEqual({
@@ -237,10 +233,14 @@ describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
       ]
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain(
-      `sheet=${encodeURIComponent("1. Questionnaire")}`
+      "sheets.googleapis.com/v4/spreadsheets/client-portal"
     );
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("headers=0");
-    expect(fetchImpl.mock.calls[0]?.[1]).toBeUndefined();
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain(
+      encodeURIComponent("'1. Questionnaire'")
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
+      headers: { Authorization: "Bearer google-provider-token" }
+    });
   });
 });
 
@@ -248,11 +248,4 @@ function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     headers: { "Content-Type": "application/json" }
   });
-}
-
-function gvizResponse(value: unknown): Response {
-  return new Response(
-    `/*O_o*/\ngoogle.visualization.Query.setResponse(${JSON.stringify(value)});`,
-    { headers: { "Content-Type": "application/javascript" } }
-  );
 }

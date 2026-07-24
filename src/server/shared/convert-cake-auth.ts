@@ -44,17 +44,14 @@ export async function resolveConvertCakeAuthorization(
     return { authorized: false, accessToken: null, email: null };
   }
 
-  const email = typeof user.email === "string" ? user.email : "";
-  const metadata = isRecord(user.app_metadata) ? user.app_metadata : {};
-  const organization =
-    typeof metadata.organization === "string" ? metadata.organization : "";
-  const authorized =
-    organization === "convert_cake" || email.endsWith("@convertcake.com");
+  const email =
+    typeof user.email === "string" ? user.email.trim().toLowerCase() : "";
+  const authorized = /^[^@\s]+@convertcake\.com$/.test(email);
 
   return {
     authorized,
     accessToken: authorized ? accessToken : null,
-    email: authorized ? email.toLowerCase() : null
+    email: authorized ? email : null
   };
 }
 

@@ -515,10 +515,10 @@ function referenceLibraryRole(label: string): string {
   if (normalized.includes("current artwork to revise")) {
     return "current artwork revision base — preserve approved identity and improve only the diagnosed issues";
   }
-  if (normalized.includes("moons artwork reference — primary")) {
+  if (normalized.includes("creative compass artwork reference — primary")) {
     return "primary artwork — composition and visual medium";
   }
-  if (normalized.includes("moons artwork reference — secondary")) {
+  if (normalized.includes("creative compass artwork reference — secondary")) {
     return "secondary artwork — compatible craft and finish";
   }
   if (normalized.includes("past work style reference")) {

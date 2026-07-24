@@ -181,10 +181,26 @@
   background: linear-gradient(145deg, #ff7958, var(--orange));
   color: #fff;
   box-shadow: 0 8px 18px rgba(255, 104, 70, 0.2), inset 0 1px rgba(255, 255, 255, 0.35);
-  font-size: 12px;
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: -0.04em;
-  text-transform: lowercase;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-align: center;
+  transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease);
+}
+
+.compass-logo-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 11px 22px rgba(255, 104, 70, 0.24), inset 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.compass-logo-button:active {
+  transform: scale(0.98);
+}
+
+.compass-logo-button:focus-visible {
+  outline: 3px solid rgba(255, 104, 70, 0.24);
+  outline-offset: 3px;
 }
 
 .compass-rail-nav {
@@ -852,6 +868,14 @@
 .compass-app .compass-account-button.open {
   border-color: #c7cde0;
   background: #f7f8fc;
+}
+
+.compass-app .compass-account-avatar {
+  width: 32px;
+  height: 32px;
+  display: block;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .compass-app .compass-account-popover {
@@ -2425,6 +2449,68 @@
   box-shadow: 0 24px 70px rgba(28, 35, 52, 0.18);
 }
 
+.compass-library-edit-backdrop {
+  z-index: 1100;
+  background: rgba(24, 28, 38, 0.38);
+  backdrop-filter: blur(5px);
+}
+
+.compass-library-edit-modal {
+  max-width: 640px;
+  max-height: min(780px, calc(100dvh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 26px 80px rgba(28, 35, 52, 0.22);
+}
+
+.compass-library-edit-head {
+  margin: 0;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compass-library-edit-head p:not(.eyebrow) {
+  max-width: 54ch;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.compass-library-edit-body {
+  max-height: calc(100dvh - 170px);
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+}
+
+.compass-library-edit-body > .memory-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.compass-library-edit-body .product-memory-form > .memory-error {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .compass-library-edit-backdrop {
+    padding: 10px;
+  }
+
+  .compass-library-edit-modal {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .compass-library-edit-body {
+    max-height: calc(100dvh - 126px);
+    padding: 15px;
+  }
+}
+
 .compass-app .compass-material-manager-head {
   display: flex;
   align-items: flex-start;
@@ -2781,6 +2867,66 @@
 .compass-app .direction-card.selected .check-dot {
   background: var(--accent);
   color: #fff;
+}
+
+.compass-app .memory-item-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.compass-app .memory-item-actions span {
+  margin-right: auto;
+}
+
+.compass-app .memory-item-actions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 2px 7px rgba(28, 35, 52, 0.05);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    transform 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    background 0.16s var(--ease),
+    color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+
+.compass-app .memory-item-actions button:not(:disabled):hover {
+  border-color: var(--accentLine);
+  background: var(--accentSoft);
+  color: var(--accent);
+  box-shadow: 0 5px 12px rgba(28, 35, 52, 0.08);
+  transform: translateY(-1px);
+}
+
+.compass-app .memory-item-actions button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.compass-app .memory-item-actions button:focus-visible {
+  outline: 3px solid rgba(86, 100, 245, 0.18);
+  outline-offset: 2px;
+}
+
+.compass-app .memory-item-actions .memory-delete-action {
+  border-color: var(--redLine);
+  color: var(--red);
+}
+
+.compass-app .memory-item-actions .memory-delete-action:not(:disabled):hover {
+  border-color: var(--redLine);
+  background: var(--redSoft);
+  color: var(--red);
 }
 
 .compass-app .direction-card-select {
@@ -3399,10 +3545,10 @@
 
 .compass-app .compass-quality-note {
   margin: 5px 0 0;
-  color: var(--red);
-  font-size: 10px;
-  font-weight: 550;
-  line-height: 1.45;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.5;
 }
 
 .compass-app .compass-context-card > h3,

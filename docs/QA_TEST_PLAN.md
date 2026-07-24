@@ -59,11 +59,11 @@ after this pass — see the last section of this document.
 
 | ID | Case | Steps | Expected | Priority | Verified |
 | --- | --- | --- | --- | --- | --- |
-| AUTH-01 | Unauthenticated user sees sign-in, not the app | Load the app with `VITE_DATA_SOURCE=supabase` and no session | `SupabaseAuthGate` renders the "Sign in to Compass" form; no workspace UI is reachable | High | Derived (was true before this session's temporary bypass; restored at the end) |
-| AUTH-02 | Non-Convert-Cake email is rejected | Enter an email not ending in `@convertcake.com` and submit | Inline error "Use your @convertcake.com email." (`validateConvertCakeEmail`); no OTP request sent | Medium | Derived |
-| AUTH-03 | Valid email sends a magic link | Enter `name@convertcake.com`, submit | `client.auth.signInWithOtp` fires; UI switches to "Check your email" with the entered address shown; "Resend login link" available | Medium | Derived |
-| AUTH-04 | Resend uses the wording "A new login link is on its way." | From the "Check your email" state, click "Resend login link" | Same email resubmitted; message updates to the resend copy, not the first-send copy | Low | Derived |
-| AUTH-05 | Redirect URL differs prod vs local | Compare `emailSignInRedirectUrl()` on `localhost`/`127.0.0.1`/`::1` vs any other hostname | Localhost returns `location.origin`; anything else returns `https://moons-cvc.vercel.app/` | Medium | Derived |
+| AUTH-01 | Unauthenticated user sees Google sign-in, not the app | Load the app with `VITE_DATA_SOURCE=supabase` and no session | `SupabaseAuthGate` renders "Continue with Google"; no workspace UI is reachable | High | Derived |
+| AUTH-02 | Google OAuth requests only the required Workspace access | Click "Continue with Google" | `signInWithOAuth` requests `drive.file` and `spreadsheets.readonly`, plus `hd=convertcake.com` | High | Derived |
+| AUTH-03 | Non-Convert-Cake Google session is rejected | Return from OAuth with a user email outside `@convertcake.com` | Session is signed out and the workspace stays inaccessible | High | Derived |
+| AUTH-04 | Google provider token is shared with Workspace features | Complete Google OAuth, then import a Questionnaire or export Slides | Questionnaire calls Sheets API and Slides calls Drive API with the captured provider token | High | Derived |
+| AUTH-05 | Redirect URL differs prod vs local | Compare `googleSignInRedirectUrl()` on `localhost`/`127.0.0.1`/`::1` vs any other hostname | Localhost returns `location.origin`; anything else returns `https://moons-cvc.vercel.app/` | Medium | Derived |
 | AUTH-06 | Supabase misconfigured shows a hard error, not a blank screen | Unset `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` with `VITE_DATA_SOURCE=supabase` | `.boot-error` screen: "Supabase is not configured." with the two env var names | Low | Derived |
 | AUTH-07 | Mock mode fully bypasses auth | Set `VITE_DATA_SOURCE=mock`, reload | App loads straight into Studio with no login screen, `enabled: false` in `AuthContext` | High | **Live** |
 

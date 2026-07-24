@@ -328,11 +328,11 @@ describe("generateImagePrompt", () => {
             imageUrl: "https://example.com/past-work.jpg"
           },
           {
-            label: "Moons artwork reference — primary",
+            label: "Creative Compass artwork reference — primary",
             imageUrl: "https://example.com/primary.jpg"
           },
           {
-            label: "Moons artwork reference — secondary",
+            label: "Creative Compass artwork reference — secondary",
             imageUrl: "https://example.com/secondary.jpg"
           }
         ],

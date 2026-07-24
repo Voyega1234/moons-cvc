@@ -225,13 +225,11 @@ lime/orange semantic accents, soft borders, and medium information density.
 - The browser ingestion trigger now converts a native `Failed to fetch` into an
   actionable message that tells local developers to start Compass with
   `npm run dev:full`.
-- Authentication was simplified to passwordless email magic links on
-  2026-07-16. The Supabase gate now asks for only a `@convertcake.com` email and
-  uses `signInWithOtp` for both existing users and first-time account creation.
-  Password, confirmation, signup-mode, forgot-password, and reset-password UI
-  were removed. The confirmation state shows the normalized destination and
-  supports resend or changing the email while the existing Supabase session and
-  sign-out behavior remain unchanged.
+- Authentication moved from email magic links to Supabase Google OAuth on
+  2026-07-24. The login requests `drive.file` for Slides export and
+  `spreadsheets.readonly` for private onboarding Questionnaire reads. Google
+  receives `hd=convertcake.com` as an account hint, while the app enforces the
+  email domain again in the auth gate and protected server endpoints.
 - Two duplicate `Power Art Material` Supabase client records and their queued
   ingestion jobs were removed on 2026-07-16 before either job started. A
   post-delete query confirmed that no client or job rows remain for those IDs,

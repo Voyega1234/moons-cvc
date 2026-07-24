@@ -356,12 +356,24 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("alert")).toBeNull();
 
     fireEvent.click(stage.getByRole("button", { name: "Manage library" }));
-    expect(
-      stage.getByRole("dialog", { name: "Manage brand materials" })
-    ).toBeTruthy();
+    const libraryDialog = stage.getByRole("dialog", {
+      name: "Manage brand materials"
+    });
+    expect(libraryDialog).toBeTruthy();
     expect(
       stage.getByRole("navigation", { name: "Brand library folders" })
     ).toBeTruthy();
+    expect(within(libraryDialog).queryByText("Upload guideline")).toBeNull();
+    expect(within(libraryDialog).queryByText("Paste guideline text")).toBeNull();
+    fireEvent.click(
+      within(libraryDialog).getByRole("button", { name: "Add guideline" })
+    );
+    expect(
+      stage.getByRole("dialog", { name: "Add brand guideline" })
+    ).toBeTruthy();
+    fireEvent.click(
+      stage.getByRole("button", { name: "Close guideline upload" })
+    );
     fireEvent.click(
       stage.getByRole("button", { name: "Close brand library" })
     );
@@ -590,13 +602,19 @@ describe("redesigned workflow stages", () => {
       within(dialog).getByRole("button", { name: /Guideline/ })
     );
     await user.click(within(dialog).getByRole("button", { name: "Edit" }));
-    const editor = within(dialog).getByRole("textbox", {
+    const editDialog = within(document.body).getByRole("dialog", {
+      name: "Edit guideline"
+    });
+    expect(
+      within(dialog).queryByRole("textbox", { name: "Guideline text" })
+    ).toBeNull();
+    const editor = within(editDialog).getByRole("textbox", {
       name: "Guideline text"
     });
     await user.clear(editor);
     await user.type(editor, "Latest editable guideline source.");
     await user.click(
-      within(dialog).getByRole("button", { name: "Save guideline" })
+      within(editDialog).getByRole("button", { name: "Save guideline" })
     );
 
     await waitFor(async () => {
@@ -733,7 +751,9 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    await user.click(await stage.findByRole("button", { name: "Add to Compass" }));
+    await user.click(
+      await stage.findByRole("button", { name: "Add to Creative Compass" })
+    );
     expect(stage.getByText("Google Sheet extraction")).toBeTruthy();
     expect(stage.getByText(questionnaireUrl)).toBeTruthy();
     const questionnaireField = stage.getByLabelText(
@@ -969,15 +989,15 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("spinbutton", { name: "Album quantity" })
     ).toBeTruthy();
+    expect(state.albumFormat).toBe("auto");
     expect(
-      stage.getByRole("button", {
+      stage.queryByRole("button", {
         name: "Automatically choose the best album format for each idea"
       })
-        .getAttribute("aria-pressed")
-    ).toBe("true");
+    ).toBeNull();
     expect(
-      stage.getByRole("button", { name: "4 images · Grid" })
-    ).toBeTruthy();
+      stage.queryByRole("button", { name: "4 images · Grid" })
+    ).toBeNull();
     expect(
       (stage.getByRole("textbox", {
         name: /Working brief/i
@@ -993,14 +1013,6 @@ describe("redesigned workflow stages", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-success-metric",
       metric: "ROAS"
-    });
-
-    await user.click(
-      stage.getByRole("button", { name: "4 images · Vertical lead" })
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-album-format",
-      format: "four-vertical"
     });
 
     await user.click(

@@ -4,6 +4,10 @@ import {
   getSupabaseClient,
   isSupabaseConfigured
 } from "../../lib/supabase/client";
+import {
+  clearGoogleProviderToken,
+  requireGoogleProviderToken
+} from "../../lib/google-workspace/provider-token";
 import type {
   MappingClient,
   MappingClientListOptions,
@@ -24,7 +28,9 @@ export class GoogleSheetMappingClientRepository
     private readonly fetchImpl: typeof fetch = (input, init) =>
       fetch(input, init),
     private readonly accessTokenProvider: () => Promise<string | null> =
-      currentSupabaseAccessToken
+      currentSupabaseAccessToken,
+    private readonly googleAccessTokenProvider: () => string =
+      requireGoogleProviderToken
   ) {}
 
   async list({
@@ -46,17 +52,25 @@ export class GoogleSheetMappingClientRepository
     sheetUrl: string
   ): Promise<OnboardingQuestionnaireSource | null> {
     const accessToken = await this.accessTokenProvider();
+    const googleAccessToken = this.googleAccessTokenProvider();
     const separator = this.endpoint.includes("?") ? "&" : "?";
     const url = `${this.endpoint}${separator}questionnaireSheetUrl=${encodeURIComponent(sheetUrl)}`;
     const response = await this.fetchImpl(url, {
       cache: "no-store",
       headers: accessToken
-        ? { Authorization: `Bearer ${accessToken}` }
-        : undefined
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+            "X-Google-Access-Token": googleAccessToken
+          }
+        : { "X-Google-Access-Token": googleAccessToken }
     });
     const payload = (await response.json()) as unknown;
     if (!response.ok) {
-      throw new Error(mappingSheetError(payload, response.status));
+      const message = mappingSheetError(payload, response.status);
+      if (message.startsWith("Google access has expired.")) {
+        clearGoogleProviderToken();
+      }
+      throw new Error(message);
     }
     if (!isRecord(payload) || payload.ok !== true) {
       throw new Error("Questionnaire sheet endpoint returned invalid data.");

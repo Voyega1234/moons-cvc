@@ -39,9 +39,16 @@ describe("redesigned application navigation", () => {
       />
     );
 
-    expect(
-      screen.getByRole("button", { name: "Open Compass studio" }).textContent
-    ).toBe("compass");
+    const productHome = screen.getByRole("button", {
+      name: "Open Creative Compass studio"
+    });
+    expect(productHome.textContent).toBe("Creative Compass");
+
+    await user.click(productHome);
+    expect(workspaceDispatch).toHaveBeenCalledWith({
+      type: "set-view",
+      view: "studio"
+    });
 
     await user.click(screen.getByRole("button", { name: "Workboard" }));
     expect(workspaceDispatch).toHaveBeenCalledWith({

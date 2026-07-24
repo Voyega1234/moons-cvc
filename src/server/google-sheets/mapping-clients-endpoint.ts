@@ -45,8 +45,22 @@ export async function handleMappingClientsRequest({
       "questionnaireSheetUrl"
     );
     if (questionnaireSheetUrl) {
+      const googleAccessToken = request.headers
+        .get("x-google-access-token")
+        ?.trim();
+      if (!googleAccessToken) {
+        return jsonResponse(
+          {
+            ok: false,
+            error:
+              "Google access is required. Sign out, then sign in with Google again."
+          },
+          403
+        );
+      }
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
+        accessToken: googleAccessToken,
         fetchImpl
       });
       return jsonResponse({ ok: true, questionnaire });
@@ -72,15 +86,16 @@ export async function handleMappingClientsRequest({
 
     return jsonResponse({ ok: true, ...result });
   } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Could not read the Google Sheet.";
     return jsonResponse(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not read the Google Sheet."
+        error: message
       },
-      500
+      message.startsWith("Google access has expired.") ? 401 : 500
     );
   }
 }

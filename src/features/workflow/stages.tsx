@@ -8,6 +8,7 @@ import {
   type Dispatch,
   type ReactNode
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowRight,
   Bell,
@@ -20,13 +21,13 @@ import {
   X
 } from "@phosphor-icons/react";
 import {
-  brandLogoUrl,
   canSelectBrand,
   canStartBrandIngestion,
   type Brand,
   type LibraryItem,
   type OnboardingQuestionnaireSource
 } from "../../domain/brand";
+import { BrandLogo } from "../../shared/components/brand-logo";
 import {
   brandDocumentTypeLabels,
   brandDocumentTypes,
@@ -281,10 +282,10 @@ export function StartStage({ state, dispatch }: StageProps) {
             >
               <span className="select-left">
                 <span className="avatar compass-brand-select-avatar">
-                  {brandLogoUrl(state.brand) ? (
-                    <img src={brandLogoUrl(state.brand)} alt="" />
+                  {state.brand ? (
+                    <BrandLogo brand={state.brand} />
                   ) : (
-                    state.brand?.initials ?? "NE"
+                    "NE"
                   )}
                 </span>
                 <span>
@@ -351,11 +352,7 @@ export function StartStage({ state, dispatch }: StageProps) {
                       title={disabledReason ?? undefined}
                     >
                       <span className="avatar">
-                        {brandLogoUrl(brand) ? (
-                          <img src={brandLogoUrl(brand)} alt="" />
-                        ) : (
-                          brand.initials
-                        )}
+                        <BrandLogo brand={brand} />
                       </span>
                       <span className="client-row-copy">
                         <b>{brand.name}</b>
@@ -382,7 +379,7 @@ export function StartStage({ state, dispatch }: StageProps) {
                             dispatch({ type: "toggle-brand-menu" });
                           }}
                         >
-                          {canAddMapping ? "Add to Compass" : "Set up brand"}
+                          {canAddMapping ? "Add to Creative Compass" : "Set up brand"}
                         </button>
                       ) : null}
                     </div>
@@ -400,11 +397,7 @@ export function StartStage({ state, dispatch }: StageProps) {
                     onClick={() => dispatch({ type: "select-brand", brand })}
                   >
                     <span className="avatar">
-                      {brandLogoUrl(brand) ? (
-                        <img src={brandLogoUrl(brand)} alt="" />
-                      ) : (
-                        brand.initials
-                      )}
+                      <BrandLogo brand={brand} />
                     </span>
                     <span>
                       <b>{brand.name}</b>
@@ -448,7 +441,7 @@ export function StartStage({ state, dispatch }: StageProps) {
             <div className="compass-start-blank">
               <b>Brand context is your unfair advantage.</b>
               <p>
-                compass keeps approved references, uploaded brand materials, and
+                Creative Compass keeps approved references, uploaded brand materials, and
                 past performance close to every creative decision.
               </p>
             </div>
@@ -541,7 +534,7 @@ function BrandAnalysisQueuedDialog({
         </div>
         <h3 id={titleId}>{brandName} is in the queue.</h3>
         <p>
-          Compass usually needs 5-10 minutes to analyze the brand. You can close
+          Creative Compass usually needs 5-10 minutes to analyze the brand. You can close
           this message and continue working.
         </p>
         <div className="compass-setup-queued-mailbox">
@@ -705,7 +698,7 @@ function MappingBrandSetupPanel({
       setError(
         error instanceof Error
           ? error.message
-          : "Could not add this client to Compass."
+          : "Could not add this client to Creative Compass."
       );
     } finally {
       setSaving(false);
@@ -715,9 +708,9 @@ function MappingBrandSetupPanel({
   return (
     <section className="client-intake-card">
       <div className="client-intake-heading">
-        <span>Add {brand.name} to Compass</span>
+        <span>Add {brand.name} to Creative Compass</span>
         <small>
-          This client exists in the mapping sheet but has no Compass data yet.
+          This client exists in the mapping sheet but has no Creative Compass data yet.
         </small>
       </div>
       <div className="client-intake-form">
@@ -949,7 +942,7 @@ function BrandSetupSources({
         <legend>Facebook page</legend>
         <p>
           {sourceOptions.length
-            ? "Select the page Compass should analyze. These were found in the client data."
+            ? "Select the page Creative Compass should analyze. These were found in the client data."
             : "No Facebook page was found in the client data. Add one manually."}
         </p>
         <div className="client-source-options">
@@ -1020,7 +1013,7 @@ function brandFacebookSourceOptions(
 
   return urls.map((url) => ({
     url,
-    label: "Current Compass page"
+    label: "Current Creative Compass page"
   }));
 }
 
@@ -1053,7 +1046,7 @@ function GoogleSheetExtractionSummary({
         <small>
           {questionnaireFields?.length
             ? `Extracted ${questionnaireFields.length} answered fields from the read-only ${questionnaireSource?.sheetTitle ?? "1. Questionnaire"} tab.`
-            : "Compass reads only the tab named 1. Questionnaire and extracts answered fields from its {{field_name}} placeholders."}
+            : "Creative Compass reads only the tab named 1. Questionnaire and extracts answered fields from its {{field_name}} placeholders."}
         </small>
       </div>
       {questionnaireFields?.length ? (
@@ -1110,7 +1103,7 @@ function OnboardingQuestionnaireField({
           onChange={(event) => onChange(event.target.value)}
         />
         <small>
-          Compass uses read-only access and imports the 1. Questionnaire tab as
+          Creative Compass uses read-only access and imports the 1. Questionnaire tab as
           onboarding context. It is not the current campaign brief.
         </small>
       </label>
@@ -1256,7 +1249,7 @@ function clientDisabledReason(
   brand: NonNullable<WorkflowState["brand"]>
 ): string | null {
   if (brand.existsInSystem === false) {
-    return "This client is in the mapping sheet but has no brand memory in Compass yet.";
+    return "This client is in the mapping sheet but has no brand memory in Creative Compass yet.";
   }
 
   if (!canSelectBrand(brand)) {
@@ -1267,7 +1260,7 @@ function clientDisabledReason(
 }
 
 function clientStatusLabel(brand: NonNullable<WorkflowState["brand"]>): string {
-  if (brand.existsInSystem === false) return "No Compass data yet";
+  if (brand.existsInSystem === false) return "No Creative Compass data yet";
 
   switch (brand.ingestionStatus) {
     case "draft":
@@ -1439,7 +1432,7 @@ function BrandProfilePanel({
   const logoRule = brandRules.find(
     (item) => item.title.trim().toLowerCase() === "logo" && item.assetUrl
   );
-  const logoUrl = logoRule?.assetUrl ?? brandLogoUrl(brand);
+  const logoUrl = logoRule?.assetUrl;
   const colors = Array.from(
     new Set([
       ...extractColorSwatches(findRuleByTitle(brandRules, "Colors")),
@@ -1473,7 +1466,11 @@ function BrandProfilePanel({
       <div className="compass-brand-snapshot">
         <div className="compass-brand-snapshot-identity">
           <div className="compass-brand-snapshot-logo">
-            {logoUrl ? <img src={logoUrl} alt={`${brand.name} logo`} /> : brand.initials}
+            <BrandLogo
+              brand={brand}
+              assetUrl={logoUrl}
+              alt={`${brand.name} logo`}
+            />
           </div>
           <div className="compass-brand-snapshot-name">
             <b>{brand.name}</b>
@@ -1822,7 +1819,7 @@ function BrandLibraryModal({
             <p className="eyebrow">Brand Library</p>
             <h3 id="brand-library-title">Manage brand materials</h3>
             <p>
-              Search, organize, update, and remove the source memory used by compass.
+              Search, organize, update, and remove the source memory used by Creative Compass.
             </p>
           </div>
           <button
@@ -1886,6 +1883,69 @@ function BrandLibraryModal({
   );
 }
 
+function LibraryEditModal({
+  title,
+  description,
+  busy,
+  onClose,
+  children
+}: {
+  title: string;
+  description?: string;
+  busy: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
+
+  if (typeof document === "undefined") return null;
+  const portalRoot = document.querySelector(".compass-app") ?? document.body;
+
+  return createPortal(
+    <div
+      className="output-modal-backdrop compass-library-edit-backdrop"
+      onClick={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <section
+        className="output-modal compass-library-edit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="output-modal-head compass-library-edit-head">
+          <div>
+            <p className="eyebrow">Manage library</p>
+            <h3 id={titleId}>{title}</h3>
+            {description ? <p>{description}</p> : null}
+          </div>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={busy}
+            aria-label="Close edit popup"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </header>
+        <div className="compass-library-edit-body">{children}</div>
+      </section>
+    </div>,
+    portalRoot
+  );
+}
+
 function BrandProfileSectionContent({
   state,
   dispatch,
@@ -1903,6 +1963,7 @@ function BrandProfileSectionContent({
       {section === "brand" ? (
         <BrandKitMemoryList
           clientId={brand.id}
+          brandName={brand.name}
           initialItems={brand.library.brand}
           libraryDocuments={brand.library.docs}
           onBrandRulesSaved={(items) =>
@@ -2025,6 +2086,41 @@ function OnboardingQuestionnaireMemory({
     setEditing(!questionnaire);
   }
 
+  const questionnaireForm = (
+    <div className="memory-form questionnaire-memory-form">
+      {error ? (
+        <p className="memory-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <OnboardingQuestionnaireField
+        value={sheetUrl}
+        disabled={saving}
+        onChange={setSheetUrl}
+      />
+      <div className="memory-form-actions">
+        {questionnaire ? (
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={saving}
+            onClick={cancelEditing}
+          >
+            Cancel
+          </button>
+        ) : null}
+        <button
+          className="btn primary"
+          type="button"
+          disabled={saving || !sheetUrl.trim()}
+          onClick={() => void saveQuestionnaire()}
+        >
+          {saving ? "Importing…" : "Import questionnaire"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <section className="memory-editor questionnaire-memory">
       <header>
@@ -2046,40 +2142,19 @@ function OnboardingQuestionnaireMemory({
         ) : null}
       </header>
 
-      {error ? (
-        <p className="memory-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
       {editing ? (
-        <div className="memory-form questionnaire-memory-form">
-          <OnboardingQuestionnaireField
-            value={sheetUrl}
-            disabled={saving}
-            onChange={setSheetUrl}
-          />
-          <div className="memory-form-actions">
-            {questionnaire ? (
-              <button
-                className="btn secondary"
-                type="button"
-                disabled={saving}
-                onClick={cancelEditing}
-              >
-                Cancel
-              </button>
-            ) : null}
-            <button
-              className="btn primary"
-              type="button"
-              disabled={saving || !sheetUrl.trim()}
-              onClick={() => void saveQuestionnaire()}
-            >
-              {saving ? "Importing…" : "Import questionnaire"}
-            </button>
-          </div>
-        </div>
+        questionnaire ? (
+          <LibraryEditModal
+            title="Edit questionnaire"
+            description="Update the Google Sheet used as onboarding context."
+            busy={saving}
+            onClose={cancelEditing}
+          >
+            {questionnaireForm}
+          </LibraryEditModal>
+        ) : (
+          questionnaireForm
+        )
       ) : questionnaire ? (
         <article className="memory-item questionnaire-memory-item">
           {questionnaire.extractedFields?.length ? (
@@ -2160,6 +2235,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
     setKeyBenefit("");
     setAudience("");
     setClaimNotes("");
+    setError(null);
   }
 
   function openCreateForm() {
@@ -2243,6 +2319,83 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
     }
   }
 
+  const productForm = (
+    <div className="memory-form product-memory-form">
+      {error ? <p className="memory-error">{error}</p> : null}
+      <label>
+        <span>Product / service name</span>
+        <input
+          value={name}
+          disabled={saving}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>What it is</span>
+        <textarea
+          rows={2}
+          value={description}
+          disabled={saving}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>Offer</span>
+        <textarea
+          rows={2}
+          value={offer}
+          disabled={saving}
+          onChange={(event) => setOffer(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>Key benefit</span>
+        <textarea
+          rows={2}
+          value={keyBenefit}
+          disabled={saving}
+          onChange={(event) => setKeyBenefit(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>Audience</span>
+        <textarea
+          rows={2}
+          value={audience}
+          disabled={saving}
+          onChange={(event) => setAudience(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>Claim notes</span>
+        <textarea
+          rows={2}
+          value={claimNotes}
+          disabled={saving}
+          onChange={(event) => setClaimNotes(event.target.value)}
+        />
+      </label>
+      <div className="memory-form-actions">
+        <button
+          className="btn ghost"
+          type="button"
+          disabled={saving}
+          onClick={resetForm}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          type="button"
+          disabled={saving}
+          onClick={() => void saveProduct()}
+        >
+          {saving ? "Saving..." : "Save product"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <section className="memory-editor">
       <header>
@@ -2250,7 +2403,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
           <h4>Products</h4>
           <p>
             Default offers, benefits, audience, and claim notes extracted by
-            Compass. Review and edit before generation.
+            Creative Compass. Review and edit before generation.
           </p>
         </div>
         {!formOpen ? (
@@ -2264,81 +2417,20 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
           </button>
         ) : null}
       </header>
-      {error ? <p className="memory-error">{error}</p> : null}
+      {error && !formOpen ? <p className="memory-error">{error}</p> : null}
       {formOpen ? (
-        <div className="memory-form product-memory-form">
-          <label>
-            <span>Product / service name</span>
-            <input
-              value={name}
-              disabled={saving}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>What it is</span>
-            <textarea
-              rows={2}
-              value={description}
-              disabled={saving}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Offer</span>
-            <textarea
-              rows={2}
-              value={offer}
-              disabled={saving}
-              onChange={(event) => setOffer(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Key benefit</span>
-            <textarea
-              rows={2}
-              value={keyBenefit}
-              disabled={saving}
-              onChange={(event) => setKeyBenefit(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Audience</span>
-            <textarea
-              rows={2}
-              value={audience}
-              disabled={saving}
-              onChange={(event) => setAudience(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Claim notes</span>
-            <textarea
-              rows={2}
-              value={claimNotes}
-              disabled={saving}
-              onChange={(event) => setClaimNotes(event.target.value)}
-            />
-          </label>
-          <div className="memory-form-actions">
-            <button
-              className="btn ghost"
-              type="button"
-              disabled={saving}
-              onClick={resetForm}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={saving}
-              onClick={() => void saveProduct()}
-            >
-              {saving ? "Saving..." : "Save product"}
-            </button>
-          </div>
-        </div>
+        editingId ? (
+          <LibraryEditModal
+            title="Edit product or service"
+            description={name}
+            busy={saving}
+            onClose={resetForm}
+          >
+            {productForm}
+          </LibraryEditModal>
+        ) : (
+          productForm
+        )
       ) : null}
       {loading ? <p className="repository-message">Loading products...</p> : null}
       {products.length ? (
@@ -2354,7 +2446,6 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
                 <ProductField label="Claim notes" value={product.claimNotes} />
               </dl>
               <div className="memory-item-actions">
-                <span>Editable AI default</span>
                 <button
                   type="button"
                   disabled={saving}
@@ -2363,6 +2454,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
                   Edit
                 </button>
                 <button
+                  className="memory-delete-action"
                   type="button"
                   disabled={saving}
                   onClick={() => void deleteProduct(product)}
@@ -2517,12 +2609,14 @@ function isImageGuidelineFile(file: File): boolean {
 
 function BrandKitMemoryList({
   clientId,
+  brandName,
   initialItems,
   libraryDocuments,
   onBrandRulesSaved,
   onGuidelinesSaved
 }: {
   clientId: string;
+  brandName: string;
   initialItems: readonly LibraryItem[];
   libraryDocuments: readonly LibraryItem[];
   onBrandRulesSaved: (items: readonly LibraryItem[]) => void;
@@ -2536,10 +2630,7 @@ function BrandKitMemoryList({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [analyzingGuideline, setAnalyzingGuideline] = useState(false);
-  const [guidelineError, setGuidelineError] = useState<string | null>(null);
-  const [guidelineTextOpen, setGuidelineTextOpen] = useState(false);
-  const [guidelineText, setGuidelineText] = useState("");
+  const [guidelineDialogOpen, setGuidelineDialogOpen] = useState(false);
   const [expandedMemoryItemIds, setExpandedMemoryItemIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -2589,6 +2680,7 @@ function BrandKitMemoryList({
     setEditingId(null);
     setTitle("");
     setDescription("");
+    setError(null);
   }
 
   async function saveRule() {
@@ -2625,37 +2717,6 @@ function BrandKitMemoryList({
       setError(error instanceof Error ? error.message : "Could not save rule.");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleAnalyzeGuideline(source: GuidelineSource) {
-    setAnalyzingGuideline(true);
-    setGuidelineError(null);
-
-    try {
-      const result = await analyzeAndSaveBrandGuideline({
-        repository,
-        clientId,
-        items,
-        guidelines: libraryDocuments,
-        source
-      });
-      setItems(result.brandRules);
-      onBrandRulesSaved(result.brandRules);
-      onGuidelinesSaved(result.guidelines);
-
-      if ("text" in source) {
-        setGuidelineText("");
-        setGuidelineTextOpen(false);
-      }
-    } catch (caught) {
-      setGuidelineError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not analyze guideline."
-      );
-    } finally {
-      setAnalyzingGuideline(false);
     }
   }
 
@@ -2746,6 +2807,7 @@ function BrandKitMemoryList({
             Edit
           </button>
           <button
+            className="memory-delete-action"
             type="button"
             disabled={saving}
             onClick={() => void deleteRule(item)}
@@ -2757,38 +2819,67 @@ function BrandKitMemoryList({
     );
   }
 
+  const ruleForm = (
+    <div className="memory-form">
+      {error ? <p className="memory-error">{error}</p> : null}
+      <label>
+        <span>Rule title</span>
+        <input
+          value={title}
+          disabled={saving}
+          placeholder="Example: Voice"
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>Rule detail</span>
+        <textarea
+          value={description}
+          disabled={saving}
+          placeholder="Example: Calm, premium, direct. Avoid hype and exaggerated claims."
+          rows={3}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+      </label>
+      <div className="memory-form-actions">
+        <button
+          className="btn ghost"
+          type="button"
+          disabled={saving}
+          onClick={closeForm}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          type="button"
+          disabled={saving}
+          onClick={() => void saveRule()}
+        >
+          {saving ? "Saving..." : "Save rule"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <section className="memory-editor">
       <header>
         <div>
           <h4>Brand kit</h4>
-          <p>Store the core rules: voice, CI, claim safety, and do/don’t.</p>
+          <p>
+            Add your brand assets so Creative Compass can create content that
+            looks and sounds like your brand.
+          </p>
         </div>
         <div className="memory-actions">
-          <label
-            className={`btn secondary upload-inline ${analyzingGuideline ? "disabled" : ""}`}
-            title="Upload a PDF or image guideline. Compass will extract tone, style, and brand colors automatically."
-          >
-            {analyzingGuideline ? "Analyzing…" : "Upload guideline"}
-            <input
-              className="file-input"
-              type="file"
-              accept="application/pdf,image/png,image/jpeg,image/webp"
-              disabled={analyzingGuideline}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void handleAnalyzeGuideline({ file });
-              }}
-            />
-          </label>
           <button
             className="btn secondary"
             type="button"
-            disabled={analyzingGuideline}
-            onClick={() => setGuidelineTextOpen((current) => !current)}
+            onClick={() => setGuidelineDialogOpen(true)}
           >
-            {guidelineTextOpen ? "Cancel" : "Paste guideline text"}
+            <FileArrowUp size={16} weight="bold" aria-hidden="true" />
+            Add guideline
           </button>
           {!formOpen ? (
             <button
@@ -2804,48 +2895,10 @@ function BrandKitMemoryList({
       </header>
       {!loading && missingIdentityInputs.includes("Brand CI / Guideline") ? (
         <p className="compass-quality-note">
-          Optional: without a Brand CI / Guideline, Compass has less context
-          for tone and visual direction.
+          Brand guideline is optional. Add one to improve tone, visual style,
+          and brand consistency. You can add it later.
         </p>
       ) : null}
-      {guidelineTextOpen ? (
-        <div className="memory-form">
-          <label>
-            <span>Guideline text</span>
-            <textarea
-              value={guidelineText}
-              disabled={analyzingGuideline}
-              placeholder="Paste brand guideline text: voice, tone, positioning, color names, or hex codes..."
-              rows={4}
-              onChange={(event) => setGuidelineText(event.target.value)}
-            />
-          </label>
-          <div className="memory-form-actions">
-            <button
-              className="btn ghost"
-              type="button"
-              disabled={analyzingGuideline}
-              onClick={() => {
-                setGuidelineTextOpen(false);
-                setGuidelineText("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={analyzingGuideline || !guidelineText.trim()}
-              onClick={() =>
-                void handleAnalyzeGuideline({ text: guidelineText })
-              }
-            >
-              {analyzingGuideline ? "Analyzing…" : "Analyze text"}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {guidelineError ? <p className="memory-error">{guidelineError}</p> : null}
       <BrandLogoCard
         clientId={clientId}
         logoItem={logoItem}
@@ -2891,47 +2944,20 @@ function BrandKitMemoryList({
           }
         />
       </section>
-      {error ? <p className="memory-error">{error}</p> : null}
+      {error && !formOpen ? <p className="memory-error">{error}</p> : null}
       {formOpen ? (
-        <div className="memory-form">
-          <label>
-            <span>Rule title</span>
-            <input
-              value={title}
-              disabled={saving}
-              placeholder="Example: Voice"
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Rule detail</span>
-            <textarea
-              value={description}
-              disabled={saving}
-              placeholder="Example: Calm, premium, direct. Avoid hype and exaggerated claims."
-              rows={3}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <div className="memory-form-actions">
-            <button
-              className="btn ghost"
-              type="button"
-              disabled={saving}
-              onClick={closeForm}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={saving}
-              onClick={() => void saveRule()}
-            >
-              {saving ? "Saving..." : "Save rule"}
-            </button>
-          </div>
-        </div>
+        editingId ? (
+          <LibraryEditModal
+            title="Edit brand rule"
+            description={title}
+            busy={saving}
+            onClose={closeForm}
+          >
+            {ruleForm}
+          </LibraryEditModal>
+        ) : (
+          ruleForm
+        )
       ) : null}
       {loading ? <p className="repository-message">Loading brand kit...</p> : null}
       {otherItems.length ? (
@@ -2943,6 +2969,20 @@ function BrandKitMemoryList({
           <b>No brand kit yet.</b>
           <p>Add memory here before using it in generation.</p>
         </div>
+      ) : null}
+      {guidelineDialogOpen ? (
+        <GuidelineQuickAddDialog
+          brandName={brandName}
+          clientId={clientId}
+          initialItems={items}
+          initialGuidelines={libraryDocuments}
+          onSaved={({ brandRules, guidelines }) => {
+            setItems(brandRules);
+            onBrandRulesSaved(brandRules);
+            onGuidelinesSaved(guidelines);
+          }}
+          onClose={() => setGuidelineDialogOpen(false)}
+        />
       ) : null}
     </section>
   );
@@ -3117,8 +3157,7 @@ function ColorsCard({
       </div>
       {ruleTitle === "Colors" && colors.length === 0 ? (
         <p className="compass-quality-note">
-          Optional: without brand colors, artwork may match the brand less
-          accurately.
+          Add the colors your brand uses most often. You can add them later.
         </p>
       ) : null}
       {error ? <p className="memory-error">{error}</p> : null}
@@ -3217,8 +3256,8 @@ function BrandLogoCard({
         <p>PNG, JPEG, or WEBP. Used across generation and previews.</p>
         {!logoItem?.assetUrl ? (
           <p className="compass-quality-note">
-            Optional: without a logo, artwork may feel less consistent with
-            the brand.
+            Upload your logo to keep generated artwork visually consistent.
+            You can add it later.
           </p>
         ) : null}
         {error ? <p className="memory-error">{error}</p> : null}
@@ -3451,6 +3490,7 @@ function BrandDocumentsMemoryList({
     setEditingGuidelineId(null);
     setGuidelineTitle("");
     setGuidelineText("");
+    setError(null);
   }
 
   async function saveGuideline() {
@@ -3481,6 +3521,39 @@ function BrandDocumentsMemoryList({
       setSavingGuideline(false);
     }
   }
+
+  const guidelineForm = (
+    <div className="memory-form">
+      {error ? <p className="memory-error">{error}</p> : null}
+      <label>
+        <span>Guideline text</span>
+        <textarea
+          value={guidelineText}
+          disabled={savingGuideline}
+          rows={10}
+          onChange={(event) => setGuidelineText(event.target.value)}
+        />
+      </label>
+      <div className="memory-form-actions">
+        <button
+          className="btn ghost"
+          type="button"
+          disabled={savingGuideline}
+          onClick={cancelGuidelineEdit}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn primary"
+          type="button"
+          disabled={savingGuideline || !guidelineText.trim()}
+          onClick={() => void saveGuideline()}
+        >
+          {savingGuideline ? "Saving…" : "Save guideline"}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <section className="memory-editor">
@@ -3527,7 +3600,9 @@ function BrandDocumentsMemoryList({
           </div>
         </div>
       </header>
-      {error ? <p className="memory-error">{error}</p> : null}
+      {error && !editingGuidelineId ? (
+        <p className="memory-error">{error}</p>
+      ) : null}
       {loading ? <p className="repository-message">Loading documents...</p> : null}
       {documents.length ? (
         <>
@@ -3571,39 +3646,14 @@ function BrandDocumentsMemoryList({
         </>
       ) : null}
       {editingGuidelineId ? (
-        <div className="memory-form">
-          <b>{guidelineTitle}</b>
-          <label>
-            <span>Guideline text</span>
-            <textarea
-              value={guidelineText}
-              disabled={savingGuideline}
-              rows={10}
-              onChange={(event) => setGuidelineText(event.target.value)}
-            />
-          </label>
-          <div className="memory-form-actions">
-            <button
-              className="btn ghost"
-              type="button"
-              disabled={savingGuideline}
-              onClick={cancelGuidelineEdit}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={
-                savingGuideline ||
-                !guidelineText.trim()
-              }
-              onClick={() => void saveGuideline()}
-            >
-              {savingGuideline ? "Saving…" : "Save guideline"}
-            </button>
-          </div>
-        </div>
+        <LibraryEditModal
+          title="Edit guideline"
+          description={guidelineTitle}
+          busy={savingGuideline}
+          onClose={cancelGuidelineEdit}
+        >
+          {guidelineForm}
+        </LibraryEditModal>
       ) : null}
       {!loading && !documents.length && !guidelines.length ? (
         <div className="empty">
@@ -3706,7 +3756,7 @@ function PastWorkPreview({
           <h4>Past work</h4>
           <p>
             Facebook posts and Ads Library references appear by default.
-            Delivered Compass work is shown separately when available.
+            Delivered Creative Compass work is shown separately when available.
           </p>
         </div>
         <span className="pill">Reference only</span>
@@ -3729,7 +3779,7 @@ function PastWorkPreview({
       ) : null}
       {delivered ? (
         <>
-          <span className="memory-subhead">Delivered by Compass</span>
+          <span className="memory-subhead">Delivered by Creative Compass</span>
           <div className="memory-item-list">
             {state.outputs.map((output, index) => (
               <article className="memory-item" key={output.id}>
@@ -3863,6 +3913,8 @@ const briefServiceIcons: Partial<Record<ServiceType, string>> = {
   "ugc-video": "UG",
   "album-post": "AL"
 };
+
+const SHOW_ALBUM_FORMAT_PICKER = false;
 
 export type BrandIdentityInput =
   | "Logo"
@@ -4160,7 +4212,8 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 );
               })}
             </div>
-            {fixedMixItems.some(
+            {SHOW_ALBUM_FORMAT_PICKER &&
+            fixedMixItems.some(
               (item) => item.service === "album-post" && item.quantity > 0
             ) ? (
               <div className="compass-album-format-picker">
@@ -5136,12 +5189,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       const { exportCompassIdeasReviewPdf } = await import(
         "../export-pdf-kit/export-ideas-review-pdf"
       );
-      const brandSlug = (state.brand?.name ?? "compass")
+      const brandSlug = (state.brand?.name ?? "creative-compass")
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      const filename = `${brandSlug || "compass"}-angles.pdf`;
+      const filename = `${brandSlug || "creative-compass"}-angles.pdf`;
       await exportCompassIdeasReviewPdf(
         review.sections,
         filename,
@@ -5175,8 +5228,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     <DecisionCard
       eyebrow="03 / Angles"
       title="Pick the hooks for this creative mix."
-      helper="compass preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
-      status={`compass picked ${selected} / ${requiredCount}`}
+      helper="Creative Compass preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
+      status={`Creative Compass picked ${selected} / ${requiredCount}`}
       statusClass={selected === requiredCount ? "green" : "blue"}
       className="compass-stage-angles"
       actions={
@@ -6102,7 +6155,7 @@ function HookRegenerateAllModal({
           />
         </label>
         <p className="hook-regenerate-note">
-          Compass will keep each Hook's original strategy and selection, then
+          Creative Compass will keep each Hook's original strategy and selection, then
           rewrite every Hook and its supporting copy in this tone.
         </p>
         {error ? <p className="repository-message error">{error}</p> : null}
@@ -7996,7 +8049,7 @@ function ApprovalDecisionField({
                     ? "Fix owner: GD · Update and replace the artwork in Internal QC."
                     : changeType === "both"
                       ? "Fix route: GD → CS · Artwork first, then copy."
-                      : "Choose one and Compass will route the revision to the right owner."}
+                      : "Choose one and Creative Compass will route the revision to the right owner."}
               </div>
             ) : null}
             <label className="output-modal-prompt-label">
@@ -8822,7 +8875,7 @@ function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {
         <div>
           <h3>Learning suggestions</h3>
           <p>
-            Compass reviews this run's approvals and rejections and proposes
+            Creative Compass reviews this run's approvals and rejections and proposes
             brand learning updates for you to approve.
           </p>
         </div>
@@ -8877,7 +8930,7 @@ function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {
         </div>
       ) : !loading ? (
         <p className="repository-message">
-          Nothing generated yet. Click "Suggest learning" to have Compass
+          Nothing generated yet. Click "Suggest learning" to have Creative Compass
           propose updates from this run's real approval signal.
         </p>
       ) : null}
@@ -9114,6 +9167,9 @@ export function Overview({
   const runs = workspace.runOrder
     .map((id) => workspace.runsById[id])
     .filter((run): run is WorkflowState => Boolean(run));
+  const currentBrandById = new Map(
+    brands.map((brand) => [brand.id, brand] as const)
+  );
   const visibleBrandIds = new Set(brands.map((brand) => brand.id));
 
   const attentionItems = runs
@@ -9138,8 +9194,9 @@ export function Overview({
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const activeProjectRows = activeRuns.flatMap((run) => {
-    const brand = run.brand;
-    if (!brand) return [];
+    const savedBrand = run.brand;
+    if (!savedBrand) return [];
+    const brand = currentBrandById.get(savedBrand.id) ?? savedBrand;
     const attention = attentionByRunId.get(run.id) ?? null;
     const ownership = collaboration?.ownershipByRunId[run.id] ?? null;
     const ownerUserId = ownership?.currentOwnerUserId ?? null;
@@ -9407,11 +9464,7 @@ export function Overview({
                   </div>
                   <div className="workboard-client-main">
                     <span className="avatar ov-av" aria-hidden="true">
-                      {brandLogoUrl(brand) ? (
-                        <img src={brandLogoUrl(brand)} alt="" />
-                      ) : (
-                        brand.initials
-                      )}
+                      <BrandLogo brand={brand} />
                     </span>
                     <span>
                       <b>{brand.name}</b>

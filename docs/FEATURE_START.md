@@ -70,12 +70,12 @@ Dropdown rows:
 
 Operators can add a new client from Start by entering a client name, Facebook
 URL, and a normal Google Sheet URL for the required onboarding questionnaire.
-Compass reads the public `1. Questionnaire` tab on demand without Google
-credentials. Mapping clients prefill the URL from Client Portal when available, but
-the operator can replace it before import. The questionnaire is historical
-onboarding context and is not treated as the current campaign brief. This
-creates a draft client and queued ingestion job; the client remains disabled
-until the backend harness prepares Brand Memory.
+Creative Compass reads the private `1. Questionnaire` tab with the Google
+access granted during sign-in. Mapping clients prefill the URL from Client
+Portal when available, but the operator can replace it before import. The
+questionnaire is historical onboarding context and is not treated as the
+current campaign brief. This creates a draft client and queued ingestion job;
+the client remains disabled until the backend harness prepares Brand Memory.
 
 The intake form includes a Google Sheet extraction section. Supported mapping
 fields are Client ID, Status, Service Status, and Client Portal URL. For a
@@ -89,11 +89,11 @@ when a sheet-only client appears there.
 ## Google Sheet access
 
 The browser calls `/api/mapping-clients`; it never fetches Google directly.
-Questionnaire reads use the public Google Visualization response for the exact
-`1. Questionnaire` tab and therefore require the Sheet to be shared as
-`Anyone with the link`. The endpoint remains protected by Compass
-authentication. The configured source must be a normal Google Sheet URL, not a
-Publish to web URL.
+Questionnaire reads use the Sheets API for the exact `1. Questionnaire` tab.
+The browser sends both the Supabase session token and the short-lived Google
+provider token to the protected endpoint. The Sheet can remain private, but the
+signed-in `@convertcake.com` account must have read access. The configured
+source must be a normal Google Sheet URL, not a Publish to web URL.
 
 The separate mapping-client list reader still uses keyless Google authentication:
 Production and Preview use Vercel OIDC through Workload Identity Federation,

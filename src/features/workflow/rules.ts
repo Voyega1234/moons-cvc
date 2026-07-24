@@ -109,7 +109,7 @@ export function workflowActionBlockReason(
     case "select-brand":
       return canSelectBrand(action.brand)
         ? null
-        : "This client has no Compass brand memory yet.";
+        : "This client has no Creative Compass brand memory yet.";
     case "start-idea-generation":
     case "generate-directions":
     case "generate-more-directions":
@@ -145,7 +145,7 @@ export function workflowActionBlockReason(
     case "auto-select-directions":
       return run.directions.length > 0
         ? null
-        : "Generate hooks before Compass can pick.";
+        : "Generate hooks before Creative Compass can pick.";
     case "start-artwork-generation":
       if (run.artworkGenerationStatus === "running") {
         return "Artwork generation is already in progress.";

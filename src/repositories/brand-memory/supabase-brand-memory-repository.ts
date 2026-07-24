@@ -14,6 +14,7 @@ import {
 } from "../../domain/brand-memory";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database, Json } from "../../lib/supabase/database.types";
+import { refreshSupabaseSignedAssetUrl } from "../../lib/supabase/storage-asset-url";
 import type {
   AnalyzeGuidelineInput,
   BrandMemoryRepository,
@@ -78,7 +79,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return data.map(mapLibraryItem);
+    return resolveLibraryItems(client, data);
   }
 
   async createBrandRule({
@@ -108,7 +109,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return mapLibraryItem(data);
+    return resolveLibraryItem(client, data);
   }
 
   async updateBrandRule({
@@ -145,7 +146,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return mapLibraryItem(data);
+    return resolveLibraryItem(client, data);
   }
 
   async deleteBrandRule(id: string): Promise<void> {
@@ -172,7 +173,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .order("created_at");
 
     if (error) throw error;
-    return data.map(mapLibraryItem);
+    return resolveLibraryItems(client, data);
   }
 
   async createGuideline({
@@ -766,6 +767,24 @@ function mapLibraryItem(row: BrandLibraryRow): LibraryItem {
     description: row.description,
     ...(row.asset_url ? { assetUrl: row.asset_url } : {})
   };
+}
+
+async function resolveLibraryItem(
+  client: SupabaseClient<Database>,
+  row: BrandLibraryRow
+): Promise<LibraryItem> {
+  if (!row.asset_url) return mapLibraryItem(row);
+  const assetUrl = await refreshSupabaseSignedAssetUrl(client, row.asset_url);
+  return mapLibraryItem(
+    assetUrl === row.asset_url ? row : { ...row, asset_url: assetUrl }
+  );
+}
+
+async function resolveLibraryItems(
+  client: SupabaseClient<Database>,
+  rows: readonly BrandLibraryRow[]
+): Promise<readonly LibraryItem[]> {
+  return Promise.all(rows.map((row) => resolveLibraryItem(client, row)));
 }
 
 function mapDocument(row: BrandDocumentRow): BrandDocument {

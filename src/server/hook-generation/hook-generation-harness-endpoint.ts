@@ -668,7 +668,7 @@ function buildGenerationPrompt(
     "",
     buildPastPostsBlock(pastPosts),
     "",
-    "## Compass output adapter — this overrides only the supplied prompt's final JSON shape",
+    "## Creative Compass output adapter — this overrides only the supplied prompt's final JSON shape",
     `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
     "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; albumFormat = the exact album layout chosen for this idea according to the album rules above (for non-album services return three-horizontal); formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
     "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
@@ -726,7 +726,7 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
   return [
-    "## Compass current input",
+    "## Creative Compass current input",
     `Run ID: ${input.runId}`,
     `Brand: ${input.brand?.name ?? "Unknown"}`,
     `Category: ${input.brand?.category ?? "Unknown"}`,

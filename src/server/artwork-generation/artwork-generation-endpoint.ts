@@ -1057,16 +1057,16 @@ function buildReferenceLibraryImageInstruction(
   return [
     "ORIGINAL EXECUTION:",
     ...roles,
-    "Study the attached Moons artwork references directly. Use the primary artwork only for compatible abstract composition grammar, hierarchy, visual medium, density, layering rhythm, typography behavior, and commercial construction. Use the secondary artwork only for compatible lighting, material response, texture, compositing, typography craft, and finish. Invent a new main visual, visual metaphor, subject, action, camera angle, background, environment, props, and scene logic from the approved idea. Do not reconstruct, trace, or lightly reskin either reference's recognizable content or arrangement. Preserve attached official client assets exactly. Unless the brief or official brand system clearly requires darkness, use a bright off-white, pale neutral, or softly tinted background and keep dark brand color to accents or one contained zone. Protect 30–40% genuine low-detail negative space with one obvious quiet area; keep 8–10% outer margins; keep the main visual near 30–40% of the canvas and below half. Limit the composition to one headline, one compact proof/support group, one CTA, and one logo. Keep every generated element coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment."
+    "Study the attached Creative Compass artwork references directly. Use the primary artwork only for compatible abstract composition grammar, hierarchy, visual medium, density, layering rhythm, typography behavior, and commercial construction. Use the secondary artwork only for compatible lighting, material response, texture, compositing, typography craft, and finish. Invent a new main visual, visual metaphor, subject, action, camera angle, background, environment, props, and scene logic from the approved idea. Do not reconstruct, trace, or lightly reskin either reference's recognizable content or arrangement. Preserve attached official client assets exactly. Unless the brief or official brand system clearly requires darkness, use a bright off-white, pale neutral, or softly tinted background and keep dark brand color to accents or one contained zone. Protect 30–40% genuine low-detail negative space with one obvious quiet area; keep 8–10% outer margins; keep the main visual near 30–40% of the canvas and below half. Limit the composition to one headline, one compact proof/support group, one CTA, and one logo. Keep every generated element coherent in perspective, scale, lighting, shadows, color grade, depth, and material treatment."
   ].join("\n");
 }
 
 function compactReferenceRole(label: string | undefined): string {
   const normalized = label?.toLowerCase() ?? "";
-  if (normalized.includes("moons artwork reference — primary")) {
+  if (normalized.includes("creative compass artwork reference — primary")) {
     return "primary artwork reference";
   }
-  if (normalized.includes("moons artwork reference — secondary")) {
+  if (normalized.includes("creative compass artwork reference — secondary")) {
     return "secondary artwork reference";
   }
   if (normalized.includes("past work style reference")) {
@@ -1124,7 +1124,7 @@ function buildReferenceFidelityInstruction(
       : []),
     ...(artworkPatternReferences.length
       ? [
-          "The image labeled as a Moons artwork reference is the selected primary execution blueprint from the complete 72-artwork catalog and the minimum visible craft standard. Faithfully carry forward its zone geometry, layout engine, hierarchy, visual medium, hero share and crop, lighting logic, density, layering, texture, compositing depth, CTA/logo behavior, and finish. Treat typography conditionally: preserve compatible font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects while using a brand-appropriate typeface. Replace the source brand, product, people, readable copy, offer, and campaign identity with the approved runtime content."
+          "The image labeled as a Creative Compass artwork reference is the selected primary execution blueprint from the complete 72-artwork catalog and the minimum visible craft standard. Faithfully carry forward its zone geometry, layout engine, hierarchy, visual medium, hero share and crop, lighting logic, density, layering, texture, compositing depth, CTA/logo behavior, and finish. Treat typography conditionally: preserve compatible font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects while using a brand-appropriate typeface. Replace the source brand, product, people, readable copy, offer, and campaign identity with the approved runtime content."
         ]
       : []),
     mode !== "standard"
@@ -1145,7 +1145,7 @@ function buildConceptAlignmentInstruction(hook: SelectedHook): string {
     `Strategic concept: ${hook.concept}`,
     `Reason this concept works: ${hook.why}`,
     `Approved visual direction: ${hook.visual}`,
-    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. When a Moons artwork reference is supplied, use it as the execution blueprint while mapping this approved concept into its structural roles. Uploaded source materials must be used for the role stated in their label."
+    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. When a Creative Compass artwork reference is supplied, use it as the execution blueprint while mapping this approved concept into its structural roles. Uploaded source materials must be used for the role stated in their label."
   ].join("\n");
 }
 

@@ -2,7 +2,7 @@ import { artworkReferenceCatalog } from "./artwork-reference-catalog.generated.j
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 
 export const ARTWORK_PATTERN_REFERENCE_PREFIX =
-  "Moons artwork reference —";
+  "Creative Compass artwork reference —";
 export const ARTWORK_REFERENCE_BUCKET = "artwork-reference-library";
 
 type ArtworkMode =

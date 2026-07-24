@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  emailSignInRedirectUrl,
+  googleSignInRedirectUrl,
   shouldRequireAuth,
   validateConvertCakeEmail
 } from "./auth-provider";
 
-describe("emailSignInRedirectUrl", () => {
+describe("googleSignInRedirectUrl", () => {
   it("keeps local sign-ins on the active development origin", () => {
     expect(
-      emailSignInRedirectUrl({
+      googleSignInRedirectUrl({
         hostname: "localhost",
         origin: "http://localhost:4173"
       })
@@ -17,14 +17,14 @@ describe("emailSignInRedirectUrl", () => {
 
   it("keeps non-local sign-ins on the existing production URL", () => {
     expect(
-      emailSignInRedirectUrl({
+      googleSignInRedirectUrl({
         hostname: "moons-cvc-git-feature.vercel.app",
         origin: "https://moons-cvc-git-feature.vercel.app"
       })
     ).toBe("https://moons-cvc.vercel.app/");
   });
 
-  it("limits passwordless accounts to Convert Cake email addresses", () => {
+  it("limits authenticated accounts to Convert Cake email addresses", () => {
     expect(validateConvertCakeEmail("designer@convertcake.com")).toBeNull();
     expect(validateConvertCakeEmail("designer@example.com")).toBe(
       "Use your @convertcake.com email."

@@ -32,27 +32,69 @@ actions such as brand ingestion will not work under the standalone Vite server.
 The local desktop setup also accepts `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 Only those two public Supabase values are mapped into the Vite client build.
 
-In Supabase Auth → URL Configuration, set the Site URL and add this exact
-Redirect URL:
+In Supabase Auth → URL Configuration, set the Site URL and add these redirect
+URLs:
 
 ```text
 https://moons-cvc.vercel.app/
+http://localhost:3000
 ```
 
-Moons passes this URL as `emailRedirectTo` for every non-local sign-in. Local
-development sign-ins continue to return to their active localhost origin.
+Creative Compass uses Supabase Google OAuth instead of email magic links. Set
+up the Google Cloud and Supabase providers as follows:
 
-In Supabase Auth → Providers → Email, keep the Email provider enabled. Compass now
-uses email/password accounts rather than magic-link-only login. New account
-creation in the UI is limited to `@convertcake.com`, matching the existing
-`moons.is_convert_cake_user()` RLS policy and server authorization checks.
+1. Use a Google Cloud project owned by the Convert Cake Google Workspace
+   organization.
+2. In Google Auth Platform → Audience, choose **Internal** so only Workspace
+   organization accounts can authorize the app.
+3. Enable the **Google Drive API** and **Google Sheets API**.
+4. In Google Auth Platform → Data Access, configure:
 
-Keep **Confirm email** enabled in production. Confirmation and password-reset
-emails return to the configured URL above; password recovery adds the
-`?reset-password=1` query string. Configure production SMTP in Supabase before
-inviting the wider team so confirmation and reset messages are delivered from
-the approved sender. Existing magic-link users can choose **Forgot password?**
-to establish their first password.
+   ```text
+   openid
+   https://www.googleapis.com/auth/userinfo.email
+   https://www.googleapis.com/auth/userinfo.profile
+   https://www.googleapis.com/auth/drive.file
+   https://www.googleapis.com/auth/spreadsheets.readonly
+   ```
+
+5. Create a **Web application** OAuth client. Add the production origin and
+   `http://localhost:3000` as authorized JavaScript origins.
+6. Add the callback URL shown in Supabase Auth → Providers → Google as the
+   Google client's authorized redirect URI. It has this shape:
+
+   ```text
+   https://<supabase-project-ref>.supabase.co/auth/v1/callback
+   ```
+
+7. In Supabase Auth → Providers → Google, enable the provider and enter that
+   OAuth client ID and secret.
+8. Apply `202607240001_google_auth_domain_hook.sql`. Then open Supabase
+   Authentication → Hooks and select
+   `public.hook_restrict_creative_compass_signup` for **Before User Created**.
+   This rejects non-Google and non-`@convertcake.com` signups before an
+   `auth.users` record is created.
+9. After Google login is verified in Production, disable the Supabase Email
+   provider to prevent new magic-link sign-ins.
+
+The app also sends `hd=convertcake.com` to improve Google's account chooser,
+then verifies the returned Supabase user's email again in the browser and in
+every protected server endpoint. The `hd` parameter is not treated as an
+authorization boundary.
+
+Google's provider access token is kept in browser storage for at most 55
+minutes and cleared on sign out. No Google refresh token is persisted. When
+Google access expires, sign out and sign in again to grant a fresh token.
+
+The same Google grant is used for:
+
+- converting generated PowerPoint files into Google Slides with
+  `drive.file`;
+- reading the private `1. Questionnaire` tab with
+  `spreadsheets.readonly`.
+
+Questionnaire Sheets no longer need **Anyone with the link**. The signed-in
+`@convertcake.com` user must have read access to the Sheet.
 
 Do not expose the Supabase service role key in Vite/client env.
 
@@ -250,6 +292,7 @@ supabase/migrations/202607090011_queue_brand_ingestion.sql
 supabase/migrations/202607090012_client_ingestion_service_role.sql
 supabase/migrations/202607090013_brand_products_worker_access.sql
 supabase/migrations/202607160001_artwork_reference_library.sql
+supabase/migrations/202607240001_google_auth_domain_hook.sql
 ```
 
 The migration creates:

@@ -1,7 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
-import { uploadPptxToGoogleSlides } from "./google-slides-import";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureGoogleProviderToken } from "../../lib/google-workspace/provider-token";
+import {
+  requestGoogleDriveAccessToken,
+  uploadPptxToGoogleSlides
+} from "./google-slides-import";
 
 describe("uploadPptxToGoogleSlides", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("reuses the Google token granted during Supabase sign-in", async () => {
+    captureGoogleProviderToken({ provider_token: "supabase-google-token" });
+
+    await expect(requestGoogleDriveAccessToken()).resolves.toBe(
+      "supabase-google-token"
+    );
+  });
+
   it("uploads a PowerPoint deck and asks Drive to convert it to Google Slides", async () => {
     const blob = new Blob(["deck"], {
       type: "application/vnd.openxmlformats-officedocument.presentationml.presentation"

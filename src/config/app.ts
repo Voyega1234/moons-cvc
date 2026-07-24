@@ -1,6 +1,6 @@
 export const appConfig = {
   appId: "compass-creative-os",
-  name: "Compass Creative OS",
+  name: "Creative Compass",
   referenceFile: "neo-creative-compass.html",
   referenceDate: "2026-07-13"
 } as const;

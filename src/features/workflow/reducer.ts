@@ -226,7 +226,7 @@ export function workflowActionToast(
       return action.id
         ? successToast(
             "Primary reference updated",
-            "Compass will treat this image as the main visual source."
+            "Creative Compass will treat this image as the main visual source."
           )
         : null;
     case "generate-directions":
@@ -271,7 +271,7 @@ export function workflowActionToast(
     case "auto-select-directions":
       return successToast(
         "Recommended ideas selected",
-        "Compass filled each creative type using the planned quota."
+        "Creative Compass filled each creative type using the planned quota."
       );
     case "start-artwork-generation":
       return null;

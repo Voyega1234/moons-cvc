@@ -47,28 +47,31 @@ describe("handleMappingClientsRequest", () => {
 
   it('reads the Client Portal "1. Questionnaire" tab on demand', async () => {
     const createSheetsAccessToken = vi.fn(async () => "sheets-token");
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      gvizResponse({
-        status: "ok",
-        table: {
-          cols: [{ label: "" }, { label: "" }, { label: "" }],
-          rows: [
-            {
-              c: [
-                { v: "{{products_target_customer}}" },
-                null,
-                { v: "Urban professionals" }
-              ]
-            }
-          ]
-        }
-      })
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes("?fields=")
+        ? jsonResponse({
+            properties: { title: "Client portal" },
+            sheets: [
+              {
+                properties: {
+                  sheetId: 8,
+                  title: "1. Questionnaire"
+                }
+              }
+            ]
+          })
+        : jsonResponse({
+            values: [
+              ["{{products_target_customer}}", "", "Urban professionals"]
+            ]
+          })
     );
     const sourceUrl =
       "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=8";
     const response = await handleMappingClientsRequest({
       request: new Request(
-        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`
+        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`,
+        { headers: { "X-Google-Access-Token": "google-provider-token" } }
       ),
       env: {
         ...baseEnv,
@@ -99,6 +102,30 @@ describe("handleMappingClientsRequest", () => {
       }
     });
     expect(createSheetsAccessToken).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("sheets.googleapis.com/v4/spreadsheets"),
+      expect.objectContaining({
+        headers: { Authorization: "Bearer google-provider-token" }
+      })
+    );
+  });
+
+  it("requires Google OAuth access before reading a questionnaire", async () => {
+    const sourceUrl =
+      "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=8";
+    const response = await handleMappingClientsRequest({
+      request: new Request(
+        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`
+      ),
+      env: baseEnv
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error:
+        "Google access is required. Sign out, then sign in with Google again."
+    });
   });
 
   it("uses the authenticated Convert Cake email in production", async () => {
@@ -195,11 +222,4 @@ function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     headers: { "Content-Type": "application/json" }
   });
-}
-
-function gvizResponse(value: unknown): Response {
-  return new Response(
-    `/*O_o*/\ngoogle.visualization.Query.setResponse(${JSON.stringify(value)});`,
-    { headers: { "Content-Type": "application/javascript" } }
-  );
 }

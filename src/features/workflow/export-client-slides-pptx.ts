@@ -1,5 +1,4 @@
 import type PptxGenJS from "pptxgenjs";
-import { env } from "../../config/env";
 import {
   resolveAlbumFormat,
   type AlbumFormat,
@@ -879,8 +878,8 @@ async function buildClientSlidesPptx(
   const pptx = new PptxGenJSConstructor();
   const brandName = cleanText(state.brand?.name, "Client");
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Compass";
-  pptx.company = "Neo Creative Compass";
+  pptx.author = "Creative Compass";
+  pptx.company = "Creative Compass";
   pptx.subject = `${brandName} ${subject}`;
   pptx.title = `${brandName} ${title}`;
   pptx.theme = {
@@ -960,9 +959,7 @@ async function openPptxInGoogleSlides(
   build: () => Promise<PptxGenJS>,
   name: string
 ): Promise<GoogleSlidesImportResult> {
-  const accessToken = await requestGoogleDriveAccessToken(
-    env.googleOAuthClientId ?? ""
-  );
+  const accessToken = await requestGoogleDriveAccessToken();
   const pptx = await build();
   return uploadPptxToGoogleSlides({
     blob: await pptxBlob(pptx),
