@@ -397,7 +397,7 @@ async function googleJson(
   const text = await response.text();
   if (response.status === 401) {
     throw new Error(
-      "Google access has expired. Sign out, then sign in with Google again."
+      "Google access has expired. Try again to renew it automatically."
     );
   }
   let body: unknown;

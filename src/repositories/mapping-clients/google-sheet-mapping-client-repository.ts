@@ -29,7 +29,7 @@ export class GoogleSheetMappingClientRepository
       fetch(input, init),
     private readonly accessTokenProvider: () => Promise<string | null> =
       currentSupabaseAccessToken,
-    private readonly googleAccessTokenProvider: () => string =
+    private readonly googleAccessTokenProvider: () => string | Promise<string> =
       requireGoogleProviderToken
   ) {}
 
@@ -52,7 +52,7 @@ export class GoogleSheetMappingClientRepository
     sheetUrl: string
   ): Promise<OnboardingQuestionnaireSource | null> {
     const accessToken = await this.accessTokenProvider();
-    const googleAccessToken = this.googleAccessTokenProvider();
+    const googleAccessToken = await this.googleAccessTokenProvider();
     const separator = this.endpoint.includes("?") ? "&" : "?";
     const url = `${this.endpoint}${separator}questionnaireSheetUrl=${encodeURIComponent(sheetUrl)}`;
     const response = await this.fetchImpl(url, {

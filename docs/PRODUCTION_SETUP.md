@@ -69,7 +69,8 @@ up the Google Cloud and Supabase providers as follows:
 
 7. In Supabase Auth → Providers → Google, enable the provider and enter that
    OAuth client ID and secret.
-8. Apply `202607240001_google_auth_domain_hook.sql`. Then open Supabase
+8. Apply `202607240001_google_auth_domain_hook.sql` and
+   `202607260001_google_provider_token_cache.sql`. Then open Supabase
    Authentication → Hooks and select
    `public.hook_restrict_creative_compass_signup` for **Before User Created**.
    This rejects non-Google and non-`@convertcake.com` signups before an
@@ -83,8 +84,28 @@ every protected server endpoint. The `hd` parameter is not treated as an
 authorization boundary.
 
 Google's provider access token is kept in browser storage for at most 55
-minutes and cleared on sign out. No Google refresh token is persisted. When
-Google access expires, sign out and sign in again to grant a fresh token.
+minutes and cleared on sign out. The Google refresh token is sent once to the
+authenticated backend, encrypted with AES-256-GCM, and stored in
+`moons.google_workspace_credentials`, which is accessible only to
+`service_role`. When Google access expires, the browser retrieves a fresh
+short-lived access token from `/api/google-provider-token`; the refresh token
+is never written to browser storage or returned to the browser.
+
+Configure these server-only environment variables using the same Web OAuth
+client configured in Supabase:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+GOOGLE_OAUTH_CLIENT_ID=<google-web-client-id>
+GOOGLE_OAUTH_CLIENT_SECRET=<google-web-client-secret>
+GOOGLE_TOKEN_ENCRYPTION_KEY=<32-random-bytes-as-base64>
+```
+
+Generate the encryption key once with `openssl rand -base64 32` and keep the
+same value across deployments. Existing users must sign out and continue with
+Google once after this migration so Google can issue the initial offline
+refresh token. Routine access-token expiry after that does not require another
+login.
 
 The same Google grant is used for:
 
@@ -293,6 +314,7 @@ supabase/migrations/202607090012_client_ingestion_service_role.sql
 supabase/migrations/202607090013_brand_products_worker_access.sql
 supabase/migrations/202607160001_artwork_reference_library.sql
 supabase/migrations/202607240001_google_auth_domain_hook.sql
+supabase/migrations/202607260001_google_provider_token_cache.sql
 ```
 
 The migration creates:
@@ -308,6 +330,7 @@ The migration creates:
 - `moons.creative_directions`
 - `moons.qa_results`
 - `moons.internal_reviews`
+- `moons.google_workspace_credentials`
 - `moons.client_review_links`
 - `moons.client_review_items`
 - `moons.exports`

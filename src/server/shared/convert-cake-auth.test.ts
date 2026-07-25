@@ -4,9 +4,13 @@ import { resolveConvertCakeAuthorization } from "./convert-cake-auth";
 describe("resolveConvertCakeAuthorization", () => {
   it("allows an authenticated Convert Cake account", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
-      new Response(JSON.stringify({ email: "Designer@convertcake.com" }), {
-        headers: { "Content-Type": "application/json" }
-      })
+      new Response(
+        JSON.stringify({
+          id: "0d4c7456-3876-47d4-bf72-4dfbcd614e40",
+          email: "Designer@convertcake.com"
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
     );
 
     await expect(
@@ -23,7 +27,8 @@ describe("resolveConvertCakeAuthorization", () => {
     ).resolves.toEqual({
       authorized: true,
       accessToken: "supabase-token",
-      email: "designer@convertcake.com"
+      email: "designer@convertcake.com",
+      userId: "0d4c7456-3876-47d4-bf72-4dfbcd614e40"
     });
   });
 
@@ -31,6 +36,7 @@ describe("resolveConvertCakeAuthorization", () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
+          id: "0d4c7456-3876-47d4-bf72-4dfbcd614e40",
           email: "outsider@example.com",
           app_metadata: { organization: "convert_cake" }
         }),

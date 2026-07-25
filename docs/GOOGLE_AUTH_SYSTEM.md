@@ -409,6 +409,32 @@ queryParams: {
 
 Google อาจส่ง refresh token เฉพาะตอน consent ครั้งแรกหรือเมื่อบังคับ consent ใหม่ จึงต้องออกแบบ flow การเชื่อมบัญชีและ reconnect ให้ชัดเจน
 
+Creative Compass ใช้ Option B:
+
+- Supabase session ยังคง cache และ auto-refresh ใน browser ตามปกติ
+- Google access token cache ใน `localStorage` ไม่เกิน 55 นาที
+- Google refresh token ส่งผ่าน authenticated
+  `/api/google-provider-token` เพียงครั้งเดียว
+- Backend เข้ารหัส refresh token ด้วย AES-256-GCM ก่อนเก็บใน
+  `moons.google_workspace_credentials`
+- ตารางนี้ไม่มี policy สำหรับ `anon` หรือ `authenticated`; ใช้ได้เฉพาะ
+  `service_role`
+- เมื่อ access token หมดอายุ browser ขอ token ใหม่จาก backend โดยไม่ให้ user
+  sign out หรือ login ใหม่
+- ห้ามเปลี่ยน `GOOGLE_TOKEN_ENCRYPTION_KEY` ระหว่าง deployment เพราะ token
+  เดิมจะถอดรหัสไม่ได้
+
+Environment ฝั่ง server:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_TOKEN_ENCRYPTION_KEY=
+```
+
+สร้าง encryption key ด้วย `openssl rand -base64 32` และ apply migration
+`202607260001_google_provider_token_cache.sql` ก่อน deploy
+
 ## 10. Protect application APIs
 
 Request ที่อ่าน Google data ควรมี:

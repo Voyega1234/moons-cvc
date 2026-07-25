@@ -53,7 +53,7 @@ export async function handleMappingClientsRequest({
           {
             ok: false,
             error:
-              "Google access is required. Sign out, then sign in with Google again."
+              "Google access is required. Try again to renew it automatically."
           },
           403
         );

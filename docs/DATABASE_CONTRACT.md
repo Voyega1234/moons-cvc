@@ -164,6 +164,21 @@ This remains the private refresh/login safety net. After
 loaded from per-run snapshots in `moons.runs`; the private workspace is kept
 as a migration fallback and for each user's local view preference.
 
+### `moons.google_workspace_credentials`
+
+Stores one AES-256-GCM-encrypted Google provider refresh token per Supabase
+user so Drive and Sheets access can be renewed without another login. The
+browser never reads this table or receives the refresh token. RLS is enabled,
+all `anon` and `authenticated` table privileges are revoked, and only the
+authenticated `/api/google-provider-token` backend may access it through
+`service_role`.
+
+Created by:
+
+```text
+supabase/migrations/202607260001_google_provider_token_cache.sql
+```
+
 ### `moons.runs` collaboration fields
 
 Each shared run has one current owner. Assigned client members can view it,

@@ -28,7 +28,7 @@ async function driveError(response: Response): Promise<Error> {
   if (response.status === 401) {
     clearGoogleProviderToken();
     return new Error(
-      "Google access has expired. Sign out, then sign in with Google again."
+      "Google access expired during the upload. Try the export again to renew it automatically."
     );
   }
   const fallback = `Google Drive returned ${response.status}.`;

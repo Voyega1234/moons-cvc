@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cacheGoogleProviderRefreshToken,
   captureGoogleProviderToken,
   clearGoogleProviderToken,
   currentGoogleProviderToken,
@@ -21,12 +22,74 @@ describe("Google Workspace provider token", () => {
     expect(currentGoogleProviderToken(60 * 60 * 1000)).toBeNull();
   });
 
-  it("removes Google access on sign out and returns an actionable error", () => {
+  it("removes Google access on sign out and returns an actionable error", async () => {
     captureGoogleProviderToken({ provider_token: "google-token" });
     clearGoogleProviderToken();
 
-    expect(() => requireGoogleProviderToken()).toThrow(
-      "Sign out, then sign in with Google again."
+    await expect(
+      requireGoogleProviderToken(fetch, async () => null)
+    ).rejects.toThrow(
+      "Your session has expired. Continue with Google again."
     );
+  });
+
+  it("renews an expired Google token through the authenticated backend", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          accessToken: "renewed-google-token",
+          expiresIn: 3_600
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    await expect(
+      requireGoogleProviderToken(
+        fetchImpl,
+        async () => "supabase-access-token"
+      )
+    ).resolves.toBe("renewed-google-token");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/google-provider-token",
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer supabase-access-token"
+        }
+      })
+    );
+    expect(currentGoogleProviderToken()).toBe("renewed-google-token");
+  });
+
+  it("sends a newly issued Google refresh token only to the backend", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await cacheGoogleProviderRefreshToken(
+      {
+        access_token: "supabase-access-token",
+        provider_refresh_token: "google-refresh-token"
+      },
+      fetchImpl
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/google-provider-token",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          Authorization: "Bearer supabase-access-token",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ refreshToken: "google-refresh-token" })
+      })
+    );
+    expect(
+      Object.values(window.localStorage).includes("google-refresh-token")
+    ).toBe(false);
   });
 });

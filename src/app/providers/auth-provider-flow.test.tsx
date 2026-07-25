@@ -67,6 +67,7 @@ describe("Supabase account flow", () => {
         queryParams: {
           hd: "convertcake.com",
           include_granted_scopes: "true",
+          access_type: "offline",
           prompt: "consent"
         }
       }

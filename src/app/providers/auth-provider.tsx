@@ -9,6 +9,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { env } from "../../config/env";
 import {
+  cacheGoogleProviderRefreshToken,
   captureGoogleProviderToken,
   clearGoogleProviderToken
 } from "../../lib/google-workspace/provider-token";
@@ -110,6 +111,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
         return;
       }
       captureGoogleProviderToken(nextSession);
+      void cacheGoogleProviderRefreshToken(nextSession).catch(() => undefined);
       setSession(nextSession);
       setLoading(false);
     }
@@ -146,6 +148,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           queryParams: {
             hd: "convertcake.com",
             include_granted_scopes: "true",
+            access_type: "offline",
             prompt: "consent"
           }
         }
