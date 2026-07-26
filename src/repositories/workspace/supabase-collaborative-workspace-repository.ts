@@ -286,6 +286,8 @@ export class SupabaseCollaborativeWorkspaceRepository
 
       if (error) throw error;
       if (!data) {
+        const latest = await this.findKnownRun(run.id);
+        if (latest) this.knownRuns.set(run.id, latest);
         throw new Error(
           "This project changed in another browser. Reload the latest version before continuing."
         );

@@ -400,19 +400,18 @@ export function workflowReducer(
       return { ...state, brandMenuOpen: false };
     case "search-brands":
       return { ...state, brandSearch: action.value };
-    case "select-brand":
-      return {
+    case "select-brand": {
+      const brandChanged = state.brand?.id !== action.brand.id;
+      const next = {
         ...state,
         brand: action.brand,
         brandMenuOpen: false,
         brandSearch: "",
-        selectedProductIds:
-          state.brand?.id === action.brand.id
-            ? state.selectedProductIds
-            : undefined,
-        referenceImages:
-          state.brand?.id === action.brand.id ? state.referenceImages : []
+        selectedProductIds: brandChanged ? undefined : state.selectedProductIds,
+        referenceImages: brandChanged ? [] : state.referenceImages
       };
+      return brandChanged ? resetCreativeWork(next) : next;
+    }
     case "set-library-section":
       return { ...state, librarySection: action.section };
     case "sync-brand-rules":

@@ -305,6 +305,59 @@ describe("workflowReducer", () => {
     expect(generated.directions[0]?.hook).toContain(brand.name);
   });
 
+  it("clears generated ideas and outputs when switching to a different brand", () => {
+    const [brandA, brandB] = brands;
+    if (!brandA || !brandB) throw new Error("Mock brand fixtures are missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand: brandA
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brandA.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    expect(state.directions.length).toBeGreaterThan(0);
+    expect(state.outputs.length).toBeGreaterThan(0);
+
+    const switched = workflowReducer(state, {
+      type: "select-brand",
+      brand: brandB
+    });
+
+    expect(switched.brand?.id).toBe(brandB.id);
+    expect(switched.directions).toHaveLength(0);
+    expect(switched.outputs).toHaveLength(0);
+    expect(switched.ideaGenerationStatus).toBe("idle");
+    expect(switched.artworkGenerationStatus).toBe("idle");
+    expect(switched.qaComplete).toBe(false);
+    expect(switched.approved).toBe(false);
+  });
+
+  it("keeps generated ideas when re-selecting the same brand", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    expect(state.directions.length).toBeGreaterThan(0);
+
+    const reselected = workflowReducer(state, {
+      type: "select-brand",
+      brand
+    });
+
+    expect(reselected.directions).toEqual(state.directions);
+  });
+
   it("assigns generated directions to the requested content-type quotas", () => {
     const mixedState: WorkflowState = {
       ...initialWorkflowState,

@@ -47,7 +47,7 @@ export type WorkspacePersistenceStatus =
   | "saved"
   | "error";
 
-export const WORKSPACE_AUTOSAVE_DELAY_MS = 600;
+export const WORKSPACE_AUTOSAVE_DELAY_MS = 250;
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 

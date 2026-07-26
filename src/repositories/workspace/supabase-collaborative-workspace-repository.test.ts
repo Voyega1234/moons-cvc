@@ -113,6 +113,38 @@ describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
     await expect(repository.save(workspace)).resolves.toBeUndefined();
     expect(inserts).toHaveLength(1);
   });
+
+  it("refreshes the cached version after a conflict so later saves are not permanently blocked", async () => {
+    const base = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const withBrief = (brief: string) => ({
+      ...base,
+      runsById: {
+        ...base.runsById,
+        "run-1": { ...getActiveRun(base), brief }
+      }
+    });
+    const workspaceV1 = withBrief("First brief");
+    const workspaceV2 = withBrief("Second brief");
+    const workspaceV3 = withBrief("Third brief");
+    const refreshedRow = { ...sharedRunRow(workspaceV2), version: 5 };
+
+    const { client, updateVersions } = createVersionConflictClient(refreshedRow);
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(),
+      client
+    );
+
+    await repository.save(workspaceV1);
+    await expect(repository.save(workspaceV2)).rejects.toThrow(
+      "changed in another browser"
+    );
+    await expect(repository.save(workspaceV3)).resolves.toBeUndefined();
+
+    expect(updateVersions).toEqual([1, 5]);
+  });
 });
 
 describe("SupabaseCollaborativeWorkspaceRepository recovery points", () => {
@@ -280,6 +312,92 @@ function createClient({
     }
   } as unknown as SupabaseClient<Database>;
   return { client, inserts };
+}
+
+function createVersionConflictClient(
+  refreshedRow: ReturnType<typeof sharedRunRow>
+): {
+  client: SupabaseClient<Database>;
+  updateVersions: number[];
+} {
+  const updateVersions: number[] = [];
+  let selectCallCount = 0;
+  let updateCallCount = 0;
+  const client = {
+    auth: {
+      async getUser() {
+        return { data: { user: { id: "user-1" } }, error: null };
+      }
+    },
+    schema() {
+      return {
+        from(table: string) {
+          if (table !== "runs") throw new Error(`Unexpected table ${table}`);
+          return {
+            select() {
+              selectCallCount += 1;
+              const isFirstLookup = selectCallCount === 1;
+              const query = {
+                eq() {
+                  return query;
+                },
+                async maybeSingle() {
+                  return { data: isFirstLookup ? null : refreshedRow, error: null };
+                }
+              };
+              return query;
+            },
+            insert() {
+              return {
+                select() {
+                  return {
+                    async single() {
+                      return {
+                        data: {
+                          id: "database-run-1",
+                          current_owner_user_id: "user-1",
+                          version: 1
+                        },
+                        error: null
+                      };
+                    }
+                  };
+                }
+              };
+            },
+            update() {
+              updateCallCount += 1;
+              const isFirstUpdate = updateCallCount === 1;
+              let requestedVersion: number | undefined;
+              const query = {
+                eq(column: string, value: unknown) {
+                  if (column === "version") requestedVersion = value as number;
+                  return query;
+                },
+                select() {
+                  return query;
+                },
+                async maybeSingle() {
+                  updateVersions.push(requestedVersion!);
+                  if (isFirstUpdate) return { data: null, error: null };
+                  return {
+                    data: {
+                      id: "database-run-1",
+                      current_owner_user_id: "user-1",
+                      version: (requestedVersion ?? 0) + 1
+                    },
+                    error: null
+                  };
+                }
+              };
+              return query;
+            }
+          };
+        }
+      };
+    }
+  } as unknown as SupabaseClient<Database>;
+  return { client, updateVersions };
 }
 
 function createRecoveryClient(
