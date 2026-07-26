@@ -102,10 +102,12 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request.brandLibrary.products).toEqual([
       {
+        id: "vase",
         title: "Minimal vase",
         description: "Supporting home accessory"
       }
     ]);
+    expect(request.selectedProductIds).toEqual(["vase"]);
   });
 
   it("orders the primary reference first and includes its selected role", () => {

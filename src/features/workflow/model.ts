@@ -126,6 +126,7 @@ export type WorkflowAction =
     }
   | { type: "remove-uploaded-material"; id: string }
   | { type: "toggle-product-context"; id: string }
+  | { type: "set-all-product-context"; selected: boolean }
   | { type: "select-reference-image"; item: ReferenceImageSelection }
   | {
       type: "sync-brand-logo-reference";

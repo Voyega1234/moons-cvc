@@ -576,6 +576,15 @@ export function workflowReducer(
             : nextSelectedIds
       };
     }
+    case "set-all-product-context": {
+      const products = state.brand?.library.products ?? [];
+      if (!products.length) return state;
+
+      return {
+        ...state,
+        selectedProductIds: action.selected ? undefined : []
+      };
+    }
     case "select-reference-image":
       return state.referenceImages.some((item) => item.id === action.item.id)
         ? state

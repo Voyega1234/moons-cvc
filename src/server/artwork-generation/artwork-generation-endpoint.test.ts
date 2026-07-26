@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
   albumCropRegions,
+  buildActiveHumanPresenceRules,
   detectAlbumBoundaries,
   handleArtworkGenerationRequest,
   type ArtworkStorageClient
@@ -58,6 +59,22 @@ function promptAgentResponse(
   );
 }
 
+function creativeGraphicDesignerResponse(
+  direction =
+    "A bouquet appears to soften the hard geometry of a room: rigid architectural shadows visibly relax into gentle curves around the flowers, making the emotional benefit instantly visible and specific to the offer."
+): Response {
+  return promptAgentResponse(direction);
+}
+
+function responseForArtworkAgentRequest(init?: RequestInit): Response {
+  const body = JSON.parse(String(init?.body)) as {
+    text?: { format?: { name?: string } };
+  };
+  return body.text?.format?.name === "moons_image_generation_prompt"
+    ? creativeGraphicDesignerResponse()
+    : strategyAgentResponse();
+}
+
 function strategyAgentResponse(): Response {
   return new Response(
     JSON.stringify({
@@ -84,6 +101,26 @@ function strategyAgentResponse(): Response {
     { status: 200 }
   );
 }
+
+describe("active human-presence prompt rules", () => {
+  it("compiles only the explicit human-presence policy", () => {
+    expect(buildActiveHumanPresenceRules("avoid")).toContain(
+      "Do not use people, faces, bodies, portraits, or hands"
+    );
+    expect(buildActiveHumanPresenceRules("supporting")).toContain(
+      "remain clearly subordinate"
+    );
+    expect(buildActiveHumanPresenceRules("essential")).toContain(
+      "Human presence is essential"
+    );
+  });
+
+  it("uses a neutral rule when no human-presence policy is supplied", () => {
+    expect(buildActiveHumanPresenceRules(undefined)).toBe(
+      "Infer whether human presence materially improves the campaign message. Do not add people merely as decoration, but do not prohibit people by default."
+    );
+  });
+});
 
 async function albumMasterPng(): Promise<Buffer> {
   return sharp({
@@ -127,6 +164,86 @@ function fakeStorage(): {
     }
   };
   return { client, uploads };
+}
+
+async function captureDesignSystemGenerationPrompt(
+  overrides: Record<string, unknown>
+): Promise<string> {
+  const imageBodies: Array<{ prompt: string }> = [];
+  const fetchMock = vi.fn(
+    async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      if (href === "https://example.com/logo.png") {
+        return new Response(Buffer.from("official-logo"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (href.includes("/v1/responses")) {
+        return responseForArtworkAgentRequest(init);
+      }
+      if (href.includes("/v1/images/edits")) {
+        imageBodies.push({
+          prompt: String((init?.body as FormData).get("prompt"))
+        });
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from("fake-png-bytes").toString("base64")
+              }
+            ]
+          }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/images/generations")) {
+        imageBodies.push(
+          JSON.parse(String(init?.body)) as { prompt: string }
+        );
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from("fake-png-bytes").toString("base64")
+              }
+            ]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    }
+  );
+  const { client } = fakeStorage();
+  const response = await handleArtworkGenerationRequest({
+    request: new Request("https://moons.local/api/artwork-generation", {
+      method: "POST",
+      headers: { authorization: "Bearer user-token" },
+      body: JSON.stringify({
+        ...requestBody,
+        artworkMode: "design-system",
+        ...overrides
+      })
+    }),
+    env: {
+      OPENAI_API_KEY: "test-key",
+      SUPABASE_URL: "https://supabase.example.com",
+      SUPABASE_ANON_KEY: "anon-key"
+    },
+    fetchImpl: fetchMock as unknown as typeof fetch,
+    createStorageClient: () => client
+  });
+
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(imageBodies).toHaveLength(1);
+  return imageBodies[0]!.prompt;
 }
 
 function syntheticFourVerticalMaster({
@@ -793,7 +910,7 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        return strategyAgentResponse();
+        return responseForArtworkAgentRequest(init);
       }
       if (href.includes("/v1/images/generations")) {
         imageBodies.push(
@@ -857,6 +974,15 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
+    expect(imageBodies[0]?.prompt).toContain(
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER V4"
+    );
+    expect(imageBodies[0]?.prompt).toContain("Album master rules:");
+    expect(imageBodies[0]?.prompt).toContain(
+      "Use the selected four-vertical structure with 4 clearly separated panels."
+    );
+    expect(imageBodies[0]?.prompt).not.toContain("Static artwork rules:");
+    expect(imageBodies[0]?.prompt).not.toContain("{{");
     expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER GRID");
     expect(imageBodies[0]?.prompt).toContain("เปิดปัญหา");
     expect(imageBodies[0]?.prompt).toContain("อธิบายหลักฐาน");
@@ -917,7 +1043,7 @@ describe("handleArtworkGenerationRequest", () => {
           );
         }
         if (href.includes("/v1/responses")) {
-          return strategyAgentResponse();
+          return responseForArtworkAgentRequest(init);
         }
         if (href.includes("/v1/images/generations")) {
           imageBodies.push(
@@ -988,13 +1114,12 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]!.prompt.length).toBeLessThanOrEqual(31_500);
-    expect(imageBodies[0]!.prompt).toContain(
-      "Lower-priority reference context was shortened"
-    );
     expect(imageBodies[0]!.prompt).toContain("ALBUM MASTER GRID");
     expect(imageBodies[0]!.prompt).toContain(
       requestBody.selectedHooks[0]!.hook
     );
+    expect(imageBodies[0]!.prompt).not.toContain("Static artwork rules:");
+    expect(imageBodies[0]!.prompt).not.toContain("{{");
   });
 
   it("generates two selected hooks at a time while preserving their order", async () => {
@@ -1597,7 +1722,85 @@ describe("handleArtworkGenerationRequest", () => {
     });
   });
 
-  it("sends a thin brief and attached artifacts directly to GPT Image 2 in design-system mode", async () => {
+  it("compiles a sparse, service-relevant Campaign Context for budget allocation", async () => {
+    const prompt = await captureDesignSystemGenerationPrompt({
+      brand: {
+        id: "convert-cake",
+        name: "Convert Cake Ads",
+        category: "Performance Marketing Agency",
+        personality: [],
+        colors: ["#1D48F3", "#000E3F", "#FFFFFF"]
+      },
+      brief:
+        "Objective: Create Meta performance creatives that make the product benefit instantly clear. Message priority: Lead with a recognizable tension, prove the product difference, and end with a low-friction action. Creative guardrails: Keep the first frame bold, reduce decorative copy, show the product early.",
+      selectedHooks: [
+        {
+          ...requestBody.selectedHooks[0],
+          hook: "ยอดขายนิ่ง อาจไม่ใช่เพราะงบน้อย",
+          concept:
+            "ชี้ให้เห็นว่า Budget, Platform และวัตถุประสงค์ที่ไม่ตรงกันอาจทำให้พลาดโอกาส",
+          cta: "ขอวางแผนงบ",
+          supportingPoints: [
+            "วิเคราะห์ Budget Allocation ตาม KPI",
+            "พิจารณาความเหมาะสมของ Platform และเป้าหมายแคมเปญ",
+            "ตรวจจุดรั่วระหว่าง Prospecting และ Retargeting"
+          ]
+        }
+      ],
+      referenceImages: [
+        {
+          kind: "url",
+          url: "https://example.com/logo.png",
+          label: "Supporting reference · Logo · Logo"
+        }
+      ],
+      brandLibrary: {
+        brand: [],
+        products: [
+          {
+            id: "ai-seo",
+            title: "AI SEO / AEO / GEO",
+            description: "Help B2B brands appear in AI search answers."
+          },
+          {
+            id: "performance",
+            title: "Performance Marketing Agency",
+            description:
+              "Plan Budget Allocation, Platform mix, campaign objectives, and performance measurement."
+          },
+          {
+            id: "kol",
+            title: "KOL campaign support",
+            description: "Influencer selection and campaign consulting."
+          }
+        ],
+        docs: [],
+        refs: []
+      }
+    });
+    expect(prompt).toContain(
+      "make the core offer or value proposition credible"
+    );
+    expect(prompt).toContain(
+      "make the core offer or value proposition visually clear early"
+    );
+    expect(prompt).not.toContain("prove the product difference");
+    expect(prompt).not.toContain("show the product early");
+    expect(prompt).toContain("Performance Marketing Agency");
+    expect(prompt).not.toContain("AI SEO / AEO / GEO");
+    expect(prompt).not.toContain("KOL campaign support");
+    expect(prompt).toContain("วิเคราะห์ Budget Allocation ตาม KPI");
+    expect(prompt).toContain(
+      "พิจารณาความเหมาะสมของ Platform และเป้าหมายแคมเปญ"
+    );
+    expect(prompt).not.toContain(
+      "ตรวจจุดรั่วระหว่าง Prospecting และ Retargeting"
+    );
+    expect(prompt).toContain("Supporting content is optional");
+    expect(prompt).not.toContain("{{");
+  });
+
+  it("adds a creative provocation before sending the thin brief and artifacts to GPT Image 2", async () => {
     const editCalls: FormData[] = [];
     const strategyCalls: Record<string, unknown>[] = [];
     const oversizedContext = "Brand context detail ".repeat(500);
@@ -1619,7 +1822,7 @@ describe("handleArtworkGenerationRequest", () => {
         strategyCalls.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
-        return strategyAgentResponse();
+        return responseForArtworkAgentRequest(init);
       }
       if (href.includes("/v1/images/edits")) {
         editCalls.push(init?.body as FormData);
@@ -1642,12 +1845,17 @@ describe("handleArtworkGenerationRequest", () => {
           ...requestBody,
           artworkMode: "design-system",
           imagePromptModel: "anthropic/claude-sonnet-4.6",
+          textInputs: [
+            "Earlier correction that should be superseded.",
+            "Keep more breathing space around the headline."
+          ],
           selectedHooks: [
             {
               ...requestBody.selectedHooks[0],
               supportingPoints: [
                 "Same-day delivery in Bangkok",
-                "Hand-arranged seasonal stems"
+                "Hand-arranged seasonal stems",
+                "Unselected third supporting point"
               ]
             }
           ],
@@ -1664,7 +1872,24 @@ describe("handleArtworkGenerationRequest", () => {
                   "DERIVED STALE GUIDELINE: use a different typeface and ignore clear space."
               }
             ],
-            products: [{ title: "Product truths", description: oversizedContext }],
+            products: [
+              {
+                id: "flower-delivery",
+                title: "Flower delivery service",
+                description:
+                  "Bouquet ordering and same-day flower delivery in Bangkok."
+              },
+              {
+                id: "ai-seo",
+                title: "AI SEO / AEO / GEO",
+                description: "Help B2B brands appear in AI search answers."
+              },
+              {
+                id: "kol",
+                title: "KOL campaign support",
+                description: "Influencer selection and campaign consulting."
+              }
+            ],
             docs: [
               {
                 title: "Brand guideline",
@@ -1691,6 +1916,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1703,69 +1929,131 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.getAll("image[]")).toHaveLength(2);
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
-    expect(prompt).toContain("# DIRECT CREATIVE ARTWORK PROMPT — GPT IMAGE 2");
     expect(prompt).toContain(
-      "Create **ONE complete, publication-ready social media advertising artwork**"
-    );
-    expect(prompt).toContain("Build the visual concept directly from the campaign message");
-    expect(prompt).toContain("Create a composition that feels specifically invented");
-    expect(prompt).toContain("Maintain clear mobile-feed readability");
-    expect(prompt).toContain("Content type: lifestyle");
-    expect(prompt).toContain("Human, natural, and relatable");
-    expect(prompt).toContain("Selling approach: desire");
-    expect(prompt).toContain(
-      "Products must feel physically present through realistic scale, perspective, contact shadows"
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER V4"
     );
     expect(prompt).toContain(
-      "Working brief (HIGHEST PRIORITY): Launch a soft summer bouquet offer."
+      "Create one complete, publication-ready advertising artwork"
     );
     expect(prompt).toContain(
-      "The Working brief controls visual cleanliness, text density, element count"
+      "You are the final visual decision-maker"
     );
     expect(prompt).toContain(
-      '"workingBrief": "Launch a soft summer bouquet offer."'
+      "Freely choose the visual concept"
     );
     expect(prompt).toContain(
-      "Exact headline: Flowers that make the room feel softer"
+      "Pay attention to these principles without treating them as a template"
     );
-    expect(prompt).toContain("CTA: Order a bouquet");
-    expect(prompt).toContain("Identification");
-    expect(prompt).toContain("Persuasion");
-    expect(prompt).toContain("Action");
-    expect(prompt).toContain("Complete the ad unit");
-    expect(prompt).toContain("For paid social or Meta");
-    expect(prompt).toContain("standalone, organic, downloadable");
-    expect(prompt).toContain("Select the smallest useful combination");
+    expect(prompt).toContain(
+      "Let the visual create the first stop"
+    );
+    expect(prompt).toContain(
+      "Give the eye somewhere to rest"
+    );
+    expect(prompt).toContain(
+      "Do not make every part of the canvas equally active"
+    );
+    expect(prompt).toContain(
+      "inside one coherent visual world"
+    );
+    expect(prompt).toContain(
+      "support rather than compete"
+    );
+    expect(prompt).toContain("Selling mechanism:\ndesire");
+    expect(prompt).toContain(
+      "Infer whether human presence materially improves the campaign message"
+    );
+    expect(prompt).toContain("### Creative provocation");
+    expect(prompt).toContain(
+      "A bouquet appears to soften the hard geometry of a room"
+    );
+    expect(prompt).not.toContain("Do not use people, faces, bodies");
+    expect(prompt).not.toContain("remain clearly subordinate");
+    expect(prompt).toContain(
+      "Business problem and communication objective:\nLaunch a soft summer bouquet offer."
+    );
+    expect(prompt).toContain(
+      "Resolve conflicts in this order:"
+    );
+    expect(prompt).toContain(
+      "### Mandatory on-artwork copy"
+    );
+    expect(prompt).toContain(
+      "- Exact headline: “Flowers that make the room feel softer”"
+    );
+    expect(prompt).toContain("- Mandatory CTA: “Order a bouquet”");
+    expect(prompt).toContain(
+      "Canvas:\n1:1 single-static"
+    );
+    expect(prompt).toContain(
+      "Latest user correction:\nKeep more breathing space around the headline."
+    );
+    expect(prompt).not.toContain("Earlier correction that should be superseded.");
+    expect(prompt).toContain("### Approved optional content pool");
     expect(prompt).toContain("Same-day delivery in Bangkok");
     expect(prompt).toContain("Hand-arranged seasonal stems");
-    expect(prompt).toContain("plausible editable mockup details");
-    expect(prompt).toContain("# CONTEXT AND ASSETS");
+    expect(prompt).not.toContain("Unselected third supporting point");
+    expect(prompt).toContain(
+      "approved content pool, not a required copy checklist"
+    );
+    expect(prompt).toContain(
+      "Select only what strengthens the idea, understanding, persuasion, or required execution"
+    );
+    expect(prompt).toContain("### Information density intent");
+    expect(prompt).toContain("infer from the Working Brief");
+    expect(prompt).not.toContain("You may use multiple short items");
+    expect(prompt).not.toContain("Build a cohesive secondary-information group");
+    expect(prompt).not.toContain("Check Identification, Persuasion, and Action");
+    expect(prompt).not.toContain("Complete the ad unit");
+    expect(prompt).toContain(
+      "Choose the information architecture freely for the campaign's actual communication job"
+    );
+    expect(prompt).toContain("### Attached artifact roles");
     expect(prompt).toContain(
       '"role": "Primary reference · Logo · Latest logo"'
     );
     expect(prompt).toContain(
       '"role": "Supporting reference · Style · Workshop CTA"'
     );
-    expect(prompt).toContain("Extract the design thinking behind the references");
-    expect(prompt).toContain("STYLE FIDELITY IS MANDATORY");
+    expect(prompt).toContain('"kind": "official-logo"');
+    expect(prompt).toContain("This is an official logo asset only");
     expect(prompt).toContain(
-      "same mood, tone, and visual style family"
+      "Do not use it as a style, composition, lighting, spatial-density, or visual-treatment reference"
     );
-    expect(prompt).toContain('"brandMemory"');
+    expect(prompt).toContain(
+      "Use each attached reference only for its stated role"
+    );
+    expect(prompt).toContain(
+      "Preserve official logos, products, packaging, spelling, proportions, colours"
+    );
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');
     expect(prompt).toContain("EDITABLE SOURCE GUIDELINE");
     expect(prompt).toContain("use Söhne Breit for headlines");
     expect(prompt).toContain("preserve 48 px clear space");
     expect(prompt).not.toContain("DERIVED STALE GUIDELINE");
-    expect(prompt).toContain('"products"');
-    expect(prompt).toContain('"caption"');
-    expect(prompt).toContain("Product truths");
+    expect(prompt).toContain('"relevantProductOrService"');
+    expect(prompt).toContain("Flower delivery service");
+    expect(prompt).not.toContain("AI SEO / AEO / GEO");
+    expect(prompt).not.toContain("KOL campaign support");
+    expect(prompt).not.toContain('"title": "Campaign brief"');
+    expect(prompt).not.toContain('"brandMemory"');
+    expect(prompt).not.toContain('"brandRules"');
+    expect(prompt).not.toContain('"caption"');
+    expect(prompt).not.toContain("Fresh flowers for calm homes.");
+    expect(prompt).not.toContain("Connects the offer to a clear room mood.");
+    expect(prompt).not.toContain(
+      "Soft natural light with bouquet on table."
+    );
     expect(prompt).not.toContain('"selectedEvidence"');
     expect(prompt).not.toContain("Style-only reference — study composition");
     expect(prompt).not.toContain("Approved visual direction");
     expect(prompt).not.toContain("preferredLayout");
     expect(prompt).not.toContain("preferredHeroType");
+    expect(prompt).toContain("Static artwork rules:");
+    expect(prompt).not.toContain("Album master rules:");
+    expect(prompt).not.toContain("2048 × 2048");
+    expect(prompt).not.toContain("panel seams");
     expect(prompt).not.toContain("ALBUM MASTER GRID");
     expect(prompt).not.toContain("ONE CAMPAIGN WORLD IS MANDATORY");
     expect(prompt).not.toContain("CTA UNIQUENESS IS MANDATORY");
@@ -1777,8 +2065,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("{hook.");
     expect(prompt).not.toContain("{commercialStyle}");
     expect(prompt.length).toBeLessThanOrEqual(32_000);
-    expect(strategyCalls).toHaveLength(1);
-    expect(strategyCalls[0]?.model).toBe("gpt-5.6-luna");
+    expect(strategyCalls).toHaveLength(2);
+    expect(strategyCalls[0]?.model).toBe("anthropic/claude-sonnet-4.6");
+    expect(strategyCalls[1]?.model).toBe("anthropic/claude-sonnet-4.6");
   });
 
   it("surfaces prompt-agent failure instead of silently generating with a fallback", async () => {
@@ -1826,5 +2115,95 @@ describe("handleArtworkGenerationRequest", () => {
       ok: false,
       error: "OpenAI image prompt agent failed: 500 — agent unavailable"
     });
+  });
+
+  it("continues to image generation when optional strategy evidence validation fails", async () => {
+    const generationCalls: string[] = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          const body = JSON.parse(String(init?.body)) as {
+            text?: { format?: { name?: string } };
+          };
+          if (
+            body.text?.format?.name === "moons_image_generation_prompt"
+          ) {
+            return creativeGraphicDesignerResponse();
+          }
+          return new Response(
+            JSON.stringify({
+              output_text: JSON.stringify({
+                commercialStyle: "story",
+                sellingMechanism: "problem-solution",
+                preferredMode: "standard_commercial",
+                preferredLayout: "architectural_plane_split",
+                preferredHeroType: "object_metaphor",
+                humanPresence: "avoid",
+                audienceMoment: "The customer wants an easier daily routine.",
+                reasonToBelieve: "Show the benefit through the visual.",
+                visibleProofDirection: "A clear before-and-after visual.",
+                offer: { text: "", evidenceId: "", source: "none" },
+                proof: [],
+                differentiator: {
+                  text: "Paraphrased campaign difference",
+                  evidenceId: "brief:0",
+                  source: "verified"
+                },
+                referenceSearchText: "clean problem-solution artwork",
+                evidenceStatus: "verified",
+                requiresTextReview: false,
+                missingEvidence: []
+              })
+            }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/images/generations")) {
+          const body = JSON.parse(String(init?.body)) as { prompt: string };
+          generationCalls.push(body.prompt);
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  b64_json: Buffer.from("fake-png-bytes").toString("base64")
+                }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(generationCalls).toHaveLength(1);
+    expect(generationCalls[0]).toContain("### Creative provocation");
   });
 });

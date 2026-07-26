@@ -36,7 +36,6 @@ describe("redesigned application navigation", () => {
         dispatch={dispatch}
         workspaceDispatch={workspaceDispatch}
         createRun={createRun}
-        canEdit
       />
     );
 
@@ -100,11 +99,13 @@ describe("redesigned application navigation", () => {
     });
   });
 
-  it("keeps new-project controls unavailable to viewers", () => {
+  it("lets viewers create their own project without editing the viewed project", async () => {
+    const user = userEvent.setup();
     const workspace = createInitialWorkspaceState({
       runId: "run-viewer-create",
       now: "2026-07-24T00:00:00.000Z"
     });
+    const createRun = vi.fn();
 
     const view = render(
       <NavigationRail
@@ -112,14 +113,15 @@ describe("redesigned application navigation", () => {
         state={getActiveRun(workspace)}
         dispatch={vi.fn()}
         workspaceDispatch={vi.fn()}
-        createRun={vi.fn()}
-        canEdit={false}
+        createRun={createRun}
       />
     );
 
     const newProject = view.container.querySelector<HTMLButtonElement>(
       'button[aria-label="New project"]'
     );
-    expect(newProject?.disabled).toBe(true);
+    expect(newProject?.disabled).toBe(false);
+    await user.click(newProject!);
+    expect(createRun).toHaveBeenCalledWith(false);
   });
 });

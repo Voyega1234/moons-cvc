@@ -186,12 +186,13 @@ interface ImagePromptAgentDebugLog {
 interface CreativeStrategyAgentDebugLog {
   kind: "creative-strategy-agent";
   createdAt: string;
+  provider: ImagePromptProvider;
   model: string;
   runId: string;
   directionId: string;
   status: "succeeded" | "failed";
   request: {
-    endpoint: "/v1/responses";
+    endpoint: "/v1/responses" | "/api/v1/responses";
     store: false;
     inputText: string;
     responseFormat: {
@@ -309,12 +310,11 @@ export async function handleArtworkGenerationRequest({
       input.imagePromptModel === "anthropic/claude-sonnet-4.6"
         ? "openrouter"
         : "openai";
-    const usesImagePromptAgent = input.artworkMode !== "design-system";
     const promptApiKey =
       promptProvider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
-    if (usesImagePromptAgent && !promptApiKey) {
+    if (!promptApiKey) {
       return jsonResponse(
         { ok: false, error: "OPENROUTER_API_KEY is required." },
         500
@@ -325,7 +325,9 @@ export async function handleArtworkGenerationRequest({
         ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
         : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
     const creativeStrategyModel =
-      env.OPENAI_CREATIVE_STRATEGY_MODEL?.trim() || undefined;
+      promptProvider === "openrouter"
+        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
+        : env.OPENAI_CREATIVE_STRATEGY_MODEL?.trim() || undefined;
 
     const outputs = await generateOutputsForSelectedHooks({
       input,
@@ -599,19 +601,29 @@ async function generateOutputForHook({
     ? "2048x2048"
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
-  const strategy =
+  let strategy: CreativeStrategyEnrichment | undefined;
+  if (
     input.artworkMode === "reference-library" ||
     input.artworkMode === "design-system"
-      ? await resolveCreativeStrategy({
-          input,
-          hook,
-          apiKey,
-          model: creativeStrategyModel,
-          debugLogDirectory,
-          writeDebugLog,
-          fetchImpl
-        })
-      : undefined;
+  ) {
+    try {
+      strategy = await resolveCreativeStrategy({
+        input,
+        hook,
+        apiKey: promptApiKey,
+        model: creativeStrategyModel,
+        provider: promptProvider,
+        debugLogDirectory,
+        writeDebugLog,
+        fetchImpl
+      });
+    } catch (error) {
+      console.warn(
+        `Creative strategy enrichment failed for "${hook.id}"; continuing without it.`,
+        error
+      );
+    }
+  }
   const artworkReferences =
     input.artworkMode === "reference-library"
       ? await resolveStoredArtworkReferences({ input, hook, strategy, storage })
@@ -621,6 +633,24 @@ async function generateOutputForHook({
     ...artworkReferences.map(({ image }) => image)
   ];
   const generationReferences = promptReferences;
+  const creativeProvocation =
+    input.artworkMode === "design-system"
+      ? await resolveImagePrompt({
+          input,
+          hook,
+          promptModel,
+          promptProvider,
+          promptApiKey,
+          debugLogDirectory,
+          writeDebugLog,
+          references: promptReferences,
+          artworkReferences,
+          strategy,
+          canvasRatio,
+          albumFormat,
+          fetchImpl
+        })
+      : undefined;
   const prompt =
     input.artworkMode === "design-system"
       ? await buildDirectDesignSystemPrompt({
@@ -629,7 +659,8 @@ async function generateOutputForHook({
           references: promptReferences,
           canvasRatio,
           albumFormat,
-          strategy
+          strategy,
+          creativeProvocation
         })
       : await resolveImagePrompt({
           input,
@@ -1334,6 +1365,7 @@ async function resolveCreativeStrategy({
   hook,
   apiKey,
   model,
+  provider,
   debugLogDirectory,
   writeDebugLog,
   fetchImpl
@@ -1342,6 +1374,7 @@ async function resolveCreativeStrategy({
   hook: SelectedHook;
   apiKey: string;
   model?: string;
+  provider: ImagePromptProvider;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   fetchImpl: FetchLike;
@@ -1349,6 +1382,7 @@ async function resolveCreativeStrategy({
   return enrichCreativeStrategy({
     apiKey,
     model,
+    provider,
     fetchImpl,
     input: {
       brand: input.brand,
@@ -1538,13 +1572,159 @@ function buildConceptAlignmentInstruction(hook: SelectedHook): string {
   ].join("\n");
 }
 
+// async function buildDirectDesignSystemPrompt({
+//   input,
+//   hook,
+//   references,
+//   canvasRatio,
+//   albumFormat,
+//   strategy
+// }: {
+//   input: ArtworkGenerationRequest;
+//   hook: SelectedHook;
+//   references: readonly ReferenceImageInput[];
+//   canvasRatio: string;
+//   albumFormat: AlbumFormat;
+//   strategy?: CreativeStrategyEnrichment;
+// }): Promise<string> {
+//   const artifactMap = references.map((reference, index) => ({
+//     image: index + 1,
+//     role: compactPromptText(reference.label ?? "Reference image", 180)
+//   }));
+//   const supportingCopy = hook.supportingPoints?.length
+//     ? hook.supportingPoints
+//     : ["None supplied; do not add filler copy merely to occupy space."];
+//   const additionalRequirements = input.textInputs.length
+//     ? input.textInputs
+//     : ["None supplied."];
+//   const editableGuidelineItems = input.brandLibrary.docs.filter(
+//     isEditableBrandGuidelineItem
+//   );
+//   const derivedGuidelineItems = input.brandLibrary.brand.filter(
+//     isBrandGuidelineItem
+//   );
+//   const guidelineItems = editableGuidelineItems.length
+//     ? editableGuidelineItems
+//     : derivedGuidelineItems;
+//   const otherBrandItems = input.brandLibrary.brand.filter(
+//     (item) => !isBrandGuidelineItem(item)
+//   );
+//   const otherDocumentItems = input.brandLibrary.docs.filter(
+//     (item) => !isEditableBrandGuidelineItem(item)
+//   );
+//   const thickContext = {
+//     brand: input.brand
+//       ? {
+//           id: compactPromptText(input.brand.id, 120),
+//           name: compactPromptText(input.brand.name, 180),
+//           category: compactPromptText(input.brand.category, 180),
+//           personality: compactPromptList(input.brand.personality, 8, 120),
+//           colors: compactPromptList(input.brand.colors, 12, 40)
+//         }
+//       : null,
+//     brandMemory: {
+//       // working: compactPromptList(input.brandMemory.working, 8, 240),
+//       // avoid: compactPromptList(input.brandMemory.avoid, 8, 240)
+//     },
+//     brandLibrary: {
+//       guidelines: compactPromptLibrary(guidelineItems, 3, 4_000),
+//       brand: compactPromptLibrary(otherBrandItems, 6, 400),
+//       products: compactPromptLibrary(input.brandLibrary.products, 8, 500),
+//       docs: compactPromptLibrary(otherDocumentItems, 4, 280),
+//       refs: compactPromptLibrary(input.brandLibrary.refs, 6, 280)
+//     // },
+//     // campaignContext: {
+//     //   workingBrief: compactPromptText(input.brief, 1_500),
+//     //   rationale: compactPromptText(hook.why, 1_000),
+//     //   caption: compactPromptText(hook.caption, 1_500)
+//     },
+//     attachedArtifacts: artifactMap.slice(0, 16)
+//   };
+
+//   const contextJson = JSON.stringify(thickContext, null, 2);
+//   const prompt = renderDesignSystemPromptTemplate(
+//     await loadDesignSystemPrompt(),
+//     {
+//       "{{COMMERCIAL_STYLE}}": compactPromptText(
+//         strategy?.commercialStyle ?? "select from the brief and brand context",
+//         300
+//       ),
+//       "{{TREATMENT}}": compactPromptText(
+//         designSystemTreatmentFor(strategy?.commercialStyle),
+//         500
+//       ),
+//       "{{SELLING_MECHANISM}}": compactPromptText(
+//         strategy?.sellingMechanism ??
+//           "select the clearest approach for the message",
+//         300
+//       ),
+//       "{{HUMAN_PRESENCE}}": compactPromptText(
+//         strategy?.humanPresence ?? "avoid",
+//         40
+//       ),
+//       "{{AUDIENCE_MOMENT}}": compactPromptText(
+//         strategy?.audienceMoment ??
+//           "infer conservatively from the supplied context",
+//         500
+//       ),
+//       "{{BRAND_FIT_REASON}}": compactPromptText(
+//         strategy?.reasonToBelieve ??
+//           "Use the supplied brand context and artifacts as evidence.",
+//         500
+//       ),
+//       "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
+//         `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
+//         360
+//       ),
+//       "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
+//       "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
+//       "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
+//       "{{SUPPORTING_COPY}}": compactPromptText(
+//         supportingCopy.join(" | "),
+//         1_200
+//       ),
+//       "{{CTA}}": compactPromptText(hook.cta, 300),
+//       "{{SERVICE_TYPE}}":
+//         input.service === "album-post" ? "Album" : "Static",
+//       "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
+//       "{{ON_ARTWORK_COPY_PRIORITY}}": buildDesignSystemCopyPriority(
+//         input.service,
+//         hook,
+//         albumFormat
+//       ),
+//       "{{CAPTION_CONTEXT}}": compactPromptText(
+//         hook.caption || "None supplied.",
+//         1_500
+//       ),
+//       "{{IDEA_RATIONALE}}": compactPromptText(hook.why, 1_000),
+//       "{{VISUAL_DIRECTION}}": compactPromptText(hook.visual, 1_000),
+//       "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
+//         .slice(0, 5)
+//         .map((requirement) => `* ${compactPromptText(requirement, 500)}`)
+//         .join("\n"),
+//       "{{ALBUM_PANEL_COUNT}}": String(
+//         albumFormat.startsWith("three-") ? 3 : 4
+//       ),
+//       "{{FORMAT_BEATS}}": compactPromptText(
+//         hook.formatBeats?.length
+//           ? hook.formatBeats.join(" | ")
+//           : "Not applicable.",
+//         1_000
+//       ),
+//       "{{THICK_CONTEXT_JSON}}": contextJson
+//     }
+//   );
+
+//   return prompt;
+// }
 async function buildDirectDesignSystemPrompt({
   input,
   hook,
   references,
   canvasRatio,
   albumFormat,
-  strategy
+  strategy,
+  creativeProvocation
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
@@ -1552,119 +1732,511 @@ async function buildDirectDesignSystemPrompt({
   canvasRatio: string;
   albumFormat: AlbumFormat;
   strategy?: CreativeStrategyEnrichment;
+  creativeProvocation?: string;
 }): Promise<string> {
-  const artifactMap = references.map((reference, index) => ({
-    image: index + 1,
-    role: compactPromptText(reference.label ?? "Reference image", 180)
-  }));
-  const supportingCopy = hook.supportingPoints?.length
-    ? hook.supportingPoints
-    : ["None supplied; do not add filler copy merely to occupy space."];
-  const additionalRequirements = input.textInputs.length
-    ? input.textInputs
-    : ["None supplied."];
+  /**
+   * Describe only the role of each image.
+   * GPT Image 2 can inspect the actual image itself, so avoid repeating
+   * detailed visual descriptions that may over-bias the generation.
+   */
+  const artifactMap = references
+    .slice(0, 16)
+    .map((reference, index) => buildCampaignArtifactRole(reference, index));
+
+  /**
+   * Static artwork should not receive every available supporting point.
+   * Too many supporting options tend to produce:
+   * - icon rows
+   * - feature cards
+   * - infographic blocks
+   * - crowded bottom strips
+   */
+  const selectedSupportingCopy = (hook.supportingPoints ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, input.service === "album-post" ? 4 : 2);
+
+  const latestCorrection =
+    input.textInputs
+    .map((requirement) => requirement.trim())
+    .filter(Boolean)
+    .at(-1);
+
+  /**
+   * Prefer editable guidelines when they exist.
+   * Do not send older brand artwork as general brand context because it
+   * can anchor GPT Image 2 to previous layouts and visual formulas.
+   */
   const editableGuidelineItems = input.brandLibrary.docs.filter(
     isEditableBrandGuidelineItem
   );
+
   const derivedGuidelineItems = input.brandLibrary.brand.filter(
     isBrandGuidelineItem
   );
+
   const guidelineItems = editableGuidelineItems.length
     ? editableGuidelineItems
     : derivedGuidelineItems;
-  const otherBrandItems = input.brandLibrary.brand.filter(
-    (item) => !isBrandGuidelineItem(item)
+
+  /**
+   * Keep only non-guideline documents as possible factual evidence.
+   * Campaign brief, caption, rationale, and visual direction are not
+   * duplicated inside this context.
+   */
+  const factualDocumentItems = input.brandLibrary.docs.filter(
+    (item) =>
+      !isEditableBrandGuidelineItem(item) &&
+      !isRepeatedCampaignDirectionItem(item)
   );
-  const otherDocumentItems = input.brandLibrary.docs.filter(
-    (item) => !isEditableBrandGuidelineItem(item)
-  );
-  const thickContext = {
+  const relevantProductOrService = selectRelevantProductOrServiceTruth({
+    input,
+    hook,
+    references
+  });
+  const workingBrief = compileNeutralWorkingBrief({
+    brief: input.brief || hook.why,
+    references,
+    relevantProductOrService
+  });
+
+  /**
+   * This is now an Image Truth Context rather than a Thick Creative Context.
+   *
+   * It contains:
+   * - verified brand identity
+   * - relevant restrictions
+   * - official guidelines
+   * - product truth
+   * - factual documents
+   * - attached-image roles
+   *
+   * It intentionally excludes:
+   * - campaign brief duplication
+   * - caption
+   * - rationale
+   * - AI-generated visual direction
+   * - previous brand artwork
+   * - brandMemory.working visual patterns
+   */
+  const imageTruthContext = {
     brand: input.brand
       ? {
-          id: compactPromptText(input.brand.id, 120),
           name: compactPromptText(input.brand.name, 180),
-          category: compactPromptText(input.brand.category, 180),
-          personality: compactPromptList(input.brand.personality, 8, 120),
-          colors: compactPromptList(input.brand.colors, 12, 40)
+          personality: compactPromptList(
+            input.brand.personality,
+            2,
+            60
+          ),
+          colors: compactPromptList(
+            input.brand.colors,
+            6,
+            40
+          )
         }
       : null,
-    brandMemory: {
-      working: compactPromptList(input.brandMemory.working, 8, 240),
-      avoid: compactPromptList(input.brandMemory.avoid, 8, 240)
-    },
+
     brandLibrary: {
-      guidelines: compactPromptLibrary(guidelineItems, 3, 4_000),
-      brand: compactPromptLibrary(otherBrandItems, 6, 400),
-      products: compactPromptLibrary(input.brandLibrary.products, 8, 500),
-      docs: compactPromptLibrary(otherDocumentItems, 4, 280),
-      refs: compactPromptLibrary(input.brandLibrary.refs, 6, 280)
-    },
-    campaignContext: {
-      workingBrief: compactPromptText(input.brief, 1_500),
-      rationale: compactPromptText(hook.why, 1_000),
-      caption: compactPromptText(hook.caption, 1_500)
-    },
-    attachedArtifacts: artifactMap.slice(0, 16)
+      /**
+       * Keep guidelines concise. Sending several thousand characters per
+       * file can introduce unrelated history, voice, examples, and layout
+       * references into the image prompt.
+       */
+      guidelines: compactPromptLibrary(
+        guidelineItems,
+        2,
+        800
+      ),
+
+      /**
+       * Ideally input.brandLibrary.products should already contain only
+       * the products selected for this campaign.
+       *
+       * This cap prevents GPT Image 2 from turning a single-product
+       * campaign into a product-lineup or marketplace layout.
+       */
+      relevantProductOrService: compactPromptLibrary(
+        relevantProductOrService,
+        relevantProductOrService.length,
+        320
+      ),
+
+      /**
+       * Keep documents only as concise factual support.
+       */
+      verifiedFacts: compactPromptLibrary(
+        factualDocumentItems,
+        2,
+        180
+      )
+    }
   };
 
-  const contextJson = JSON.stringify(thickContext, null, 2);
+  const contextJson = JSON.stringify(
+    imageTruthContext,
+    null,
+    2
+  );
+
+  const compiledCampaignContext = [
+    "### Strategic intent",
+    [
+      "Selling mechanism:",
+      compactPromptText(
+        strategy?.sellingMechanism ??
+          "Select the clearest selling approach from the campaign message.",
+        180
+      )
+    ].join("\n"),
+    [
+      "Audience moment:",
+      compactPromptText(
+        strategy?.audienceMoment ??
+          "Infer conservatively from the campaign brief and audience context.",
+        260
+      )
+    ].join("\n"),
+    "These strategic inputs describe intent only. They do not prescribe the visual solution.",
+    "### Creative provocation",
+    compactPromptText(
+      creativeProvocation ??
+        "Find the strongest campaign-specific visual idea from the verified evidence.",
+      1_200
+    ),
+    "Use this as an imaginative starting point, not a prescribed layout or production blueprint. Freely transform it when a stronger visual execution communicates the campaign more effectively. It does not authorize invented facts, copy, products, or claims.",
+    "### Brand",
+    [
+      `- Name: ${compactPromptText(input.brand?.name ?? "Not supplied", 180)}`,
+      `- Category: ${compactPromptText(input.brand?.category ?? "Not supplied", 180)}`
+    ].join("\n"),
+    "### Working Brief",
+    [
+      "Business problem and communication objective:",
+      workingBrief
+    ].join("\n"),
+    ["Main message:", compactPromptText(hook.concept, 600)].join("\n"),
+    [
+      "Offer and product handling:",
+      "Make the core offer or value proposition clear. When a supplied physical product matters to the campaign, preserve and use it accurately. For services, express the value through a campaign-specific idea without presenting an invented interface or object as a factual product."
+    ].join("\n"),
+    "### Mandatory on-artwork copy",
+    `- Exact headline: “${compactPromptText(hook.hook, 500)}”`,
+    hook.cta.trim()
+      ? `- Mandatory CTA: “${compactPromptText(hook.cta, 300)}”`
+      : "- Mandatory CTA: None supplied.",
+    artifactMap.some((artifact) => artifact.kind === "official-logo")
+      ? "- Official brand identification: use the supplied official logo once and preserve it exactly."
+      : "- Official brand identification: preserve supplied brand identity; do not invent a logo.",
+    "- Other mandatory legal, promotional, event, price, date, or contact details: only those explicitly required by the Working Brief or latest user correction.",
+    "### Approved optional content pool",
+    [
+      selectedSupportingCopy.length
+        ? selectedSupportingCopy
+            .map(
+              (item) =>
+                `- ${compactPromptText(
+                  item,
+                  input.service === "album-post" ? 800 : 400
+                )}`
+            )
+            .join("\n")
+        : "- None supplied.",
+      "",
+      "Supporting information above is an approved content pool, not a required copy checklist.",
+      "Select only what strengthens the idea, understanding, persuasion, or required execution.",
+      "Omit redundant information when the visual already communicates it.",
+      "Supporting content is optional unless explicitly marked mandatory."
+    ].join("\n"),
+    "### Information density intent",
+    "infer from the Working Brief",
+    "This controls how much approved information may be useful. It does not prescribe layout, zones, hero placement, typography placement, visual metaphor, or composition.",
+    [
+      "Canvas:",
+      compactPromptText(`${canvasRatio} ${input.service}`, 120)
+    ].join("\n"),
+    [
+      "Campaign content rules:",
+      buildDesignSystemCopyPriority()
+    ].join("\n"),
+    [
+      "Latest user correction:",
+      latestCorrection
+        ? compactPromptText(latestCorrection, 500)
+        : "None supplied."
+    ].join("\n"),
+    "### Brand and relevant product or service truth",
+    contextJson,
+    "Use the JSON only as factual context. Do not display it in the artwork.",
+    "### Attached artifact roles",
+    artifactMap.length
+      ? JSON.stringify(artifactMap, null, 2)
+      : "No artifacts supplied."
+  ].join("\n\n");
+
   const prompt = renderDesignSystemPromptTemplate(
     await loadDesignSystemPrompt(),
     {
-      "{{COMMERCIAL_STYLE}}": compactPromptText(
-        strategy?.commercialStyle ?? "select from the brief and brand context",
-        300
-      ),
-      "{{TREATMENT}}": compactPromptText(
-        designSystemTreatmentFor(strategy?.commercialStyle),
-        500
-      ),
-      "{{SELLING_MECHANISM}}": compactPromptText(
-        strategy?.sellingMechanism ??
-          "select the clearest approach for the message",
-        300
-      ),
-      "{{HUMAN_PRESENCE}}": compactPromptText(
-        strategy?.humanPresence ?? "avoid",
-        40
-      ),
-      "{{AUDIENCE_MOMENT}}": compactPromptText(
-        strategy?.audienceMoment ??
-          "infer conservatively from the supplied context",
-        500
-      ),
-      "{{BRAND_FIT_REASON}}": compactPromptText(
-        strategy?.reasonToBelieve ??
-          "Use the supplied brand context and artifacts as evidence.",
-        500
-      ),
-      "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
-        `${input.brand?.name ?? "Not supplied"}${input.brand?.category ? ` — ${input.brand.category}` : ""}`,
-        360
-      ),
-      "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
-      "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
-      "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
-      "{{SUPPORTING_COPY}}": compactPromptText(
-        supportingCopy.join(" | "),
-        1_200
-      ),
-      "{{CTA}}": compactPromptText(hook.cta, 300),
-      "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
-      "{{ON_ARTWORK_COPY_PRIORITY}}": buildDesignSystemCopyPriority(
+      "{{COMPILED_CAMPAIGN_CONTEXT}}": compiledCampaignContext,
+      "{{ACTIVE_HUMAN_PRESENCE_RULES}}":
+        buildActiveHumanPresenceRules(undefined),
+      "{{ACTIVE_OUTPUT_MODE_RULES}}": buildActiveOutputModeRules(
         input.service,
         hook,
         albumFormat
-      ),
-      "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
-        .slice(0, 5)
-        .map((requirement) => `* ${compactPromptText(requirement, 500)}`)
-        .join("\n"),
-      "{{THICK_CONTEXT_JSON}}": contextJson
+      )
     }
   );
 
   return prompt;
+}
+
+export function buildActiveHumanPresenceRules(
+  mode: CreativeStrategyEnrichment["humanPresence"] | undefined
+): string {
+  switch (mode) {
+    case "avoid":
+      return "Do not use people, faces, bodies, portraits, or hands. Build the concept through products, objects, typography, materials, architecture, environments, or graphic systems.";
+    case "supporting":
+      return "People may provide context, scale, interaction, or emotion, but they must remain clearly subordinate to the dominant message and hero system.";
+    case "essential":
+      return "Human presence is essential to the campaign. A person may become the hero when the message depends on human emotion, care, treatment, hospitality, teaching, physical experience, lifestyle, or interpersonal service.";
+    default:
+      return "Infer whether human presence materially improves the campaign message. Do not add people merely as decoration, but do not prohibit people by default.";
+  }
+}
+
+function buildActiveOutputModeRules(
+  service: ArtworkGenerationRequest["service"],
+  hook: SelectedHook,
+  albumFormat: AlbumFormat
+): string {
+  if (service !== "album-post") {
+    return [
+      "Static artwork rules:",
+      "- Create one complete artwork in the requested canvas.",
+      "- Make the message clear at mobile-feed size.",
+      "- Use one dominant visual idea and a deliberate reading order.",
+      "- Deliver one finished composition without alternate layouts or multiple design options."
+    ].join("\n");
+  }
+
+  const panelCount = albumFormat.startsWith("three-") ? 3 : 4;
+  const formatBeats = hook.formatBeats?.length
+    ? compactPromptText(hook.formatBeats.join(" | "), 1_000)
+    : "Not supplied.";
+  return [
+    "Album master rules:",
+    "- Create one master artwork at 2048 × 2048.",
+    `- Use the selected ${albumFormat} structure with ${panelCount} clearly separated panels.`,
+    "- Treat every panel as part of one consistent campaign world.",
+    "- Place the primary headline on the cover panel.",
+    "- Use the CTA once, on the closing panel.",
+    "- Keep important text, faces, logos, products, and focal objects away from panel seams.",
+    "- Make every panel independently readable while preserving visual continuity across the master.",
+    "- Keep typography, color logic, lighting, materials, and image treatment consistent.",
+    "- Do not add page numbers, step numbers, or decorative sequence labels.",
+    `- Distribute these story beats across the panels: ${formatBeats}`
+  ].join("\n");
+}
+
+interface CampaignArtifactRole {
+  image: number;
+  kind: "official-logo" | "official-product" | "style-reference" | "reference";
+  role: string;
+  instruction: string;
+}
+
+function buildCampaignArtifactRole(
+  reference: ReferenceImageInput,
+  index: number
+): CampaignArtifactRole {
+  const role = compactPromptText(reference.label ?? "Reference image", 180);
+  const normalized = role.toLowerCase();
+  if (/logo|โลโก้/.test(normalized)) {
+    return {
+      image: index + 1,
+      kind: "official-logo",
+      role,
+      instruction:
+        "This is an official logo asset only. Preserve its identity. Do not use it as a style, composition, lighting, spatial-density, or visual-treatment reference."
+    };
+  }
+  if (/product|packshot|สินค้า/.test(normalized)) {
+    return {
+      image: index + 1,
+      kind: "official-product",
+      role,
+      instruction:
+        "This is an official product asset. Preserve its visible identity and use it only for the product role stated in the label."
+    };
+  }
+  if (/· style ·|style reference|past work style/.test(normalized)) {
+    return {
+      image: index + 1,
+      kind: "style-reference",
+      role,
+      instruction:
+        "Use this image only for its stated style-reference role. Do not copy its campaign content."
+    };
+  }
+  return {
+    image: index + 1,
+    kind: "reference",
+    role,
+    instruction:
+      "Use this image only for the role stated in its label. Do not infer unrelated style or campaign facts."
+  };
+}
+
+function selectRelevantProductOrServiceTruth({
+  input,
+  hook,
+  references
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  references: readonly ReferenceImageInput[];
+}): readonly ArtworkGenerationRequest["brandLibrary"]["products"][number][] {
+  const products = input.brandLibrary.products;
+  if (input.selectedProductIds !== undefined) {
+    const selectedIds = new Set(input.selectedProductIds);
+    return products.filter(
+      (product) => product.id && selectedIds.has(product.id)
+    );
+  }
+  if (products.length <= 1) return products;
+
+  const productArtifactText = references
+    .filter((reference) =>
+      /product|packshot|สินค้า/i.test(reference.label ?? "")
+    )
+    .map((reference) => reference.label ?? "")
+    .join(" ");
+  const campaignTokens = meaningfulCampaignTokens(
+    [
+      input.brief,
+      hook.hook,
+      hook.concept,
+      hook.cta,
+      ...(hook.supportingPoints ?? []),
+      productArtifactText
+    ].join(" ")
+  );
+  const ranked = products
+    .map((product, index) => ({
+      product,
+      index,
+      score:
+        overlapScore(meaningfulCampaignTokens(product.title), campaignTokens, 4) +
+        overlapScore(
+          meaningfulCampaignTokens(product.description),
+          campaignTokens,
+          1
+        )
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+  const best = ranked[0];
+  if (!best || best.score < 4) return [];
+  if (ranked[1]?.score === best.score) return [];
+  return [best.product];
+}
+
+const CAMPAIGN_RELEVANCE_STOP_WORDS = new Set([
+  "about",
+  "actual",
+  "advertising",
+  "agency",
+  "brand",
+  "campaign",
+  "client",
+  "create",
+  "from",
+  "into",
+  "marketing",
+  "offer",
+  "product",
+  "service",
+  "that",
+  "their",
+  "this",
+  "through",
+  "with",
+  "และ",
+  "การ",
+  "ของ",
+  "ให้",
+  "ที่",
+  "ใน"
+]);
+
+function meaningfulCampaignTokens(value: string): ReadonlySet<string> {
+  const tokens = value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return new Set(
+    tokens
+      .map(normalizeCampaignToken)
+      .filter(
+        (token) =>
+          token.length >= 3 && !CAMPAIGN_RELEVANCE_STOP_WORDS.has(token)
+      )
+  );
+}
+
+function normalizeCampaignToken(token: string): string {
+  if (!/^[a-z]+$/.test(token) || token.length < 5) return token;
+  if (token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (token.endsWith("s") && !token.endsWith("ss")) return token.slice(0, -1);
+  return token;
+}
+
+function overlapScore(
+  candidates: ReadonlySet<string>,
+  campaignTokens: ReadonlySet<string>,
+  weight: number
+): number {
+  let score = 0;
+  for (const token of candidates) {
+    if (campaignTokens.has(token)) score += weight;
+  }
+  return score;
+}
+
+function compileNeutralWorkingBrief({
+  brief,
+  references,
+  relevantProductOrService
+}: {
+  brief: string;
+  references: readonly ReferenceImageInput[];
+  relevantProductOrService: readonly ArtworkGenerationRequest["brandLibrary"]["products"][number][];
+}): string {
+  const hasPhysicalProductArtifact = references.some((reference) =>
+    /product|packshot|สินค้า/i.test(reference.label ?? "")
+  );
+  const hasServiceTruth = relevantProductOrService.some((item) =>
+    /agency|consult|service|workshop|บริการ|เอเจนซี่/i.test(
+      `${item.title} ${item.description}`
+    )
+  );
+  if (hasPhysicalProductArtifact || (!hasServiceTruth && relevantProductOrService.length)) {
+    return compactPromptText(brief, 1_200);
+  }
+
+  return compactPromptText(
+    brief
+      .replace(
+        /\bshow the product in the first visual beat\b/gi,
+        "make the core offer or value proposition visually clear in the first visual beat"
+      )
+      .replace(
+        /\bshow the product early\b/gi,
+        "make the core offer or value proposition visually clear early"
+      )
+      .replace(
+        /\bprove the product difference\b/gi,
+        "make the core offer or value proposition credible"
+      ),
+    1_200
+  );
 }
 
 function isBrandGuidelineItem(item: { title: string }): boolean {
@@ -1677,38 +2249,35 @@ function isEditableBrandGuidelineItem(item: { title: string }): boolean {
     "brandguideline";
 }
 
-function buildDesignSystemCopyPriority(
-  service: ArtworkGenerationRequest["service"],
-  hook: SelectedHook,
-  albumFormat: AlbumFormat
-): string {
-  const supportingOptions =
-    hook.supportingPoints?.filter((point) => point.trim()) ?? [];
-  const lines = [
-    `Render the exact headline once: “${compactPromptText(hook.hook, 500)}”`,
-    supportingOptions.length
-      ? `Select the smallest useful combination from these evidence-backed supporting options. You may use multiple short items when they make the artwork more complete, but omit anything redundant with the visual: ${compactPromptText(supportingOptions.join(" | "), 1_000)}`
-      : "Create concise supporting or offer copy only when it closes a product-recognition, persuasion, trust, or action gap.",
-    `Use the supplied logo and the CTA “${compactPromptText(hook.cta, 300)}”.`,
-    "Build a cohesive secondary-information group that feels complete without becoming dense. It may combine a product or service descriptor, relevant benefits or proof, and a useful action detail.",
-    "Complete the ad unit rather than filling the image like a standalone poster. Check Identification, Persuasion, and Action; count information already supplied by the visual and surrounding platform UI.",
-    "For paid social or Meta, do not repeat page identity or contact merely because space is available. For standalone, organic, downloadable, or reshared artwork, a compact self-contained contact path may be useful.",
-    "You may add plausible editable mockup details such as a date, price, discount, page name, LINE handle, URL, phone number, urgency note, or contact line when they genuinely complete this ad. Use brand-derived, obviously replaceable contact formats rather than invented real personal details."
-  ];
-  if (service === "album-post" && hook.formatBeats?.length) {
-    lines.push(
-      `Album story beats must be distributed across the ${albumFormat.startsWith("three-") ? "three" : "four"} clearly separated panels in the selected ${albumFormat} master grid: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}. Keep every panel independently readable and keep all essential content away from the separators.`
-    );
-  }
-  return lines.join("\n");
+function isRepeatedCampaignDirectionItem(item: { title: string }): boolean {
+  const title = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return [
+    "campaignbrief",
+    "caption",
+    "rationale",
+    "idearationale",
+    "visualdirection"
+  ].includes(title);
+}
+
+function buildDesignSystemCopyPriority(): string {
+  return [
+    "Render mandatory on-artwork copy once.",
+    "Treat optional content as source material and include only what materially improves understanding, persuasion, or required execution.",
+    "Let the visual earn first attention; use copy to confirm and sharpen the message.",
+    "Choose the information architecture freely for the campaign's actual communication job.",
+    "Rank and group information so the intended reading order is clear.",
+    "Every visible element must earn its place. Never invent unsupported facts, claims, statistics, offers, certifications, partners, or product functions."
+  ].join("\n");
 }
 
 function compactPromptLibrary(
-  items: readonly { title: string; description: string }[],
+  items: readonly { id?: string; title: string; description: string }[],
   maxItems: number,
   maxDescriptionCharacters: number
 ) {
   return items.slice(0, maxItems).map((item) => ({
+    ...(item.id ? { id: item.id } : {}),
     title: compactPromptText(item.title, 140),
     description: compactPromptText(
       item.description,
@@ -1812,31 +2381,6 @@ function renderDesignSystemPromptTemplate(
   }
 
   return rendered;
-}
-
-function designSystemTreatmentFor(
-  style: CreativeStrategyEnrichment["commercialStyle"] | undefined
-): string {
-  switch (style) {
-    case "minimal":
-      return "Restrained and immediately clear; let one strong real visual and disciplined typography carry the message.";
-    case "lifestyle":
-      return "Human, natural, and relatable; show the product or benefit inside a believable lived moment.";
-    case "premium":
-      return "Refined and desirable through art direction, material quality, crop, lighting, and restraint—not a generic black-and-gold treatment.";
-    case "promotion":
-      return "Energetic, urgent, and exciting with decisive contrast and a clearly visible offer, while keeping mobile hierarchy controlled rather than crowded.";
-    case "infographic":
-      return "Explain the idea visually through one clear diagram, comparison, or evidence structure; remain image-led and avoid turning the artwork into a dense slide.";
-    case "social-proof":
-      return "Build trust through supplied evidence, authentic human context, or recognizable proof; never invent a real reviewer or certification.";
-    case "story":
-      return "Create one specific, visually legible tension or transformation that the viewer understands without reading a paragraph. Do not assume that the story needs a human protagonist.";
-    case "playful":
-      return "Use expressive color, scale, rhythm, and surprise appropriate to the brand while keeping the focal message unmistakable.";
-    default:
-      return "Choose the content behavior and emotional energy that best fit this specific message and brand.";
-  }
 }
 
 function buildImageRequestDebugBundle({
@@ -2177,7 +2721,8 @@ async function resolveImagePrompt({
         products: input.brandLibrary.products,
         docs: input.brandLibrary.docs,
         refs: input.brandLibrary.refs
-      }
+      },
+      selectedProductIds: input.selectedProductIds
     }
   });
 }
@@ -2190,12 +2735,13 @@ function buildCreativeStrategyAgentDebugLog(
   return {
     kind: "creative-strategy-agent",
     createdAt: trace.createdAt,
+    provider: trace.provider,
     model: trace.model,
     runId,
     directionId,
     status: trace.status,
     request: {
-      endpoint: "/v1/responses",
+      endpoint: trace.endpoint,
       store: false,
       inputText: trace.inputText,
       responseFormat: {
@@ -2398,6 +2944,14 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     referenceImages:
       value.referenceImages as ArtworkGenerationRequest["referenceImages"],
     brandMemory: parseBrandMemory(value.brandMemory),
+    ...(value.selectedProductIds === undefined
+      ? {}
+      : {
+          selectedProductIds: readStringArray(
+            value.selectedProductIds,
+            "selectedProductIds"
+          )
+        }),
     brandLibrary: parseBrandLibrary(value.brandLibrary),
     output: {
       size: outputSize as ArtworkGenerationRequest["output"]["size"],
@@ -2431,7 +2985,7 @@ function referenceCanvasRatioFromSize(
   size: ArtworkOutputSize
 ): "1:1" | "4:5" | "16:9" {
   if (size === "1024x1024") return "1:1";
-  return size === "1024x1536" ? "4:5" : "16:9";
+  return size === "1024x1536" || size === "1088x1360" ? "4:5" : "16:9";
 }
 
 function greatestCommonDivisor(a: number, b: number): number {
@@ -2454,7 +3008,7 @@ function parseBrandLibrary(
 
 function parseLibraryItems(
   value: unknown
-): readonly { title: string; description: string }[] {
+): readonly { id?: string; title: string; description: string }[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter(isRecord)
@@ -2463,6 +3017,7 @@ function parseLibraryItems(
         typeof item.title === "string" && typeof item.description === "string"
     )
     .map((item) => ({
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
       title: item.title as string,
       description: item.description as string
     }));

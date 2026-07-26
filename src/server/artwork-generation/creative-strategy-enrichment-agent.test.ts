@@ -151,6 +151,58 @@ describe("enrichCreativeStrategy", () => {
     expect(JSON.stringify(traces)).not.toContain("secret-key");
   });
 
+  it("routes art direction through OpenRouter when Claude is selected", async () => {
+    const calls: Array<{
+      url: string;
+      authorization: string | null;
+      body: Record<string, unknown>;
+    }> = [];
+    const traces: unknown[] = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          authorization: new Headers(init?.headers).get("Authorization"),
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>
+        });
+        return new Response(
+          JSON.stringify({ output_text: JSON.stringify(strategy()) }),
+          { status: 200 }
+        );
+      }
+    );
+
+    await enrichCreativeStrategy({
+      apiKey: "openrouter-key",
+      model: "anthropic/claude-sonnet-4.6",
+      provider: "openrouter",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input,
+      loadPrompt: async () => "CREATIVE STRATEGY ENRICHMENT",
+      writeTrace: async (trace) => {
+        traces.push(trace);
+      }
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        url: "https://openrouter.ai/api/v1/responses",
+        authorization: "Bearer openrouter-key",
+        body: expect.objectContaining({
+          model: "anthropic/claude-sonnet-4.6"
+        })
+      })
+    ]);
+    expect(traces).toEqual([
+      expect.objectContaining({
+        provider: "openrouter",
+        endpoint: "/api/v1/responses",
+        model: "anthropic/claude-sonnet-4.6",
+        status: "succeeded"
+      })
+    ]);
+  });
+
   it("rejects factual text that is not a verbatim excerpt of cited evidence", async () => {
     const traces: unknown[] = [];
     const fetchMock = vi.fn(async () =>

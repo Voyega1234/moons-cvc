@@ -159,12 +159,6 @@ export function App() {
     visibleStage === state.stage ? state : { ...state, stage: visibleStage };
 
   const createRun = useCallback((keepBrand: boolean) => {
-    if (!canEditRef.current) {
-      setEditWarning(
-        "Viewers can inspect every stage, but cannot create or recreate projects."
-      );
-      return;
-    }
     workspaceDispatch({
       type: "create-run",
       id: createId("run"),
@@ -192,7 +186,6 @@ export function App() {
         dispatch={interactiveDispatch}
         workspaceDispatch={workspaceDispatch}
         createRun={createRun}
-        canEdit={runCanEdit}
       />
       <div className="compass-page">
         <Header
@@ -213,7 +206,6 @@ export function App() {
                 dispatch={dispatch}
                 workspace={workspace}
                 workspaceDispatch={workspaceDispatch}
-                canCreate={runCanEdit}
                 onOpenStudio={() =>
                   workspaceDispatch({ type: "set-view", view: "studio" })
                 }
@@ -371,15 +363,13 @@ export function NavigationRail({
   state,
   dispatch,
   workspaceDispatch,
-  createRun,
-  canEdit
+  createRun
 }: {
   workspace: WorkspaceState;
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
-  canEdit: boolean;
 }) {
   const learnAction: WorkflowAction = { type: "set-stage", stage: "summary" };
   const learnBlocked = workflowActionBlockReason(state, learnAction);
@@ -440,7 +430,6 @@ export function NavigationRail({
       <button
         className="compass-rail-create"
         type="button"
-        disabled={!canEdit}
         aria-label="New project"
         title="Create a project and choose a client"
         onClick={() => createRun(false)}
@@ -526,7 +515,6 @@ function Header({
               type="button"
               title="Refresh studio"
               aria-label="Refresh studio"
-              disabled={!canEdit}
               onClick={() => createRun(false)}
             >
               <ArrowClockwise size={18} weight="bold" aria-hidden="true" />
@@ -942,7 +930,6 @@ function RunBar({
       <button
         className="runs-new"
         type="button"
-        disabled={!canEdit}
         onClick={() => createRun(true)}
       >
         + New creative

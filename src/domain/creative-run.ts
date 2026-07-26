@@ -94,6 +94,7 @@ export const imagePromptModels = [
 ] as const;
 export type ImagePromptModel = (typeof imagePromptModels)[number];
 export const artworkOutputSizes = [
+  "1088x1360",
   "1024x1024",
   "1536x1024",
   "1024x1536",
@@ -103,9 +104,11 @@ export const artworkOutputSizes = [
   "2160x3840"
 ] as const;
 export type ArtworkOutputSize = (typeof artworkOutputSizes)[number];
-export const defaultArtworkOutputSize: ArtworkOutputSize = "1024x1024";
+export const defaultArtworkOutputSize: ArtworkOutputSize = "1088x1360";
 export function artworkOutputSizeLabel(size: ArtworkOutputSize): string {
   switch (size) {
+    case "1088x1360":
+      return "1088x1360 (4:5 portrait)";
     case "1024x1024":
       return "1024x1024 (square)";
     case "1536x1024":

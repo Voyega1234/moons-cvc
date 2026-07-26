@@ -114,11 +114,12 @@ export interface ArtworkGenerationRequest {
     working: readonly string[];
     avoid: readonly string[];
   };
+  selectedProductIds?: readonly string[];
   brandLibrary: {
-    brand: readonly { title: string; description: string }[];
-    products: readonly { title: string; description: string }[];
-    docs: readonly { title: string; description: string }[];
-    refs: readonly { title: string; description: string }[];
+    brand: readonly { id?: string; title: string; description: string }[];
+    products: readonly { id?: string; title: string; description: string }[];
+    docs: readonly { id?: string; title: string; description: string }[];
+    refs: readonly { id?: string; title: string; description: string }[];
   };
   output: {
     size: ArtworkOutputSize;
@@ -772,7 +773,7 @@ async function mapWithConcurrency<Input, Output>(
 
 function buildBrandContext(run: WorkflowState): Pick<
   ArtworkGenerationRequest,
-  "brandMemory" | "brandLibrary"
+  "brandMemory" | "brandLibrary" | "selectedProductIds"
 > {
   const brand = run.brand;
   return {
@@ -780,6 +781,9 @@ function buildBrandContext(run: WorkflowState): Pick<
       working: brand?.memory.working ?? [],
       avoid: brand?.memory.avoid ?? []
     },
+    ...(run.selectedProductIds === undefined
+      ? {}
+      : { selectedProductIds: run.selectedProductIds }),
     brandLibrary: {
       brand: compactLibraryItems(brand?.library.brand ?? []),
       products: compactLibraryItems(selectedBrandProducts(run)),
@@ -790,9 +794,10 @@ function buildBrandContext(run: WorkflowState): Pick<
 }
 
 function compactLibraryItems(
-  items: readonly { title: string; description: string }[]
+  items: readonly { id?: string; title: string; description: string }[]
 ) {
   return items.map((item) => ({
+    ...(item.id ? { id: item.id } : {}),
     title: item.title,
     description: item.description
   }));

@@ -3754,12 +3754,48 @@
   line-height: 1.45;
 }
 
+.compass-app .compass-product-truth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 9px;
+}
+
+.compass-app .compass-product-truth-actions button {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compass-app .compass-product-truth-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  color: var(--accent);
+}
+
+.compass-app .compass-product-truth-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .compass-app .compass-product-truth-list,
 .compass-app .compass-active-context-list,
 .compass-app .compass-active-material-list {
   display: grid;
   gap: 7px;
   padding-top: 9px;
+}
+
+.compass-app
+  .compass-product-truth-actions
+  + .compass-product-truth-list {
+  padding-top: 0;
 }
 
 .compass-app .compass-product-truth-option {
@@ -7399,6 +7435,114 @@
   white-space: nowrap;
 }
 
+.compass-app .workboard-project-table-head,
+.compass-app .workboard-project-row {
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 1.45fr)
+    minmax(165px, 1fr)
+    minmax(170px, 0.95fr)
+    minmax(105px, 0.62fr)
+    minmax(115px, 0.72fr)
+    78px;
+  gap: 14px;
+  align-items: center;
+}
+
+.compass-app .workboard-project-table-head {
+  min-height: 42px;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--line);
+  background: #f5f6f8;
+  color: #686e79;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.compass-app .workboard-client-list {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #f5f6f8;
+}
+
+.compass-app .workboard-client-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.compass-app .workboard-client-group-head {
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(180px, 240px);
+  gap: 16px;
+  align-items: center;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.compass-app .workboard-client-group-head .workboard-client-main b {
+  font-size: 13px;
+}
+
+.compass-app .workboard-client-group-head .workboard-client-main small {
+  font-size: 9.5px;
+}
+
+.compass-app .workboard-client-group-head .workboard-client-pic-control {
+  margin-top: 0;
+}
+
+.compass-app .workboard-client-project-count {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--accentLine);
+  border-radius: 8px;
+  background: var(--accentSoft);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.compass-app .workboard-client-projects {
+  display: grid;
+}
+
+.compass-app .workboard-project-row {
+  min-height: 82px;
+  padding: 12px 16px 12px 26px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  transition: background 0.16s var(--ease);
+}
+
+.compass-app .workboard-project-row:last-child {
+  border-bottom: 0;
+}
+
+.compass-app .workboard-project-row:hover {
+  background: #f9fafc;
+}
+
+.compass-app .workboard-project-row.urgent {
+  background: linear-gradient(90deg, var(--orangeSoft), #fff 34%);
+}
+
+.compass-app .workboard-project-row .workboard-project-main,
+.compass-app .workboard-project-row .workboard-client-status,
+.compass-app .workboard-project-row .workboard-project-owner,
+.compass-app .workboard-project-row .workboard-client-stage {
+  min-width: 0;
+}
+
 .compass-app .workboard-table-head,
 .compass-app .workboard-client-row {
   display: grid;
@@ -7678,18 +7822,18 @@
   border-radius: 0;
 }
 
-.compass-app .workboard-load-more {
-  min-height: 62px;
+.compass-app .workboard-client-load-more {
+  min-height: 50px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 16px;
+  padding: 8px 14px 8px 54px;
   border-top: 1px solid var(--line);
   background: var(--surface2);
 }
 
-.compass-app .workboard-load-more span {
+.compass-app .workboard-client-load-more span {
   color: var(--muted);
   font-size: 10px;
 }
@@ -7731,6 +7875,21 @@
 
   .compass-app .workboard-search {
     width: 100%;
+  }
+
+  .compass-app .workboard-project-table-head,
+  .compass-app .workboard-project-row {
+    grid-template-columns:
+      minmax(210px, 1.35fr)
+      minmax(155px, 1fr)
+      minmax(165px, 0.9fr)
+      minmax(105px, 0.65fr)
+      78px;
+  }
+
+  .compass-app .workboard-project-table-head span:nth-child(5),
+  .compass-app .workboard-project-row .workboard-stage-track {
+    display: none;
   }
 
   .compass-app .workboard-table-head,
@@ -7782,6 +7941,57 @@
 
   .compass-app .workboard-table-head {
     display: none;
+  }
+
+  .compass-app .workboard-project-table-head {
+    display: none;
+  }
+
+  .compass-app .workboard-client-list {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .compass-app .workboard-client-group-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .compass-app .workboard-client-group-head .workboard-client-pic-control {
+    grid-column: 1 / -1;
+  }
+
+  .compass-app .workboard-project-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .compass-app .workboard-project-row .workboard-project-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .compass-app .workboard-project-row .workboard-client-action {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .compass-app .workboard-project-row .workboard-client-status {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .compass-app .workboard-project-row .workboard-client-stage {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+  }
+
+  .compass-app .workboard-project-row .workboard-project-owner {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 
   .compass-app .workboard-client-row {

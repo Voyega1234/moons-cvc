@@ -46,10 +46,11 @@ export interface ImagePromptAgentInput {
   strategy?: CreativeStrategyEnrichment;
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
-    products: readonly { title: string; description: string }[];
+    products: readonly { id?: string; title: string; description: string }[];
     docs: readonly { title: string; description: string }[];
     refs: readonly { title: string; description: string }[];
   };
+  selectedProductIds?: readonly string[];
 }
 
 export interface ImagePromptAgentTrace {
@@ -82,7 +83,8 @@ export async function generateImagePrompt({
   input,
   writeTrace,
   loadAgentImagePrompt = defaultLoadAgentImagePrompt,
-  loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt
+  loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt,
+  loadCreativeGraphicDesignerPrompt = defaultLoadCreativeGraphicDesignerPrompt
 }: {
   apiKey: string;
   model?: string;
@@ -93,12 +95,8 @@ export async function generateImagePrompt({
   writeTrace?: ImagePromptAgentTraceWriter;
   loadAgentImagePrompt?: () => Promise<string>;
   loadReferenceLibraryPrompt?: () => Promise<string>;
+  loadCreativeGraphicDesignerPrompt?: () => Promise<string>;
 }): Promise<string> {
-  if (mode === "design-system") {
-    throw new Error(
-      "Design-system mode sends its thin brief and artifacts directly to GPT Image 2."
-    );
-  }
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
   const endpoint =
     provider === "openrouter"
@@ -108,7 +106,12 @@ export async function generateImagePrompt({
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const inputText =
-    mode === "reference-library"
+    mode === "design-system"
+      ? renderCreativeGraphicDesignerPrompt(
+          await loadCreativeGraphicDesignerPrompt(),
+          input
+        )
+      : mode === "reference-library"
       ? renderReferenceLibraryPrompt(
           await loadReferenceLibraryPrompt(),
           input
@@ -228,6 +231,81 @@ async function defaultLoadReferenceLibraryPrompt(): Promise<string> {
   );
 }
 
+async function defaultLoadCreativeGraphicDesignerPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_creative_graphic_designer.md"),
+    "utf8"
+  );
+}
+
+function renderCreativeGraphicDesignerPrompt(
+  source: string,
+  input: ImagePromptAgentInput
+): string {
+  const explicitGuidelines = [
+    ...input.brandLibrary.docs.filter(isExplicitBrandGuideline),
+    ...input.brandLibrary.brand.filter(isExplicitBrandGuideline)
+  ]
+    .slice(0, 3)
+    .map((item) => ({
+      title: compactAgentText(item.title, 120),
+      description: compactAgentText(item.description, 1_200)
+    }));
+  const selectedProductIds = new Set(input.selectedProductIds ?? []);
+  const selectedProducts = input.brandLibrary.products.filter(
+    (item) => !selectedProductIds.size || (item.id && selectedProductIds.has(item.id))
+  );
+  const runtimeInput = {
+    brand: {
+      name: input.brand?.name ?? "Unknown",
+      category: input.brand?.category ?? "Unknown",
+      personality: input.brand?.personality ?? [],
+      colors: input.brand?.colors ?? []
+    },
+    campaign: {
+      workingBrief: compactAgentText(input.brief || "Not provided.", 1_200),
+      headline: compactAgentText(input.hook.hook, 500),
+      concept: compactAgentText(input.hook.concept, 700),
+      objective: compactAgentText(input.hook.why || input.brief, 700),
+      cta: compactAgentText(input.hook.cta, 300),
+      service: compactServiceName(input.service),
+      ratio: input.canvasRatio,
+      audienceMoment: input.strategy?.audienceMoment ?? null
+    },
+    explicitBrandGuidelines: explicitGuidelines,
+    productOrServiceEvidence: selectedProducts.slice(0, 4).map((item) => ({
+      title: compactAgentText(item.title, 160),
+      description: compactAgentText(item.description, 500)
+    })),
+    references: input.referenceImages.map((image, index) =>
+      buildCompactReference(image.label, index)
+    ),
+    latestCorrection:
+      input.textInputs.map((item) => item.trim()).filter(Boolean).at(-1) ?? null
+  };
+
+  return [
+    source.trim(),
+    "",
+    "AUTHORITATIVE RUNTIME INPUT",
+    JSON.stringify(runtimeInput, null, 2)
+  ].join("\n");
+}
+
+function isExplicitBrandGuideline(item: {
+  title: string;
+}): boolean {
+  return /guideline|brand\s*(?:ci|identity|system)|visual\s*(?:identity|system)|style\s*guide|คู่มือ|อัตลักษณ์|ซีไอ/i.test(
+    item.title
+  );
+}
+
+function compactAgentText(value: string, maxCharacters: number): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxCharacters) return clean;
+  return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
+}
+
 function renderStandardPrompt(
   source: string,
   input: ImagePromptAgentInput
@@ -340,6 +418,9 @@ function buildCompactReference(label: string, index: number) {
       .replaceAll(/[^a-z0-9]+/g, "-")
       .replaceAll(/^-|-$/g, "") || `reference-${index + 1}`;
 
+  if (/past work style reference/.test(normalized)) {
+    return { id, role: "brand-visual-dna", fidelity: "style-only" };
+  }
   if (explicitRole === "logo") {
     return { id, role: primary ? "primary-logo" : "logo", fidelity: "exact" };
   }
@@ -366,9 +447,6 @@ function buildCompactReference(label: string, index: number) {
   }
   if (/logo|โลโก้/.test(normalized)) {
     return { id, role: primary ? "primary-logo" : "logo", fidelity: "exact" };
-  }
-  if (/past work style reference/.test(normalized)) {
-    return { id, role: "brand-visual-dna", fidelity: "style-only" };
   }
   if (/current artwork to revise/.test(normalized)) {
     return { id, role: "revision-base", fidelity: "preserve-and-improve" };

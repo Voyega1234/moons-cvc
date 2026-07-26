@@ -185,8 +185,8 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("defaults output size to square and allows larger landscape output", () => {
-    expect(initialWorkflowState.outputSize).toBe("1024x1024");
+  it("defaults output size to 4:5 portrait and allows larger landscape output", () => {
+    expect(initialWorkflowState.outputSize).toBe("1088x1360");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-output-size",
@@ -956,6 +956,20 @@ describe("workflowReducer", () => {
     state = workflowReducer(state, {
       type: "toggle-product-context",
       id: firstProduct.id
+    });
+    expect(selectedBrandProducts(state)).toEqual(brand.library.products);
+    expect(state.selectedProductIds).toBeUndefined();
+
+    state = workflowReducer(state, {
+      type: "set-all-product-context",
+      selected: false
+    });
+    expect(selectedBrandProducts(state)).toEqual([]);
+    expect(state.selectedProductIds).toEqual([]);
+
+    state = workflowReducer(state, {
+      type: "set-all-product-context",
+      selected: true
     });
     expect(selectedBrandProducts(state)).toEqual(brand.library.products);
     expect(state.selectedProductIds).toBeUndefined();

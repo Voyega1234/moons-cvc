@@ -49,7 +49,11 @@ describe("Workboard", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText(`${brands.length} shown`)).toBeTruthy()
+      expect(
+        screen.getByText(
+          `${brands.length} clients · ${brands.length} projects shown`
+        )
+      ).toBeTruthy()
     );
     for (const brand of brands) {
       expect(screen.getByText(brand.name)).toBeTruthy();
@@ -57,9 +61,10 @@ describe("Workboard", () => {
 
     const first = brands[0];
     if (!first) throw new Error("Mock brand fixture is missing.");
-    const row = screen.getByText(first.name).closest("article");
-    if (!row) throw new Error("Workboard project row was not found.");
-    await user.click(within(row).getByRole("button", { name: /Start/i }));
+    const group = screen.getByRole("region", {
+      name: `Projects for ${first.name}`
+    });
+    await user.click(within(group).getByRole("button", { name: /Start/i }));
 
     expect(workspaceDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -99,7 +104,7 @@ describe("Workboard", () => {
       target.name
     );
 
-    expect(screen.getByText("1 shown")).toBeTruthy();
+    expect(screen.getByText("1 client · 1 project shown")).toBeTruthy();
     expect(screen.getByText(target.name)).toBeTruthy();
   });
 
@@ -154,7 +159,13 @@ describe("Workboard", () => {
     expect(await screen.findByText("Summer Campaign")).toBeTruthy();
     const launch = screen.getByText("Product Launch");
     expect(launch).toBeTruthy();
-    expect(screen.getAllByText(brand.name)).toHaveLength(2);
+    expect(screen.getAllByText(brand.name)).toHaveLength(1);
+    const group = screen.getByRole("region", {
+      name: `Projects for ${brand.name}`
+    });
+    expect(within(group).getByText("Summer Campaign")).toBeTruthy();
+    expect(within(group).getByText("Product Launch")).toBeTruthy();
+    expect(within(group).getByText("2 projects")).toBeTruthy();
 
     const launchRow = launch.closest("article");
     if (!launchRow) throw new Error("Project row was not found.");
@@ -166,6 +177,79 @@ describe("Workboard", () => {
       type: "switch-run",
       id: "nike-launch"
     });
+  });
+
+  it("shows the latest five projects first and reveals older projects on demand", async () => {
+    const user = userEvent.setup();
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+    let workspace = createInitialWorkspaceState({
+      runId: "campaign-1",
+      now: "2026-07-16T00:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "campaign-1",
+      action: { type: "select-brand", brand },
+      now: "2026-07-16T00:01:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: "campaign-1",
+      action: { type: "set-brief", brief: "Project: Campaign 1" },
+      now: "2026-07-16T00:02:00.000Z"
+    });
+
+    for (let index = 2; index <= 6; index += 1) {
+      const runId = `campaign-${index}`;
+      workspace = workspaceReducer(workspace, {
+        type: "create-run",
+        id: runId,
+        now: `2026-07-16T00:0${index}:00.000Z`,
+        keepBrand: true
+      });
+      workspace = workspaceReducer(workspace, {
+        type: "apply-run-action",
+        runId,
+        action: { type: "set-brief", brief: `Project: Campaign ${index}` },
+        now: `2026-07-16T00:1${index}:00.000Z`
+      });
+    }
+
+    const singleBrandRepository: BrandRepository = {
+      async list() {
+        return [brand];
+      },
+      async getById(id) {
+        return id === brand.id ? brand : null;
+      }
+    };
+
+    render(
+      <BrandProvider
+        repository={singleBrandRepository}
+        mappingRepository={mappingRepository}
+      >
+        <Overview
+          state={getActiveRun(workspace)}
+          dispatch={vi.fn()}
+          workspace={workspace}
+          workspaceDispatch={vi.fn()}
+          onOpenStudio={vi.fn()}
+        />
+      </BrandProvider>
+    );
+
+    expect(await screen.findByText("1 client · 5 projects shown")).toBeTruthy();
+    expect(screen.getByText("Campaign 6")).toBeTruthy();
+    expect(screen.queryByText("Campaign 1")).toBeNull();
+    expect(screen.getByText("Showing 5 of 6 projects")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "See more" }));
+
+    expect(screen.getByText("Campaign 1")).toBeTruthy();
+    expect(screen.getByText("1 client · 6 projects shown")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "See more" })).toBeNull();
   });
 
   it("uses the latest client logo and category for an existing project", async () => {
@@ -235,12 +319,12 @@ describe("Workboard", () => {
     );
 
     const brandName = await screen.findByText(currentBrand.name);
-    const row = brandName.closest("article");
-    if (!row) throw new Error("Workboard project row was not found.");
-    expect(within(row).getByText("Current brand category")).toBeTruthy();
-    expect(row.querySelector("img")?.getAttribute("src")).toBe(
+    const group = brandName.closest("section");
+    if (!group) throw new Error("Workboard client group was not found.");
+    expect(within(group).getByText("Current brand category")).toBeTruthy();
+    expect(group.querySelector("img")?.getAttribute("src")).toBe(
       "https://storage.example.com/current-logo.png"
     );
-    expect(within(row).queryByText("Awaiting brand ingestion")).toBeNull();
+    expect(within(group).queryByText("Awaiting brand ingestion")).toBeNull();
   });
 });

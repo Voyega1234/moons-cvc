@@ -283,20 +283,60 @@ describe("generateImagePrompt", () => {
     expect(content?.[0]?.text).not.toContain("STYLE SELECTION:");
   });
 
-  it("keeps design-system mode out of the image prompt agent", async () => {
-    const fetchMock = vi.fn();
+  it("uses a concept-first creative graphic designer in design-system mode", async () => {
+    const calls: { body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>
+      });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            finalPrompt:
+              "Editorial product photography with asymmetrical typography and calm negative space."
+          })
+        }),
+        { status: 200 }
+      );
+    });
 
-    await expect(
-      generateImagePrompt({
-        apiKey: "test-key",
-        mode: "design-system",
-        fetchImpl: fetchMock as unknown as typeof fetch,
-        input: baseInput
-      })
-    ).rejects.toThrow(
-      "Design-system mode sends its thin brief and artifacts directly to GPT Image 2."
-    );
-    expect(fetchMock).not.toHaveBeenCalled();
+    const result = await generateImagePrompt({
+      apiKey: "test-key",
+      mode: "design-system",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      loadCreativeGraphicDesignerPrompt: async () =>
+        "CREATIVE GRAPHIC DESIGNER TEST",
+      input: {
+        ...baseInput,
+        brandLibrary: {
+          ...baseInput.brandLibrary,
+          docs: [
+            {
+              title: "Brand guideline",
+              description:
+                "Use warm daylight, editorial photography, and restrained typography."
+            }
+          ]
+        },
+        referenceImages: [
+          {
+            label:
+              "Supporting reference · Style · Past work style reference — Summer campaign",
+            imageUrl: "data:image/png;base64,cmVmZXJlbmNl"
+          }
+        ]
+      }
+    });
+
+    expect(result).toContain("Editorial product photography");
+    const promptText = (
+      calls[0]?.body.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(promptText).toContain("CREATIVE GRAPHIC DESIGNER TEST");
+    expect(promptText).toContain("AUTHORITATIVE RUNTIME INPUT");
+    expect(promptText).toContain("Use warm daylight");
+    expect(promptText).toContain('"role": "brand-visual-dna"');
+    expect(promptText).not.toContain("Convert Cake");
   });
 
   it("uses a compact two-reference contract in reference-library mode", async () => {
@@ -397,13 +437,19 @@ describe("generateImagePrompt", () => {
 
   it("keeps regeneration instructions as one optional compact field", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
-      return new Response(
-        JSON.stringify({ output_text: JSON.stringify({ prompt: "Prompt." }) }),
-        { status: 200 }
-      );
-    });
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        calls.push({
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>
+        });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({ prompt: "Prompt." })
+          }),
+          { status: 200 }
+        );
+      }
+    );
 
     await generateImagePrompt({
       apiKey: "test-key",
@@ -466,7 +512,7 @@ describe("generateImagePrompt", () => {
 
     const result = await generateImagePrompt({
       apiKey: "openrouter-key",
-      model: "anthropic/claude-sonnet-4.6",
+      model: "anthropic/claude-sonnet-5",
       provider: "openrouter",
       fetchImpl: fetchMock as unknown as typeof fetch,
       input: baseInput,
@@ -486,7 +532,7 @@ describe("generateImagePrompt", () => {
       expect.objectContaining({
         provider: "openrouter",
         endpoint: "/api/v1/responses",
-        model: "anthropic/claude-sonnet-4.6",
+        model: "anthropic/claude-sonnet-5",
         status: "succeeded"
       })
     ]);

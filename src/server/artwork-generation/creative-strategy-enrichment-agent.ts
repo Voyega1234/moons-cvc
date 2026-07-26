@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ImagePromptAgentHook } from "./image-prompt-agent.js";
+import type {
+  ImagePromptAgentHook,
+  ImagePromptProvider
+} from "./image-prompt-agent.js";
 
 type FetchLike = typeof fetch;
 
@@ -130,6 +133,8 @@ export interface CreativeStrategyEnrichmentInput {
 
 export interface CreativeStrategyEnrichmentTrace {
   createdAt: string;
+  provider: ImagePromptProvider;
+  endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
   status: "succeeded" | "failed";
   inputText: string;
@@ -143,10 +148,13 @@ export type CreativeStrategyEnrichmentTraceWriter = (
 
 const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT =
+  "https://openrouter.ai/api/v1/responses";
 
 export async function enrichCreativeStrategy({
   apiKey,
   model,
+  provider = "openai",
   fetchImpl,
   input,
   writeTrace,
@@ -154,19 +162,27 @@ export async function enrichCreativeStrategy({
 }: {
   apiKey: string;
   model?: string;
+  provider?: ImagePromptProvider;
   fetchImpl: FetchLike;
   input: CreativeStrategyEnrichmentInput;
   writeTrace?: CreativeStrategyEnrichmentTraceWriter;
   loadPrompt?: () => Promise<string>;
 }): Promise<CreativeStrategyEnrichment> {
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const endpointPath =
+    provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const evidence = buildCreativeStrategyEvidence(input);
   const inputText = buildInputText(await loadPrompt(), input, evidence);
 
   try {
     let requestText = inputText;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+      const response = await fetchImpl(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -194,7 +210,7 @@ export async function enrichCreativeStrategy({
 
       if (!response.ok) {
         throw new Error(
-          `OpenAI creative strategy enrichment failed: ${response.status}`
+          `${providerLabel} creative strategy enrichment failed: ${response.status}`
         );
       }
 
@@ -206,6 +222,8 @@ export async function enrichCreativeStrategy({
 
         await writeTraceSafely(writeTrace, {
           createdAt: new Date().toISOString(),
+          provider,
+          endpoint: endpointPath,
           model: resolvedModel,
           status: "succeeded",
           inputText,
@@ -229,6 +247,8 @@ export async function enrichCreativeStrategy({
   } catch (error) {
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
+      provider,
+      endpoint: endpointPath,
       model: resolvedModel,
       status: "failed",
       inputText,

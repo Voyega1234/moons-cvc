@@ -4515,29 +4515,61 @@ export function BriefStage({ state, dispatch }: StageProps) {
                   </summary>
                   <div className="compass-signal-detail">
                     {brandProducts.length ? (
-                      <div className="compass-product-truth-list">
-                        {brandProducts.map((product) => (
-                          <label
-                            className="compass-product-truth-option"
-                            key={product.id}
+                      <>
+                        <div className="compass-product-truth-actions">
+                          <button
+                            type="button"
+                            aria-label="Select all product truths"
+                            disabled={
+                              activeProducts.length === brandProducts.length
+                            }
+                            onClick={() =>
+                              dispatch({
+                                type: "set-all-product-context",
+                                selected: true
+                              })
+                            }
                           >
-                            <input
-                              type="checkbox"
-                              checked={activeProductIds.has(product.id)}
-                              aria-label={`Use product ${product.title}`}
-                              onChange={() =>
-                                dispatch({
-                                  type: "toggle-product-context",
-                                  id: product.id
-                                })
-                              }
-                            />
-                            <span>
-                              <b>{product.title}</b>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Deselect all product truths"
+                            disabled={!activeProducts.length}
+                            onClick={() =>
+                              dispatch({
+                                type: "set-all-product-context",
+                                selected: false
+                              })
+                            }
+                          >
+                            Deselect all
+                          </button>
+                        </div>
+                        <div className="compass-product-truth-list">
+                          {brandProducts.map((product) => (
+                            <label
+                              className="compass-product-truth-option"
+                              key={product.id}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={activeProductIds.has(product.id)}
+                                aria-label={`Use product ${product.title}`}
+                                onChange={() =>
+                                  dispatch({
+                                    type: "toggle-product-context",
+                                    id: product.id
+                                  })
+                                }
+                              />
+                              <span>
+                                <b>{product.title}</b>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </>
                     ) : (
                       <p>No products are available in this brand library.</p>
                     )}
@@ -5589,15 +5621,24 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           </div>
         </div>
         <label className="compass-angle-setting">
-          <span className="compass-angle-setting-label">Generation path</span>
+          <span className="compass-angle-setting-label">Creative concept model</span>
           <select
             className="compass-angle-model-select"
-            aria-label="Generation path"
+            aria-label="Creative concept model"
             value={state.imagePromptModel}
-            disabled
+            disabled={creating}
+            onChange={(event) =>
+              dispatch({
+                type: "set-image-prompt-model",
+                model: event.target.value as WorkflowState["imagePromptModel"]
+              })
+            }
           >
-            <option value={state.imagePromptModel}>
-              Luna treatment → GPT Image 2
+            <option value="gpt-5.6-terra">
+              GPT · OpenAI → GPT Image 2
+            </option>
+            <option value="anthropic/claude-sonnet-4.6">
+              Claude · OpenRouter → GPT Image 2
             </option>
           </select>
         </label>
@@ -9563,7 +9604,7 @@ function ClientPicControl({ clientId }: { clientId: string }) {
     </label>
   );
 }
-const WORKBOARD_PAGE_SIZE = 50;
+const WORKBOARD_PAGE_SIZE = 5;
 
 interface WorkboardProjectState {
   label: string;
@@ -9712,7 +9753,9 @@ export function Overview({
   const collaboration = useOptionalRunCollaboration();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<WorkboardFilter>("all");
-  const [visibleLimit, setVisibleLimit] = useState(WORKBOARD_PAGE_SIZE);
+  const [visibleLimitByClient, setVisibleLimitByClient] = useState<
+    Record<string, number>
+  >({});
 
   const runs = workspace.runOrder
     .map((id) => workspace.runsById[id])
@@ -9810,9 +9853,6 @@ export function Overview({
       return true;
     })
     .sort((a, b) => {
-      const attentionDifference =
-        Number(Boolean(b.attention)) - Number(Boolean(a.attention));
-      if (attentionDifference) return attentionDifference;
       if (a.run && b.run) {
         return Date.parse(b.run.updatedAt) - Date.parse(a.run.updatedAt);
       }
@@ -9820,7 +9860,41 @@ export function Overview({
       if (b.run) return 1;
       return a.brand.name.localeCompare(b.brand.name);
     });
-  const visibleProjectRows = projectRows.slice(0, visibleLimit);
+  type ProjectRow = (typeof projectRows)[number];
+  function groupProjects(rows: ProjectRow[]) {
+    return Array.from(
+      rows
+        .reduce(
+          (groups, row) => {
+            const existing = groups.get(row.brand.id);
+            if (existing) {
+              existing.projects.push(row);
+            } else {
+              groups.set(row.brand.id, {
+                brand: row.brand,
+                projects: [row]
+              });
+            }
+            return groups;
+          },
+          new Map<string, { brand: Brand; projects: ProjectRow[] }>()
+        )
+        .values()
+    );
+  }
+  const projectGroups = groupProjects(projectRows);
+  const visibleProjectGroups = projectGroups.map((group) => ({
+    ...group,
+    totalProjectCount: group.projects.length,
+    projects: group.projects.slice(
+      0,
+      visibleLimitByClient[group.brand.id] ?? WORKBOARD_PAGE_SIZE
+    )
+  }));
+  const visibleProjectCount = visibleProjectGroups.reduce(
+    (count, group) => count + group.projects.length,
+    0
+  );
   const mineCount = activeProjectRows.filter(
     ({ ownerUserId }) =>
       Boolean(collaboration?.currentUserId) &&
@@ -9901,7 +9975,7 @@ export function Overview({
               placeholder="Search project, client, or owner"
               onChange={(event) => {
                 setQuery(event.target.value);
-                setVisibleLimit(WORKBOARD_PAGE_SIZE);
+                setVisibleLimitByClient({});
               }}
             />
           </label>
@@ -9923,7 +9997,7 @@ export function Overview({
                 aria-pressed={filter === value}
                 onClick={() => {
                   setFilter(value);
-                  setVisibleLimit(WORKBOARD_PAGE_SIZE);
+                  setVisibleLimitByClient({});
                 }}
               >
                 {label}
@@ -9933,15 +10007,18 @@ export function Overview({
           <span className="workboard-result-count">
             {loading
               ? "Loading projects"
-              : visibleProjectRows.length < projectRows.length
-                ? `${visibleProjectRows.length} of ${projectRows.length} shown`
-                : `${projectRows.length} shown`}
+              : `${visibleProjectGroups.length} ${pluralize(
+                  visibleProjectGroups.length,
+                  "client"
+                )} · ${visibleProjectCount} ${pluralize(
+                  visibleProjectCount,
+                  "project"
+                )} shown`}
           </span>
         </div>
 
-        <div className="workboard-table-head" aria-hidden="true">
+        <div className="workboard-project-table-head" aria-hidden="true">
           <span>Project</span>
-          <span>Client</span>
           <span>Status</span>
           <span>Owner</span>
           <span>Stage</span>
@@ -9967,145 +10044,176 @@ export function Overview({
                 </div>
               ))
             : null}
-          {visibleProjectRows.map(
-            ({
-              key,
-              brand,
-              run,
-              status,
-              attention,
-              owner,
-              ownerUserId,
-              projectName,
-              projectMeta
-            }) => {
-              const stageIndex = run
-                ? stages.findIndex((item) => item.id === run.stage)
-                : -1;
-              const stageLabel = run
-                ? stages[stageIndex]?.name ?? "Creative run"
-                : "Not started";
-              const isCurrentOwner = Boolean(
-                ownerUserId && ownerUserId === collaboration?.currentUserId
-              );
-              const ownerName = run
-                ? owner?.displayName ??
-                  (collaboration?.enabled ? "Owner pending" : "Current user")
-                : "Not assigned";
-              const ownerMeta = run
-                ? owner
-                  ? `${isCurrentOwner ? "You · " : ""}${departmentLabel(owner.department)}`
-                  : collaboration?.enabled
-                    ? "Syncing team profile"
-                    : "Local workspace"
-                : "Assigned when started";
-              return (
-                <article
-                  className={`workboard-client-row ${attention?.urgent ? "urgent" : ""}`}
-                  key={key}
-                >
-                  <div className="workboard-project-main">
-                    <span className="workboard-project-icon" aria-hidden="true">
-                      <Sparkle size={16} weight="duotone" />
-                    </span>
-                    <span>
-                      <b>{projectName}</b>
-                      <small>{projectMeta}</small>
-                    </span>
-                  </div>
-                  <div className="workboard-client-main">
-                    <span className="avatar ov-av" aria-hidden="true">
-                      <BrandLogo brand={brand} />
-                    </span>
-                    <span>
-                      <b>{brand.name}</b>
-                      <small>{brand.category || "Uncategorised client"}</small>
-                    </span>
-                  </div>
-                  <div className="workboard-client-status">
-                    <span className={`workboard-status ${status.tone}`}>
-                      {status.label}
-                    </span>
-                    <small>{status.detail}</small>
-                  </div>
-                  <div className="workboard-project-owner">
-                    <span className="workboard-owner-avatar" aria-hidden="true">
-                      {initials(ownerName) || "NA"}
-                    </span>
-                    <span>
-                      <b>{ownerName}</b>
-                      <small>{ownerMeta}</small>
-                      <ClientPicControl clientId={brand.id} />
-                    </span>
-                  </div>
-                  <div className="workboard-client-stage">
-                    <b>{stageLabel}</b>
-                    <small>
-                      {run
-                        ? `Stage ${stageIndex + 1} of ${stages.length}`
-                        : "Ready to start"}
-                    </small>
-                  </div>
-                  <div
-                    className="workboard-stage-track"
-                    aria-label={
-                      run
-                        ? `${stageLabel}, stage ${stageIndex + 1} of ${stages.length}`
-                        : "No creative stages completed"
+          {visibleProjectGroups.map(
+            ({ brand, projects, totalProjectCount }) => (
+            <section
+              className="workboard-client-group"
+              aria-label={`Projects for ${brand.name}`}
+              key={brand.id}
+            >
+              <header className="workboard-client-group-head">
+                <div className="workboard-client-main">
+                  <span className="avatar ov-av" aria-hidden="true">
+                    <BrandLogo brand={brand} />
+                  </span>
+                  <span>
+                    <b>{brand.name}</b>
+                    <small>{brand.category || "Uncategorised client"}</small>
+                  </span>
+                </div>
+                <span className="workboard-client-project-count">
+                  {totalProjectCount}{" "}
+                  {pluralize(totalProjectCount, "project")}
+                </span>
+                <ClientPicControl clientId={brand.id} />
+              </header>
+              <div className="workboard-client-projects">
+                {projects.map(
+                  ({
+                    key,
+                    run,
+                    status,
+                    attention,
+                    owner,
+                    ownerUserId,
+                    projectName,
+                    projectMeta
+                  }) => {
+                    const stageIndex = run
+                      ? stages.findIndex((item) => item.id === run.stage)
+                      : -1;
+                    const stageLabel = run
+                      ? stages[stageIndex]?.name ?? "Creative run"
+                      : "Not started";
+                    const isCurrentOwner = Boolean(
+                      ownerUserId &&
+                        ownerUserId === collaboration?.currentUserId
+                    );
+                    const ownerName = run
+                      ? owner?.displayName ??
+                        (collaboration?.enabled
+                          ? "Owner pending"
+                          : "Current user")
+                      : "Not assigned";
+                    const ownerMeta = run
+                      ? owner
+                        ? `${isCurrentOwner ? "You · " : ""}${departmentLabel(owner.department)}`
+                        : collaboration?.enabled
+                          ? "Syncing team profile"
+                          : "Local workspace"
+                      : "Assigned when started";
+                    return (
+                      <article
+                        className={`workboard-project-row ${attention?.urgent ? "urgent" : ""}`}
+                        key={key}
+                      >
+                        <div className="workboard-project-main">
+                          <span
+                            className="workboard-project-icon"
+                            aria-hidden="true"
+                          >
+                            <Sparkle size={16} weight="duotone" />
+                          </span>
+                          <span>
+                            <b>{projectName}</b>
+                            <small>{projectMeta}</small>
+                          </span>
+                        </div>
+                        <div className="workboard-client-status">
+                          <span className={`workboard-status ${status.tone}`}>
+                            {status.label}
+                          </span>
+                          <small>{status.detail}</small>
+                        </div>
+                        <div className="workboard-project-owner">
+                          <span
+                            className="workboard-owner-avatar"
+                            aria-hidden="true"
+                          >
+                            {initials(ownerName) || "NA"}
+                          </span>
+                          <span>
+                            <b>{ownerName}</b>
+                            <small>{ownerMeta}</small>
+                          </span>
+                        </div>
+                        <div className="workboard-client-stage">
+                          <b>{stageLabel}</b>
+                          <small>
+                            {run
+                              ? `Stage ${stageIndex + 1} of ${stages.length}`
+                              : "Ready to start"}
+                          </small>
+                        </div>
+                        <div
+                          className="workboard-stage-track"
+                          aria-label={
+                            run
+                              ? `${stageLabel}, stage ${stageIndex + 1} of ${stages.length}`
+                              : "No creative stages completed"
+                          }
+                        >
+                          {stages.map((item, index) => (
+                            <i
+                              className={
+                                run && (run.done || index <= stageIndex)
+                                  ? "complete"
+                                  : ""
+                              }
+                              key={item.id}
+                            />
+                          ))}
+                        </div>
+                        <div className="workboard-client-action">
+                          <button
+                            className="btn small"
+                            type="button"
+                            disabled={!run && !canCreate}
+                            title={
+                              !run && !canCreate
+                                ? "You cannot start a new project."
+                                : undefined
+                            }
+                            onClick={() => openProject(brand, run)}
+                          >
+                            {run ? "Open" : "Start"}
+                            <ArrowRight
+                              size={14}
+                              weight="bold"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  }
+                )}
+              </div>
+              {projects.length < totalProjectCount ? (
+                <div className="workboard-client-load-more">
+                  <span>
+                    Showing {projects.length} of {totalProjectCount} projects
+                  </span>
+                  <button
+                    className="btn small"
+                    type="button"
+                    onClick={() =>
+                      setVisibleLimitByClient((current) => ({
+                        ...current,
+                        [brand.id]:
+                          (current[brand.id] ?? WORKBOARD_PAGE_SIZE) +
+                          WORKBOARD_PAGE_SIZE
+                      }))
                     }
                   >
-                    {stages.map((item, index) => (
-                      <i
-                        className={
-                          run && (run.done || index <= stageIndex)
-                            ? "complete"
-                            : ""
-                        }
-                        key={item.id}
-                      />
-                    ))}
-                  </div>
-                  <div className="workboard-client-action">
-                    <button
-                      className="btn small"
-                      type="button"
-                      disabled={!run && !canCreate}
-                      title={
-                        !run && !canCreate
-                          ? "Viewers cannot start new projects."
-                          : undefined
-                      }
-                      onClick={() => openProject(brand, run)}
-                    >
-                      {run ? "Open" : "Start"}
-                      <ArrowRight size={14} weight="bold" aria-hidden="true" />
-                    </button>
-                  </div>
-                </article>
-              );
-            }
+                    See more
+                  </button>
+                </div>
+              ) : null}
+            </section>
+            )
           )}
         </div>
-
-        {visibleProjectRows.length < projectRows.length ? (
-          <div className="workboard-load-more">
-            <span>
-              Showing {visibleProjectRows.length} of {projectRows.length} projects
-            </span>
-            <button
-              className="btn small"
-              type="button"
-              onClick={() =>
-                setVisibleLimit((current) => current + WORKBOARD_PAGE_SIZE)
-              }
-            >
-              Show {Math.min(
-                WORKBOARD_PAGE_SIZE,
-                projectRows.length - visibleProjectRows.length
-              )} more
-            </button>
-          </div>
-        ) : null}
 
         {!loading && !projectRows.length ? (
           <div className="empty workboard-empty">

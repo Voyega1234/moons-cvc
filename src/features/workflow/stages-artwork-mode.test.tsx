@@ -41,17 +41,22 @@ describe("DirectionsStage artwork mode", () => {
     ).toBeNull();
 
     const pathSelect = screen.getByRole("combobox", {
-      name: "Generation path"
+      name: "Creative concept model"
     }) as HTMLSelectElement;
-    expect(pathSelect.disabled).toBe(true);
+    expect(pathSelect.disabled).toBe(false);
     expect(pathSelect.selectedOptions[0]?.textContent).toBe(
-      "Luna treatment → GPT Image 2"
+      "GPT · OpenAI → GPT Image 2"
     );
+    await user.selectOptions(pathSelect, "anthropic/claude-sonnet-4.6");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-image-prompt-model",
+      model: "anthropic/claude-sonnet-4.6"
+    });
 
     const sizeSelect = screen.getByRole("combobox", {
       name: "Output size"
     }) as HTMLSelectElement;
-    expect(sizeSelect.value).toBe("1024x1024");
+    expect(sizeSelect.value).toBe("1088x1360");
 
     await user.selectOptions(sizeSelect, "3840x2160");
     expect(dispatch).toHaveBeenCalledWith({
@@ -113,7 +118,7 @@ describe("DirectionsStage artwork mode", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("shows that Design System goes directly to GPT Image 2", () => {
+  it("shows the selectable art direction model in the Design System path", () => {
     const state = {
       ...createInitialWorkflowState({
         id: "run-1",
@@ -128,12 +133,12 @@ describe("DirectionsStage artwork mode", () => {
     const stage = within(view.container);
 
     const pathSelect = stage.getByRole("combobox", {
-      name: "Generation path"
+      name: "Creative concept model"
     }) as HTMLSelectElement;
-    expect(pathSelect.disabled).toBe(true);
+    expect(pathSelect.disabled).toBe(false);
     expect(pathSelect.selectedOptions[0]?.textContent).toBe(
-      "Luna treatment → GPT Image 2"
+      "GPT · OpenAI → GPT Image 2"
     );
-    expect(stage.getByText("Generation path")).toBeTruthy();
+    expect(stage.getByText("Creative concept model")).toBeTruthy();
   });
 });

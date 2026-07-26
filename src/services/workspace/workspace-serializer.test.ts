@@ -497,7 +497,7 @@ describe("workspace serializer", () => {
     );
   });
 
-  it("loads older snapshots without an output size as 1024x1024", () => {
+  it("loads older snapshots without an output size as 1088x1360", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -511,7 +511,7 @@ describe("workspace serializer", () => {
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
-    expect(restored?.runsById["run-1"]?.outputSize).toBe("1024x1024");
+    expect(restored?.runsById["run-1"]?.outputSize).toBe("1088x1360");
   });
 
   it("migrates older single-format snapshots into one creative-mix row", () => {

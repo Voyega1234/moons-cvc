@@ -1189,6 +1189,19 @@ describe("redesigned workflow stages", () => {
       state.brand?.library.products.length ?? 0
     );
     expect(productTruthOptions.every((option) => option.checked)).toBe(true);
+    const selectAllProducts = stage.getByRole("button", {
+      name: "Select all product truths"
+    }) as HTMLButtonElement;
+    const deselectAllProducts = stage.getByRole("button", {
+      name: "Deselect all product truths"
+    }) as HTMLButtonElement;
+    expect(selectAllProducts.disabled).toBe(true);
+    expect(deselectAllProducts.disabled).toBe(false);
+    await user.click(deselectAllProducts);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-all-product-context",
+      selected: false
+    });
     const productTruth = stage
       .getByText("Product truth")
       .closest("details");
