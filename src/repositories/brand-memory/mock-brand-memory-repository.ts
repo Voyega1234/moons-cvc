@@ -22,6 +22,7 @@ import type {
   SaveGuidelineInput,
   SaveBrandProductInput,
   SaveOnboardingQuestionnaireInput,
+  UpdateBrandAssetFolderInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
   UpdateGuidelineInput,
@@ -255,6 +256,10 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     };
   }
 
+  async deleteReferenceImage(_id: string): Promise<void> {
+    // The workflow state owns mock reference items; there is no backing store.
+  }
+
   async listAssetFolders(
     clientId: string
   ): Promise<readonly BrandAssetFolder[]> {
@@ -292,6 +297,50 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     return folder;
   }
 
+  async updateAssetFolder(
+    input: UpdateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    for (const [clientId, folders] of this.assetFoldersByClient) {
+      const existing = folders.find((folder) => folder.id === input.id);
+      if (!existing) continue;
+      const updated = { ...existing, name: input.name.trim() };
+      this.assetFoldersByClient.set(
+        clientId,
+        folders.map((folder) => (folder.id === input.id ? updated : folder))
+      );
+      return updated;
+    }
+    throw new Error("Asset folder not found.");
+  }
+
+  async deleteAssetFolder(id: string): Promise<void> {
+    for (const [clientId, folders] of this.assetFoldersByClient) {
+      if (!folders.some((folder) => folder.id === id)) continue;
+      const deletedIds = new Set([id]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        folders.forEach((folder) => {
+          if (folder.parentId && deletedIds.has(folder.parentId)) {
+            if (!deletedIds.has(folder.id)) changed = true;
+            deletedIds.add(folder.id);
+          }
+        });
+      }
+      this.assetFoldersByClient.set(
+        clientId,
+        folders.filter((folder) => !deletedIds.has(folder.id))
+      );
+      this.assetImagesByClient.set(
+        clientId,
+        (this.assetImagesByClient.get(clientId) ?? []).filter(
+          (image) => !image.folderId || !deletedIds.has(image.folderId)
+        )
+      );
+      return;
+    }
+  }
+
   async createAssetImage(
     input: CreateBrandAssetImageInput
   ): Promise<BrandAssetImage> {
@@ -320,6 +369,17 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     };
     this.assetImagesByClient.set(input.clientId, [...images, image]);
     return image;
+  }
+
+  async deleteAssetImage(id: string): Promise<void> {
+    for (const [clientId, images] of this.assetImagesByClient) {
+      if (!images.some((image) => image.id === id)) continue;
+      this.assetImagesByClient.set(
+        clientId,
+        images.filter((image) => image.id !== id)
+      );
+      return;
+    }
   }
 
   async saveOnboardingQuestionnaire({

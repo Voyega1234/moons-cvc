@@ -16,7 +16,10 @@ import {
 } from "../../domain/brand-memory";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database, Json } from "../../lib/supabase/database.types";
-import { refreshSupabaseSignedAssetUrl } from "../../lib/supabase/storage-asset-url";
+import {
+  parseSupabaseSignedStorageUrl,
+  refreshSupabaseSignedAssetUrl
+} from "../../lib/supabase/storage-asset-url";
 import type {
   AnalyzeGuidelineInput,
   BrandMemoryRepository,
@@ -29,6 +32,7 @@ import type {
   SaveBrandRuleInput,
   SaveGuidelineInput,
   SaveOnboardingQuestionnaireInput,
+  UpdateBrandAssetFolderInput,
   UpdateBrandProductInput,
   UpdateBrandRuleInput,
   UpdateGuidelineInput,
@@ -524,6 +528,36 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     return mapLibraryItem(data);
   }
 
+  async deleteReferenceImage(id: string): Promise<void> {
+    const client = getSupabaseClient();
+    const reference = await client
+      .schema("moons")
+      .from("brand_library")
+      .select("asset_url")
+      .eq("id", id)
+      .eq("section", "refs")
+      .maybeSingle();
+    if (reference.error) throw reference.error;
+    if (!reference.data) return;
+
+    const deleted = await client
+      .schema("moons")
+      .from("brand_library")
+      .delete()
+      .eq("id", id)
+      .eq("section", "refs");
+    if (deleted.error) throw deleted.error;
+
+    const storageLocation = reference.data.asset_url
+      ? parseSupabaseSignedStorageUrl(reference.data.asset_url)
+      : null;
+    if (storageLocation) {
+      await client.storage
+        .from(storageLocation.bucket)
+        .remove([storageLocation.path]);
+    }
+  }
+
   async listAssetFolders(
     clientId: string
   ): Promise<readonly BrandAssetFolder[]> {
@@ -599,6 +633,80 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     return mapAssetFolder(existing.data);
   }
 
+  async updateAssetFolder(
+    input: UpdateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .update({ name: input.name.trim() })
+      .eq("id", input.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapAssetFolder(data);
+  }
+
+  async deleteAssetFolder(id: string): Promise<void> {
+    const client = getSupabaseClient();
+    const folder = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .select("client_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (folder.error) throw folder.error;
+    if (!folder.data) return;
+
+    const [folders, assets] = await Promise.all([
+      client
+        .schema("moons")
+        .from("brand_asset_folders")
+        .select("id,parent_id")
+        .eq("client_id", folder.data.client_id),
+      client
+        .schema("moons")
+        .from("brand_assets")
+        .select("folder_id,storage_path")
+        .eq("client_id", folder.data.client_id)
+    ]);
+    if (folders.error) throw folders.error;
+    if (assets.error) throw assets.error;
+
+    const deletedFolderIds = new Set([id]);
+    let foundDescendant = true;
+    while (foundDescendant) {
+      foundDescendant = false;
+      folders.data.forEach((candidate) => {
+        if (
+          candidate.parent_id &&
+          deletedFolderIds.has(candidate.parent_id) &&
+          !deletedFolderIds.has(candidate.id)
+        ) {
+          deletedFolderIds.add(candidate.id);
+          foundDescendant = true;
+        }
+      });
+    }
+    const storagePaths = assets.data
+      .filter(
+        (asset) =>
+          asset.folder_id && deletedFolderIds.has(asset.folder_id)
+      )
+      .map((asset) => asset.storage_path);
+
+    const deleted = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .delete()
+      .eq("id", id);
+    if (deleted.error) throw deleted.error;
+    if (storagePaths.length) {
+      await client.storage.from(env.brandAssetsBucket).remove(storagePaths);
+    }
+  }
+
   async createAssetImage(
     input: CreateBrandAssetImageInput
   ): Promise<BrandAssetImage> {
@@ -666,6 +774,28 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
     if (signed.error) throw signed.error;
     return mapAssetImage(inserted.data, signed.data.signedUrl);
+  }
+
+  async deleteAssetImage(id: string): Promise<void> {
+    const client = getSupabaseClient();
+    const asset = await client
+      .schema("moons")
+      .from("brand_assets")
+      .select("storage_path")
+      .eq("id", id)
+      .maybeSingle();
+    if (asset.error) throw asset.error;
+    if (!asset.data) return;
+
+    const deleted = await client
+      .schema("moons")
+      .from("brand_assets")
+      .delete()
+      .eq("id", id);
+    if (deleted.error) throw deleted.error;
+    await client.storage
+      .from(env.brandAssetsBucket)
+      .remove([asset.data.storage_path]);
   }
 
   async saveOnboardingQuestionnaire({

@@ -23,6 +23,7 @@ import {
   Plus,
   Sparkle,
   TextT,
+  Trash,
   X
 } from "@phosphor-icons/react";
 import {
@@ -4088,6 +4089,16 @@ function CreativeMaterialsEditor({
   const [newFolderName, setNewFolderName] = useState("");
   const [assetLibraryPending, setAssetLibraryPending] = useState(false);
   const [assetLibraryReady, setAssetLibraryReady] = useState(false);
+  const [editingAssetFolder, setEditingAssetFolder] =
+    useState<BrandAssetFolder | null>(null);
+  const [editingAssetFolderName, setEditingAssetFolderName] = useState("");
+  const [folderMutationPending, setFolderMutationPending] = useState(false);
+  const [deletingAssetImageId, setDeletingAssetImageId] = useState<
+    string | null
+  >(null);
+  const [deletingLegacyReferenceId, setDeletingLegacyReferenceId] = useState<
+    string | null
+  >(null);
   const [driveImportStatuses, setDriveImportStatuses] = useState<
     Readonly<Record<string, "pending" | "imported" | "failed">>
   >({});
@@ -4332,6 +4343,152 @@ function CreativeMaterialsEditor({
     }
   }
 
+  function openAssetFolderEditor(folder: BrandAssetFolder): void {
+    setEditingAssetFolder(folder);
+    setEditingAssetFolderName(folder.name);
+    setUploadError(null);
+  }
+
+  function removeAssetFromBrief(asset: BrandAssetImage): void {
+    const selectionId = `brand-asset-${asset.id}`;
+    if (asset.kind === "material") {
+      if (state.uploadedMaterials.some((item) => item.id === selectionId)) {
+        dispatch({ type: "remove-uploaded-material", id: selectionId });
+      }
+      return;
+    }
+    const reference = state.referenceImages.find(
+      (item) => item.id === selectionId
+    );
+    if (reference) {
+      dispatch({ type: "toggle-reference-image", item: reference });
+    }
+  }
+
+  async function renameAssetFolder(): Promise<void> {
+    const folder = editingAssetFolder;
+    const name = editingAssetFolderName.trim();
+    if (!folder || !name || name === folder.name || folderMutationPending) {
+      return;
+    }
+    setFolderMutationPending(true);
+    setUploadError(null);
+    try {
+      const updated = await brandMemoryRepository.updateAssetFolder({
+        id: folder.id,
+        name
+      });
+      setAssetFolders((folders) =>
+        folders.map((candidate) =>
+          candidate.id === updated.id ? updated : candidate
+        )
+      );
+      setEditingAssetFolder(null);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not rename the folder."
+      );
+    } finally {
+      setFolderMutationPending(false);
+    }
+  }
+
+  async function deleteAssetFolder(): Promise<void> {
+    const folder = editingAssetFolder;
+    if (!folder || folderMutationPending) return;
+    if (
+      !window.confirm(
+        `Delete “${folder.name}” and every nested folder and image inside it?`
+      )
+    ) {
+      return;
+    }
+    const deletedFolderIds = brandAssetFolderSubtreeIds(folder.id, assetFolders);
+    const deletedImages = assetImages.filter(
+      (image) => image.folderId && deletedFolderIds.has(image.folderId)
+    );
+    setFolderMutationPending(true);
+    setUploadError(null);
+    try {
+      await brandMemoryRepository.deleteAssetFolder(folder.id);
+      setAssetFolders((folders) =>
+        folders.filter((candidate) => !deletedFolderIds.has(candidate.id))
+      );
+      setAssetImages((images) =>
+        images.filter(
+          (image) => !image.folderId || !deletedFolderIds.has(image.folderId)
+        )
+      );
+      deletedImages.forEach(removeAssetFromBrief);
+      if (
+        currentAssetFolderId &&
+        deletedFolderIds.has(currentAssetFolderId)
+      ) {
+        setCurrentAssetFolderId(folder.parentId);
+      }
+      setEditingAssetFolder(null);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not delete the folder."
+      );
+    } finally {
+      setFolderMutationPending(false);
+    }
+  }
+
+  async function deleteAssetImage(asset: BrandAssetImage): Promise<void> {
+    if (deletingAssetImageId) return;
+    if (!window.confirm(`Delete “${asset.name}” from the library?`)) return;
+    setDeletingAssetImageId(asset.id);
+    setUploadError(null);
+    try {
+      await brandMemoryRepository.deleteAssetImage(asset.id);
+      setAssetImages((images) =>
+        images.filter((candidate) => candidate.id !== asset.id)
+      );
+      removeAssetFromBrief(asset);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not delete the image."
+      );
+    } finally {
+      setDeletingAssetImageId(null);
+    }
+  }
+
+  async function deleteLegacyReference(item: LibraryItem): Promise<void> {
+    if (deletingLegacyReferenceId) return;
+    if (!window.confirm(`Delete “${item.title}” from References?`)) return;
+    setDeletingLegacyReferenceId(item.id);
+    setUploadError(null);
+    try {
+      await brandMemoryRepository.deleteReferenceImage(item.id);
+      state.referenceImages
+        .filter(
+          (reference) =>
+            reference.id === `brand-library-${item.id}` ||
+            reference.id === `library-${item.id}`
+        )
+        .forEach((reference) =>
+          dispatch({ type: "toggle-reference-image", item: reference })
+        );
+      dispatch({
+        type: "sync-brand-references",
+        items: legacyReferences.filter(
+          (reference) => reference.id !== item.id
+        )
+      });
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not delete the reference."
+      );
+    } finally {
+      setDeletingLegacyReferenceId(null);
+    }
+  }
+
   async function openSavedAssetFolder(folder: BrandAssetFolder) {
     setCurrentAssetFolderId(folder.id);
     if (folder.sourceProvider !== "google-drive" || !folder.sourceId) return;
@@ -4477,6 +4634,7 @@ function CreativeMaterialsEditor({
           <nav aria-label={`${assetKind} library folder path`}>
             <button
               type="button"
+              aria-label="Go to parent folder"
               disabled={!currentAssetFolder}
               onClick={() =>
                 setCurrentAssetFolderId(currentAssetFolder?.parentId ?? null)
@@ -4554,15 +4712,30 @@ function CreativeMaterialsEditor({
           {visibleAssetFolders.length ? (
             <div className="compass-drive-subfolder-grid">
               {visibleAssetFolders.map((folder) => (
-                <button
-                  type="button"
-                  key={folder.id}
-                  onClick={() => void openSavedAssetFolder(folder)}
-                >
-                  <FolderSimple aria-hidden="true" size={21} weight="duotone" />
-                  <b>{folder.name}</b>
-                  <small>Open folder</small>
-                </button>
+                <article key={folder.id}>
+                  <button
+                    className="compass-folder-open"
+                    type="button"
+                    onClick={() => void openSavedAssetFolder(folder)}
+                  >
+                    <FolderSimple
+                      aria-hidden="true"
+                      size={21}
+                      weight="duotone"
+                    />
+                    <b>{folder.name}</b>
+                    <small>Open folder</small>
+                  </button>
+                  <button
+                    className="compass-folder-edit"
+                    type="button"
+                    aria-label={`Edit folder ${folder.name}`}
+                    title={`Edit ${folder.name}`}
+                    onClick={() => openAssetFolderEditor(folder)}
+                  >
+                    <PencilSimple aria-hidden="true" size={14} weight="bold" />
+                  </button>
+                </article>
               ))}
             </div>
           ) : null}
@@ -4583,13 +4756,27 @@ function CreativeMaterialsEditor({
                   <article key={asset.id}>
                     <AssetPreviewImage src={asset.url} alt={asset.name} />
                     <b>{asset.name}</b>
-                    <button
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => selectBrandAsset(asset)}
-                    >
-                      {selected ? "Selected" : "Select"}
-                    </button>
+                    <div className="compass-persistent-asset-actions">
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => selectBrandAsset(asset)}
+                      >
+                        {selected ? "Selected" : "Select"}
+                      </button>
+                      <button
+                        className="danger"
+                        type="button"
+                        disabled={deletingAssetImageId === asset.id}
+                        aria-label={`Delete image ${asset.name}`}
+                        onClick={() => void deleteAssetImage(asset)}
+                      >
+                        <Trash aria-hidden="true" size={13} weight="bold" />
+                        {deletingAssetImageId === asset.id
+                          ? "Deleting…"
+                          : "Delete"}
+                      </button>
+                    </div>
                   </article>
                 );
               })}
@@ -4604,13 +4791,27 @@ function CreativeMaterialsEditor({
                       alt={item.title}
                     />
                     <b>{item.title}</b>
-                    <button
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => selectLegacyReference(item)}
-                    >
-                      {selected ? "Selected" : "Select"}
-                    </button>
+                    <div className="compass-persistent-asset-actions">
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => selectLegacyReference(item)}
+                      >
+                        {selected ? "Selected" : "Select"}
+                      </button>
+                      <button
+                        className="danger"
+                        type="button"
+                        disabled={deletingLegacyReferenceId === item.id}
+                        aria-label={`Delete reference image ${item.title}`}
+                        onClick={() => void deleteLegacyReference(item)}
+                      >
+                        <Trash aria-hidden="true" size={13} weight="bold" />
+                        {deletingLegacyReferenceId === item.id
+                          ? "Deleting…"
+                          : "Delete"}
+                      </button>
+                    </div>
                   </article>
                 );
               })}
@@ -4742,6 +4943,58 @@ function CreativeMaterialsEditor({
           </div>
         </section>
       ) : null}
+      {editingAssetFolder ? (
+        <LibraryEditModal
+          title={`Edit ${editingAssetFolder.name}`}
+          description="Rename this folder or permanently delete it with every nested folder and image inside."
+          busy={folderMutationPending}
+          onClose={() => setEditingAssetFolder(null)}
+        >
+          <div className="memory-form compass-asset-folder-edit-form">
+            <label>
+              Folder name
+              <input
+                aria-label="Folder name"
+                value={editingAssetFolderName}
+                maxLength={120}
+                disabled={folderMutationPending}
+                onChange={(event) =>
+                  setEditingAssetFolderName(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void renameAssetFolder();
+                  }
+                }}
+              />
+            </label>
+            <div className="compass-asset-folder-edit-actions">
+              <button
+                className="btn danger"
+                type="button"
+                disabled={folderMutationPending}
+                onClick={() => void deleteAssetFolder()}
+              >
+                <Trash aria-hidden="true" size={15} weight="bold" />
+                Delete folder
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                disabled={
+                  folderMutationPending ||
+                  !editingAssetFolderName.trim() ||
+                  editingAssetFolderName.trim() === editingAssetFolder.name
+                }
+                onClick={() => void renameAssetFolder()}
+              >
+                {folderMutationPending ? "Saving…" : "Save name"}
+              </button>
+            </div>
+          </div>
+        </LibraryEditModal>
+      ) : null}
     </div>
   );
 }
@@ -4777,6 +5030,28 @@ function brandAssetFolderPath(
     current = parent;
   }
   return names.join(" / ");
+}
+
+function brandAssetFolderSubtreeIds(
+  rootId: string,
+  folders: readonly BrandAssetFolder[]
+): ReadonlySet<string> {
+  const ids = new Set([rootId]);
+  let foundDescendant = true;
+  while (foundDescendant) {
+    foundDescendant = false;
+    folders.forEach((folder) => {
+      if (
+        folder.parentId &&
+        ids.has(folder.parentId) &&
+        !ids.has(folder.id)
+      ) {
+        ids.add(folder.id);
+        foundDescendant = true;
+      }
+    });
+  }
+  return ids;
 }
 
 function BrandMaterialsMemoryList({

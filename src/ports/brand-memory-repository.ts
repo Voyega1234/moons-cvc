@@ -92,6 +92,11 @@ export interface CreateBrandAssetImageInput {
   sourceId?: string;
 }
 
+export interface UpdateBrandAssetFolderInput {
+  id: string;
+  name: string;
+}
+
 export interface SaveOnboardingQuestionnaireInput {
   clientId: string;
   text: string;
@@ -129,12 +134,18 @@ export interface BrandMemoryRepository {
   uploadDocument(input: UploadBrandDocumentInput): Promise<BrandDocument>;
   createLearningEntry(input: CreateLearningEntryInput): Promise<void>;
   createReferenceImage(input: CreateReferenceImageInput): Promise<LibraryItem>;
+  deleteReferenceImage(id: string): Promise<void>;
   listAssetFolders(clientId: string): Promise<readonly BrandAssetFolder[]>;
   listAssetImages(clientId: string): Promise<readonly BrandAssetImage[]>;
   createAssetFolder(
     input: CreateBrandAssetFolderInput
   ): Promise<BrandAssetFolder>;
+  updateAssetFolder(
+    input: UpdateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder>;
+  deleteAssetFolder(id: string): Promise<void>;
   createAssetImage(input: CreateBrandAssetImageInput): Promise<BrandAssetImage>;
+  deleteAssetImage(id: string): Promise<void>;
   saveOnboardingQuestionnaire(
     input: SaveOnboardingQuestionnaireInput
   ): Promise<OnboardingQuestionnaireSource>;

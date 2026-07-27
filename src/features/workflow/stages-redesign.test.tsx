@@ -687,7 +687,7 @@ describe("redesigned workflow stages", () => {
     await user.type(dialog.getByLabelText("New folder name"), "Packshots");
     await user.click(dialog.getByRole("button", { name: "Create folder" }));
     await user.click(
-      await dialog.findByRole("button", { name: /Packshots/ })
+      await dialog.findByRole("button", { name: "Packshots Open folder" })
     );
 
     await user.upload(
@@ -739,7 +739,9 @@ describe("redesigned workflow stages", () => {
       libraryDialog.getByRole("button", { name: "Create folder" })
     );
     await user.click(
-      await libraryDialog.findByRole("button", { name: /Moodboard/ })
+      await libraryDialog.findByRole("button", {
+        name: "Moodboard Open folder"
+      })
     );
     await user.upload(
       libraryDialog.getByLabelText("Upload images"),
@@ -771,6 +773,184 @@ describe("redesigned workflow stages", () => {
       "Moodboard"
     ]);
     referencesView.unmount();
+  });
+
+  it("renames and deletes asset folders and deletes their images", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const state = { ...buildCreativeState(), stage: "start" as const };
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const campaignFolder = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Campaign"
+    });
+    const nestedFolder = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Packshots",
+      parentId: campaignFolder.id
+    });
+    await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      folderId: nestedFolder.id,
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage state={state} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const libraryDialog = within(
+      stage.getByRole("dialog", { name: "Manage brand materials" })
+    );
+    await user.click(
+      libraryDialog.getByRole("button", { name: /Materials/ })
+    );
+    await user.click(
+      await libraryDialog.findByRole("button", {
+        name: "Campaign Open folder"
+      })
+    );
+    await user.click(
+      await libraryDialog.findByRole("button", {
+        name: "Packshots Open folder"
+      })
+    );
+    await user.click(
+      await libraryDialog.findByRole("button", {
+        name: "Delete image Bottle.png"
+      })
+    );
+    await waitFor(async () =>
+      expect(await memoryRepository.listAssetImages(clientId)).toHaveLength(0)
+    );
+
+    await user.click(
+      libraryDialog.getByRole("button", { name: "Go to parent folder" })
+    );
+    await user.click(
+      libraryDialog.getByRole("button", { name: "Go to parent folder" })
+    );
+    await user.click(
+      libraryDialog.getByRole("button", { name: "Edit folder Campaign" })
+    );
+    const editDialog = within(
+      within(document.body).getByRole("dialog", { name: "Edit Campaign" })
+    );
+    await user.clear(editDialog.getByLabelText("Folder name"));
+    await user.type(editDialog.getByLabelText("Folder name"), "Campaign assets");
+    await user.click(editDialog.getByRole("button", { name: "Save name" }));
+    expect(
+      await libraryDialog.findByRole("button", {
+        name: "Campaign assets Open folder"
+      })
+    ).toBeTruthy();
+
+    await user.click(
+      libraryDialog.getByRole("button", {
+        name: "Edit folder Campaign assets"
+      })
+    );
+    const deleteDialog = within(
+      within(document.body).getByRole("dialog", {
+        name: "Edit Campaign assets"
+      })
+    );
+    await user.click(
+      deleteDialog.getByRole("button", { name: "Delete folder" })
+    );
+    await waitFor(async () =>
+      expect(await memoryRepository.listAssetFolders(clientId)).toHaveLength(0)
+    );
+    view.unmount();
+  });
+
+  it("deletes legacy reference images from the same References library", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const baseState = buildCreativeState();
+    if (!baseState.brand) throw new Error("Expected a selected brand.");
+    const reference = {
+      id: "legacy-reference",
+      title: "Campaign reference.png",
+      description: "",
+      assetUrl: "https://assets.example.com/campaign-reference.png"
+    };
+    const selectedReference = {
+      id: `brand-library-${reference.id}`,
+      url: reference.assetUrl,
+      label: reference.title,
+      role: "style" as const
+    };
+    const state = {
+      ...baseState,
+      stage: "start" as const,
+      brand: {
+        ...baseState.brand,
+        library: { ...baseState.brand.library, refs: [reference] }
+      },
+      referenceImages: [selectedReference]
+    };
+    const dispatch = vi.fn();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const deleteReferenceImage = vi.spyOn(
+      memoryRepository,
+      "deleteReferenceImage"
+    );
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage state={state} dispatch={dispatch} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const libraryDialog = within(
+      stage.getByRole("dialog", { name: "Manage brand materials" })
+    );
+    await user.click(
+      libraryDialog.getByRole("button", { name: /References/ })
+    );
+    await user.click(
+      await libraryDialog.findByRole("button", {
+        name: "Delete reference image Campaign reference.png"
+      })
+    );
+
+    expect(deleteReferenceImage).toHaveBeenCalledWith(reference.id);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "toggle-reference-image",
+      item: selectedReference
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-brand-references",
+      items: []
+    });
+    view.unmount();
   });
 
   it("adds an onboarding questionnaire later from Brand materials", async () => {

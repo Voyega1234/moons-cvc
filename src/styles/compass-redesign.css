@@ -4470,29 +4470,78 @@
   cursor: pointer;
 }
 
+.compass-app .compass-persistent-asset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.compass-app .compass-persistent-asset-grid button.danger {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  color: var(--danger);
+}
+
+.compass-app .compass-persistent-asset-grid button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .compass-app .compass-drive-subfolder-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
-.compass-app .compass-drive-subfolder-grid > button {
+.compass-app .compass-drive-subfolder-grid > article {
+  position: relative;
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface2);
+}
+
+.compass-app .compass-drive-subfolder-grid .compass-folder-open {
+  width: 100%;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   gap: 2px 7px;
   align-items: center;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--surface2);
+  padding: 8px 36px 8px 8px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
   color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
 
-.compass-app .compass-drive-subfolder-grid > button > svg {
+.compass-app .compass-drive-subfolder-grid .compass-folder-open > svg {
   grid-row: 1 / span 2;
+  color: var(--accent);
+}
+
+.compass-app .compass-drive-subfolder-grid .compass-folder-edit {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.compass-app .compass-drive-subfolder-grid .compass-folder-edit:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
   color: var(--accent);
 }
 
@@ -4517,6 +4566,35 @@
   border-radius: 9px;
   background: var(--surface2);
   text-align: center;
+}
+
+.compass-app .compass-asset-folder-edit-form {
+  display: grid;
+  gap: 18px;
+}
+
+.compass-app .compass-asset-folder-edit-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.compass-app .compass-asset-folder-edit-form input {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.compass-app .compass-asset-folder-edit-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .compass-app .compass-drive-empty b {
