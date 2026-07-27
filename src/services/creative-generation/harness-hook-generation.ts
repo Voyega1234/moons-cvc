@@ -15,6 +15,7 @@ import {
   creativeMixItems,
   hookGenerationContentTypeQuotas,
   selectedBrandProducts,
+  selectedUploadedMaterials,
   totalHookGenerationQuantity
 } from "../../features/workflow/model";
 import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionnaire-hook-context";
@@ -121,7 +122,7 @@ export function buildHookGenerationHarnessRequest({
       concept: direction.concept
     })),
     attachments: run.attachments,
-    uploadedMaterials: run.uploadedMaterials.map(
+    uploadedMaterials: selectedUploadedMaterials(run).map(
       ({ id, name, mediaType, role, description, url }) => ({
         id,
         name,

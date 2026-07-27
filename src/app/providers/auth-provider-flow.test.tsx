@@ -63,7 +63,7 @@ describe("Supabase account flow", () => {
       options: {
         redirectTo: "http://localhost:3000",
         scopes:
-          "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly",
+          "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly",
         queryParams: {
           hd: "convertcake.com",
           include_granted_scopes: "true",

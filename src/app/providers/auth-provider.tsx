@@ -21,6 +21,7 @@ import {
 const PRODUCTION_AUTH_REDIRECT_URL = "https://moons-cvc.vercel.app/";
 export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/spreadsheets.readonly"
 ].join(" ");
 

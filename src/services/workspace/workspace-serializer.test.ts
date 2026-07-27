@@ -232,6 +232,7 @@ describe("workspace serializer", () => {
             mediaType: "image/png",
             role: "product",
             description: "Use the real pack shot",
+            selected: false,
             url: "https://example.com/product.png",
             storagePath: "brand/creative-materials/product.png",
             storageBucket: "brand-assets"
@@ -266,7 +267,8 @@ describe("workspace serializer", () => {
     expect(restored?.runsById["album-run"]?.uploadedMaterials[0]).toMatchObject({
       name: "product.png",
       role: "product",
-      description: "Use the real pack shot"
+      description: "Use the real pack shot",
+      selected: false
     });
     expect(restored?.runsById["album-run"]?.creativeMix).toEqual([
       { id: "creative-mix-1", service: "album-post", quantity: 3 }

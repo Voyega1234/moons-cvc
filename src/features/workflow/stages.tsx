@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -10,10 +11,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowLeft,
   ArrowRight,
   Bell,
   CheckCircle,
   FileArrowUp,
+  FolderSimple,
+  ImageBroken,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -29,9 +33,13 @@ import {
   type OnboardingQuestionnaireSource
 } from "../../domain/brand";
 import { BrandLogo } from "../../shared/components/brand-logo";
+import { env } from "../../config/env";
 import {
   brandDocumentTypeLabels,
   brandDocumentTypes,
+  type BrandAssetFolder,
+  type BrandAssetImage,
+  type BrandAssetKind,
   type BrandDocument,
   type BrandDocumentType,
   type BrandPastWorkItem,
@@ -52,6 +60,7 @@ import {
   type ArtworkMode,
   type CreativeOutput,
   type CreativeMaterialRole,
+  type UploadedCreativeMaterial,
   type ReferenceImageRole,
   type ReferenceImageSelection,
   type ServiceType
@@ -86,6 +95,13 @@ import {
 } from "../../services/artwork-generation/openai-image-generation";
 import { uploadReplacementAsset } from "../../services/artwork-generation/replace-output-asset";
 import { uploadCreativeMaterial } from "../../services/creative-materials/upload-creative-material";
+import {
+  downloadGoogleDriveMaterial,
+  loadGoogleDriveMaterialFolder,
+  openGoogleDriveMaterialFolder,
+  type GoogleDriveMaterialFolder,
+  type GoogleDriveMaterialImage
+} from "../../services/google-drive/google-drive-materials";
 import { runQualityCheck } from "../../services/quality-check/run-quality-check";
 import {
   suggestBrandLearning,
@@ -110,6 +126,7 @@ import type {
 import {
   creativeMixItems,
   selectedBrandProducts,
+  selectedUploadedMaterials,
   totalCreativeMixQuantity
 } from "./model";
 import { WorkflowMaterialPack } from "./material-pack";
@@ -220,6 +237,7 @@ function DecisionCard({
 
 export function StartStage({ state, dispatch }: StageProps) {
   const { brands, loading, error, refresh } = useBrands();
+  const brandMemoryRepository = useBrandMemoryRepository();
   const [profileSection, setProfileSection] =
     useState<BrandProfileSection>("brand");
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -228,6 +246,10 @@ export function StartStage({ state, dispatch }: StageProps) {
   const [setupBrand, setSetupBrand] = useState<Brand | null>(null);
   const [mappingBrand, setMappingBrand] = useState<Brand | null>(null);
   const [queuedBrandName, setQueuedBrandName] = useState<string | null>(null);
+  const [assetCounts, setAssetCounts] = useState<BrandAssetCounts>({
+    material: 0,
+    reference: 0
+  });
   const continueAction: WorkflowAction = { type: "set-stage", stage: "brief" };
   const continueBlocked = workflowActionBlockReason(state, continueAction);
   const search = state.brandSearch.trim().toLowerCase();
@@ -239,12 +261,43 @@ export function StartStage({ state, dispatch }: StageProps) {
   const currentSetupBrand = setupBrand
     ? (brands.find((brand) => brand.id === setupBrand.id) ?? setupBrand)
     : null;
+  const updateAssetCount = useCallback(
+    (kind: BrandAssetKind, count: number) => {
+      setAssetCounts((current) =>
+        current[kind] === count ? current : { ...current, [kind]: count }
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     if (currentSetupBrand && !canStartBrandIngestion(currentSetupBrand)) {
       setSetupBrand(null);
     }
   }, [currentSetupBrand]);
+
+  useEffect(() => {
+    const clientId = state.brand?.id;
+    if (!clientId) {
+      setAssetCounts({ material: 0, reference: 0 });
+      return;
+    }
+    let active = true;
+    setAssetCounts({ material: 0, reference: 0 });
+    void brandMemoryRepository
+      .listAssetImages(clientId)
+      .then((images) => {
+        if (!active) return;
+        setAssetCounts({
+          material: images.filter((image) => image.kind === "material").length,
+          reference: images.filter((image) => image.kind === "reference").length
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [brandMemoryRepository, state.brand?.id]);
 
   return (
     <DecisionCard
@@ -482,6 +535,7 @@ export function StartStage({ state, dispatch }: StageProps) {
           )}
           <BrandMaterialsSummary
             state={state}
+            assetCounts={assetCounts}
             onOpenLibrary={(section) => {
               setProfileSection(section);
               setLibraryOpen(true);
@@ -501,6 +555,8 @@ export function StartStage({ state, dispatch }: StageProps) {
           state={state}
           dispatch={dispatch}
           section={profileSection}
+          assetCounts={assetCounts}
+          onAssetCountChange={updateAssetCount}
           onSectionChange={setProfileSection}
           onClose={() => {
             setLibraryOpen(false);
@@ -571,17 +627,27 @@ function BrandAnalysisQueuedDialog({
 
 function BrandMaterialsSummary({
   state,
+  assetCounts,
   onOpenLibrary
 }: {
   state: WorkflowState;
+  assetCounts: BrandAssetCounts;
   onOpenLibrary: (section: BrandProfileSection) => void;
 }) {
   const brand = state.brand;
   const rows: readonly [string, number, BrandProfileSection][] = [
     ["CI", brand?.library.brand.length ?? 0, "brand"],
     ["Guideline", brand?.library.docs.length ?? 0, "docs"],
-    ["Reference style", brand?.library.refs.length ?? 0, "refs"],
-    ["Materials", state.uploadedMaterials.length, "materials"],
+    [
+      "Reference style",
+      (brand?.library.refs.length ?? 0) + assetCounts.reference,
+      "refs"
+    ],
+    [
+      "Materials",
+      Math.max(assetCounts.material, state.uploadedMaterials.length),
+      "materials"
+    ],
     [
       "Business context",
       (brand?.memory.working.length ?? 0) + (brand?.memory.avoid.length ?? 0),
@@ -1321,6 +1387,8 @@ type BrandProfileSection =
   | "learning"
   | "questionnaire";
 
+type BrandAssetCounts = Record<BrandAssetKind, number>;
+
 const brandProfileSections: readonly [BrandProfileSection, string, string][] = [
   ["brand", "Brand kit", "Rules, voice, CI, claim guardrails"],
   ["products", "Products", "Offers, benefits, audience, claim notes"],
@@ -1795,12 +1863,16 @@ function BrandLibraryModal({
   state,
   dispatch,
   section,
+  assetCounts,
+  onAssetCountChange,
   onSectionChange,
   onClose
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   section: BrandProfileSection;
+  assetCounts: BrandAssetCounts;
+  onAssetCountChange: (kind: BrandAssetKind, count: number) => void;
   onSectionChange: (section: BrandProfileSection) => void;
   onClose: () => void;
 }) {
@@ -1811,8 +1883,8 @@ function BrandLibraryModal({
     brand: brand.library.brand.length,
     products: brand.library.products.length,
     docs: brand.library.docs.length,
-    refs: brand.library.refs.length,
-    materials: state.uploadedMaterials.length,
+    refs: brand.library.refs.length + assetCounts.reference,
+    materials: Math.max(assetCounts.material, state.uploadedMaterials.length),
     past: 0,
     learning: brand.memory.working.length + brand.memory.avoid.length,
     questionnaire: brand.onboardingQuestionnaire ? 1 : 0
@@ -1889,6 +1961,7 @@ function BrandLibraryModal({
                 state={state}
                 dispatch={dispatch}
                 section={section}
+                onAssetCountChange={onAssetCountChange}
               />
             </div>
           </section>
@@ -1964,11 +2037,13 @@ function LibraryEditModal({
 function BrandProfileSectionContent({
   state,
   dispatch,
-  section
+  section,
+  onAssetCountChange
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   section: BrandProfileSection;
+  onAssetCountChange: (kind: BrandAssetKind, count: number) => void;
 }) {
   const brand = state.brand;
   if (!brand) return null;
@@ -2007,15 +2082,17 @@ function BrandProfileSectionContent({
       ) : null}
       {section === "refs" ? (
         <BrandReferencesMemoryList
-          clientId={brand.id}
-          initialItems={brand.library.refs}
-          onSaved={(items) =>
-            dispatch({ type: "sync-brand-references", items })
-          }
+          state={state}
+          dispatch={dispatch}
+          onAssetCountChange={onAssetCountChange}
         />
       ) : null}
       {section === "materials" ? (
-        <BrandMaterialsMemoryList state={state} dispatch={dispatch} />
+        <BrandMaterialsMemoryList
+          state={state}
+          dispatch={dispatch}
+          onAssetCountChange={onAssetCountChange}
+        />
       ) : null}
       {section === "past" ? (
         <PastWorkPreview state={state} clientId={brand.id} />
@@ -3297,67 +3374,21 @@ function BrandLogoCard({
 }
 
 function BrandReferencesMemoryList({
-  clientId,
-  initialItems,
-  onSaved
-}: {
-  clientId: string;
-  initialItems: readonly LibraryItem[];
-  onSaved: (items: readonly LibraryItem[]) => void;
+  state,
+  dispatch,
+  onAssetCountChange
+}: StageProps & {
+  onAssetCountChange: (kind: BrandAssetKind, count: number) => void;
 }) {
-  const repository = useBrandMemoryRepository();
-  const [items, setItems] = useState(initialItems);
-
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
-
-  async function uploadReference(file: File): Promise<void> {
-    const saved = await repository.createReferenceImage({ clientId, file });
-    const nextItems = [saved, ...items.filter((item) => item.id !== saved.id)];
-    setItems(nextItems);
-    onSaved(nextItems);
-  }
-
   return (
     <section className="memory-editor compass-brand-references">
-      <header>
-        <div>
-          <h4>References</h4>
-          <p>
-            Upload approved visual references for creative direction and image
-            generation.
-          </p>
-        </div>
-        <InlineUploadForm
-          actionLabel="Upload reference"
-          onUpload={uploadReference}
-        />
-      </header>
-      {items.length ? (
-        <div className="compass-brand-reference-grid">
-          {items.map((item) => (
-            <article className="compass-brand-reference-card" key={item.id}>
-              {item.assetUrl ? (
-                <img src={item.assetUrl} alt={item.title} />
-              ) : (
-                <div className="compass-brand-reference-placeholder">
-                  No preview
-                </div>
-              )}
-              <div>
-                <b>{item.title}</b>
-                <p>{item.description || "Visual reference"}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="empty">
-          <b>No references yet.</b>
-          <p>Upload a PNG, JPEG, or WEBP image to add the first reference.</p>
-        </div>
-      )}
+      <CreativeMaterialsEditor
+        state={state}
+        dispatch={dispatch}
+        kind="reference"
+        legacyReferences={state.brand?.library.refs}
+        onAssetCountChange={onAssetCountChange}
+      />
     </section>
   );
 }
@@ -3993,35 +4024,169 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "client-context": "Person / client context"
 };
 
+function AssetPreviewImage({
+  src,
+  alt
+}: {
+  src: string;
+  alt: string;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    "loading"
+  );
+
+  useEffect(() => {
+    setStatus("loading");
+  }, [src]);
+
+  return (
+    <div className={`compass-asset-preview ${status}`}>
+      {status === "loading" ? (
+        <span className="compass-asset-preview-skeleton" aria-hidden="true" />
+      ) : null}
+      {status === "error" ? (
+        <span className="compass-asset-preview-error">
+          <ImageBroken aria-hidden="true" size={24} weight="duotone" />
+          Preview unavailable
+        </span>
+      ) : null}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setStatus("loaded")}
+        onError={() => setStatus("error")}
+      />
+    </div>
+  );
+}
+
 function CreativeMaterialsEditor({
   state,
-  dispatch
-}: StageProps) {
+  dispatch,
+  kind = "material",
+  legacyReferences = [],
+  onAssetCountChange
+}: StageProps & {
+  kind?: BrandAssetKind;
+  legacyReferences?: readonly LibraryItem[];
+  onAssetCountChange?: (kind: BrandAssetKind, count: number) => void;
+}) {
+  const brandMemoryRepository = useBrandMemoryRepository();
   const [uploadPending, setUploadPending] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [driveLink, setDriveLink] = useState("");
+  const [drivePending, setDrivePending] = useState(false);
+  const assetKind = kind;
+  const [assetFolders, setAssetFolders] = useState<readonly BrandAssetFolder[]>(
+    []
+  );
+  const [assetImages, setAssetImages] = useState<readonly BrandAssetImage[]>([]);
+  const [currentAssetFolderId, setCurrentAssetFolderId] = useState<string | null>(
+    null
+  );
+  const [newFolderName, setNewFolderName] = useState("");
+  const [assetLibraryPending, setAssetLibraryPending] = useState(false);
+  const [assetLibraryReady, setAssetLibraryReady] = useState(false);
+  const [driveImportStatuses, setDriveImportStatuses] = useState<
+    Readonly<Record<string, "pending" | "imported" | "failed">>
+  >({});
+  const driveImportIds = useRef(new Set<string>());
+  const selectedMaterials = selectedUploadedMaterials(state);
+
+  useEffect(() => {
+    const clientId = state.brand?.id;
+    if (!clientId) {
+      setAssetFolders([]);
+      setAssetImages([]);
+      setAssetLibraryReady(false);
+      return;
+    }
+    let active = true;
+    setAssetLibraryPending(true);
+    setAssetLibraryReady(false);
+    void Promise.all([
+      brandMemoryRepository.listAssetFolders(clientId),
+      brandMemoryRepository.listAssetImages(clientId)
+    ])
+      .then(([folders, images]) => {
+        if (!active) return;
+        setAssetFolders(folders);
+        setAssetImages(images);
+        images.forEach((image) => {
+          if (image.sourceProvider === "google-drive" && image.sourceId) {
+            driveImportIds.current.add(image.sourceId);
+          }
+        });
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setUploadError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load the brand asset library."
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setAssetLibraryPending(false);
+          setAssetLibraryReady(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [brandMemoryRepository, state.brand?.id]);
+
+  useEffect(() => {
+    if (!assetLibraryReady) return;
+    onAssetCountChange?.(
+      assetKind,
+      assetImages.filter((image) => image.kind === assetKind).length
+    );
+  }, [
+    assetImages,
+    assetKind,
+    assetLibraryReady,
+    onAssetCountChange
+  ]);
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (!files.length) return;
-    if (state.uploadedMaterials.length + files.length > 8) {
-      setUploadError("Use up to 8 creative material images per brief.");
+    if (files.length > 20) {
+      setUploadError("Upload up to 20 images at a time.");
       return;
     }
 
     setUploadPending(true);
     setUploadError(null);
     try {
-      const items = await Promise.all(
-        files.map((file) =>
-          uploadCreativeMaterial({
-            runId: state.id,
-            brandId: state.brand?.id,
-            file
-          })
-        )
-      );
-      dispatch({ type: "add-uploaded-materials", items });
+      const clientId = state.brand?.id;
+      if (clientId) {
+        const items = await Promise.all(
+          files.map((file) =>
+            brandMemoryRepository.createAssetImage({
+              clientId,
+              kind: assetKind,
+              folderId: currentAssetFolderId ?? undefined,
+              file
+            })
+          )
+        );
+        setAssetImages((current) => mergeBrandAssetImages(current, items));
+      } else {
+        const items = await Promise.all(
+          files.map((file) =>
+            uploadCreativeMaterial({
+              runId: state.id,
+              file
+            })
+          )
+        );
+        dispatch({ type: "add-uploaded-materials", items });
+      }
     } catch (caught) {
       setUploadError(
         caught instanceof Error ? caught.message : "Could not upload the image."
@@ -4031,36 +4196,482 @@ function CreativeMaterialsEditor({
     }
   }
 
+  async function handleBrowseDrive() {
+    if (!driveLink.trim() || drivePending) return;
+    const clientId = state.brand?.id;
+    if (!clientId) {
+      setUploadError("Choose a brand before adding a Drive folder.");
+      return;
+    }
+    setDrivePending(true);
+    setUploadError(null);
+    try {
+      const root = await openGoogleDriveMaterialFolder(driveLink);
+      const contents = await loadGoogleDriveMaterialFolder(root);
+      const rootLibraryFolder = await brandMemoryRepository.createAssetFolder({
+        clientId,
+        kind: assetKind,
+        name: root.name,
+        parentId: currentAssetFolderId ?? undefined,
+        sourceProvider: "google-drive",
+        sourceId: root.id,
+        sourceUrl: driveLink
+      });
+      const childLibraryFolders = await Promise.all(
+        contents.folders.map((folder) =>
+          brandMemoryRepository.createAssetFolder({
+            clientId,
+            kind: assetKind,
+            name: folder.name,
+            parentId: rootLibraryFolder.id,
+            sourceProvider: "google-drive",
+            sourceId: folder.id
+          })
+        )
+      );
+      setAssetFolders((folders) =>
+        mergeBrandAssetFolders(folders, [
+          rootLibraryFolder,
+          ...childLibraryFolders
+        ])
+      );
+      setCurrentAssetFolderId(rootLibraryFolder.id);
+      void importDriveImages(contents.images, rootLibraryFolder.id);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not open the Google Drive folder."
+      );
+    } finally {
+      setDrivePending(false);
+    }
+  }
+
+  async function importDriveImages(
+    images: readonly GoogleDriveMaterialImage[],
+    folderId: string
+  ): Promise<void> {
+    const clientId = state.brand?.id;
+    if (!clientId) return;
+    const candidates = images.filter((image) => {
+      if (driveImportIds.current.has(image.id)) return false;
+      driveImportIds.current.add(image.id);
+      return true;
+    });
+    if (!candidates.length) return;
+    setDriveImportStatuses((statuses) => ({
+      ...statuses,
+      ...Object.fromEntries(candidates.map((image) => [image.id, "pending"]))
+    }));
+
+    let failures = 0;
+    for (let index = 0; index < candidates.length; index += 4) {
+      const batch = candidates.slice(index, index + 4);
+      const results = await Promise.allSettled(
+        batch.map(async (image) => {
+          const file = await downloadGoogleDriveMaterial(image);
+          return brandMemoryRepository.createAssetImage({
+            clientId,
+            kind: assetKind,
+            folderId,
+            file,
+            sourceProvider: "google-drive",
+            sourceId: image.id
+          });
+        })
+      );
+      const imported = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      );
+      setAssetImages((current) => mergeBrandAssetImages(current, imported));
+      setDriveImportStatuses((statuses) => {
+        const next = { ...statuses };
+        results.forEach((result, resultIndex) => {
+          const image = batch[resultIndex];
+          if (!image) return;
+          if (result.status === "fulfilled") {
+            next[image.id] = "imported";
+          } else {
+            next[image.id] = "failed";
+            driveImportIds.current.delete(image.id);
+            failures += 1;
+          }
+        });
+        return next;
+      });
+    }
+    if (failures) {
+      setUploadError(
+        `${failures} Drive ${pluralize(failures, "image")} could not be imported. Re-enter the folder to retry.`
+      );
+    }
+  }
+
+  async function createAssetFolder() {
+    const clientId = state.brand?.id;
+    const name = newFolderName.trim();
+    if (!clientId || !name || assetLibraryPending) return;
+    setAssetLibraryPending(true);
+    setUploadError(null);
+    try {
+      const folder = await brandMemoryRepository.createAssetFolder({
+        clientId,
+        kind: assetKind,
+        name,
+        parentId: currentAssetFolderId ?? undefined
+      });
+      setAssetFolders((folders) => mergeBrandAssetFolders(folders, [folder]));
+      setNewFolderName("");
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not create the folder."
+      );
+    } finally {
+      setAssetLibraryPending(false);
+    }
+  }
+
+  async function openSavedAssetFolder(folder: BrandAssetFolder) {
+    setCurrentAssetFolderId(folder.id);
+    if (folder.sourceProvider !== "google-drive" || !folder.sourceId) return;
+
+    const clientId = state.brand?.id;
+    if (!clientId || assetLibraryPending) return;
+    setAssetLibraryPending(true);
+    setUploadError(null);
+    try {
+      const driveFolder: GoogleDriveMaterialFolder = {
+        id: folder.sourceId,
+        name: folder.name,
+        path: brandAssetFolderPath(folder, assetFolders)
+      };
+      const contents = await loadGoogleDriveMaterialFolder(driveFolder);
+      const children = await Promise.all(
+        contents.folders.map((child) =>
+          brandMemoryRepository.createAssetFolder({
+            clientId,
+            kind: assetKind,
+            name: child.name,
+            parentId: folder.id,
+            sourceProvider: "google-drive",
+            sourceId: child.id
+          })
+        )
+      );
+      setAssetFolders((folders) => mergeBrandAssetFolders(folders, children));
+      await importDriveImages(contents.images, folder.id);
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not sync the Google Drive folder."
+      );
+    } finally {
+      setAssetLibraryPending(false);
+    }
+  }
+
+  function selectBrandAsset(asset: BrandAssetImage) {
+    if (asset.kind === "reference") {
+      const item: ReferenceImageSelection = {
+        id: `brand-asset-${asset.id}`,
+        url: asset.url,
+        label: asset.name,
+        role: "style"
+      };
+      dispatch({ type: "toggle-reference-image", item });
+      return;
+    }
+    const id = `brand-asset-${asset.id}`;
+    const existing = state.uploadedMaterials.find((item) => item.id === id);
+    if (existing) {
+      toggleMaterial(existing);
+      return;
+    }
+    if (selectedMaterials.length >= 8) {
+      setUploadError("Select up to 8 creative material images per brief.");
+      return;
+    }
+    dispatch({
+      type: "add-uploaded-materials",
+      items: [
+        {
+          id,
+          name: asset.name,
+          mediaType: asset.mimeType,
+          role: "main-object",
+          description: "",
+          selected: true,
+          url: asset.url,
+          storagePath: asset.storagePath,
+          storageBucket: env.brandAssetsBucket
+        }
+      ]
+    });
+  }
+
+  function selectLegacyReference(item: LibraryItem) {
+    if (!item.assetUrl) return;
+    dispatch({
+      type: "toggle-reference-image",
+      item: {
+        id: `brand-library-${item.id}`,
+        url: item.assetUrl,
+        label: item.title,
+        role: "style"
+      }
+    });
+  }
+
+  function toggleMaterial(material: UploadedCreativeMaterial) {
+    const willSelect = material.selected === false;
+    if (willSelect && selectedMaterials.length >= 8) {
+      setUploadError("Select up to 8 creative material images per brief.");
+      return;
+    }
+    setUploadError(null);
+    dispatch({
+      type: "update-uploaded-material",
+      id: material.id,
+      changes: { selected: !willSelect ? false : true }
+    });
+  }
+
+  const currentAssetFolder =
+    assetFolders.find((folder) => folder.id === currentAssetFolderId) ?? null;
+  const visibleAssetFolders = assetFolders.filter(
+    (folder) =>
+      folder.kind === assetKind &&
+      folder.parentId === (currentAssetFolder?.id ?? null)
+  );
+  const visibleAssetImages = assetImages.filter(
+    (image) =>
+      image.kind === assetKind &&
+      image.folderId === (currentAssetFolder?.id ?? null)
+  );
+  const visibleLegacyReferences =
+    assetKind === "reference" && !currentAssetFolder
+      ? legacyReferences.filter(
+          (item): item is LibraryItem & { assetUrl: string } =>
+            Boolean(item.assetUrl)
+        )
+      : [];
+  const pendingDriveImports = Object.values(driveImportStatuses).filter(
+    (status) => status === "pending"
+  ).length;
+  const visibleAssetCount =
+    visibleAssetImages.length + visibleLegacyReferences.length;
+  const showAssetSkeletons =
+    (assetLibraryPending ||
+      uploadPending ||
+      drivePending ||
+      pendingDriveImports > 0) &&
+    !visibleAssetFolders.length &&
+    visibleAssetCount === 0;
+
   return (
     <div className="compass-creative-material-editor">
+      {state.brand ? (
+        <div className="compass-asset-library-browser">
+          <nav aria-label={`${assetKind} library folder path`}>
+            <button
+              type="button"
+              disabled={!currentAssetFolder}
+              onClick={() =>
+                setCurrentAssetFolderId(currentAssetFolder?.parentId ?? null)
+              }
+            >
+              <ArrowLeft aria-hidden="true" size={15} weight="bold" />
+            </button>
+            <b>
+              {currentAssetFolder
+                ? brandAssetFolderPath(currentAssetFolder, assetFolders)
+                : `${state.brand.name} / ${
+                    assetKind === "material" ? "Materials" : "References"
+                  }`}
+            </b>
+            <span>
+              {visibleAssetFolders.length} folders ·{" "}
+              {visibleAssetCount} images
+              {pendingDriveImports ? ` · importing ${pendingDriveImports}` : ""}
+            </span>
+          </nav>
+          <div className="compass-asset-library-actions">
+            <input
+              aria-label="New folder name"
+              value={newFolderName}
+              placeholder="New folder name"
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void createAssetFolder();
+                }
+              }}
+            />
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={!newFolderName.trim() || assetLibraryPending}
+              onClick={() => void createAssetFolder()}
+            >
+              Create folder
+            </button>
+            <label className="btn secondary compass-brief-add-files">
+              {uploadPending ? "Uploading…" : "Upload images"}
+              <input
+                className="file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                disabled={uploadPending}
+                onChange={handleUpload}
+              />
+            </label>
+            <input
+              aria-label="Google Drive folder link"
+              type="url"
+              value={driveLink}
+              placeholder="Paste Google Drive folder link"
+              onChange={(event) => setDriveLink(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleBrowseDrive();
+                }
+              }}
+            />
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={!driveLink.trim() || drivePending}
+              onClick={() => void handleBrowseDrive()}
+            >
+              {drivePending ? "Adding…" : "Add Drive folder"}
+            </button>
+          </div>
+          {visibleAssetFolders.length ? (
+            <div className="compass-drive-subfolder-grid">
+              {visibleAssetFolders.map((folder) => (
+                <button
+                  type="button"
+                  key={folder.id}
+                  onClick={() => void openSavedAssetFolder(folder)}
+                >
+                  <FolderSimple aria-hidden="true" size={21} weight="duotone" />
+                  <b>{folder.name}</b>
+                  <small>Open folder</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {visibleAssetImages.length || visibleLegacyReferences.length ? (
+            <div className="compass-persistent-asset-grid">
+              {visibleAssetImages.map((asset) => {
+                const selected =
+                  asset.kind === "material"
+                    ? state.uploadedMaterials.some(
+                        (item) =>
+                          item.id === `brand-asset-${asset.id}` &&
+                          item.selected !== false
+                      )
+                    : state.referenceImages.some(
+                        (item) => item.id === `brand-asset-${asset.id}`
+                      );
+                return (
+                  <article key={asset.id}>
+                    <AssetPreviewImage src={asset.url} alt={asset.name} />
+                    <b>{asset.name}</b>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => selectBrandAsset(asset)}
+                    >
+                      {selected ? "Selected" : "Select"}
+                    </button>
+                  </article>
+                );
+              })}
+              {visibleLegacyReferences.map((item) => {
+                const selected = state.referenceImages.some(
+                  (reference) => reference.id === `brand-library-${item.id}`
+                );
+                return (
+                  <article key={`legacy-${item.id}`}>
+                    <AssetPreviewImage
+                      src={item.assetUrl}
+                      alt={item.title}
+                    />
+                    <b>{item.title}</b>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => selectLegacyReference(item)}
+                    >
+                      {selected ? "Selected" : "Select"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+          {showAssetSkeletons ? (
+            <div
+              className="compass-persistent-asset-grid compass-asset-loading-grid"
+              role="status"
+              aria-label="Loading images"
+            >
+              <span className="sr-only">Loading images</span>
+              {Array.from({ length: 3 }, (_, index) => (
+                <article aria-hidden="true" key={index}>
+                  <span className="compass-asset-preview-skeleton" />
+                  <span className="compass-asset-line-skeleton" />
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {!assetLibraryPending &&
+          !uploadError &&
+          !visibleAssetFolders.length &&
+          !visibleAssetImages.length &&
+          !visibleLegacyReferences.length ? (
+            <div className="compass-drive-empty">
+              <b>This folder is empty.</b>
+              <span>Upload images, create a folder, or add a Drive folder.</span>
+            </div>
+          ) : null}
+          {uploadError ? (
+            <p className="error-text" role="alert">
+              {uploadError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="compass-creative-material-upload-row">
-        <label className="btn secondary compass-brief-add-files">
-          {uploadPending ? "Uploading…" : "Add material images"}
-          <input
-            className="file-input"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            multiple
-            disabled={uploadPending}
-            onChange={handleUpload}
-          />
-        </label>
+        <span>
+          {assetKind === "material"
+            ? `${selectedMaterials.length}/8 materials selected`
+            : `${state.referenceImages.length} references selected`}
+        </span>
       </div>
       <p className="compass-creative-material-helper">
-        The Hook Agent inspects these images before proposing ideas. The Image
-        Agent receives them as source materials and uses each image according
-        to its assigned role.
+        {assetKind === "material"
+          ? "Only materials you mark Selected are sent to the Hook Agent and Image Agent."
+          : "Only references you mark Selected are used as style and composition context."}
       </p>
-      {uploadError ? (
-        <p className="error-text" role="alert">
-          {uploadError}
-        </p>
-      ) : null}
-      {state.uploadedMaterials.length ? (
-        <div className="compass-creative-material-grid">
-          {state.uploadedMaterials.map((material) => (
+      {assetKind === "material" && state.uploadedMaterials.length ? (
+        <section className="compass-selected-materials">
+          <header>
+            <b>Selected for this brief</b>
+            <span>Set each image role before generation.</span>
+          </header>
+          <div className="compass-creative-material-grid">
+            {state.uploadedMaterials.map((material) => (
             <article
-              className="compass-creative-material-card"
+              className={`compass-creative-material-card ${
+                material.selected !== false ? "selected" : ""
+              }`}
               key={material.id}
             >
               <img src={material.url} alt={material.name} />
@@ -4080,6 +4691,14 @@ function CreativeMaterialsEditor({
                     ×
                   </button>
                 </div>
+                <button
+                  className="compass-material-select"
+                  type="button"
+                  aria-pressed={material.selected !== false}
+                  onClick={() => toggleMaterial(material)}
+                >
+                  {material.selected !== false ? "Selected" : "Select"}
+                </button>
                 <label>
                   Use as
                   <select
@@ -4119,43 +4738,61 @@ function CreativeMaterialsEditor({
                 </label>
               </div>
             </article>
-          ))}
-        </div>
-      ) : (
-        <div className="compass-signal-memory-empty">
-          <div>
-            <b>No material images added.</b>
-            <span>
-              Add a product, person, or object that should appear in the
-              generated artwork.
-            </span>
+            ))}
           </div>
-        </div>
-      )}
+        </section>
+      ) : null}
     </div>
   );
 }
 
+function mergeBrandAssetFolders(
+  current: readonly BrandAssetFolder[],
+  incoming: readonly BrandAssetFolder[]
+): readonly BrandAssetFolder[] {
+  const byId = new Map(current.map((folder) => [folder.id, folder]));
+  incoming.forEach((folder) => byId.set(folder.id, folder));
+  return [...byId.values()];
+}
+
+function mergeBrandAssetImages(
+  current: readonly BrandAssetImage[],
+  incoming: readonly BrandAssetImage[]
+): readonly BrandAssetImage[] {
+  const byId = new Map(current.map((image) => [image.id, image]));
+  incoming.forEach((image) => byId.set(image.id, image));
+  return [...byId.values()];
+}
+
+function brandAssetFolderPath(
+  folder: BrandAssetFolder,
+  folders: readonly BrandAssetFolder[]
+): string {
+  const names = [folder.name];
+  let current = folder;
+  while (current.parentId) {
+    const parent = folders.find((candidate) => candidate.id === current.parentId);
+    if (!parent) break;
+    names.unshift(parent.name);
+    current = parent;
+  }
+  return names.join(" / ");
+}
+
 function BrandMaterialsMemoryList({
   state,
-  dispatch
-}: StageProps) {
+  dispatch,
+  onAssetCountChange
+}: StageProps & {
+  onAssetCountChange: (kind: BrandAssetKind, count: number) => void;
+}) {
   return (
     <section className="memory-editor compass-brand-materials">
-      <header>
-        <div>
-          <h4>Materials</h4>
-          <p>
-            The same source images shown in Brief materials. Changes made here
-            are included in the current creative brief.
-          </p>
-        </div>
-        <span className="pill blue">
-          {state.uploadedMaterials.length} image
-          {state.uploadedMaterials.length === 1 ? "" : "s"}
-        </span>
-      </header>
-      <CreativeMaterialsEditor state={state} dispatch={dispatch} />
+      <CreativeMaterialsEditor
+        state={state}
+        dispatch={dispatch}
+        onAssetCountChange={onAssetCountChange}
+      />
     </section>
   );
 }
@@ -4181,7 +4818,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
   const activeProducts = selectedBrandProducts(state);
   const activeProductIds = new Set(activeProducts.map((product) => product.id));
   const availableReferenceCount = state.brand?.library.refs.length ?? 0;
-  const materialCount = state.uploadedMaterials.length;
+  const materialCount = selectedUploadedMaterials(state).length;
 
   function openMaterials(
     category: ReferenceLibraryCategory | null = null
@@ -4653,15 +5290,22 @@ export function BriefStage({ state, dispatch }: StageProps) {
                   <div className="compass-signal-detail">
                     {materialCount ? (
                       <div className="compass-active-material-list">
-                        {state.uploadedMaterials.map((material) => (
-                          <article key={material.id}>
-                            <b>{material.name}</b>
-                            <span>
-                              {creativeMaterialRoleLabels[material.role]}
-                              {material.description
-                                ? ` · ${material.description}`
-                                : ""}
-                            </span>
+                        {selectedUploadedMaterials(state).map((material) => (
+                          <article className="has-preview" key={material.id}>
+                            <img
+                              src={material.url}
+                              alt={material.name}
+                              loading="lazy"
+                            />
+                            <div>
+                              <b>{material.name}</b>
+                              <span>
+                                {creativeMaterialRoleLabels[material.role]}
+                                {material.description
+                                  ? ` · ${material.description}`
+                                  : ""}
+                              </span>
+                            </div>
                           </article>
                         ))}
                         {state.attachments.map((name) => (
@@ -4775,7 +5419,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 </span>
                 <span>
                   <b>
-                    {state.uploadedMaterials.length}
+                    {selectedUploadedMaterials(state).length}
                   </b>{" "}
                   materials
                 </span>
@@ -4899,7 +5543,10 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         used in the artwork.
                       </p>
                     </div>
-                    <span>{state.uploadedMaterials.length} images</span>
+                    <span>
+                      {selectedUploadedMaterials(state).length} selected ·{" "}
+                      {state.uploadedMaterials.length} in library
+                    </span>
                   </header>
                   <div className="compass-brief-material-section-body">
                     <div className="compass-brief-material-modal-body">
@@ -5527,7 +6174,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       if (review.sections.length === 0) {
         throw new Error("Generate or add at least one hook before exporting.");
       }
-      const { exportCompassIdeasReviewPdf } = await import(
+      const { exportIdeasReviewPdf } = await import(
         "../export-pdf-kit/export-ideas-review-pdf"
       );
       const brandSlug = (state.brand?.name ?? "creative-compass")
@@ -5536,11 +6183,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
       const filename = `${brandSlug || "creative-compass"}-angles.pdf`;
-      await exportCompassIdeasReviewPdf(
+      await exportIdeasReviewPdf(
         review.sections,
         filename,
-        review.highlightMap,
-        state.brand?.name ?? "Creative topics"
+        review.highlightMap
       );
     } catch (caught) {
       setExportAnglesError(

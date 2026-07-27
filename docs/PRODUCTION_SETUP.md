@@ -55,6 +55,7 @@ up the Google Cloud and Supabase providers as follows:
    https://www.googleapis.com/auth/userinfo.email
    https://www.googleapis.com/auth/userinfo.profile
    https://www.googleapis.com/auth/drive.file
+   https://www.googleapis.com/auth/drive.readonly
    https://www.googleapis.com/auth/spreadsheets.readonly
    ```
 
@@ -70,7 +71,9 @@ up the Google Cloud and Supabase providers as follows:
 7. In Supabase Auth → Providers → Google, enable the provider and enter that
    OAuth client ID and secret.
 8. Apply `202607240001_google_auth_domain_hook.sql` and
-   `202607260001_google_provider_token_cache.sql`. Then open Supabase
+   `202607260001_google_provider_token_cache.sql`. Also apply
+   `202607270002_brand_asset_library.sql` for persistent Materials and
+   References folders. Then open Supabase
    Authentication → Hooks and select
    `public.hook_restrict_creative_compass_signup` for **Before User Created**.
    This rejects non-Google and non-`@convertcake.com` signups before an
@@ -107,10 +110,18 @@ Google once after this migration so Google can issue the initial offline
 refresh token. Routine access-token expiry after that does not require another
 login.
 
+After adding Drive folder browsing, existing users must also sign out and
+continue with Google once so the cached refresh grant includes
+`drive.readonly`. Google Cloud must list that scope under Data Access before
+deployment. It is used only to list and download images from folders the
+signed-in user can already access.
+
 The same Google grant is used for:
 
 - converting generated PowerPoint files into Google Slides with
   `drive.file`;
+- browsing private Drive folders and importing selected source images with
+  `drive.readonly`;
 - reading the private `1. Questionnaire` tab with
   `spreadsheets.readonly`.
 
@@ -313,8 +324,10 @@ supabase/migrations/202607090011_queue_brand_ingestion.sql
 supabase/migrations/202607090012_client_ingestion_service_role.sql
 supabase/migrations/202607090013_brand_products_worker_access.sql
 supabase/migrations/202607160001_artwork_reference_library.sql
+supabase/migrations/202607200002_run_recovery_checkpoints.sql
 supabase/migrations/202607240001_google_auth_domain_hook.sql
 supabase/migrations/202607260001_google_provider_token_cache.sql
+supabase/migrations/202607270001_checkpoint_brand_restore_guard.sql
 ```
 
 The migration creates:

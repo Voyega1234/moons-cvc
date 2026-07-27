@@ -205,6 +205,11 @@ export interface UploadedCreativeMaterial {
   role: CreativeMaterialRole;
   description: string;
   url: string;
+  /**
+   * Older saved runs do not have this field and are treated as selected.
+   * New uploads/imports start unselected so adding an asset never changes a brief.
+   */
+  selected?: boolean;
   storagePath?: string;
   storageBucket?: string;
 }

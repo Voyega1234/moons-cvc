@@ -66,3 +66,29 @@ export interface BrandPastWorkItem {
   sourceUrl: string | null;
   sourceType: "facebook_post" | "ads_library";
 }
+
+export type BrandAssetKind = "material" | "reference";
+
+export interface BrandAssetFolder {
+  id: string;
+  clientId: string;
+  parentId: string | null;
+  kind: BrandAssetKind;
+  name: string;
+  sourceProvider?: "google-drive";
+  sourceId?: string;
+  sourceUrl?: string;
+}
+
+export interface BrandAssetImage {
+  id: string;
+  clientId: string;
+  folderId: string | null;
+  kind: BrandAssetKind;
+  name: string;
+  mimeType: string;
+  url: string;
+  storagePath: string;
+  sourceProvider?: "google-drive";
+  sourceId?: string;
+}

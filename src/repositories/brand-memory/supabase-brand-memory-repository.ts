@@ -7,6 +7,8 @@ import type {
 import { validateOnboardingQuestionnaire } from "../../domain/client-ingestion";
 import {
   isBrandDocumentType,
+  type BrandAssetFolder,
+  type BrandAssetImage,
   type BrandDocument,
   type BrandDocumentType,
   type BrandPastWorkItem,
@@ -18,6 +20,8 @@ import { refreshSupabaseSignedAssetUrl } from "../../lib/supabase/storage-asset-
 import type {
   AnalyzeGuidelineInput,
   BrandMemoryRepository,
+  CreateBrandAssetFolderInput,
+  CreateBrandAssetImageInput,
   CreateLearningEntryInput,
   CreateReferenceImageInput,
   GuidelineAnalysisResult,
@@ -35,6 +39,9 @@ type BrandLibraryRow = Database["moons"]["Tables"]["brand_library"]["Row"];
 type BrandDocumentRow =
   Database["moons"]["Tables"]["brand_documents"]["Row"];
 type BrandProductRow = Database["moons"]["Tables"]["brand_products"]["Row"];
+type BrandAssetFolderRow =
+  Database["moons"]["Tables"]["brand_asset_folders"]["Row"];
+type BrandAssetRow = Database["moons"]["Tables"]["brand_assets"]["Row"];
 
 const MAX_DOCUMENT_SIZE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_DOCUMENT_TYPES = new Set([
@@ -517,6 +524,150 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     return mapLibraryItem(data);
   }
 
+  async listAssetFolders(
+    clientId: string
+  ): Promise<readonly BrandAssetFolder[]> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("name");
+    if (error) throw error;
+    return data.map(mapAssetFolder);
+  }
+
+  async listAssetImages(clientId: string): Promise<readonly BrandAssetImage[]> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_assets")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at");
+    if (error) throw error;
+    return Promise.all(
+      data.map(async (row) => {
+        const signed = await client.storage
+          .from(env.brandAssetsBucket)
+          .createSignedUrl(row.storage_path, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
+        if (signed.error) throw signed.error;
+        return mapAssetImage(row, signed.data.signedUrl);
+      })
+    );
+  }
+
+  async createAssetFolder(
+    input: CreateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    const client = getSupabaseClient();
+    const { data: userData } = await client.auth.getUser();
+    const payload = {
+      client_id: input.clientId,
+      asset_kind: input.kind,
+      name: input.name.trim(),
+      parent_id: input.parentId ?? null,
+      source_provider: input.sourceProvider ?? null,
+      source_id: input.sourceId ?? null,
+      source_url: input.sourceUrl?.trim() || null,
+      created_by: userData.user?.id ?? null
+    };
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (!error) return mapAssetFolder(data);
+    if (error.code !== "23505") throw error;
+
+    let query = client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .select("*")
+      .eq("client_id", input.clientId)
+      .eq("asset_kind", input.kind);
+    query = input.sourceId
+      ? query.eq("source_provider", "google-drive").eq("source_id", input.sourceId)
+      : query.ilike("name", input.name.trim());
+    query = input.parentId
+      ? query.eq("parent_id", input.parentId)
+      : query.is("parent_id", null);
+    const existing = await query.single();
+    if (existing.error) throw existing.error;
+    return mapAssetFolder(existing.data);
+  }
+
+  async createAssetImage(
+    input: CreateBrandAssetImageInput
+  ): Promise<BrandAssetImage> {
+    validateBrandImage(input.file);
+    const client = getSupabaseClient();
+    if (input.sourceId) {
+      const existing = await client
+        .schema("moons")
+        .from("brand_assets")
+        .select("*")
+        .eq("client_id", input.clientId)
+        .eq("asset_kind", input.kind)
+        .eq("source_provider", "google-drive")
+        .eq("source_id", input.sourceId)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+      if (existing.data) {
+        const signed = await client.storage
+          .from(env.brandAssetsBucket)
+          .createSignedUrl(
+            existing.data.storage_path,
+            ASSET_SIGNED_URL_EXPIRES_IN_SECONDS
+          );
+        if (signed.error) throw signed.error;
+        return mapAssetImage(existing.data, signed.data.signedUrl);
+      }
+    }
+
+    const storagePath = [
+      input.clientId,
+      "asset-library",
+      input.kind,
+      `${crypto.randomUUID()}-${safeFileName(input.file.name)}`
+    ].join("/");
+    const upload = await client.storage
+      .from(env.brandAssetsBucket)
+      .upload(storagePath, input.file, {
+        contentType: input.file.type,
+        upsert: false
+      });
+    if (upload.error) throw upload.error;
+    const { data: userData } = await client.auth.getUser();
+    const inserted = await client
+      .schema("moons")
+      .from("brand_assets")
+      .insert({
+        client_id: input.clientId,
+        folder_id: input.folderId ?? null,
+        asset_kind: input.kind,
+        name: input.file.name,
+        mime_type: input.file.type as "image/png" | "image/jpeg" | "image/webp",
+        storage_path: storagePath,
+        source_provider: input.sourceProvider ?? null,
+        source_id: input.sourceId ?? null,
+        created_by: userData.user?.id ?? null
+      })
+      .select("*")
+      .single();
+    if (inserted.error) {
+      await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
+      throw inserted.error;
+    }
+    const signed = await client.storage
+      .from(env.brandAssetsBucket)
+      .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
+    if (signed.error) throw signed.error;
+    return mapAssetImage(inserted.data, signed.data.signedUrl);
+  }
+
   async saveOnboardingQuestionnaire({
     clientId,
     text,
@@ -769,6 +920,37 @@ function mapLibraryItem(row: BrandLibraryRow): LibraryItem {
   };
 }
 
+function mapAssetFolder(row: BrandAssetFolderRow): BrandAssetFolder {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    parentId: row.parent_id,
+    kind: row.asset_kind,
+    name: row.name,
+    ...(row.source_provider ? { sourceProvider: row.source_provider } : {}),
+    ...(row.source_id ? { sourceId: row.source_id } : {}),
+    ...(row.source_url ? { sourceUrl: row.source_url } : {})
+  };
+}
+
+function mapAssetImage(
+  row: BrandAssetRow,
+  url: string
+): BrandAssetImage {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    folderId: row.folder_id,
+    kind: row.asset_kind,
+    name: row.name,
+    mimeType: row.mime_type,
+    url,
+    storagePath: row.storage_path,
+    ...(row.source_provider ? { sourceProvider: row.source_provider } : {}),
+    ...(row.source_id ? { sourceId: row.source_id } : {})
+  };
+}
+
 async function resolveLibraryItem(
   client: SupabaseClient<Database>,
   row: BrandLibraryRow
@@ -835,6 +1017,15 @@ function validateDocument(file: File): void {
 
   if (file.type && !ALLOWED_DOCUMENT_TYPES.has(file.type)) {
     throw new Error("This file type is not supported yet.");
+  }
+}
+
+function validateBrandImage(file: File): void {
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("Image is too large. Maximum upload size is 10MB.");
+  }
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("Upload a PNG, JPEG, or WEBP image.");
   }
 }
 

@@ -122,7 +122,9 @@ export type WorkflowAction =
   | {
       type: "update-uploaded-material";
       id: string;
-      changes: Partial<Pick<UploadedCreativeMaterial, "role" | "description">>;
+      changes: Partial<
+        Pick<UploadedCreativeMaterial, "role" | "description" | "selected">
+      >;
     }
   | { type: "remove-uploaded-material"; id: string }
   | { type: "toggle-product-context"; id: string }
@@ -242,8 +244,21 @@ export function selectedBrandProducts(
   return products.filter((product) => selectedIds.has(product.id));
 }
 
+export function selectedUploadedMaterials(
+  state: Pick<WorkflowState, "uploadedMaterials">
+): readonly UploadedCreativeMaterial[] {
+  return state.uploadedMaterials.filter((material) => material.selected !== false);
+}
+
 export type WorkspaceAction =
   | { type: "set-view"; view: AppView }
+  | {
+      type: "select-run-brand";
+      runId: string;
+      brand: Brand;
+      newRunId: string;
+      now: string;
+    }
   | {
       type: "create-run";
       id: string;

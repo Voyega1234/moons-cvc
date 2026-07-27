@@ -43,6 +43,27 @@ export function workspaceReducer(
   switch (action.type) {
     case "set-view":
       return { ...state, view: action.view };
+    case "select-run-brand": {
+      const targetRun = state.runsById[action.runId];
+      if (!targetRun) return state;
+      if (!targetRun.brand || targetRun.brand.id === action.brand.id) {
+        return workspaceReducer(state, {
+          type: "apply-run-action",
+          runId: action.runId,
+          action: { type: "select-brand", brand: action.brand },
+          now: action.now
+        });
+      }
+
+      const next = workspaceReducer(state, {
+        type: "create-run",
+        id: action.newRunId,
+        now: action.now,
+        keepBrand: false,
+        brand: action.brand
+      });
+      return next === state ? state : { ...next, toast: null };
+    }
     case "create-run": {
       if (state.runsById[action.id]) return state;
       const activeRun = getActiveRun(state);

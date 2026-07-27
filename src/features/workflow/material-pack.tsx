@@ -9,7 +9,7 @@ import {
 import { useBrandMemoryRepository } from "../../app/providers/brand-memory-provider";
 import type { LibraryItem } from "../../domain/brand";
 import type { BrandDocument } from "../../domain/brand-memory";
-import type { WorkflowState } from "./model";
+import { selectedUploadedMaterials, type WorkflowState } from "./model";
 
 interface MaterialAsset {
   id: string;
@@ -233,7 +233,7 @@ export function WorkflowMaterialPack({ state }: { state: WorkflowState }) {
 function quickMaterialCount(state: WorkflowState): number {
   return (
     state.referenceImages.length +
-    state.uploadedMaterials.length +
+    selectedUploadedMaterials(state).length +
     state.brand!.library.docs.filter((item) => item.assetUrl).length
   );
 }
@@ -264,7 +264,7 @@ function materialAssets(
       group: "References"
     });
   });
-  state.uploadedMaterials.forEach((material) => {
+  selectedUploadedMaterials(state).forEach((material) => {
     candidates.push({
       id: `upload-${material.id}`,
       label: material.name,

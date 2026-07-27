@@ -197,6 +197,21 @@ with no membership rows remains visible to every Convert Cake user for the
 current rollout. Once memberships are added for that client, only its members
 and Compass admins can view it.
 
+### `moons.run_checkpoints`
+
+Stores the latest three recovery snapshots for each run. A run keeps one client
+identity for its lifetime. The restore function compares the checkpoint
+snapshot's brand with the current run before replacing any data, so a legacy
+checkpoint from another client cannot change the active project's client.
+
+Apply both migrations in order:
+
+```text
+supabase/migrations/202607200002_run_recovery_checkpoints.sql
+supabase/migrations/202607270001_checkpoint_brand_restore_guard.sql
+supabase/migrations/202607270002_brand_asset_library.sql
+```
+
 ## Normalized workflow tables prepared for next slices
 
 ## Brand Memory tables prepared for upload/edit slices
@@ -225,6 +240,20 @@ Allowed `document_type` values are controlled by the UI and database:
 Visual/link references for the References tab.
 
 Read `docs/FEATURE_BRAND_MEMORY.md` before wiring uploads or save actions.
+
+### `moons.brand_asset_folders`
+
+Persistent, brand-scoped folder hierarchy for Materials and References.
+Folders may be created by users or linked to a Google Drive folder. Drive
+source IDs are unique per brand and asset kind so reopening a link does not
+create duplicate folders.
+
+### `moons.brand_assets`
+
+Persistent PNG, JPEG, and WEBP assets stored in the brand assets bucket and
+assigned to a Materials or References folder. Google Drive source IDs are
+deduplicated. Adding an asset to this library does not select it for a creative
+run; selection remains run-scoped.
 
 ### `moons.jobs`
 

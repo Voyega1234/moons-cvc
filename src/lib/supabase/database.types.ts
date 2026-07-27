@@ -106,6 +106,64 @@ export type Database = {
           updated_at?: string;
         }
       >;
+      brand_asset_folders: TableDefinition<
+        {
+          id: string;
+          client_id: string;
+          parent_id: string | null;
+          asset_kind: "material" | "reference";
+          name: string;
+          source_provider: "google-drive" | null;
+          source_id: string | null;
+          source_url: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: string;
+          client_id: string;
+          parent_id?: string | null;
+          asset_kind: "material" | "reference";
+          name: string;
+          source_provider?: "google-drive" | null;
+          source_id?: string | null;
+          source_url?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        }
+      >;
+      brand_assets: TableDefinition<
+        {
+          id: string;
+          client_id: string;
+          folder_id: string | null;
+          asset_kind: "material" | "reference";
+          name: string;
+          mime_type: "image/png" | "image/jpeg" | "image/webp";
+          storage_path: string;
+          source_provider: "google-drive" | null;
+          source_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: string;
+          client_id: string;
+          folder_id?: string | null;
+          asset_kind: "material" | "reference";
+          name: string;
+          mime_type: "image/png" | "image/jpeg" | "image/webp";
+          storage_path: string;
+          source_provider?: "google-drive" | null;
+          source_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        }
+      >;
       brand_library: TableDefinition<
         {
           id: string;

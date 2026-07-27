@@ -31,6 +31,7 @@ import {
   createStageClientSlideItems,
   pmApprovedClientSlideItems
 } from "./export-client-slides-pptx";
+import * as googleDriveMaterials from "../../services/google-drive/google-drive-materials";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -485,6 +486,14 @@ describe("redesigned workflow stages", () => {
       id: material.id,
       changes: { role: "product" }
     });
+    fireEvent.click(
+      within(libraryDialog).getByRole("button", { name: "Selected" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "update-uploaded-material",
+      id: material.id,
+      changes: { selected: false }
+    });
 
     signalView.unmount();
     const briefView = render(
@@ -493,6 +502,19 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const briefStage = within(briefView.container);
+    const activeMaterials = briefStage
+      .getByRole("button", { name: "Add Materials" })
+      .closest(".compass-signal-disclosure-wrap")
+      ?.querySelector("details");
+    if (!activeMaterials) {
+      throw new Error("Expected the active Materials disclosure.");
+    }
+    fireEvent.click(activeMaterials.querySelector("summary")!);
+    expect(
+      within(activeMaterials as HTMLElement)
+        .getByRole("img", { name: material.name })
+        .getAttribute("src")
+    ).toBe(material.url);
     fireEvent.click(
       briefStage.getByRole("button", { name: "Add Materials" })
     );
@@ -511,6 +533,244 @@ describe("redesigned workflow stages", () => {
       })
     );
     briefView.unmount();
+  });
+
+  it("navigates Drive folders one level at a time and loads children on entry", async () => {
+    const root = { id: "root", name: "Campaign", path: "Campaign" };
+    const year = { id: "year", name: "2026", path: "Campaign / 2026" };
+    const packshot = {
+      id: "packshot",
+      name: "Packshot",
+      path: "Campaign / 2026 / Packshot"
+    };
+    const packshotImage = {
+      id: "drive-image",
+      name: "Bottle.png",
+      mimeType: "image/png"
+    };
+    vi.spyOn(
+      googleDriveMaterials,
+      "openGoogleDriveMaterialFolder"
+    ).mockResolvedValue(root);
+    const loadFolder = vi
+      .spyOn(googleDriveMaterials, "loadGoogleDriveMaterialFolder")
+      .mockImplementation(async (folder) => {
+        if (folder.id === root.id) {
+          return { folder: root, folders: [year], images: [] };
+        }
+        if (folder.id === year.id) {
+          return { folder: year, folders: [packshot], images: [] };
+        }
+        return { folder: packshot, folders: [], images: [packshotImage] };
+      });
+    vi.spyOn(
+      googleDriveMaterials,
+      "downloadGoogleDriveMaterial"
+    ).mockResolvedValue(
+      new File(["image"], packshotImage.name, { type: packshotImage.mimeType })
+    );
+
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
+    const dialog = within(
+      stage.getByRole("dialog", { name: "Brief materials" })
+    );
+    fireEvent.change(dialog.getByLabelText("Google Drive folder link"), {
+      target: {
+        value: "https://drive.google.com/drive/folders/root-folder"
+      }
+    });
+    fireEvent.click(
+      dialog.getByRole("button", { name: "Add Drive folder" })
+    );
+
+    const yearButton = await dialog.findByRole("button", { name: /2026/ });
+    expect(dialog.queryByText("This folder is empty.")).toBeNull();
+    expect(loadFolder).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(yearButton);
+    const packshotButton = await dialog.findByRole("button", {
+      name: /Packshot/
+    });
+    expect(loadFolder).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(packshotButton);
+    await dialog.findByRole("img", { name: "Bottle.png" });
+    expect(loadFolder).toHaveBeenCalledTimes(3);
+    expect(
+      await memoryRepository.listAssetImages(state.brand?.id ?? "")
+    ).toHaveLength(1);
+    expect(
+      await memoryRepository.listAssetFolders(state.brand?.id ?? "")
+    ).toHaveLength(3);
+    view.unmount();
+  });
+
+  it("distinguishes a loading asset folder from an empty folder", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    vi.spyOn(memoryRepository, "listAssetFolders").mockReturnValue(
+      new Promise(() => {})
+    );
+    vi.spyOn(memoryRepository, "listAssetImages").mockReturnValue(
+      new Promise(() => {})
+    );
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
+    const dialog = within(
+      stage.getByRole("dialog", { name: "Brief materials" })
+    );
+
+    expect(
+      await dialog.findByRole("status", { name: "Loading images" })
+    ).toBeTruthy();
+    expect(dialog.queryByText("This folder is empty.")).toBeNull();
+    view.unmount();
+  });
+
+  it("shows a loading placeholder until an image preview finishes", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    await memoryRepository.createAssetImage({
+      clientId: state.brand?.id ?? "",
+      kind: "material",
+      file: new File(["preview"], "Preview.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
+    const dialog = within(
+      stage.getByRole("dialog", { name: "Brief materials" })
+    );
+    const image = await dialog.findByRole("img", { name: "Preview.png" });
+    const preview = image.closest(".compass-asset-preview");
+
+    expect(preview?.classList.contains("loading")).toBe(true);
+    fireEvent.load(image);
+    expect(preview?.classList.contains("loaded")).toBe(true);
+    view.unmount();
+  });
+
+  it("persists user-created folders and uploads for Materials and References", async () => {
+    const user = userEvent.setup();
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const createAssetImage = vi.spyOn(memoryRepository, "createAssetImage");
+    const materialsView = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(materialsView.container);
+    await user.click(stage.getByRole("button", { name: "Add Materials" }));
+    const dialog = within(
+      stage.getByRole("dialog", { name: "Brief materials" })
+    );
+
+    await user.type(dialog.getByLabelText("New folder name"), "Packshots");
+    await user.click(dialog.getByRole("button", { name: "Create folder" }));
+    await user.click(
+      await dialog.findByRole("button", { name: /Packshots/ })
+    );
+
+    await user.upload(
+      dialog.getByLabelText("Upload images"),
+      new File(["material"], "Packshot.png", { type: "image/png" })
+    );
+    await waitFor(() => expect(createAssetImage).toHaveBeenCalled());
+    materialsView.unmount();
+
+    const referencesView = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={vi.fn()}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const referencesStage = within(referencesView.container);
+    await user.click(
+      referencesStage.getByRole("button", { name: "Manage library" })
+    );
+    const libraryDialog = within(
+      referencesStage.getByRole("dialog", {
+        name: "Manage brand materials"
+      })
+    );
+    expect(
+      await libraryDialog.findByRole("button", {
+        name: /Materials 1 item/
+      })
+    ).toBeTruthy();
+    await user.click(
+      libraryDialog.getByRole("button", { name: /References/ })
+    );
+    await user.type(
+      libraryDialog.getByLabelText("New folder name"),
+      "Moodboard"
+    );
+    await user.click(
+      libraryDialog.getByRole("button", { name: "Create folder" })
+    );
+    await user.click(
+      await libraryDialog.findByRole("button", { name: /Moodboard/ })
+    );
+    await user.upload(
+      libraryDialog.getByLabelText("Upload images"),
+      new File(["reference"], "Reference.png", { type: "image/png" })
+    );
+    await waitFor(() =>
+      expect(createAssetImage).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "reference" })
+      )
+    );
+    const expectedReferenceCount =
+      (state.brand?.library.refs.length ?? 0) + 1;
+    expect(
+      await libraryDialog.findByRole("button", {
+        name: new RegExp(`References ${expectedReferenceCount} items?`)
+      })
+    ).toBeTruthy();
+
+    const assets = await memoryRepository.listAssetImages(
+      state.brand?.id ?? ""
+    );
+    expect(assets.some((asset) => asset.kind === "material")).toBe(true);
+    expect(assets.some((asset) => asset.kind === "reference")).toBe(true);
+    const folders = await memoryRepository.listAssetFolders(
+      state.brand?.id ?? ""
+    );
+    expect(folders.map((folder) => folder.name)).toEqual([
+      "Packshots",
+      "Moodboard"
+    ]);
+    referencesView.unmount();
   });
 
   it("adds an onboarding questionnaire later from Brand materials", async () => {
@@ -604,15 +864,12 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
   });
 
-  it("uploads a reference from Manage brand materials and syncs the library", async () => {
+  it("uploads a reference into the dedicated References asset library", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const brandRepository = new MockBrandRepository();
     const memoryRepository = new MockBrandMemoryRepository();
-    const createReferenceImage = vi.spyOn(
-      memoryRepository,
-      "createReferenceImage"
-    );
+    const createAssetImage = vi.spyOn(memoryRepository, "createAssetImage");
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn().mockReturnValue("blob:brand-reference")
@@ -650,29 +907,29 @@ describe("redesigned workflow stages", () => {
       type: "image/png"
     });
     await user.upload(
-      within(dialog).getByLabelText("Upload reference"),
+      within(dialog).getByLabelText("Upload images"),
       file
     );
 
     await waitFor(() =>
-      expect(createReferenceImage).toHaveBeenCalledWith({
+      expect(createAssetImage).toHaveBeenCalledWith({
         clientId: state.brand?.id,
+        kind: "reference",
+        folderId: undefined,
         file
       })
     );
     expect(
       within(dialog).getByRole("img", { name: "approved-moodboard.png" })
     ).toBeTruthy();
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "sync-brand-references",
-      items: [
-        expect.objectContaining({
-          title: "approved-moodboard.png",
-          assetUrl: "blob:brand-reference"
-        }),
-        ...(state.brand?.library.refs ?? [])
-      ]
-    });
+    expect(
+      await memoryRepository.listAssetImages(state.brand?.id ?? "")
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "reference",
+        name: "approved-moodboard.png"
+      })
+    );
   });
 
   it("adds a guideline from the Memory header through file or pasted text", async () => {
@@ -1748,6 +2005,7 @@ describe("redesigned workflow stages", () => {
     expect(review.highlightMap["option:1"]).toEqual(["Subheadline 5"]);
     expect(review.sections[0]?.ideas[0]).toMatchObject({
       concept_idea: "Concept 1",
+      competitiveGap: "Why 1",
       copywriting: { sub_headline_1: "Subheadline 1" }
     });
     expect(review.sections[0]?.ideas[1]?.copywriting?.bullets).toEqual([

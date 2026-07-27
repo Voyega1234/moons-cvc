@@ -104,12 +104,14 @@ Scopes สำหรับตัวอย่างนี้:
 
 ```text
 https://www.googleapis.com/auth/drive.file
+https://www.googleapis.com/auth/drive.readonly
 https://www.googleapis.com/auth/spreadsheets.readonly
 ```
 
 ความหมาย:
 
 - `drive.file` ให้แอปทำงานกับไฟล์ที่แอปสร้างหรือไฟล์ที่ผู้ใช้เลือกให้แอปเข้าถึง เป็น scope ที่แคบกว่าการขอ Drive ทั้งหมด
+- `drive.readonly` ใช้เปิดโฟลเดอร์ Drive ที่ user มีสิทธิ์อยู่แล้ว และดาวน์โหลดเฉพาะรูปที่ user เลือกนำเข้า Materials; scope นี้อ่าน Drive ได้กว้างกว่า `drive.file` และต้องตั้งค่า Data Access ให้ครบ
 - `spreadsheets.readonly` อ่านข้อมูลใน Google Sheets ที่ผู้ใช้มีสิทธิ์เข้าถึง แต่แก้ไขไม่ได้
 
 ขอเฉพาะ scope ที่จำเป็น ถ้า feature ยังไม่ถูกใช้ อาจขอสิทธิ์แบบ incremental ตอนผู้ใช้เริ่มใช้ feature นั้น
@@ -267,6 +269,7 @@ Hook นี้บล็อกเฉพาะการสร้าง user ให
 ```ts
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/spreadsheets.readonly"
 ].join(" ");
 
@@ -542,7 +545,8 @@ Authorization:
 Authorization: Bearer <google-provider-access-token>
 ```
 
-เมื่อใช้ `drive.file` แอปไม่ควรคาดหวังว่าจะมองเห็น Drive ทั้งหมดของผู้ใช้
+การสร้าง Slides ใช้ `drive.file` ส่วน Materials folder browser ใช้
+`drive.readonly` เพื่อ list/download รูปจากโฟลเดอร์ที่ user มีสิทธิ์เปิด
 
 ## 13. Profile data and avatar
 
@@ -640,7 +644,8 @@ async function signOut() {
 - [ ] Google token หมดอายุตอบข้อความ reconnect ที่เข้าใจง่าย
 - [ ] `spreadsheets.readonly` ไม่สามารถเขียน Sheet
 - [ ] สร้าง Slides ได้ด้วย `drive.file`
-- [ ] แอปไม่เห็นไฟล์ Drive อื่นโดยไม่จำเป็น
+- [ ] Drive folder browser เห็นเฉพาะไฟล์ที่ user คนนั้นมีสิทธิ์อ่าน
+- [ ] รูป Drive ที่ import แล้วยังไม่ถูกส่งเข้า generation จนกด Select
 
 ### Profile
 

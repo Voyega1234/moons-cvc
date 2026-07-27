@@ -1,6 +1,7 @@
 import jsPDF from "jspdf"
 
 import { contentTypeSortRank } from "./content-type-sort"
+import { getIdeaWhy } from "./highlight-subheadline"
 import type { IdeaRecommendation } from "./types"
 
 const MAX_IDEAS = 10
@@ -323,6 +324,7 @@ function getCardData(idea: IdeaRecommendation) {
     hook: idea.copywriting?.headline || idea.title || idea.concept_idea || "",
     subheadline: idea.copywriting?.sub_headline_1 || idea.copywriting?.sub_headline_2 || "",
     cta: idea.copywriting?.cta || "",
+    why: idea.competitiveGap || getIdeaWhy(idea),
     metaTags,
     contentType: getContentTypeLabel(idea.content_type),
   }
@@ -385,10 +387,11 @@ function drawIdeaCard(
   const padX = 6.5
   const contentX = x + padX
   const contentWidth = width - padX * 2
-  const bodyFontSize = 11.6
-  const bodyLineHeight = bodyFontSize * PT_TO_MM * 1.42
+  const bodyFontSize = 10.4
+  const bodyLineHeight = bodyFontSize * PT_TO_MM * 1.38
 
   pdf.setDrawColor(220, 227, 236)
+  pdf.setLineWidth(0.28)
   pdf.setFillColor(255, 255, 255)
   pdf.roundedRect(x, y, width, height, 3.2, 3.2, "FD")
 
@@ -421,15 +424,15 @@ function drawIdeaCard(
     pdf.text(metaLines[0] || "", contentX + contentWidth / 2, y + 18.5, { align: "center", baseline: "top" })
   }
 
-  const hookFontSize = data.hook.length > 92 ? 16.8 : data.hook.length > 58 ? 18.4 : 19.8
-  const hookLineHeight = hookFontSize * PT_TO_MM * 1.18
+  const hookFontSize = data.hook.length > 92 ? 15.8 : data.hook.length > 58 ? 17 : 18
+  const hookLineHeight = hookFontSize * PT_TO_MM * 1.16
   pdf.setTextColor(16, 24, 40)
   setFont(pdf, "bold", hookFontSize, hasThaiFont)
   const hookLines = wrapText(pdf, data.hook, contentWidth, 3)
-  drawCenteredTextBlock(pdf, hookLines, contentX + contentWidth / 2, y + 57, hookLineHeight)
+  drawCenteredTextBlock(pdf, hookLines, contentX + contentWidth / 2, y + 40, hookLineHeight)
 
   if (data.subheadline) {
-    const subY = y + 84
+    const subY = y + 69
     drawHighlightedText(
       pdf,
       makeHighlightedRuns(data.subheadline, highlightTerms),
@@ -445,17 +448,41 @@ function drawIdeaCard(
   }
 
   if (data.cta) {
-    const ctaTextY = y + 112
+    const ctaTextY = y + 96.5
     pdf.setTextColor(102, 112, 133)
-    setFont(pdf, "semibold", 9.1, hasThaiFont)
+    setFont(pdf, "semibold", 8.6, hasThaiFont)
     pdf.text("CTA", contentX + contentWidth / 2, ctaTextY, { align: "center", baseline: "top" })
 
     pdf.setTextColor(71, 84, 103)
-    setFont(pdf, "medium", bodyFontSize, hasThaiFont)
+    setFont(pdf, "medium", 9.8, hasThaiFont)
     const ctaLines = wrapText(pdf, data.cta, contentWidth, 2)
-    drawCenteredTextBlock(pdf, ctaLines, contentX + contentWidth / 2, ctaTextY + 6.5, bodyLineHeight)
+    drawCenteredTextBlock(pdf, ctaLines, contentX + contentWidth / 2, ctaTextY + 6, 4.8)
   }
 
+  if (data.why) {
+    const whyX = contentX
+    const whyY = y + 116
+    const whyHeight = 25.5
+    pdf.setFillColor(238, 243, 255)
+    pdf.roundedRect(whyX, whyY, contentWidth, whyHeight, 3, 3, "F")
+
+    pdf.setTextColor(37, 99, 235)
+    setFont(pdf, "bold", 7.7, hasThaiFont)
+    pdf.text("WHY", contentX + contentWidth / 2, whyY + 4.8, {
+      align: "center",
+      baseline: "top",
+    })
+
+    setFont(pdf, "medium", 7.6, hasThaiFont)
+    const whyLines = wrapText(pdf, data.why, contentWidth - 8, 4)
+    drawCenteredTextBlock(
+      pdf,
+      whyLines,
+      contentX + contentWidth / 2,
+      whyY + 9,
+      3.65,
+    )
+  }
 }
 
 function drawSectionHeading(pdf: jsPDF, heading: string, x: number, y: number, hasThaiFont: boolean) {

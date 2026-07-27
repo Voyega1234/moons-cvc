@@ -11,6 +11,7 @@ import {
   directionServiceAt,
   EXTRA_HOOK_CANDIDATES_PER_TYPE,
   hookGenerationContentTypeQuotas,
+  selectedUploadedMaterials,
   totalHookGenerationQuantity,
   type WorkflowAction,
   type WorkflowState
@@ -71,7 +72,7 @@ export function useGenerateHooks(
             quantity: totalHookGenerationQuantity(state),
             contentTypeQuotas,
             brief: state.brief,
-            uploadedMaterials: state.uploadedMaterials,
+            uploadedMaterials: selectedUploadedMaterials(state),
             extraInstructions
           })
     );
@@ -159,7 +160,7 @@ export function useGenerateMoreHooks(
               quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
               brief: targetedState.brief,
-              uploadedMaterials: targetedState.uploadedMaterials,
+              uploadedMaterials: selectedUploadedMaterials(targetedState),
               extraInstructions: combinedInstructions,
               existingHooks
             });
@@ -258,7 +259,7 @@ export function useRegenerateHook(
               quantity: totalHookGenerationQuantity(targetedState),
               contentTypeQuotas,
               brief: targetedState.brief,
-              uploadedMaterials: targetedState.uploadedMaterials,
+              uploadedMaterials: selectedUploadedMaterials(targetedState),
               extraInstructions,
               existingHooks
             });
@@ -381,7 +382,7 @@ export function useRegenerateAllHooks(
                   quantity: totalHookGenerationQuantity(targetedState),
                   contentTypeQuotas,
                   brief: targetedState.brief,
-                  uploadedMaterials: targetedState.uploadedMaterials,
+                  uploadedMaterials: selectedUploadedMaterials(targetedState),
                   extraInstructions,
                   existingHooks
                 });

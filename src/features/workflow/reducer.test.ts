@@ -6,7 +6,11 @@ import {
   workflowReducer
 } from "./reducer";
 import { buildDirectionFixtures } from "./test-fixtures";
-import { selectedBrandProducts, type WorkflowState } from "./model";
+import {
+  selectedBrandProducts,
+  selectedUploadedMaterials,
+  type WorkflowState
+} from "./model";
 
 function passingQaResults(state: WorkflowState) {
   return state.outputs.map((output) => ({
@@ -1392,6 +1396,13 @@ describe("workflowReducer", () => {
       role: "supporting-component",
       description: "Use beside the headline"
     });
+
+    state = workflowReducer(state, {
+      type: "update-uploaded-material",
+      id: material.id,
+      changes: { selected: false }
+    });
+    expect(selectedUploadedMaterials(state)).toEqual([]);
 
     state = workflowReducer(state, {
       type: "remove-uploaded-material",

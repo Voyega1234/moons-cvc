@@ -102,6 +102,15 @@ export class LocalWorkspaceRepository implements WorkspaceRepository {
       : null;
     const restoredRun = restoredWorkspace?.runsById[runId];
     if (!restoredRun) throw new Error("Recovery point is unavailable.");
+    const currentRun = workspace.runsById[runId];
+    if (
+      !currentRun ||
+      (currentRun.brand?.id ?? null) !== (restoredRun.brand?.id ?? null)
+    ) {
+      throw new Error(
+        "This recovery point belongs to a different client and cannot be restored here."
+      );
+    }
     const nextWorkspace = {
       ...workspace,
       runsById: { ...workspace.runsById, [runId]: restoredRun },

@@ -129,6 +129,16 @@ export function App() {
         return;
       }
       setEditWarning(null);
+      if (action.type === "select-brand") {
+        workspaceDispatch({
+          type: "select-run-brand",
+          runId: state.id,
+          brand: action.brand,
+          newRunId: createId("run"),
+          now: nowIso()
+        });
+        return;
+      }
       workspaceDispatch({
         type: "apply-run-action",
         runId: state.id,

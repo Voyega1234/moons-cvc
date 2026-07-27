@@ -507,6 +507,12 @@ function parseUploadedMaterials(
       item.storageBucket === undefined
         ? undefined
         : parseString(item.storageBucket);
+    const selected =
+      item.selected === undefined
+        ? undefined
+        : typeof item.selected === "boolean"
+          ? item.selected
+          : null;
     if (
       !id ||
       name === null ||
@@ -515,6 +521,7 @@ function parseUploadedMaterials(
       !allowedRoles.has(role) ||
       description === null ||
       !url ||
+      selected === null ||
       storagePath === null ||
       storageBucket === null
     ) {
@@ -527,6 +534,7 @@ function parseUploadedMaterials(
       role: role as WorkflowState["uploadedMaterials"][number]["role"],
       description,
       url,
+      ...(selected !== undefined ? { selected } : {}),
       ...(storagePath ? { storagePath } : {}),
       ...(storageBucket ? { storageBucket } : {})
     };

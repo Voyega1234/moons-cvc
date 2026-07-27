@@ -28,6 +28,7 @@ export async function uploadCreativeMaterial({
       mediaType: file.type,
       role: "main-object",
       description: "",
+      selected: false,
       url: await readAsDataUrl(file)
     };
   }
@@ -60,6 +61,7 @@ export async function uploadCreativeMaterial({
     mediaType: file.type,
     role: "main-object",
     description: "",
+    selected: false,
     url: signed.data.signedUrl,
     storagePath,
     storageBucket: env.brandAssetsBucket

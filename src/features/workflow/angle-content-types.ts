@@ -106,6 +106,7 @@ function directionToExportIdea(
     title: direction.hook,
     content_type: serviceContentTypeLabel(service),
     concept_idea: direction.concept,
+    competitiveGap: direction.why,
     tags: [
       direction.pillar || "Creative direction",
       direction.objective || successMetric

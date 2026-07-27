@@ -24,6 +24,55 @@ function update(
 }
 
 describe("workspaceReducer", () => {
+  it("opens a new project when the user selects a different client", () => {
+    const [brandA, brandB] = brands;
+    if (!brandA || !brandB) throw new Error("Mock brand fixtures are missing.");
+
+    let workspace = createInitialWorkspaceState({ runId: "run-1", now });
+    workspace = update(workspace, { type: "select-brand", brand: brandA });
+    workspace = workspaceReducer(workspace, {
+      type: "select-run-brand",
+      runId: "run-1",
+      brand: brandB,
+      newRunId: "run-2",
+      now
+    });
+
+    expect(workspace.activeRunId).toBe("run-2");
+    expect(workspace.runOrder).toEqual(["run-1", "run-2"]);
+    expect(workspace.runsById["run-1"]?.brand?.id).toBe(brandA.id);
+    expect(getActiveRun(workspace).brand?.id).toBe(brandB.id);
+    expect(getActiveRun(workspace).directions).toEqual([]);
+    expect(getActiveRun(workspace).outputs).toEqual([]);
+    expect(workspace.toast).toBeNull();
+  });
+
+  it("keeps the current project for the first or same client selection", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let workspace = createInitialWorkspaceState({ runId: "run-1", now });
+    workspace = workspaceReducer(workspace, {
+      type: "select-run-brand",
+      runId: "run-1",
+      brand,
+      newRunId: "unused-run-2",
+      now
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "select-run-brand",
+      runId: "run-1",
+      brand,
+      newRunId: "unused-run-3",
+      now
+    });
+
+    expect(workspace.activeRunId).toBe("run-1");
+    expect(workspace.runOrder).toEqual(["run-1"]);
+    expect(getActiveRun(workspace).brand?.id).toBe(brand.id);
+    expect(workspace.toast?.tone).toBe("success");
+  });
+
   it("applies an async action to the run it was started against, even after the user switched to a different run", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

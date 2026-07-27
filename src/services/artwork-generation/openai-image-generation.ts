@@ -17,6 +17,7 @@ import {
   creativeMixServiceAt,
   directionServiceAt,
   selectedBrandProducts,
+  selectedUploadedMaterials,
   type WorkflowState
 } from "../../features/workflow/model";
 import type {
@@ -596,7 +597,7 @@ function nextArtworkAssetVersion(run: WorkflowState): number {
 function creativeMaterialReferences(
   run: WorkflowState
 ): readonly ArtworkReferenceImage[] {
-  return run.uploadedMaterials.map((material) => {
+  return selectedUploadedMaterials(run).map((material) => {
     const role = creativeMaterialRoleLabel(material.role);
     const label = [
       `Uploaded ${role}: ${material.name}`,

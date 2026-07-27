@@ -103,6 +103,9 @@ export function workflowActionBlockReason(
         ? null
         : "Finish the current step before opening that stage.";
     case "select-brand":
+      if (run.brand && run.brand.id !== action.brand.id) {
+        return "This project already belongs to another client. Start a new project to use a different client.";
+      }
       return canSelectBrand(action.brand)
         ? null
         : "This client has no Creative Compass brand memory yet.";

@@ -3,6 +3,7 @@ import {
   createInitialWorkspaceState,
   getActiveRun
 } from "../../features/workflow/workspace-reducer";
+import { brands } from "../../data/mock-brands";
 import { LocalWorkspaceRepository } from "./local-workspace-repository";
 
 class MemoryStorage {
@@ -123,5 +124,49 @@ describe("LocalWorkspaceRepository", () => {
 
     expect(getActiveRun(restored).brief).toBe(getActiveRun(original).brief);
     expect(await repository.load()).toEqual(restored);
+  });
+
+  it("rejects a recovery point created for a different client", async () => {
+    const [brandA, brandB] = brands;
+    if (!brandA || !brandB) throw new Error("Mock brand fixtures are missing.");
+    const storage = new MemoryStorage();
+    const repository = new LocalWorkspaceRepository(
+      storage,
+      "test.workspace",
+      () => "2026-07-27T10:05:00.000Z"
+    );
+    const base = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-27T10:00:00.000Z"
+    });
+    const brandAWorkspace = {
+      ...base,
+      runsById: {
+        ...base.runsById,
+        "run-1": { ...getActiveRun(base), brand: brandA }
+      }
+    };
+    const checkpoint = await repository.createCheckpoint(
+      brandAWorkspace,
+      "run-1",
+      "regenerate"
+    );
+    const currentWorkspace = {
+      ...brandAWorkspace,
+      runsById: {
+        ...brandAWorkspace.runsById,
+        "run-1": { ...getActiveRun(brandAWorkspace), brand: brandB }
+      }
+    };
+
+    await expect(
+      repository.restoreCheckpoint(
+        currentWorkspace,
+        "run-1",
+        checkpoint.id
+      )
+    ).rejects.toThrow(
+      "This recovery point belongs to a different client"
+    );
   });
 });

@@ -6,6 +6,9 @@ import type {
 import type {
   BrandDocument,
   BrandDocumentType,
+  BrandAssetFolder,
+  BrandAssetImage,
+  BrandAssetKind,
   BrandPastWorkItem,
   BrandProduct
 } from "../domain/brand-memory";
@@ -70,6 +73,25 @@ export interface CreateReferenceImageInput {
   label?: string;
 }
 
+export interface CreateBrandAssetFolderInput {
+  clientId: string;
+  kind: BrandAssetKind;
+  name: string;
+  parentId?: string;
+  sourceProvider?: "google-drive";
+  sourceId?: string;
+  sourceUrl?: string;
+}
+
+export interface CreateBrandAssetImageInput {
+  clientId: string;
+  kind: BrandAssetKind;
+  folderId?: string;
+  file: File;
+  sourceProvider?: "google-drive";
+  sourceId?: string;
+}
+
 export interface SaveOnboardingQuestionnaireInput {
   clientId: string;
   text: string;
@@ -107,6 +129,12 @@ export interface BrandMemoryRepository {
   uploadDocument(input: UploadBrandDocumentInput): Promise<BrandDocument>;
   createLearningEntry(input: CreateLearningEntryInput): Promise<void>;
   createReferenceImage(input: CreateReferenceImageInput): Promise<LibraryItem>;
+  listAssetFolders(clientId: string): Promise<readonly BrandAssetFolder[]>;
+  listAssetImages(clientId: string): Promise<readonly BrandAssetImage[]>;
+  createAssetFolder(
+    input: CreateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder>;
+  createAssetImage(input: CreateBrandAssetImageInput): Promise<BrandAssetImage>;
   saveOnboardingQuestionnaire(
     input: SaveOnboardingQuestionnaireInput
   ): Promise<OnboardingQuestionnaireSource>;

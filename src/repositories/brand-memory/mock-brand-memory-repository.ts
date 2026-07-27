@@ -5,12 +5,16 @@ import type {
 import { validateOnboardingQuestionnaire } from "../../domain/client-ingestion";
 import type {
   BrandDocument,
+  BrandAssetFolder,
+  BrandAssetImage,
   BrandPastWorkItem,
   BrandProduct
 } from "../../domain/brand-memory";
 import type {
   AnalyzeGuidelineInput,
   BrandMemoryRepository,
+  CreateBrandAssetFolderInput,
+  CreateBrandAssetImageInput,
   CreateLearningEntryInput,
   CreateReferenceImageInput,
   GuidelineAnalysisResult,
@@ -34,6 +38,8 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     string,
     OnboardingQuestionnaireSource
   >();
+  private readonly assetFoldersByClient = new Map<string, BrandAssetFolder[]>();
+  private readonly assetImagesByClient = new Map<string, BrandAssetImage[]>();
 
   async listBrandRules(clientId: string): Promise<readonly LibraryItem[]> {
     return this.brandRulesByClient.get(clientId) ?? [];
@@ -247,6 +253,73 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
       description: "",
       assetUrl: URL.createObjectURL(file)
     };
+  }
+
+  async listAssetFolders(
+    clientId: string
+  ): Promise<readonly BrandAssetFolder[]> {
+    return this.assetFoldersByClient.get(clientId) ?? [];
+  }
+
+  async listAssetImages(clientId: string): Promise<readonly BrandAssetImage[]> {
+    return this.assetImagesByClient.get(clientId) ?? [];
+  }
+
+  async createAssetFolder(
+    input: CreateBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    const folders = this.assetFoldersByClient.get(input.clientId) ?? [];
+    const existing = folders.find(
+      (folder) =>
+        folder.kind === input.kind &&
+        (input.sourceId
+          ? folder.sourceId === input.sourceId
+          : folder.parentId === (input.parentId ?? null) &&
+            folder.name === input.name.trim())
+    );
+    if (existing) return existing;
+    const folder: BrandAssetFolder = {
+      id: createId("asset-folder"),
+      clientId: input.clientId,
+      parentId: input.parentId ?? null,
+      kind: input.kind,
+      name: input.name.trim(),
+      ...(input.sourceProvider ? { sourceProvider: input.sourceProvider } : {}),
+      ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+      ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {})
+    };
+    this.assetFoldersByClient.set(input.clientId, [...folders, folder]);
+    return folder;
+  }
+
+  async createAssetImage(
+    input: CreateBrandAssetImageInput
+  ): Promise<BrandAssetImage> {
+    const images = this.assetImagesByClient.get(input.clientId) ?? [];
+    const existing = input.sourceId
+      ? images.find(
+          (image) =>
+            image.kind === input.kind && image.sourceId === input.sourceId
+        )
+      : undefined;
+    if (existing) return existing;
+    const image: BrandAssetImage = {
+      id: createId("asset"),
+      clientId: input.clientId,
+      folderId: input.folderId ?? null,
+      kind: input.kind,
+      name: input.file.name,
+      mimeType: input.file.type,
+      url:
+        typeof URL.createObjectURL === "function"
+          ? URL.createObjectURL(input.file)
+          : `data:${input.file.type};base64,bW9jaw==`,
+      storagePath: `mock/${input.clientId}/asset-library/${input.file.name}`,
+      ...(input.sourceProvider ? { sourceProvider: input.sourceProvider } : {}),
+      ...(input.sourceId ? { sourceId: input.sourceId } : {})
+    };
+    this.assetImagesByClient.set(input.clientId, [...images, image]);
+    return image;
   }
 
   async saveOnboardingQuestionnaire({
