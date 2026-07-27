@@ -88,6 +88,11 @@ export const artworkModes = [
 export type ArtworkMode = (typeof artworkModes)[number];
 export const hookIdeaModes = ["standard", "fresh-research"] as const;
 export type HookIdeaMode = (typeof hookIdeaModes)[number];
+export const hookGenerationModels = [
+  "gpt-5.6-terra",
+  "anthropic/claude-sonnet-4.6"
+] as const;
+export type HookGenerationModel = (typeof hookGenerationModels)[number];
 export const imagePromptModels = [
   "gpt-5.6-terra",
   "anthropic/claude-sonnet-4.6"

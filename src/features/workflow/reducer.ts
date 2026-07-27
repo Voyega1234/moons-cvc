@@ -141,6 +141,7 @@ export function createInitialWorkflowState({
     ],
     service: "single-static",
     hookIdeaMode: "standard",
+    hookGenerationModel: "gpt-5.6-terra",
     artworkMode: "design-system",
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,
@@ -473,6 +474,8 @@ export function workflowReducer(
       ]);
     case "set-hook-idea-mode":
       return { ...state, hookIdeaMode: action.mode };
+    case "set-hook-generation-model":
+      return { ...state, hookGenerationModel: action.model };
     case "set-artwork-mode":
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":

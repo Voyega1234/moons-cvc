@@ -365,6 +365,81 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(researchBody.tools).toEqual([{ type: "web_search_preview" }]);
   });
 
+  it("routes only the hook writing step through OpenRouter when selected", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "Category context is available.",
+              references: [],
+              searchQueriesUsed: ["category context"],
+              limitations: ""
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              directions: [
+                {
+                  id: "openrouter-hook",
+                  service: "single-static",
+                  hook: "มุมคิดใหม่จาก Claude",
+                  subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+                  concept: "OpenRouter generation",
+                  why: "Tests provider routing",
+                  visual: "Clean and direct",
+                  albumFormat: "three-horizontal",
+                  cta: "ดูรายละเอียด",
+                  caption: "แคปชั่นจากโมเดลที่เลือก",
+                  score: 88,
+                  reasoning: "Strong fit",
+                  citations: []
+                }
+              ]
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          generationModel: "anthropic/claude-sonnet-4.6"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-key",
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_HOOK_GENERATION_MODEL: "anthropic/test-hook-model"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://api.openai.com/v1/responses",
+      "https://openrouter.ai/api/v1/responses",
+      "https://api.openai.com/v1/responses"
+    ]);
+    expect(
+      new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Authorization")
+    ).toBe("Bearer openrouter-key");
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { model: string };
+    expect(generationBody.model).toBe("anthropic/test-hook-model");
+  });
+
   it("includes real past post captions as a style reference for caption writing", async () => {
     const fetchMock = vi
       .fn()

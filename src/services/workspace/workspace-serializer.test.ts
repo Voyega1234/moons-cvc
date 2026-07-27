@@ -499,6 +499,25 @@ describe("workspace serializer", () => {
     );
   });
 
+  it("loads older snapshots without a hook generation model as OpenAI GPT", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { hookGenerationModel?: string }> };
+    };
+    delete parsed.data.runsById["run-1"]?.hookGenerationModel;
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
+      "gpt-5.6-terra"
+    );
+  });
+
   it("loads older snapshots without an output size as 1088x1360", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",

@@ -18,9 +18,10 @@ import type {
   UploadedCreativeMaterial,
   ReviewDecision,
   ServiceType,
-  ArtworkOutputSize,
-  HookIdeaMode,
-  ImagePromptModel
+    ArtworkOutputSize,
+    HookIdeaMode,
+    HookGenerationModel,
+    ImagePromptModel
 } from "../../domain/creative-run";
 
 export type AppView = "overview" | "studio";
@@ -63,6 +64,7 @@ export interface WorkflowState {
   /** Compatibility alias for the first creative-mix item. */
   service: ServiceType;
   hookIdeaMode: HookIdeaMode;
+  hookGenerationModel: HookGenerationModel;
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
   albumFormat: AlbumFormatPreference;
@@ -108,6 +110,7 @@ export type WorkflowAction =
     }
   | { type: "set-service"; service: ServiceType }
   | { type: "set-hook-idea-mode"; mode: HookIdeaMode }
+  | { type: "set-hook-generation-model"; model: HookGenerationModel }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-album-format"; format: AlbumFormatPreference }

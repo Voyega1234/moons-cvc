@@ -171,31 +171,35 @@ function artworkModeLabel(mode: ArtworkMode): string {
   }
 }
 
-function HookIdeaModeToggle({
+function HookGenerationModelSelect({
   disabled,
+  state,
   dispatch
 }: {
   disabled: boolean;
+  state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
 }) {
   return (
-    <div
-      className="compass-hook-mode-toggle"
-      role="group"
-      aria-label="Hook idea mode"
-    >
-      <button
-        className="active"
-        type="button"
+    <label className="compass-hook-mode-toggle">
+      <span className="sr-only">Hook generation model</span>
+      <select
+        aria-label="Hook generation model"
         disabled={disabled}
-        aria-pressed="true"
-        onClick={() =>
-          dispatch({ type: "set-hook-idea-mode", mode: "standard" })
+        value={state.hookGenerationModel}
+        onChange={(event) =>
+          dispatch({
+            type: "set-hook-generation-model",
+            model: event.target.value as WorkflowState["hookGenerationModel"]
+          })
         }
       >
-        Standard
-      </button>
-    </div>
+        <option value="gpt-5.6-terra">GPT · OpenAI</option>
+        <option value="anthropic/claude-sonnet-4.6">
+          Claude · OpenRouter
+        </option>
+      </select>
+    </label>
   );
 }
 
@@ -5204,8 +5208,9 @@ export function BriefStage({ state, dispatch }: StageProps) {
             ← Back to signal
           </button>
           <div className="compass-brief-generate-actions">
-            <HookIdeaModeToggle
+            <HookGenerationModelSelect
               disabled={loading}
+              state={state}
               dispatch={dispatch}
             />
             <button
@@ -6594,12 +6599,13 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           </p>
         </div>
         <div className="compass-angle-toolbar-actions">
-          <HookIdeaModeToggle
+          <HookGenerationModelSelect
             disabled={
               generatingMore ||
               regeneratingAllHooks ||
               Boolean(regeneratingHookId)
             }
+            state={state}
             dispatch={dispatch}
           />
           <button

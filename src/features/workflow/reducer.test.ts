@@ -189,6 +189,17 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
+  it("defaults hook generation to OpenAI and allows OpenRouter Claude", () => {
+    expect(initialWorkflowState.hookGenerationModel).toBe("gpt-5.6-terra");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-hook-generation-model",
+      model: "anthropic/claude-sonnet-4.6"
+    });
+
+    expect(updated.hookGenerationModel).toBe("anthropic/claude-sonnet-4.6");
+  });
+
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {
     expect(initialWorkflowState.outputSize).toBe("1088x1360");
 

@@ -25,17 +25,16 @@ describe("DirectionsStage artwork mode", () => {
         "aria-pressed"
       )
     ).toBe("true");
-    const hookMode = within(
-      screen.getByRole("group", { name: "Hook idea mode" })
-    );
-    expect(
-      hookMode
-        .getByRole("button", { name: "Standard" })
-        .getAttribute("aria-pressed")
-    ).toBe("true");
-    expect(
-      hookMode.queryByRole("button", { name: "Fresh research" })
-    ).toBeNull();
+    const hookModel = screen.getByRole("combobox", {
+      name: "Hook generation model"
+    }) as HTMLSelectElement;
+    expect(hookModel.value).toBe("gpt-5.6-terra");
+    expect(hookModel.selectedOptions[0]?.textContent).toBe("GPT · OpenAI");
+    await user.selectOptions(hookModel, "anthropic/claude-sonnet-4.6");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-hook-generation-model",
+      model: "anthropic/claude-sonnet-4.6"
+    });
     expect(
       screen.queryByRole("button", { name: "Reference library" })
     ).toBeNull();

@@ -6,11 +6,13 @@ import {
   albumFormats,
   ctaActionTypes,
   defaultAlbumFormatPreference,
+  hookGenerationModels,
   serviceTypes,
   type AlbumFormat,
   type AlbumFormatPreference,
   type CtaActionType,
   type HookIdeaMode,
+  type HookGenerationModel,
   type ServiceType,
   type UgcVideoBrief
 } from "../../domain/creative-run.js";
@@ -33,6 +35,8 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_HOOK_GENERATION_MODEL?: string;
   OPENAI_HOOK_SUPPORT_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_HOOK_GENERATION_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -108,8 +112,11 @@ interface HookGenerationResult {
 }
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT =
+  "https://openrouter.ai/api/v1/responses";
 const HOOK_GENERATION_BATCH_SIZE = 12;
 const HOOK_GENERATION_CONCURRENCY = 3;
 const SUBHEADLINE_BATCH_SIZE = 24;
@@ -126,8 +133,8 @@ export async function handleHookGenerationHarnessRequest({
   }
 
   try {
-    const apiKey = env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
+    const openAiApiKey = env.OPENAI_API_KEY?.trim();
+    if (!openAiApiKey) {
       return jsonResponse(
         { ok: false, error: "OPENAI_API_KEY is required." },
         500
@@ -140,7 +147,28 @@ export async function handleHookGenerationHarnessRequest({
     }
 
     const input = parseRequestBody(await request.json());
-    const model = env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_MODEL;
+    const generationProvider =
+      input.generationModel === DEFAULT_OPENROUTER_MODEL
+        ? "openrouter"
+        : "openai";
+    const generationApiKey =
+      generationProvider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : openAiApiKey;
+    if (!generationApiKey) {
+      return jsonResponse(
+        { ok: false, error: "OPENROUTER_API_KEY is required." },
+        500
+      );
+    }
+    const model =
+      generationProvider === "openrouter"
+        ? env.OPENROUTER_HOOK_GENERATION_MODEL?.trim() ||
+          input.generationModel ||
+          DEFAULT_OPENROUTER_MODEL
+        : env.OPENAI_HOOK_GENERATION_MODEL?.trim() ||
+          input.generationModel ||
+          DEFAULT_MODEL;
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const pastPosts = await loadPastPostExamples({
@@ -152,7 +180,7 @@ export async function handleHookGenerationHarnessRequest({
     const agentHookPrompt = await loadAgentHookPrompt();
     const research = await runResearchStep({
       input,
-      apiKey,
+      apiKey: openAiApiKey,
       model: supportModel,
       fetchImpl
     });
@@ -167,8 +195,9 @@ export async function handleHookGenerationHarnessRequest({
             research,
             pastPosts,
             agentHookPrompt,
-            apiKey,
+            apiKey: generationApiKey,
             model,
+            provider: generationProvider,
             fetchImpl
           })
         )
@@ -186,7 +215,7 @@ export async function handleHookGenerationHarnessRequest({
     }
     const highlightedDirections = await runSubheadlineHighlightStep({
       directions,
-      apiKey,
+      apiKey: openAiApiKey,
       model: supportModel,
       fetchImpl
     });
@@ -288,6 +317,7 @@ async function runGenerationStep({
   agentHookPrompt,
   apiKey,
   model,
+  provider,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
@@ -296,6 +326,7 @@ async function runGenerationStep({
   agentHookPrompt: string;
   apiKey: string;
   model: string;
+  provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<HookGenerationResult> {
   const payload = await callResponsesApi({
@@ -314,7 +345,8 @@ async function runGenerationStep({
       }))
     ],
     schemaName: "moons_hook_generation",
-    schema: hookGenerationSchema
+    schema: hookGenerationSchema,
+    provider
   });
 
   const result = parseHookGenerationResult(extractResponseText(payload));
@@ -516,7 +548,8 @@ async function callResponsesApi({
   content,
   schemaName,
   schema,
-  tools
+  tools,
+  provider = "openai"
 }: {
   apiKey: string;
   model: string;
@@ -525,8 +558,14 @@ async function callResponsesApi({
   schemaName: string;
   schema: unknown;
   tools?: readonly { type: string }[];
+  provider?: "openai" | "openrouter";
 }): Promise<unknown> {
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -554,10 +593,10 @@ async function callResponsesApi({
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI hook harness failed: ${response.status}`);
+    throw new Error(`${providerLabel} hook harness failed: ${response.status}`);
   }
 
-  return readJsonResponse(response, "OpenAI hook harness");
+  return readJsonResponse(response, `${providerLabel} hook harness`);
 }
 
 function buildResearchPrompt(input: HookGenerationHarnessRequest): string {
@@ -731,6 +770,7 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     `Brand: ${input.brand?.name ?? "Unknown"}`,
     `Category: ${input.brand?.category ?? "Unknown"}`,
     `Service: ${input.service}`,
+    `Generation model: ${input.generationModel ?? DEFAULT_MODEL}`,
     `Selected output quantity later: ${input.quantity}`,
     `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
     `Album layout preference: ${input.albumFormat ?? defaultAlbumFormatPreference}`,
@@ -1002,6 +1042,7 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   return {
     runId,
     hookIdeaMode: readHookIdeaMode(value.hookIdeaMode),
+    generationModel: readHookGenerationModel(value.generationModel),
     albumFormat: readAlbumFormat(value.albumFormat),
     brand: value.brand === null ? null : parseBrand(value.brand),
     service: service as HookGenerationHarnessRequest["service"],
@@ -1078,6 +1119,17 @@ function readHookIdeaMode(value: unknown): HookIdeaMode {
   if (value === undefined) return "standard";
   if (value === "standard" || value === "fresh-research") return value;
   throw new Error("hookIdeaMode is invalid.");
+}
+
+function readHookGenerationModel(value: unknown): HookGenerationModel {
+  if (value === undefined) return DEFAULT_MODEL;
+  if (
+    typeof value === "string" &&
+    hookGenerationModels.includes(value as HookGenerationModel)
+  ) {
+    return value as HookGenerationModel;
+  }
+  throw new Error("generationModel is invalid.");
 }
 
 function readUploadedMaterials(

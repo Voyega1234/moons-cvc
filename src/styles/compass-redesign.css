@@ -3241,9 +3241,9 @@
   background: #fff;
 }
 
-.compass-app .compass-hook-mode-toggle button {
+.compass-app .compass-hook-mode-toggle select {
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 30px 0 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -3255,21 +3255,16 @@
   cursor: pointer;
 }
 
-.compass-app .compass-hook-mode-toggle button:hover:not(:disabled) {
+.compass-app .compass-hook-mode-toggle select:hover:not(:disabled) {
   color: var(--ink);
 }
 
-.compass-app .compass-hook-mode-toggle button.active {
-  background: var(--accentSoft);
-  color: var(--accent);
-}
-
-.compass-app .compass-hook-mode-toggle button:focus-visible {
+.compass-app .compass-hook-mode-toggle select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
-.compass-app .compass-hook-mode-toggle button:disabled {
+.compass-app .compass-hook-mode-toggle select:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -8864,7 +8859,7 @@
     width: 100%;
   }
 
-  .compass-app .compass-hook-mode-toggle button {
+  .compass-app .compass-hook-mode-toggle select {
     flex: 1;
   }
 

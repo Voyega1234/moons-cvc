@@ -50,6 +50,7 @@ const run: WorkflowState = {
   librarySection: "brand",
   service: "single-static",
   hookIdeaMode: "standard",
+  hookGenerationModel: "gpt-5.6-terra",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
   outputSize: "1024x1024",
@@ -86,6 +87,7 @@ describe("buildHookGenerationHarnessRequest", () => {
 
     expect(request.brand?.name).toBe("Convert Cake");
     expect(request.hookIdeaMode).toBe("standard");
+    expect(request.generationModel).toBe("gpt-5.6-terra");
     expect(request.albumFormat).toBe("three-horizontal");
     expect(request.brief).toBe("Generate hooks for AI SEO webinar.");
     expect(request.onboardingQuestionnaire).toBe(

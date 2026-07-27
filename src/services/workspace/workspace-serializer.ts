@@ -8,8 +8,9 @@ import {
   ctaActionTypes,
   defaultArtworkOutputSize,
   defaultAlbumFormatPreference,
-  emptyApprovalComments,
-  hookIdeaModes,
+    emptyApprovalComments,
+    hookGenerationModels,
+    hookIdeaModes,
   imagePromptModels,
   normalizeFormatBeatsForService,
   referenceImageRoles,
@@ -132,6 +133,10 @@ function parseRun(value: unknown): WorkflowState | null {
     value.hookIdeaMode === undefined || value.hookIdeaMode === "fresh-research"
       ? "standard"
       : parseMember(value.hookIdeaMode, hookIdeaModes);
+  const hookGenerationModel =
+    value.hookGenerationModel === undefined
+      ? "gpt-5.6-terra"
+      : parseMember(value.hookGenerationModel, hookGenerationModels);
   const artworkMode =
     value.artworkMode === undefined
       ? "design-system"
@@ -193,6 +198,7 @@ function parseRun(value: unknown): WorkflowState | null {
     !stage ||
     !service ||
     !hookIdeaMode ||
+    !hookGenerationModel ||
     !artworkMode ||
     !imagePromptModel ||
     !albumFormat ||
@@ -276,6 +282,7 @@ function parseRun(value: unknown): WorkflowState | null {
     creativeMix,
     service: creativeMix[0]?.service ?? (service as ServiceType),
     hookIdeaMode,
+    hookGenerationModel,
     artworkMode,
     imagePromptModel,
     albumFormat,

@@ -2,6 +2,7 @@ import { env } from "../../config/env";
 import type {
   AlbumFormatPreference,
   CreativeDirection,
+  HookGenerationModel,
   HookIdeaMode,
   UploadedCreativeMaterial
 } from "../../domain/creative-run";
@@ -23,6 +24,7 @@ import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionna
 export interface HookGenerationHarnessRequest {
   runId: string;
   hookIdeaMode: HookIdeaMode;
+  generationModel?: HookGenerationModel;
   albumFormat?: AlbumFormatPreference;
   brand: {
     id: string;
@@ -101,6 +103,7 @@ export function buildHookGenerationHarnessRequest({
   return {
     runId: run.id,
     hookIdeaMode: run.hookIdeaMode,
+    generationModel: run.hookGenerationModel,
     albumFormat: run.albumFormat,
     brand: brand
       ? {
