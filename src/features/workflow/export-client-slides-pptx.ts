@@ -157,6 +157,77 @@ function clampText(value: string | undefined, maxLength: number): string {
   return `${clean.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function cleanMultilineText(
+  value: string | undefined,
+  fallback = "Caption not provided."
+): string {
+  const clean = value
+    ?.replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .replace(/\n{2,}[ \t]*([.·])[ \t]*(?=\n)/g, "\n$1");
+  return clean || fallback;
+}
+
+function estimatedWrappedLines(
+  value: string,
+  widthInches: number,
+  fontSize: number
+): number {
+  const charactersPerLine = Math.max(
+    18,
+    Math.floor((widthInches * 72) / (fontSize * 0.68))
+  );
+  return value.split("\n").reduce((total, line) => {
+    const weightedLength = Array.from(line).reduce(
+      (length, character) =>
+        length + (THAI_TEXT_PATTERN.test(character) ? 1.08 : 1),
+      0
+    );
+    return total + Math.max(1, Math.ceil(weightedLength / charactersPerLine));
+  }, 0);
+}
+
+function fontSizeForFixedTextBox(
+  value: string,
+  widthInches: number,
+  heightInches: number,
+  candidates: readonly number[]
+): number {
+  for (const fontSize of candidates) {
+    const availableLines = Math.floor(
+      (heightInches * 72) / (fontSize * 1.28)
+    );
+    if (
+      estimatedWrappedLines(value, widthInches, fontSize) <= availableLines
+    ) {
+      return fontSize;
+    }
+  }
+  return candidates[candidates.length - 1] ?? 10.5;
+}
+
+function captionFontSizeForSlide(value: string): number {
+  const paragraphCount = value.split(/\n{2,}/).filter(Boolean).length;
+  for (const fontSize of [15, 14, 13, 12, 11, 10, 9, 8]) {
+    const wrappedLines = estimatedWrappedLines(value, 7.55, fontSize);
+    const paragraphSpacing =
+      Math.max(0, paragraphCount - 1) *
+      (fontSize >= 13 ? 8 : fontSize >= 10 ? 5 : 3);
+    const requiredHeightPoints =
+      wrappedLines * fontSize * 1.55 + paragraphSpacing;
+    if (requiredHeightPoints <= 4.2 * 72) return fontSize;
+  }
+  return 8;
+}
+
+function splitCaptionForSlides(value: string | undefined): readonly string[] {
+  const clean = cleanMultilineText(value, "");
+  return clean ? [clean] : [];
+}
+
 function fileSlug(value: string): string {
   const slug = value
     .normalize("NFKC")
@@ -192,43 +263,6 @@ export async function fetchClientSlideImage(url: string): Promise<string> {
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   return `data:${imageMimeType(url, response)};base64,${bytesToBase64(bytes)}`;
-}
-
-function addTextBlock(
-  slide: PptxGenJS.Slide,
-  label: string,
-  value: string | undefined,
-  y: number,
-  height: number,
-  maxLength: number
-) {
-  const text = clampText(value, maxLength);
-  slide.addText(label.toUpperCase(), {
-    x: 7.35,
-    y,
-    w: 5.05,
-    h: 0.2,
-    margin: 0,
-    ...localizedTextStyle(label),
-    fontSize: 8,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 1.1
-  });
-  slide.addText(text, {
-    x: 7.35,
-    y: y + 0.25,
-    w: 5.05,
-    h: height - 0.25,
-    margin: 0,
-    ...localizedTextStyle(text),
-    fontSize: 12.5,
-    color: COLORS.ink,
-    breakLine: false,
-    valign: "top",
-    fit: "shrink",
-    paraSpaceAfter: 0
-  });
 }
 
 function resolvedUgcBrief(
@@ -455,47 +489,44 @@ function addUgcClientSlide(
     color: COLORS.violet,
     charSpacing: 1.2
   });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 11.1,
-    y: 0.56,
-    w: 1.26,
-    h: 0.38,
-    rectRadius: 0.08,
-    fill: { color: COLORS.lime },
-    line: { color: COLORS.lime }
-  });
   slide.addText("UGC VIDEO", {
-    x: 11.2,
-    y: 0.67,
-    w: 1.06,
-    h: 0.14,
+    x: 11.08,
+    y: 0.64,
+    w: 1.28,
+    h: 0.22,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 7.5,
+    fontSize: 8,
     bold: true,
     color: COLORS.limeInk,
-    align: "center"
+    align: "right",
+    charSpacing: 0.8
   });
   const hook = clampText(direction?.hook, 170);
+  const hookFontSize = fontSizeForFixedTextBox(
+    hook,
+    6.86,
+    0.72,
+    [25, 22, 19]
+  );
   slide.addText(hook, {
     x: 5.5,
-    y: 1.12,
+    y: 1.04,
     w: 6.86,
-    h: 0.78,
+    h: 0.72,
     margin: 0,
     ...localizedTextStyle(hook),
-    fontSize: 25,
+    fontSize: hookFontSize,
     bold: true,
     color: COLORS.ink,
     valign: "top",
-    fit: "shrink",
     breakLine: false
   });
 
   const projectDetails = `${brief.product}  •  ${brief.duration}`;
   slide.addText(projectDetails, {
     x: 5.5,
-    y: 2.03,
+    y: 1.88,
     w: 6.86,
     h: 0.22,
     margin: 0,
@@ -505,9 +536,17 @@ function addUgcClientSlide(
     color: COLORS.violet,
     fit: "shrink"
   });
-  slide.addText("OBJECTIVE", {
+  slide.addShape(pptx.ShapeType.rect, {
     x: 5.5,
-    y: 2.43,
+    y: 2.28,
+    w: 0.42,
+    h: 0.04,
+    fill: { color: COLORS.violet },
+    line: { color: COLORS.violet }
+  });
+  slide.addText("CREATIVE OBJECTIVE", {
+    x: 5.5,
+    y: 2.48,
     w: 1.2,
     h: 0.16,
     margin: 0,
@@ -517,23 +556,30 @@ function addUgcClientSlide(
     color: COLORS.muted,
     charSpacing: 1
   });
-  const objective = clampText(brief.objective, 200);
+  const objective = clampText(brief.objective, 260);
+  const objectiveFontSize = fontSizeForFixedTextBox(
+    objective,
+    6.86,
+    0.72,
+    [12.5, 11, 9.5]
+  );
   slide.addText(objective, {
     x: 5.5,
-    y: 2.68,
+    y: 2.73,
     w: 6.86,
-    h: 0.5,
+    h: 0.72,
     margin: 0,
     ...localizedTextStyle(objective),
-    fontSize: 11,
+    fontSize: objectiveFontSize,
     color: COLORS.ink,
-    fit: "shrink",
-    valign: "top"
+    valign: "top",
+    breakLine: false,
+    paraSpaceAfter: 5
   });
 
   slide.addText("VIDEO STORYLINE", {
     x: 5.5,
-    y: 3.37,
+    y: 3.68,
     w: 2.1,
     h: 0.18,
     margin: 0,
@@ -543,13 +589,13 @@ function addUgcClientSlide(
     color: COLORS.muted,
     charSpacing: 1.1
   });
-  addUgcScriptRow(pptx, slide, 1, "OPEN / HOOK", brief.openingScript, 3.72);
-  addUgcScriptRow(pptx, slide, 2, "SHOWCASE", brief.showcaseScript, 4.47);
-  addUgcScriptRow(pptx, slide, 3, "END / CTA", brief.closingScript, 5.22);
+  addUgcScriptRow(pptx, slide, 1, "OPEN / HOOK", brief.openingScript, 4.0);
+  addUgcScriptRow(pptx, slide, 2, "SHOWCASE", brief.showcaseScript, 4.64);
+  addUgcScriptRow(pptx, slide, 3, "END / CTA", brief.closingScript, 5.28);
 
   slide.addShape(pptx.ShapeType.line, {
     x: 5.5,
-    y: 6.02,
+    y: 6.0,
     w: 6.86,
     h: 0,
     line: { color: COLORS.line, width: 1 }
@@ -560,7 +606,7 @@ function addUgcClientSlide(
   );
   slide.addText(production, {
     x: 5.5,
-    y: 6.2,
+    y: 6.16,
     w: 6.86,
     h: 0.36,
     margin: 0,
@@ -593,17 +639,20 @@ function addUgcClientSlide(
     color: COLORS.muted,
     align: "right"
   });
+  slide.addNotes(
+    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual reference: selected UGC reference image in the workflow.`
+  );
 }
 
 function addArtworkPreview(
   slide: PptxGenJS.Slide,
   data: string,
   outputSize: WorkflowState["outputSize"],
-  altText: string
+  altText: string,
+  box = { x: 0.52, y: 0.48, w: 5.84, h: 6.54 }
 ) {
   const [pixelWidth, pixelHeight] = outputSize.split("x").map(Number);
   const ratio = pixelWidth && pixelHeight ? pixelWidth / pixelHeight : 1;
-  const box = { x: 0.65, y: 0.68, w: 5.85, h: 6.15 };
   let width = box.w;
   let height = width / ratio;
   if (height > box.h) {
@@ -624,9 +673,9 @@ function addAlbumArtworkPreview(
   slide: PptxGenJS.Slide,
   imageData: readonly string[],
   brandName: string,
-  format: AlbumFormat
+  format: AlbumFormat,
+  box = { x: 0.52, y: 0.68, w: 5.84, h: 6.14 }
 ) {
-  const box = { x: 0.65, y: 0.83, w: 5.85, h: 5.85 };
   const placements = albumSlidePlacements(box, format);
 
   imageData.slice(0, placements.length).forEach((data, index) => {
@@ -728,99 +777,344 @@ function addClientSlide(
     );
     return;
   }
-  slide.background = { color: COLORS.canvas };
-
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.45,
-    y: 0.45,
-    w: 6.28,
-    h: 6.6,
-    rectRadius: 0.16,
-    fill: { color: COLORS.paper },
-    line: { color: COLORS.line, width: 1 }
-  });
-  if (isAlbumOutput(output) && imageData.length > 1) {
-    addAlbumArtworkPreview(slide, imageData, brandName, albumFormat);
-  } else if (imageData[0]) {
-    addArtworkPreview(
-      slide,
-      imageData[0],
-      outputSize,
-      `${brandName} ${output.format} creative artwork`
-    );
-  }
-
+  slide.background = { color: COLORS.paper };
   const displayBrandName = brandName.toUpperCase();
+  slide.addText("CREATIVE DIRECTION", {
+    x: 0.48,
+    y: 0.38,
+    w: 4.6,
+    h: 0.38,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 24,
+    bold: true,
+    color: COLORS.ink
+  });
   slide.addText(displayBrandName, {
-    x: 7.35,
-    y: 0.64,
-    w: 3.6,
+    x: 8.62,
+    y: 0.42,
+    w: 4.1,
     h: 0.22,
     margin: 0,
     ...localizedTextStyle(displayBrandName),
     fontSize: 8,
     bold: true,
     color: COLORS.violet,
-    charSpacing: 1.2
+    charSpacing: 1.2,
+    align: "right"
   });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 11.1,
-    y: 0.56,
-    w: 1.26,
-    h: 0.38,
-    rectRadius: 0.08,
-    fill: { color: COLORS.lime },
-    line: { color: COLORS.lime }
-  });
-  slide.addText(output.format.toUpperCase(), {
-    x: 11.2,
-    y: 0.67,
-    w: 1.06,
-    h: 0.14,
+  const formatMetadata = `${output.format.toUpperCase()}  ·  ${outputSize}`;
+  slide.addText(formatMetadata, {
+    x: 8.62,
+    y: 0.72,
+    w: 4.1,
+    h: 0.22,
     margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 7.5,
+    ...localizedTextStyle(formatMetadata),
+    fontSize: 8,
     bold: true,
-    color: COLORS.limeInk,
-    align: "center",
-    fit: "shrink"
+    color: COLORS.muted,
+    align: "right",
+    charSpacing: 0.8
   });
-  const hook = clampText(direction?.hook, 170);
-  slide.addText(hook, {
-    x: 7.35,
-    y: 1.18,
-    w: 5.05,
-    h: 1.42,
-    margin: 0,
-    ...localizedTextStyle(hook),
-    fontSize: 26,
-    bold: true,
-    color: COLORS.ink,
-    valign: "top",
-    fit: "shrink",
-    breakLine: false
-  });
-  addTextBlock(
-    slide,
-    "Sub-headline",
-    direction ? directionSubheadline(direction) : undefined,
-    2.95,
-    1.25,
-    320
-  );
-  addTextBlock(slide, "Creative concept", direction?.concept, 4.38, 0.86, 180);
-  addTextBlock(slide, "Call to action", direction?.cta, 5.48, 0.7, 130);
-
   slide.addShape(pptx.ShapeType.line, {
-    x: 7.35,
-    y: 6.47,
-    w: 5.05,
+    x: 0.48,
+    y: 1.06,
+    w: 12.24,
     h: 0,
     line: { color: COLORS.line, width: 1 }
   });
+  [3.34, 6.37, 9.4].forEach((x) => {
+    slide.addShape(pptx.ShapeType.line, {
+      x,
+      y: 1.34,
+      w: 0,
+      h: 5.28,
+      line: { color: COLORS.line, width: 1 }
+    });
+  });
+
+  slide.addText("CONCEPT IDEA", {
+    x: 0.48,
+    y: 1.36,
+    w: 2.65,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1
+  });
+  const concept = clampText(direction?.concept, 300);
+  const conceptFontSize = fontSizeForFixedTextBox(
+    concept,
+    2.65,
+    1.35,
+    [17, 15, 13]
+  );
+  slide.addText(concept, {
+    x: 0.48,
+    y: 1.76,
+    w: 2.65,
+    h: 1.35,
+    margin: 0,
+    ...localizedTextStyle(concept),
+    fontSize: conceptFontSize,
+    bold: true,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addText("WHY IT WORKS", {
+    x: 0.48,
+    y: 3.46,
+    w: 2.65,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1
+  });
+  const why = clampText(direction?.why, 360);
+  slide.addText(why, {
+    x: 0.48,
+    y: 3.82,
+    w: 2.65,
+    h: 1.72,
+    margin: 0,
+    ...localizedTextStyle(why),
+    fontSize: 13,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+
+  slide.addText("KEY MESSAGE", {
+    x: 3.57,
+    y: 1.36,
+    w: 2.58,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1
+  });
+  const hook = clampText(direction?.hook, 170);
+  const hookFontSize = fontSizeForFixedTextBox(
+    hook,
+    2.58,
+    1.72,
+    [19, 17, 15]
+  );
+  slide.addText(hook, {
+    x: 3.57,
+    y: 1.76,
+    w: 2.58,
+    h: 1.72,
+    margin: 0,
+    ...localizedTextStyle(hook),
+    fontSize: hookFontSize,
+    bold: true,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addText("SUPPORTING LINE", {
+    x: 3.57,
+    y: 3.72,
+    w: 2.58,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1
+  });
+  const subheadline = clampText(
+    direction ? directionSubheadline(direction) : undefined,
+    300
+  );
+  slide.addText(subheadline, {
+    x: 3.57,
+    y: 4.08,
+    w: 2.58,
+    h: 1.46,
+    margin: 0,
+    ...localizedTextStyle(subheadline),
+    fontSize: 13,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+
+  slide.addText("CREATIVE DRAFT", {
+    x: 6.6,
+    y: 1.36,
+    w: 2.58,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 6.6,
+    y: 1.76,
+    w: 2.58,
+    h: 3.92,
+    fill: { color: COLORS.canvas },
+    line: { color: COLORS.line, width: 1 }
+  });
+  if (isAlbumOutput(output) && imageData.length > 1) {
+    addAlbumArtworkPreview(
+      slide,
+      imageData,
+      brandName,
+      albumFormat,
+      { x: 6.72, y: 1.9, w: 2.34, h: 3.64 }
+    );
+  } else if (imageData[0]) {
+    addArtworkPreview(
+      slide,
+      imageData[0],
+      outputSize,
+      `${brandName} ${output.format} creative draft`,
+      { x: 6.72, y: 1.9, w: 2.34, h: 3.64 }
+    );
+  }
+  slide.addText(output.format, {
+    x: 6.6,
+    y: 5.92,
+    w: 2.58,
+    h: 0.24,
+    margin: 0,
+    ...localizedTextStyle(output.format),
+    fontSize: 10,
+    bold: true,
+    color: COLORS.muted,
+    align: "center"
+  });
+
+  slide.addText("CREATIVE BRIEF", {
+    x: 9.64,
+    y: 1.36,
+    w: 3.08,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1
+  });
+  slide.addText("VISUAL DIRECTION", {
+    x: 9.64,
+    y: 1.82,
+    w: 3.08,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 0.9
+  });
+  const visualDirection = clampText(direction?.visual, 360);
+  slide.addText(visualDirection, {
+    x: 9.64,
+    y: 2.12,
+    w: 3.08,
+    h: 1.38,
+    margin: 0,
+    ...localizedTextStyle(visualDirection),
+    fontSize: 13,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addText("PRIMARY CTA", {
+    x: 9.64,
+    y: 3.72,
+    w: 3.08,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 0.9
+  });
+  const callToAction = clampText(direction?.cta, 160);
+  slide.addText(callToAction, {
+    x: 9.64,
+    y: 4.04,
+    w: 3.08,
+    h: 0.74,
+    margin: 0,
+    ...localizedTextStyle(callToAction),
+    fontSize: 16,
+    bold: true,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addText("CONTENT PILLAR", {
+    x: 9.64,
+    y: 5.12,
+    w: 3.08,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 0.9
+  });
+  const pillar = clampText(
+    direction?.pillar ?? direction?.objective ?? direction?.service,
+    180
+  );
+  slide.addText(pillar, {
+    x: 9.64,
+    y: 5.42,
+    w: 3.08,
+    h: 0.56,
+    margin: 0,
+    ...localizedTextStyle(pillar),
+    fontSize: 12.5,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addShape(pptx.ShapeType.line, {
+    x: 0.48,
+    y: 6.72,
+    w: 12.24,
+    h: 0,
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText("Creative brief + draft", {
+    x: 0.48,
+    y: 6.88,
+    w: 2.8,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted
+  });
   slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: 11.72,
-    y: 6.64,
+    x: 12.02,
+    y: 6.88,
     w: 0.68,
     h: 0.2,
     margin: 0,
@@ -829,6 +1123,191 @@ function addClientSlide(
     color: COLORS.muted,
     align: "right"
   });
+  slide.addNotes(
+    `[Sources]\n- Concept, key message, visual direction, and CTA: confirmed workflow data for ${brandName}.\n- Creative draft: generated artwork attached to this output.`
+  );
+}
+
+function addCaptionSlide(
+  pptx: PptxGenJS,
+  item: ClientSlideItem,
+  brandName: string,
+  captionChunk: string,
+  chunkIndex: number,
+  chunkCount: number,
+  slideNumber: number,
+  totalSlides: number,
+  outputSize: WorkflowState["outputSize"],
+  albumFormat: AlbumFormat,
+  imageData: readonly string[] = []
+) {
+  const { output, direction } = item;
+  const slide = pptx.addSlide();
+  slide.background = { color: COLORS.canvas };
+
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 0.35,
+    y: 0.35,
+    w: 4.32,
+    h: 6.8,
+    rectRadius: 0.16,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  const previewBox = { x: 0.62, y: 0.7, w: 3.78, h: 5.92 };
+  if (isAlbumOutput(output) && imageData.length > 1) {
+    addAlbumArtworkPreview(
+      slide,
+      imageData,
+      brandName,
+      albumFormat,
+      { x: 0.62, y: 1.12, w: 3.78, h: 5.08 }
+    );
+  } else if (imageData[0] && !isUgcOutput(output)) {
+    addArtworkPreview(
+      slide,
+      imageData[0],
+      outputSize,
+      `${brandName} ${output.format} caption reference`,
+      previewBox
+    );
+  } else if (imageData[0]) {
+    slide.addImage({
+      data: imageData[0],
+      ...previewBox,
+      sizing: {
+        type: "cover",
+        x: previewBox.x,
+        y: previewBox.y,
+        w: previewBox.w,
+        h: previewBox.h
+      },
+      altText: `${brandName} UGC caption reference`
+    });
+  } else {
+    slide.addText(isUgcOutput(output) ? "UGC" : output.format.toUpperCase(), {
+      x: previewBox.x,
+      y: 2.8,
+      w: previewBox.w,
+      h: 0.6,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 30,
+      bold: true,
+      color: COLORS.violet,
+      align: "center"
+    });
+  }
+
+  const displayBrandName = brandName.toUpperCase();
+  slide.addText(displayBrandName, {
+    x: 5.15,
+    y: 0.48,
+    w: 4.1,
+    h: 0.22,
+    margin: 0,
+    ...localizedTextStyle(displayBrandName),
+    fontSize: 8,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1.2
+  });
+  const pageLabel =
+    chunkCount > 1
+      ? `ARTWORK & CAPTION · ${chunkIndex + 1}/${chunkCount}`
+      : "ARTWORK & CAPTION";
+  slide.addText(pageLabel, {
+    x: 10.4,
+    y: 0.48,
+    w: 2.4,
+    h: 0.22,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.limeInk,
+    align: "right",
+    charSpacing: 0.8
+  });
+
+  const hook = clampText(direction?.hook, 130);
+  const hookFontSize = fontSizeForFixedTextBox(
+    hook,
+    7.55,
+    0.74,
+    [20, 18, 16]
+  );
+  slide.addText(hook, {
+    x: 5.15,
+    y: 0.98,
+    w: 7.55,
+    h: 0.74,
+    margin: 0,
+    ...localizedTextStyle(hook),
+    fontSize: hookFontSize,
+    bold: true,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 5.15,
+    y: 1.82,
+    w: 0.46,
+    h: 0.04,
+    fill: { color: COLORS.violet },
+    line: { color: COLORS.violet }
+  });
+  const captionFontSize = captionFontSizeForSlide(captionChunk);
+  slide.addText(captionChunk, {
+    x: 5.15,
+    y: 2.0,
+    w: 7.55,
+    h: 4.45,
+    margin: 0,
+    ...localizedTextStyle(captionChunk),
+    fontSize: captionFontSize,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false,
+    paraSpaceAfter:
+      captionFontSize >= 13 ? 8 : captionFontSize >= 10 ? 5 : 3
+  });
+
+  const callToAction = clampText(direction?.cta, 130);
+  slide.addShape(pptx.ShapeType.line, {
+    x: 5.15,
+    y: 6.58,
+    w: 7.55,
+    h: 0,
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText(`CTA · ${callToAction}`, {
+    x: 5.15,
+    y: 6.76,
+    w: 6.6,
+    h: 0.3,
+    margin: 0,
+    ...localizedTextStyle(callToAction),
+    fontSize: 11,
+    bold: true,
+    color: COLORS.muted,
+    breakLine: false
+  });
+  slide.addText(`${slideNumber} / ${totalSlides}`, {
+    x: 12.02,
+    y: 6.76,
+    w: 0.68,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    color: COLORS.muted,
+    align: "right"
+  });
+  slide.addNotes(
+    `[Sources]\n- Full caption and CTA: confirmed workflow data for ${brandName}.\n- Visual: generated creative asset or selected UGC reference attached to this output.`
+  );
 }
 
 export async function buildPmApprovedClientSlidesPptx(
@@ -888,6 +1367,14 @@ async function buildClientSlidesPptx(
   };
   const ugcReference = preferredUgcReference(state.referenceImages);
   let ugcReferenceData: string | null | undefined;
+  const captionChunksByItem = new Map(
+    items.map((item) => [item, splitCaptionForSlides(item.direction?.caption)])
+  );
+  const totalSlides = items.reduce(
+    (count, item) => count + 1 + (captionChunksByItem.get(item)?.length ?? 0),
+    0
+  );
+  let slideNumber = 1;
 
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
@@ -912,16 +1399,38 @@ async function buildClientSlidesPptx(
         })
       );
     }
+    const albumFormat = resolveAlbumFormat(
+      state.albumFormat,
+      item.direction?.albumFormat
+    );
+    const captionChunks = captionChunksByItem.get(item) ?? [];
     addClientSlide(
       pptx,
       item,
       brandName,
-      index + 1,
-      items.length,
+      slideNumber,
+      totalSlides,
       state.outputSize,
-      resolveAlbumFormat(state.albumFormat, item.direction?.albumFormat),
+      albumFormat,
       imageData
     );
+    slideNumber += 1;
+    captionChunks.forEach((captionChunk, chunkIndex) => {
+      addCaptionSlide(
+        pptx,
+        item,
+        brandName,
+        captionChunk,
+        chunkIndex,
+        captionChunks.length,
+        slideNumber,
+        totalSlides,
+        state.outputSize,
+        albumFormat,
+        imageData
+      );
+      slideNumber += 1;
+    });
   }
 
   return pptx;

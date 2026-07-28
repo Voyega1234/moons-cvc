@@ -15,13 +15,13 @@ describe("googleSignInRedirectUrl", () => {
     ).toBe("http://localhost:4173");
   });
 
-  it("keeps non-local sign-ins on the existing production URL", () => {
+  it("keeps non-local sign-ins on the current production URL", () => {
     expect(
       googleSignInRedirectUrl({
         hostname: "moons-cvc-git-feature.vercel.app",
         origin: "https://moons-cvc-git-feature.vercel.app"
       })
-    ).toBe("https://moons-cvc.vercel.app/");
+    ).toBe("https://creative-compass-os.vercel.app/");
   });
 
   it("limits authenticated accounts to Convert Cake email addresses", () => {

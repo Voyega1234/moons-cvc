@@ -1,0 +1,18 @@
+{"kind":"deck","id":"pr/wsk516","name":"Deck"}
+{"kind":"layout","layoutId":"8a9f36a8-5f19-4e8f-a446-400f8e5990a2","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"127ef68f-2c4c-408e-aa10-a4a903e377c2","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/ccn9ea","slide":1,"title":"CHÔL AROMATIQUE","textShapes":10}
+{"kind":"shape","id":"sh/9c3md43m","slide":1,"bbox":[32,32,586,656]}
+{"kind":"textbox","id":"sh/nal4bulg","slide":1,"text":"CHÔL AROMATIQUE","textPreview":"CHÔL AROMATIQUE","textChars":15,"textLines":1,"bbox":[660,48,330,26]}
+{"kind":"textbox","id":"sh/07ulgf2p","slide":1,"text":"STATIC","textPreview":"STATIC","textChars":6,"textLines":1,"bbox":[1110,48,114,26]}
+{"kind":"textbox","id":"sh/l8329k3a","slide":1,"text":"คนที่เลือกของเข้าบ้าน\nเหมือนเลือกความรู้สึกให้ทุกวัน","textPreview":"คนที่เลือกของเข้าบ้าน | เหมือนเลือกความรู้สึกให้ทุกวัน","textChars":52,"textLines":2,"bbox":[660,100,560,112]}
+{"kind":"textbox","id":"sh/e5c3ep4z","slide":1,"text":"กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้","textPreview":"กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้","textChars":61,"textLines":1,"bbox":[660,224,548,48]}
+{"kind":"shape","id":"sh/z6lk7ulk","slide":1,"bbox":[660,302,46,4]}
+{"kind":"textbox","id":"sh/k3elsj29","slide":1,"text":"CAPTION","textPreview":"CAPTION","textChars":7,"textLines":1,"bbox":[660,324,180,24]}
+{"kind":"textbox","id":"sh/547mlo3u","slide":1,"text":"บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ\n\nUrban Diffuser จับคู่กับ Aroma Oil Urban ให้บรรยากาศอบอุ่น สุขุม และเป็นตัวเองมากขึ้น พร้อมโปรชุด Urban + Aroma Oil เหลือ ฿1,185","textPreview":"บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ |  | Urban Diffuser...","textChars":247,"textLines":3,"bbox":[660,358,552,190]}
+{"kind":"textbox","id":"sh/1cbe54ny","slide":1,"text":"CALL TO ACTION","textPreview":"CALL TO ACTION","textChars":14,"textLines":1,"bbox":[660,574,170,24]}
+{"kind":"textbox","id":"sh/0b2dczmd","slide":1,"text":"เลือกชุด Urban + Aroma Oil →","textPreview":"เลือกชุด Urban + Aroma Oil →","textChars":28,"textLines":1,"bbox":[660,605,430,34]}
+{"kind":"textbox","id":"sh/zatw3u5s","slide":1,"text":"Concept · Everyday home ritual","textPreview":"Concept · Everyday home ritual","textChars":30,"textLines":1,"bbox":[660,660,430,20]}
+{"kind":"textbox","id":"sh/e9kvap47","slide":1,"text":"01 / 01","textPreview":"01 / 01","textChars":7,"textLines":1,"bbox":[1144,660,78,20]}
+{"kind":"image","id":"im/re9032p4","slide":1,"name":"","alt":"CHÔL Aromatique static creative artwork","bbox":[52,52,546,616]}
+{"kind":"notes","id":"nt/ccn9ea","slide":1,"text":"[Sources]\n- Local creative artwork: logs/artwork-generation/2026-07-28T03-36-26-581Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-02-output.png\n- Caption text: layout prototype copy derived from the visible creative artwork; not an external factual claim."}

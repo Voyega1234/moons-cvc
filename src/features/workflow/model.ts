@@ -7,6 +7,7 @@ import type {
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import type {
   ApprovalRole,
+  AlbumFormat,
   AlbumFormatPreference,
   AngleExportGroup,
   ArtworkMode,
@@ -153,6 +154,7 @@ export type WorkflowAction =
     }
   | { type: "replace-direction"; id: string; direction: CreativeDirection }
   | { type: "replace-directions"; directions: readonly CreativeDirection[] }
+  | { type: "set-direction-album-format"; id: string; format: AlbumFormat }
   | {
       type: "set-direction-export-group";
       id: string;

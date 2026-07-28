@@ -9,22 +9,22 @@ export function useRunQualityCheck(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const check = useCallback(() => {
+  const check = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
-    void runQualityCheck(state)
-      .then((results) => {
-        dispatch({ type: "run-qa", results });
-      })
-      .catch((caught: unknown) => {
-        setError(
-          caught instanceof Error ? caught.message : "Could not run quality check."
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    try {
+      const results = await runQualityCheck(state);
+      dispatch({ type: "run-qa", results });
+      return true;
+    } catch (caught: unknown) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not run quality check."
+      );
+      return false;
+    } finally {
+      setLoading(false);
+    }
   }, [state, dispatch]);
 
   return { check, loading, error };

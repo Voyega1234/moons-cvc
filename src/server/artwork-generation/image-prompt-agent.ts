@@ -59,6 +59,7 @@ export interface ImagePromptAgentTrace {
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
   mode: ArtworkMode;
+  stage?: "production-brief";
   status: "succeeded" | "failed";
   inputText: string;
   responsePrompt?: string;
@@ -106,7 +107,7 @@ export async function generateImagePrompt({
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const inputText =
-    mode === "design-system"
+    mode === "design-system" || mode === "design-system-new"
       ? renderCreativeGraphicDesignerPrompt(
           await loadCreativeGraphicDesignerPrompt(),
           input
@@ -203,6 +204,121 @@ export async function generateImagePrompt({
   }
 }
 
+export async function generateProductionBrief({
+  apiKey,
+  model,
+  provider = "openai",
+  fetchImpl,
+  compiledDesignSystemPrompt,
+  referenceImages,
+  writeTrace,
+  loadProductionBriefPrompt = defaultLoadProductionBriefPrompt
+}: {
+  apiKey: string;
+  model?: string;
+  provider?: ImagePromptProvider;
+  fetchImpl: FetchLike;
+  compiledDesignSystemPrompt: string;
+  referenceImages: ImagePromptAgentInput["referenceImages"];
+  writeTrace?: ImagePromptAgentTraceWriter;
+  loadProductionBriefPrompt?: () => Promise<string>;
+}): Promise<string> {
+  const resolvedModel = model?.trim() || DEFAULT_MODEL;
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const endpointPath =
+    provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const inputText = renderProductionBriefPrompt(
+    await loadProductionBriefPrompt(),
+    compiledDesignSystemPrompt
+  );
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        store: false,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: inputText },
+              ...referenceImages.map((image) => ({
+                type: "input_image" as const,
+                image_url: image.imageUrl,
+                detail: "high" as const
+              }))
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "moons_image_generation_prompt",
+            strict: true,
+            schema: standardImagePromptSchema
+          }
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await readProviderErrorDetail(response);
+      throw new Error(
+        `${providerLabel} production brief agent failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      );
+    }
+
+    const payload = await readJsonResponse(
+      response,
+      `${providerLabel} production brief agent`
+    );
+    const text = extractResponseText(payload);
+    const parsed = JSON.parse(text) as { finalPrompt?: unknown };
+    if (typeof parsed.finalPrompt !== "string" || !parsed.finalPrompt.trim()) {
+      throw new Error(
+        `${providerLabel} production brief agent returned an empty prompt.`
+      );
+    }
+
+    const responsePrompt = parsed.finalPrompt.trim();
+    validateProductionBrief(responsePrompt);
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
+      mode: "design-system-new",
+      stage: "production-brief",
+      status: "succeeded",
+      inputText,
+      responsePrompt
+    });
+    return responsePrompt;
+  } catch (error) {
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
+      mode: "design-system-new",
+      stage: "production-brief",
+      status: "failed",
+      inputText,
+      error: readableError(error)
+    });
+    throw error;
+  }
+}
+
 async function writeTraceSafely(
   writeTrace: ImagePromptAgentTraceWriter | undefined,
   trace: ImagePromptAgentTrace
@@ -236,6 +352,61 @@ async function defaultLoadCreativeGraphicDesignerPrompt(): Promise<string> {
     join(process.cwd(), "agent_prompt", "agent_creative_graphic_designer.md"),
     "utf8"
   );
+}
+
+async function defaultLoadProductionBriefPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_production_brief.md"),
+    "utf8"
+  );
+}
+
+const productionBriefSections = [
+  "CENTRAL IDEA",
+  "VISUAL EVENT",
+  "COMPOSITION",
+  "SUBJECT AND ENVIRONMENT",
+  "CAMERA",
+  "LIGHT AND MATERIAL",
+  "TYPOGRAPHY",
+  "OFFICIAL ASSETS",
+  "IMMUTABLE FACTS",
+  "DO NOT INVENT",
+  "OUTPUT"
+] as const;
+
+function renderProductionBriefPrompt(
+  source: string,
+  compiledDesignSystemPrompt: string
+): string {
+  const marker = "{{COMPILED_DESIGN_SYSTEM_PROMPT}}";
+  if (!source.includes(marker)) {
+    throw new Error(
+      `agent_production_brief.md is missing required marker: ${marker}`
+    );
+  }
+  return source.trim().replaceAll(marker, compiledDesignSystemPrompt.trim());
+}
+
+function validateProductionBrief(prompt: string): void {
+  const missingSections = productionBriefSections.filter(
+    (section) => !prompt.includes(section)
+  );
+  if (missingSections.length) {
+    throw new Error(
+      `Production brief is missing required sections: ${missingSections.join(", ")}`
+    );
+  }
+  const sectionPositions = productionBriefSections.map((section) =>
+    prompt.indexOf(section)
+  );
+  if (
+    sectionPositions.some(
+      (position, index) => index > 0 && position <= sectionPositions[index - 1]!
+    )
+  ) {
+    throw new Error("Production brief sections are not in the required order.");
+  }
 }
 
 function renderCreativeGraphicDesignerPrompt(

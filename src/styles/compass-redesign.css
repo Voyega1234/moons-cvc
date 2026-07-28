@@ -4321,29 +4321,114 @@
 }
 
 .compass-app .compass-asset-library-actions {
-  display: grid;
-  grid-template-columns:
-    minmax(130px, 0.7fr)
-    auto
-    auto
-    minmax(210px, 1fr)
-    auto;
-  gap: 7px;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
   align-items: center;
 }
 
-.compass-app .compass-asset-library-actions input {
-  width: 100%;
-  min-width: 0;
-  height: 32px;
+.compass-app .compass-asset-library-actions .btn {
+  width: auto;
+  min-height: 26px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 8.5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.compass-app .compass-asset-action-popover {
+  width: min(520px, 100%);
+  justify-self: end;
+  display: grid;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(31, 40, 61, 0.14);
+}
+
+.compass-app .compass-asset-action-popover > header,
+.compass-app .compass-asset-action-popover > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compass-app .compass-asset-action-popover > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-asset-action-popover > header b {
+  font-size: 11px;
+}
+
+.compass-app .compass-asset-action-popover > header span,
+.compass-app .compass-asset-action-popover > label > span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-app .compass-asset-action-popover > header > button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.compass-app .compass-asset-action-popover > label {
+  display: grid;
+  gap: 6px;
+}
+
+.compass-app .compass-asset-action-popover > label > input {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
   font-size: 10px;
 }
 
-.compass-app .compass-asset-library-actions .btn {
-  white-space: nowrap;
+.compass-app .compass-asset-action-popover > label > input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  outline: 3px solid color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.compass-app .compass-asset-action-popover > footer {
+  justify-content: flex-end;
+}
+
+.compass-app .compass-asset-library-subhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.compass-app .compass-asset-library-subhead b {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.compass-app .compass-asset-library-subhead span {
+  color: var(--muted);
+  font-size: 8.5px;
 }
 
 .compass-app .compass-persistent-asset-grid {
@@ -4561,6 +4646,25 @@
   border-radius: 9px;
   background: var(--surface2);
   text-align: center;
+}
+
+.compass-app .compass-google-reconnect-error {
+  min-height: 38px;
+  padding: 7px 8px 7px 11px;
+  border: 1px solid #f0c9c4;
+  border-radius: 10px;
+  background: #fff7f6;
+  color: #a73b30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.compass-app .compass-google-reconnect-error .btn {
+  flex: 0 0 auto;
 }
 
 .compass-app .compass-asset-folder-edit-form {
@@ -9494,23 +9598,10 @@
   }
 }
 
-@media (max-width: 1100px) {
-  .compass-app .compass-asset-library-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .compass-app .compass-asset-library-actions > label {
-    grid-column: 1 / -1;
-  }
-}
-
 @media (max-width: 640px) {
   .compass-app .compass-asset-library-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .compass-app .compass-asset-library-actions > label {
-    grid-column: auto;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .compass-app .compass-asset-library-actions .btn,

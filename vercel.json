@@ -6,7 +6,7 @@
       "maxDuration": 300
     },
     "api/artwork-generation.ts": {
-      "includeFiles": "{agent_prompt/agent_image.md,agent_prompt/agent_artwork_reference.md,agent_prompt/agent_creative_graphic_designer.md,agent_prompt/agent_design_system.md,graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md}"
+      "includeFiles": "{agent_prompt/agent_image.md,agent_prompt/agent_artwork_reference.md,agent_prompt/agent_creative_graphic_designer.md,agent_prompt/agent_design_system.md,agent_prompt/agent_production_brief.md,graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md}"
     }
   }
 }

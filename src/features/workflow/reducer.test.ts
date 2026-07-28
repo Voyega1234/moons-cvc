@@ -222,11 +222,11 @@ describe("workflowReducer", () => {
     expect(updated.successMetric).toBe("ROAS");
   });
 
-  it("defaults to the fixed Static, UGC, and Album monthly mix", () => {
+  it("defaults to the fixed Single, Album, and UGC monthly mix", () => {
     expect(initialWorkflowState.creativeMix).toEqual([
       { id: "creative-mix-1", service: "single-static", quantity: 3 },
-      { id: "creative-mix-2", service: "ugc-video", quantity: 2 },
-      { id: "creative-mix-3", service: "album-post", quantity: 1 }
+      { id: "creative-mix-2", service: "album-post", quantity: 1 },
+      { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ]);
     expect(initialWorkflowState.quantity).toBe(6);
     expect(initialWorkflowState.brief).toHaveLength(440);
@@ -234,9 +234,9 @@ describe("workflowReducer", () => {
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-creative-mix-quantity",
       id: "creative-mix-3",
-      quantity: 2
+      quantity: 3
     });
-    expect(updated.creativeMix?.[2]?.quantity).toBe(2);
+    expect(updated.creativeMix?.[2]?.quantity).toBe(3);
     expect(updated.quantity).toBe(7);
   });
 
@@ -250,8 +250,8 @@ describe("workflowReducer", () => {
       quantity
     }))).toEqual([
       { service: "single-static", quantity: 3 },
-      { service: "ugc-video", quantity: 2 },
-      { service: "album-post", quantity: 1 }
+      { service: "album-post", quantity: 1 },
+      { service: "ugc-video", quantity: 2 }
     ]);
     expect(state.quantity).toBe(6);
   });
@@ -264,14 +264,14 @@ describe("workflowReducer", () => {
     });
     const albumMaxed = workflowReducer(staticMaxed, {
       type: "set-creative-mix-quantity",
-      id: "creative-mix-3",
+      id: "creative-mix-2",
       quantity: 50
     });
 
     expect(albumMaxed.creativeMix?.map((item) => item.quantity)).toEqual([
       50,
-      2,
-      50
+      50,
+      2
     ]);
     expect(albumMaxed.quantity).toBe(102);
   });
@@ -594,9 +594,9 @@ describe("workflowReducer", () => {
       "1:1 Static",
       "1:1 Static",
       "1:1 Static",
+      "Album post",
       "9:16 UGC",
-      "9:16 UGC",
-      "Album post"
+      "9:16 UGC"
     ]);
   });
 
@@ -884,6 +884,51 @@ describe("workflowReducer", () => {
     expect(replaced?.selected).toBe(original.selected);
     expect(replaced?.exportGroup).toBe("recommended");
     expect(replaced?.hook).toBe("A sharper regenerated hook");
+    expect(state.outputs).toEqual([]);
+    expect(state.qaComplete).toBe(false);
+  });
+
+  it("stores Album format on the selected hook and clears downstream output", () => {
+    const albumDirection = {
+      ...buildDirectionFixtures("Album")[0]!,
+      id: "album-format-hook",
+      service: "album-post" as const,
+      selected: true
+    };
+    const state = workflowReducer(
+      {
+        ...initialWorkflowState,
+        directions: [albumDirection],
+        outputs: [
+          {
+            id: "album-output",
+            directionId: albumDirection.id,
+            format: "Album post",
+            status: "ready" as const,
+            clientStatus: "queued" as const,
+            revisionCount: 0,
+            approval: {
+              graphicDesign: null,
+              clientService: null,
+              projectManager: null
+            },
+            approvalComments: {
+              graphicDesign: "",
+              clientService: "",
+              projectManager: ""
+            }
+          }
+        ],
+        qaComplete: true
+      },
+      {
+        type: "set-direction-album-format",
+        id: albumDirection.id,
+        format: "four-grid"
+      }
+    );
+
+    expect(state.directions[0]?.albumFormat).toBe("four-grid");
     expect(state.outputs).toEqual([]);
     expect(state.qaComplete).toBe(false);
   });

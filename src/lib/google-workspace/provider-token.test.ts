@@ -62,6 +62,24 @@ describe("Google Workspace provider token", () => {
     expect(currentGoogleProviderToken()).toBe("renewed-google-token");
   });
 
+  it("turns a plain-text server failure into an actionable Google error", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response("A server error occurred.", {
+        status: 500,
+        headers: { "Content-Type": "text/plain" }
+      })
+    );
+
+    await expect(
+      requireGoogleProviderToken(
+        fetchImpl,
+        async () => "supabase-access-token"
+      )
+    ).rejects.toThrow(
+      "Google access could not be renewed. Continue with Google again."
+    );
+  });
+
   it("sends a newly issued Google refresh token only to the backend", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ ok: true }), {

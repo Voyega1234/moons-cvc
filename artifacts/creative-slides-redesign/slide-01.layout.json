@@ -1,0 +1,808 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/ccn9ea",
+    "id": "ccn9ea",
+    "slide": 1,
+    "layoutId": "127ef68f-2c4c-408e-aa10-a4a903e377c2",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "8a9f36a8-5f19-4e8f-a446-400f8e5990a2",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#F4F4F0",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "+mn-lt"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "127ef68f-2c4c-408e-aa10-a4a903e377c2",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "8a9f36a8-5f19-4e8f-a446-400f8e5990a2",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "8a9f36a8-5f19-4e8f-a446-400f8e5990a2",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9c3md43m",
+      "id": "1",
+      "bbox": [
+        32,
+        32,
+        586,
+        656
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E3E4DD",
+      "lineWidth": 1
+    },
+    {
+      "order": 2,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/re9032p4",
+      "id": "2",
+      "bbox": [
+        52,
+        52,
+        546,
+        616
+      ],
+      "alt": "CHÔL Aromatique static creative artwork",
+      "contentType": "image/png",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "9d88e6f1-85c1-4e6c-bebe-bc4fdca2790d",
+        "contentType": "image/png",
+        "byteLength": 1989233
+      }
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nal4bulg",
+      "id": "3",
+      "bbox": [
+        660,
+        48,
+        330,
+        26
+      ],
+      "geometry": "rect",
+      "text": "CHÔL AROMATIQUE",
+      "textPreview": "CHÔL AROMATIQUE",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "+mn-lt",
+        "color": "#625BFF",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CHÔL AROMATIQUE"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CHÔL AROMATIQUE",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "color": "#625BFF",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CHÔL AROMATIQUE",
+              "fontSize": 14,
+              "color": "#625BFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/07ulgf2p",
+      "id": "4",
+      "bbox": [
+        1110,
+        48,
+        114,
+        26
+      ],
+      "geometry": "rect",
+      "text": "STATIC",
+      "textPreview": "STATIC",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "+mn-lt",
+        "color": "#465100",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "STATIC"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "STATIC",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "color": "#465100",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "STATIC",
+              "fontSize": 13,
+              "color": "#465100",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l8329k3a",
+      "id": "5",
+      "bbox": [
+        660,
+        100,
+        560,
+        112
+      ],
+      "geometry": "rect",
+      "text": "คนที่เลือกของเข้าบ้าน\nเหมือนเลือกความรู้สึกให้ทุกวัน",
+      "textPreview": "คนที่เลือกของเข้าบ้าน | เหมือนเลือกความรู้สึกให้ทุกวัน",
+      "resolvedFontSize": 34,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 34,
+        "typeface": "+mn-lt",
+        "color": "#191B27",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "คนที่เลือกของเข้าบ้าน"
+          },
+          {
+            "index": 2,
+            "text": "เหมือนเลือกความรู้สึกให้ทุกวัน"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "คนที่เลือกของเข้าบ้าน",
+          "lineSpacingPercent": 93000,
+          "resolvedTextStyle": {
+            "fontSize": 34,
+            "color": "#191B27",
+            "bold": true,
+            "lineSpacing": 0.93
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "คนที่เลือกของเข้าบ้าน",
+              "fontSize": 34,
+              "color": "#191B27",
+              "bold": true,
+              "lineSpacing": 0.93
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "เหมือนเลือกความรู้สึกให้ทุกวัน",
+          "lineSpacingPercent": 93000,
+          "resolvedTextStyle": {
+            "fontSize": 34,
+            "color": "#191B27",
+            "bold": true,
+            "lineSpacing": 0.93
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "เหมือนเลือกความรู้สึกให้ทุกวัน",
+              "fontSize": 34,
+              "color": "#191B27",
+              "bold": true,
+              "lineSpacing": 0.93
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e5c3ep4z",
+      "id": "6",
+      "bbox": [
+        660,
+        224,
+        548,
+        48
+      ],
+      "geometry": "rect",
+      "text": "กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้",
+      "textPreview": "กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "+mn-lt",
+        "color": "#707487",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้",
+          "lineSpacingPercent": 115000,
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "color": "#707487",
+            "lineSpacing": 1.15
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "กลิ่นที่อยู่ในบ้านนานกว่าความสวย และเปลี่ยนอารมณ์ของทุกวันได้",
+              "fontSize": 18,
+              "color": "#707487",
+              "lineSpacing": 1.15
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z6lk7ulk",
+      "id": "7",
+      "bbox": [
+        660,
+        302,
+        46,
+        4
+      ],
+      "geometry": "rect",
+      "fillColor": "#625BFF",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/k3elsj29",
+      "id": "8",
+      "bbox": [
+        660,
+        324,
+        180,
+        24
+      ],
+      "geometry": "rect",
+      "text": "CAPTION",
+      "textPreview": "CAPTION",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "+mn-lt",
+        "color": "#707487",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CAPTION"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CAPTION",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "color": "#707487",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CAPTION",
+              "fontSize": 13,
+              "color": "#707487",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/547mlo3u",
+      "id": "9",
+      "bbox": [
+        660,
+        358,
+        552,
+        190
+      ],
+      "geometry": "rect",
+      "text": "บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ\n\nUrban Diffuser จับคู่กับ Aroma Oil Urban ให้บรรยากาศอบอุ่น สุขุม และเป็นตัวเองมากขึ้น พร้อมโปรชุด Urban + Aroma Oil เหลือ ฿1,185",
+      "textPreview": "บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ |  | Urban Diffuser...",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "+mn-lt",
+        "color": "#282B37",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 5,
+        "lines": [
+          {
+            "index": 1,
+            "text": "บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น”"
+          },
+          {
+            "index": 2,
+            "text": "ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ"
+          },
+          {
+            "index": 3,
+            "text": ""
+          },
+          {
+            "index": 4,
+            "text": "Urban Diffuser จับคู่กับ Aroma Oil Urban ให้บรรยากาศอบอุ่น สุขุม"
+          },
+          {
+            "index": 5,
+            "text": "และเป็นตัวเองมากขึ้น พร้อมโปรชุด Urban + Aroma Oil เหลือ ฿1,185"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ",
+          "lineSpacingPercent": 125000,
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "color": "#282B37",
+            "lineSpacing": 1.25
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "บ้านที่น่าอยู่ ไม่ได้มีแค่เฟอร์นิเจอร์ที่สวย แต่ยังมี “กลิ่น” ที่ทำให้ทุกครั้งที่เปิดประตูรู้สึกว่าได้กลับมาพักจริง ๆ",
+              "fontSize": 18,
+              "color": "#282B37",
+              "lineSpacing": 1.25
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "Urban Diffuser จับคู่กับ Aroma Oil Urban ให้บรรยากาศอบอุ่น สุขุม และเป็นตัวเองมากขึ้น พร้อมโปรชุด Urban + Aroma Oil เหลือ ฿1,185",
+          "lineSpacingPercent": 125000,
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "color": "#282B37",
+            "lineSpacing": 1.25
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Urban Diffuser จับคู่กับ Aroma Oil Urban ให้บรรยากาศอบอุ่น สุขุม และเป็นตัวเองมากขึ้น พร้อมโปรชุด Urban + Aroma Oil เหลือ ฿1,185",
+              "fontSize": 18,
+              "color": "#282B37",
+              "lineSpacing": 1.25
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1cbe54ny",
+      "id": "10",
+      "bbox": [
+        660,
+        574,
+        170,
+        24
+      ],
+      "geometry": "rect",
+      "text": "CALL TO ACTION",
+      "textPreview": "CALL TO ACTION",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "+mn-lt",
+        "color": "#707487",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CALL TO ACTION"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CALL TO ACTION",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "color": "#707487",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CALL TO ACTION",
+              "fontSize": 13,
+              "color": "#707487",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0b2dczmd",
+      "id": "11",
+      "bbox": [
+        660,
+        605,
+        430,
+        34
+      ],
+      "geometry": "rect",
+      "text": "เลือกชุด Urban + Aroma Oil →",
+      "textPreview": "เลือกชุด Urban + Aroma Oil →",
+      "resolvedFontSize": 20,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 20,
+        "typeface": "+mn-lt",
+        "color": "#191B27",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "เลือกชุด Urban + Aroma Oil →"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "เลือกชุด Urban + Aroma Oil →",
+          "resolvedTextStyle": {
+            "fontSize": 20,
+            "color": "#191B27",
+            "bold": true
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "เลือกชุด Urban + Aroma Oil →",
+              "fontSize": 20,
+              "color": "#191B27",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zatw3u5s",
+      "id": "12",
+      "bbox": [
+        660,
+        660,
+        430,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Concept · Everyday home ritual",
+      "textPreview": "Concept · Everyday home ritual",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "+mn-lt",
+        "color": "#8A8E9E",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Concept · Everyday home ritual"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Concept · Everyday home ritual",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "color": "#8A8E9E"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Concept · Everyday home ritual",
+              "fontSize": 12,
+              "color": "#8A8E9E"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e9kvap47",
+      "id": "13",
+      "bbox": [
+        1144,
+        660,
+        78,
+        20
+      ],
+      "geometry": "rect",
+      "text": "01 / 01",
+      "textPreview": "01 / 01",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "+mn-lt",
+        "color": "#8A8E9E",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "01 / 01"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "01 / 01",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "color": "#8A8E9E"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "01 / 01",
+              "fontSize": 12,
+              "color": "#8A8E9E"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

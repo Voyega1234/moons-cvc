@@ -384,25 +384,31 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            output_text: JSON.stringify({
-              directions: [
-                {
-                  id: "openrouter-hook",
-                  service: "single-static",
-                  hook: "มุมคิดใหม่จาก Claude",
-                  subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
-                  concept: "OpenRouter generation",
-                  why: "Tests provider routing",
-                  visual: "Clean and direct",
-                  albumFormat: "three-horizontal",
-                  cta: "ดูรายละเอียด",
-                  caption: "แคปชั่นจากโมเดลที่เลือก",
-                  score: 88,
-                  reasoning: "Strong fit",
-                  citations: []
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    directions: [
+                      {
+                        id: "openrouter-hook",
+                        service: "single-static",
+                        hook: "มุมคิดใหม่จาก Claude",
+                        subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+                        concept: "OpenRouter generation",
+                        why: "Tests provider routing",
+                        visual: "Clean and direct",
+                        albumFormat: "three-horizontal",
+                        cta: "ดูรายละเอียด",
+                        caption: "แคปชั่นจากโมเดลที่เลือก",
+                        score: 88,
+                        reasoning: "Strong fit",
+                        citations: []
+                      }
+                    ]
+                  })
                 }
-              ]
-            })
+              }
+            ]
           }),
           { status: 200 }
         )
@@ -428,7 +434,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status).toBe(200);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "https://api.openai.com/v1/responses",
-      "https://openrouter.ai/api/v1/responses",
+      "https://openrouter.ai/api/v1/chat/completions",
       "https://api.openai.com/v1/responses"
     ]);
     expect(
@@ -436,8 +442,201 @@ describe("handleHookGenerationHarnessRequest", () => {
     ).toBe("Bearer openrouter-key");
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
-    ) as { model: string };
+    ) as {
+      model: string;
+      messages: readonly {
+        content: readonly {
+          type: string;
+          text?: string;
+          image_url?: { url: string };
+        }[];
+      }[];
+      response_format: {
+        type: string;
+        json_schema: { name: string; strict: boolean; schema: unknown };
+      };
+      provider: { require_parameters: boolean };
+    };
     expect(generationBody.model).toBe("anthropic/test-hook-model");
+    expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
+    expect(generationBody.messages[0]?.content[1]).toEqual({
+      type: "image_url",
+      image_url: { url: "https://example.com/hero-bottle.png" }
+    });
+    expect(generationBody.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: {
+        name: "moons_hook_generation",
+        strict: true
+      }
+    });
+    expect(
+      JSON.stringify(generationBody.response_format.json_schema.schema)
+    ).not.toContain("maxItems");
+    expect(generationBody.provider.require_parameters).toBe(true);
+  });
+
+  it("surfaces the provider's OpenRouter 400 detail", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "No strong signal.",
+              references: [],
+              searchQueriesUsed: [],
+              limitations: ""
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: "Unable to download the selected material image."
+            }
+          }),
+          { status: 400 }
+        )
+      );
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          generationModel: "anthropic/claude-sonnet-4.6"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-key",
+        OPENROUTER_API_KEY: "openrouter-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error:
+        "OpenRouter hook harness failed: 400 — Unable to download the selected material image."
+    });
+  });
+
+  it("retries OpenRouter with inline material data when its provider cannot download an image URL", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              overallFinding: "No strong signal.",
+              references: [],
+              searchQueriesUsed: [],
+              limitations: ""
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: "Provider returned error",
+              metadata: {
+                raw: JSON.stringify({
+                  type: "error",
+                  error: {
+                    type: "invalid_request_error",
+                    message:
+                      "Unable to download the file. Please verify the URL and try again."
+                  }
+                })
+              }
+            }
+          }),
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    directions: [
+                      {
+                        id: "openrouter-hook",
+                        service: "single-static",
+                        hook: "มุมคิดใหม่จาก Claude",
+                        subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+                        concept: "OpenRouter generation",
+                        why: "Tests provider routing",
+                        visual: "Clean and direct",
+                        albumFormat: "three-horizontal",
+                        cta: "ดูรายละเอียด",
+                        caption: "แคปชั่นจากโมเดลที่เลือก",
+                        score: 88,
+                        reasoning: "Strong fit",
+                        citations: []
+                      }
+                    ]
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          generationModel: "anthropic/claude-sonnet-4.6"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-key",
+        OPENROUTER_API_KEY: "openrouter-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
+      "https://example.com/hero-bottle.png"
+    );
+    const retryBody = JSON.parse(
+      String(fetchMock.mock.calls[3]?.[1]?.body)
+    ) as {
+      messages: readonly {
+        content: readonly {
+          type: string;
+          image_url?: { url: string };
+        }[];
+      }[];
+    };
+    expect(retryBody.messages[0]?.content[1]?.image_url?.url).toBe(
+      "data:image/png;base64,iVBORw=="
+    );
   });
 
   it("includes real past post captions as a style reference for caption writing", async () => {

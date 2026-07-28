@@ -115,8 +115,8 @@ const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-const OPENROUTER_RESPONSES_ENDPOINT =
-  "https://openrouter.ai/api/v1/responses";
+const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
+  "https://openrouter.ai/api/v1/chat/completions";
 const HOOK_GENERATION_BATCH_SIZE = 12;
 const HOOK_GENERATION_CONCURRENCY = 3;
 const SUBHEADLINE_BATCH_SIZE = 24;
@@ -563,37 +563,94 @@ async function callResponsesApi({
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const endpoint =
     provider === "openrouter"
-      ? OPENROUTER_RESPONSES_ENDPOINT
+      ? OPENROUTER_CHAT_COMPLETIONS_ENDPOINT
       : OPENAI_RESPONSES_ENDPOINT;
-  const response = await fetchImpl(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      store: false,
-      input: [
-        {
-          role: "user",
-          content
+  const buildBody = (requestContent: readonly ResponseContent[]) =>
+    provider === "openrouter"
+      ? {
+          model,
+          messages: [
+            {
+              role: "user",
+              content: requestContent.map((item) =>
+                item.type === "input_text"
+                  ? { type: "text" as const, text: item.text }
+                  : {
+                      type: "image_url" as const,
+                      image_url: { url: item.image_url }
+                    }
+              )
+            }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: schemaName,
+              strict: true,
+              schema
+            }
+          },
+          provider: {
+            require_parameters: true
+          }
         }
-      ],
-      ...(tools?.length ? { tools } : {}),
-      text: {
-        format: {
-          type: "json_schema",
-          name: schemaName,
-          strict: true,
-          schema
-        }
-      }
-    })
-  });
+      : {
+          model,
+          store: false,
+          input: [
+            {
+              role: "user",
+              content: requestContent
+            }
+          ],
+          ...(tools?.length ? { tools } : {}),
+          text: {
+            format: {
+              type: "json_schema",
+              name: schemaName,
+              strict: true,
+              schema
+            }
+          }
+        };
+  const send = (requestContent: readonly ResponseContent[]) =>
+    fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(buildBody(requestContent))
+    });
+
+  let response = await send(content);
 
   if (!response.ok) {
-    throw new Error(`${providerLabel} hook harness failed: ${response.status}`);
+    let detail = await readProviderErrorDetail(response);
+    if (
+      provider === "openrouter" &&
+      response.status === 400 &&
+      isImageDownloadError(detail) &&
+      content.some(
+        (item) =>
+          item.type === "input_image" && /^https?:\/\//i.test(item.image_url)
+      )
+    ) {
+      try {
+        const inlinedContent = await inlineRemoteImages(content, fetchImpl);
+        response = await send(inlinedContent);
+        if (response.ok) {
+          return readJsonResponse(response, `${providerLabel} hook harness`);
+        }
+        detail = await readProviderErrorDetail(response);
+      } catch (error) {
+        detail = `${detail} Retrying with an inline image failed: ${readableError(error)}`;
+      }
+    }
+
+    throw new Error(
+      `${providerLabel} hook harness failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+    );
   }
 
   return readJsonResponse(response, `${providerLabel} hook harness`);
@@ -636,6 +693,7 @@ function buildGenerationPrompt(
     "",
     "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
     "",
+    "## CONTENT TYPE CREATIVE RULES",
     "CONTENT TYPE EXECUTION — แต่ละ format ต้องคิดคนละแบบ ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
     "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
     albumHookInstruction(
@@ -933,7 +991,6 @@ const hookGenerationSchema = {
           albumFormat: { type: "string", enum: albumFormats },
           formatBeats: {
             type: "array",
-            maxItems: 3,
             items: { type: "string" }
           },
           ugcBrief: {
@@ -1525,8 +1582,17 @@ function extractResponseText(payload: unknown): string {
     return payload.output_text;
   }
 
+  if (isRecord(payload) && Array.isArray(payload.choices)) {
+    for (const choice of payload.choices) {
+      if (!isRecord(choice) || !isRecord(choice.message)) continue;
+      if (typeof choice.message.content === "string") {
+        return choice.message.content;
+      }
+    }
+  }
+
   if (!isRecord(payload) || !Array.isArray(payload.output)) {
-    throw new Error("OpenAI hook response did not include output text.");
+    throw new Error("Hook generation response did not include output text.");
   }
 
   for (const item of payload.output) {
@@ -1543,7 +1609,126 @@ function extractResponseText(payload: unknown): string {
     }
   }
 
-  throw new Error("OpenAI hook response did not include output text.");
+  throw new Error("Hook generation response did not include output text.");
+}
+
+async function readProviderErrorDetail(response: Response): Promise<string> {
+  const text = await response.text();
+  if (!text.trim()) return "";
+
+  let detail = text;
+  try {
+    const payload = JSON.parse(text) as unknown;
+    if (isRecord(payload)) {
+      if (typeof payload.message === "string") {
+        detail = payload.message;
+      } else if (typeof payload.error === "string") {
+        detail = payload.error;
+      } else if (isRecord(payload.error)) {
+        detail = providerErrorMessage(payload.error) ?? detail;
+      }
+    }
+  } catch {
+    // Plain-text provider errors are already safe to summarize below.
+  }
+
+  return sanitizeProviderError(detail);
+}
+
+function providerErrorMessage(error: Record<string, unknown>): string | null {
+  const direct =
+    typeof error.message === "string" ? error.message.trim() : "";
+  const metadata = isRecord(error.metadata) ? error.metadata : null;
+
+  if (metadata && typeof metadata.raw === "string") {
+    try {
+      const raw = JSON.parse(metadata.raw) as unknown;
+      if (
+        isRecord(raw) &&
+        isRecord(raw.error) &&
+        typeof raw.error.message === "string"
+      ) {
+        return raw.error.message;
+      }
+    } catch {
+      if (metadata.raw.trim()) return metadata.raw.trim();
+    }
+  }
+
+  if (metadata && Array.isArray(metadata.previous_errors)) {
+    for (const item of metadata.previous_errors) {
+      if (
+        isRecord(item) &&
+        typeof item.message === "string" &&
+        item.message !== "Provider returned error"
+      ) {
+        return item.message;
+      }
+    }
+  }
+
+  return direct || null;
+}
+
+function sanitizeProviderError(value: string): string {
+  return value
+    .replace(/https?:\/\/[^\s"'<>]+/gi, (match) => {
+      try {
+        const url = new URL(match.replace(/[),.;]+$/, ""));
+        return `${url.origin}${url.pathname}`;
+      } catch {
+        return "[image URL]";
+      }
+    })
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+}
+
+function isImageDownloadError(detail: string): boolean {
+  return /unable to download (?:the )?(?:file|image)|fetching image from url|image_download_failed/i.test(
+    detail
+  );
+}
+
+async function inlineRemoteImages(
+  content: readonly ResponseContent[],
+  fetchImpl: FetchLike
+): Promise<readonly ResponseContent[]> {
+  return Promise.all(
+    content.map(async (item): Promise<ResponseContent> => {
+      if (
+        item.type !== "input_image" ||
+        !/^https?:\/\//i.test(item.image_url)
+      ) {
+        return item;
+      }
+
+      const response = await fetchImpl(item.image_url);
+      if (!response.ok) {
+        throw new Error(`material download returned ${response.status}`);
+      }
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > 10 * 1024 * 1024) {
+        throw new Error("material image is larger than 10MB");
+      }
+
+      const contentType = response.headers
+        .get("content-type")
+        ?.split(";")[0]
+        ?.trim()
+        .toLowerCase();
+      if (!contentType?.startsWith("image/")) {
+        throw new Error("material URL did not return an image");
+      }
+
+      return {
+        ...item,
+        image_url: `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
+      };
+    })
+  );
 }
 
 function readRecord(value: unknown, field: string): Record<string, unknown> {

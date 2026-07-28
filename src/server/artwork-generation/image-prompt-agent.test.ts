@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { generateImagePrompt } from "./image-prompt-agent";
+import {
+  generateImagePrompt,
+  generateProductionBrief
+} from "./image-prompt-agent";
 
 const baseInput = {
   brand: {
@@ -586,5 +589,107 @@ describe("generateImagePrompt", () => {
         input: baseInput
       })
     ).rejects.toThrow("OpenAI image prompt agent returned an empty prompt.");
+  });
+});
+
+describe("generateProductionBrief", () => {
+  const productionBrief = [
+    "Create one finished 4:5 Facebook advertising artwork.",
+    "CENTRAL IDEA",
+    "One small product ritual transforms the familiar room.",
+    "VISUAL EVENT",
+    "A diffuser plume changes the room's reflected mood.",
+    "COMPOSITION",
+    "Hero right, headline left, quiet upper-left field.",
+    "SUBJECT AND ENVIRONMENT",
+    "Official diffuser on a lived-in side table.",
+    "CAMERA",
+    "Eye-level environmental portrait with a restrained crop.",
+    "LIGHT AND MATERIAL",
+    "Warm window light, soft shadows, tactile stone and glass.",
+    "TYPOGRAPHY",
+    "Use the exact approved headline and CTA once.",
+    "OFFICIAL ASSETS",
+    "Image 1 is the exact official product.",
+    "IMMUTABLE FACTS",
+    "Preserve the approved product, offer, and copy.",
+    "DO NOT INVENT",
+    "No unsupported claims, prices, or products.",
+    "OUTPUT",
+    "Render one complete artwork only."
+  ].join("\n");
+
+  it("turns the compiled design-system prompt into the required production brief", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const traces: unknown[] = [];
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({ finalPrompt: productionBrief })
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const result = await generateProductionBrief({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      compiledDesignSystemPrompt: "COMPILED MASTER PROMPT",
+      referenceImages: [
+        {
+          imageUrl: "data:image/png;base64,cHJvZHVjdA==",
+          label: "Official product"
+        }
+      ],
+      writeTrace: async (trace) => {
+        traces.push(trace);
+      }
+    });
+
+    expect(result).toBe(productionBrief);
+    const input = calls[0]?.input as {
+      content: { type: string; text?: string; image_url?: string }[];
+    }[];
+    expect(input[0]?.content[0]?.text).toContain(
+      "# GPT IMAGE 2 PRODUCTION BRIEF DIRECTOR"
+    );
+    expect(input[0]?.content[0]?.text).toContain("COMPILED MASTER PROMPT");
+    expect(input[0]?.content[1]).toMatchObject({
+      type: "input_image",
+      image_url: "data:image/png;base64,cHJvZHVjdA=="
+    });
+    expect(traces).toContainEqual(
+      expect.objectContaining({
+        mode: "design-system-new",
+        stage: "production-brief",
+        status: "succeeded",
+        responsePrompt: productionBrief
+      })
+    );
+  });
+
+  it("rejects a production brief that omits required sections", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            finalPrompt: "Create one finished artwork.\nCENTRAL IDEA\nOne idea."
+          })
+        }),
+        { status: 200 }
+      )
+    );
+
+    await expect(
+      generateProductionBrief({
+        apiKey: "test-key",
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        compiledDesignSystemPrompt: "COMPILED MASTER PROMPT",
+        referenceImages: []
+      })
+    ).rejects.toThrow("Production brief is missing required sections");
   });
 });

@@ -107,7 +107,7 @@ async function refreshGoogleProviderToken(
     cache: "no-store",
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  const payload = (await response.json()) as GoogleProviderTokenPayload;
+  const payload = await readProviderTokenPayload(response);
   if (
     !response.ok ||
     payload.ok !== true ||
@@ -117,7 +117,9 @@ async function refreshGoogleProviderToken(
     throw new Error(
       typeof payload.error === "string"
         ? payload.error
-        : "Could not renew Google access."
+        : response.ok
+          ? "Could not renew Google access."
+          : "Google access could not be renewed. Continue with Google again."
     );
   }
 
@@ -158,12 +160,23 @@ async function currentSupabaseAccessToken(): Promise<string | null> {
 }
 
 async function providerTokenError(response: Response): Promise<string> {
+  const payload = await readProviderTokenPayload(response);
+  return typeof payload.error === "string"
+    ? payload.error
+    : "Could not save Google access renewal.";
+}
+
+async function readProviderTokenPayload(
+  response: Response
+): Promise<GoogleProviderTokenPayload> {
+  const text = await response.text();
+  if (!text.trim()) return {};
   try {
-    const payload = (await response.json()) as GoogleProviderTokenPayload;
-    return typeof payload.error === "string"
-      ? payload.error
-      : "Could not save Google access renewal.";
+    const payload = JSON.parse(text) as unknown;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as GoogleProviderTokenPayload)
+      : {};
   } catch {
-    return "Could not save Google access renewal.";
+    return {};
   }
 }

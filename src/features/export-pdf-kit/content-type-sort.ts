@@ -23,6 +23,21 @@ export function contentTypeSortRank(contentType?: string) {
   return rank === -1 ? EXPORT_CONTENT_TYPE_ORDER.length : rank
 }
 
+export function compassContentTypeHeading(contentType?: string) {
+  const normalized = normalizeContentTypeForSort(contentType)
+  const labels: Record<string, string> = {
+    "STATIC AD": "Static",
+    "ALBUM AD": "Album",
+    "UGC VIDEO": "UGC",
+    "SHORT VIDEO": "Short video",
+  }
+  const label =
+    labels[normalized] ||
+    normalized.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+
+  return `${label || "Creative"} topics`
+}
+
 export function sortIdeasByContentType(ideasToSort: IdeaRecommendation[]) {
   return ideasToSort
     .map((idea, index) => ({ idea, index }))

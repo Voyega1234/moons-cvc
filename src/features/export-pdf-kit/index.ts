@@ -10,6 +10,7 @@ export {
   type ReviewIdeaSection,
 } from "./export-ideas-review-pdf"
 export {
+  compassContentTypeHeading,
   contentTypeSortRank,
   EXPORT_CONTENT_TYPE_ORDER,
   normalizeContentTypeForSort,

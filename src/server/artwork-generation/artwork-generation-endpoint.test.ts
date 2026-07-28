@@ -975,7 +975,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER V4"
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
     );
     expect(imageBodies[0]?.prompt).toContain("Album master rules:");
     expect(imageBodies[0]?.prompt).toContain(
@@ -1458,12 +1458,16 @@ describe("handleArtworkGenerationRequest", () => {
                 "Study the attached Creative Compass artwork references directly"
               ),
               images: [
-                expect.objectContaining({
-                  label: "Creative Compass artwork reference — primary"
-                }),
-                expect.objectContaining({
-                  label: "Creative Compass artwork reference — secondary"
-                })
+                {
+                  label: "Creative Compass artwork reference — primary",
+                  mimeType: "image/jpeg",
+                  bytes: Buffer.from("stored-reference").length
+                },
+                {
+                  label: "Creative Compass artwork reference — secondary",
+                  mimeType: "image/jpeg",
+                  bytes: Buffer.from("stored-reference").length
+                }
               ]
             })
           })
@@ -1476,14 +1480,12 @@ describe("handleArtworkGenerationRequest", () => {
         })
       ])
     );
-    expect(debugAssets).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          filename: expect.stringMatching(/-output\.png$/),
-          bytes: Buffer.from("fake-png-bytes")
-        })
-      ])
-    );
+    expect(debugAssets).toEqual([
+      expect.objectContaining({
+        filename: expect.stringMatching(/-output\.png$/),
+        bytes: Buffer.from("fake-png-bytes")
+      })
+    ]);
   });
 
   it("recovers an expired Supabase signed reference URL through storage", async () => {
@@ -1930,19 +1932,19 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
     expect(prompt).toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER V4"
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
     );
     expect(prompt).toContain(
       "Create one complete, publication-ready advertising artwork"
     );
     expect(prompt).toContain(
-      "You are the final visual decision-maker"
+      "Act as the final creative director"
     );
     expect(prompt).toContain(
-      "Freely choose the visual concept"
+      "Freely determine the strongest"
     );
     expect(prompt).toContain(
-      "Pay attention to these principles without treating them as a template"
+      "Treat these principles as design judgement, not as a fixed template"
     );
     expect(prompt).toContain(
       "Let the visual create the first stop"
@@ -1957,7 +1959,7 @@ describe("handleArtworkGenerationRequest", () => {
       "inside one coherent visual world"
     );
     expect(prompt).toContain(
-      "support rather than compete"
+      "If an element competes without helping"
     );
     expect(prompt).toContain("Selling mechanism:\ndesire");
     expect(prompt).toContain(
@@ -2021,10 +2023,10 @@ describe("handleArtworkGenerationRequest", () => {
       "Do not use it as a style, composition, lighting, spatial-density, or visual-treatment reference"
     );
     expect(prompt).toContain(
-      "Use each attached reference only for its stated role"
+      "Use each attached reference only for its explicitly stated role"
     );
     expect(prompt).toContain(
-      "Preserve official logos, products, packaging, spelling, proportions, colours"
+      "Preserve all official:"
     );
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');
@@ -2205,5 +2207,110 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain("### Creative provocation");
+  });
+
+  it("uses the new production brief agent before GPT Image 2 in design-system-new mode", async () => {
+    const responseInputs: string[] = [];
+    const generationCalls: string[] = [];
+    const productionBrief = [
+      "Create one finished 1:1 Facebook advertising artwork.",
+      "CENTRAL IDEA",
+      "A bouquet visibly softens the room.",
+      "VISUAL EVENT",
+      "Rigid shadows relax into gentle curves around the flowers.",
+      "COMPOSITION",
+      "Bouquet right, headline left, quiet space above.",
+      "SUBJECT AND ENVIRONMENT",
+      "Official bouquet in a calm lived-in room.",
+      "CAMERA",
+      "Eye-level medium-wide environmental crop.",
+      "LIGHT AND MATERIAL",
+      "Soft daylight, natural shadows, tactile petals and plaster.",
+      "TYPOGRAPHY",
+      "Use the exact headline and CTA once.",
+      "OFFICIAL ASSETS",
+      "Preserve every attached official asset exactly.",
+      "IMMUTABLE FACTS",
+      "Preserve approved product, offer, and copy.",
+      "DO NOT INVENT",
+      "No unsupported claims, offers, or products.",
+      "OUTPUT",
+      "Render one complete artwork only."
+    ].join("\n");
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          const body = JSON.parse(String(init?.body)) as {
+            input?: { content?: { type?: string; text?: string }[] }[];
+          };
+          const inputText = body.input?.[0]?.content?.find(
+            (item) => item.type === "input_text"
+          )?.text ?? "";
+          responseInputs.push(inputText);
+          if (inputText.includes("# GPT IMAGE 2 PRODUCTION BRIEF DIRECTOR")) {
+            return promptAgentResponse(productionBrief);
+          }
+          if (inputText.includes("# CREATIVE CONCEPT DIRECTOR")) {
+            return creativeGraphicDesignerResponse();
+          }
+          return strategyAgentResponse();
+        }
+        if (href.includes("/v1/images/generations")) {
+          const body = JSON.parse(String(init?.body)) as { prompt: string };
+          generationCalls.push(body.prompt);
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  b64_json: Buffer.from("fake-png-bytes").toString("base64")
+                }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system-new"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(responseInputs).toHaveLength(3);
+    expect(responseInputs[1]).toContain("# CREATIVE CONCEPT DIRECTOR");
+    expect(responseInputs[2]).toContain(
+      "# GPT IMAGE 2 PRODUCTION BRIEF DIRECTOR"
+    );
+    expect(responseInputs[2]).toContain(
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+    );
+    expect(generationCalls).toEqual([productionBrief]);
+    expect(generationCalls[0]).not.toContain(
+      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+    );
   });
 });

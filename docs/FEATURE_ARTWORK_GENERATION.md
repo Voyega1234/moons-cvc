@@ -38,7 +38,17 @@ reconfigure the OpenAI/n8n provider choice above:
    CTA, or logo compositor. Selected campaign references are authoritative for
    visual medium and design grammar, so photographic/editorial work must not
    collapse into generic isometric 3D or SaaS illustration.
-3. `reference-library` — loads
+3. `design-system-new` — keeps the complete `design-system` strategy,
+   creative-concept, campaign-context compilation, reference, and asset flow.
+   Instead of sending the rendered `agent_design_system.md` directly to GPT
+   Image 2, it sends that rendered master prompt plus the same attached images
+   to a production-brief agent using the selected OpenAI/OpenRouter model. The
+   agent follows `agent_prompt/agent_production_brief.md` and must return one
+   committed brief with CENTRAL IDEA, VISUAL EVENT, COMPOSITION, SUBJECT AND
+   ENVIRONMENT, CAMERA, LIGHT AND MATERIAL, TYPOGRAPHY, OFFICIAL ASSETS,
+   IMMUTABLE FACTS, DO NOT INVENT, and OUTPUT sections. Only that concise brief
+   is sent to GPT Image 2.
+4. `reference-library` — loads
    `agent_prompt/agent_artwork_reference.md`, a catalog distilled from the
    verified specs and reconstruction prompts in `agent_prompt/Images/output`.
    Before selection, a GPT Luna (`gpt-5.6-luna`) strategy-enrichment step reads

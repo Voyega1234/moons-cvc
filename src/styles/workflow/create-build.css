@@ -1,0 +1,75 @@
+.compass-app .compass-stage-build .output-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.compass-app .compass-stage-build .compass-build-review-card {
+  border-color: #e4e7ed;
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.compass-app .compass-build-card-head {
+  min-height: 58px;
+  padding: 12px 14px;
+}
+
+.compass-app .compass-build-card-head .pill {
+  min-height: 24px;
+  border-radius: 8px;
+  background: #f4f5f8;
+  color: #7e8695;
+}
+
+.compass-app .compass-build-asset-pair {
+  min-height: 320px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+}
+
+.compass-app .compass-stage-build .compass-build-preview {
+  min-height: 320px;
+  padding: 16px;
+  background: #f1f3f7;
+  overflow: hidden;
+}
+
+.compass-app .compass-build-caption {
+  padding: 14px;
+  background: #fff;
+}
+
+.compass-app .compass-build-caption textarea {
+  height: auto;
+  min-height: 120px;
+  max-height: none;
+  overflow: auto;
+  resize: vertical;
+}
+
+.compass-app .compass-build-output-foot {
+  min-height: 52px;
+  padding: 10px 13px;
+}
+
+.compass-app .compass-build-hidden-preflight,
+.compass-app .compass-build-qa,
+.compass-app .compass-build-qa-strip {
+  display: none !important;
+}
+
+@media (max-width: 1080px) {
+  .compass-app .compass-build-asset-pair {
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .compass-app .compass-stage-build .compass-build-preview {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 760px) {
+  .compass-app .compass-stage-build .output-grid {
+    grid-template-columns: 1fr;
+  }
+}

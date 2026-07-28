@@ -1,6 +1,6 @@
 import jsPDF from "jspdf"
 
-import { contentTypeSortRank } from "./content-type-sort"
+import { compassContentTypeHeading, contentTypeSortRank } from "./content-type-sort"
 import { getIdeaWhy } from "./highlight-subheadline"
 import type { IdeaRecommendation } from "./types"
 
@@ -131,6 +131,10 @@ function tokenize(text: string) {
   return tokenizeWithRanges(text).map((segment) => segment.text)
 }
 
+function isClosingPunctuation(text: string) {
+  return /^[,.;:!?…%)\]}”’]+$/u.test(text)
+}
+
 export function getReviewHighlightKey(group: ReviewIdeaGroup, index: number) {
   return `${group}:${index}`
 }
@@ -191,6 +195,11 @@ function wrapRuns(
 
   for (const run of runs) {
     const runWidth = getTextRunWidth(pdf, run, normalStyle, highlightStyle, sizePt, hasThaiFont)
+    if (line.length > 0 && isClosingPunctuation(run.text)) {
+      line.push(run)
+      lineWidth += runWidth
+      continue
+    }
     if (line.length > 0 && lineWidth + runWidth > maxWidthMm) {
       lines.push(line)
       if (lines.length >= maxLines) return lines
@@ -261,7 +270,10 @@ function wrapText(pdf: jsPDF, text: string, maxWidthMm: number, maxLines: number
   for (const token of tokens) {
     if (!current && /^\s+$/.test(token)) continue
     const next = current + token
-    if (pdf.getTextWidth(next) <= maxWidthMm) {
+    if (
+      pdf.getTextWidth(next) <= maxWidthMm ||
+      (current && isClosingPunctuation(token))
+    ) {
       current = next
       continue
     }
@@ -508,7 +520,7 @@ function drawNeoReviewHeader(
 
   pdf.setTextColor(23, 29, 45)
   setFont(pdf, "semibold", 21, hasThaiFont)
-  pdf.text(`${contentType} topics`, centerX, 12, {
+  pdf.text(compassContentTypeHeading(contentType), centerX, 12, {
     align: "center",
     baseline: "top",
   })
@@ -620,7 +632,7 @@ function drawCompassIdeaCard(
   const hookLineHeight = hookFontSize * PT_TO_MM * 1.08
   pdf.setTextColor(23, 29, 45)
   setFont(pdf, "bold", hookFontSize, hasThaiFont)
-  const hookLines = wrapText(pdf, data.hook, contentWidth, 4)
+  const hookLines = wrapText(pdf, data.hook, contentWidth, data.why ? 3 : 4)
   drawCenteredTextBlock(pdf, hookLines, centerX, hookTextY, hookLineHeight)
 
   const subheadlineLabelY = Math.max(
@@ -644,12 +656,31 @@ function drawCompassIdeaCard(
       contentX,
       subheadlineTextY,
       contentWidth,
-      4,
+      data.why ? 3 : 4,
       bodyFontSize * PT_TO_MM * 1.36,
       bodyFontSize,
       hasThaiFont,
       "center",
     )
+  }
+
+  if (data.why) {
+    const whyY = y + 112
+    const whyHeight = 25.5
+    pdf.setFillColor(238, 243, 255)
+    pdf.roundedRect(contentX, whyY, contentWidth, whyHeight, 3, 3, "F")
+
+    pdf.setTextColor(37, 99, 235)
+    setFont(pdf, "bold", 7.7, hasThaiFont)
+    pdf.text("WHY", centerX, whyY + 4.8, {
+      align: "center",
+      baseline: "top",
+    })
+
+    pdf.setTextColor(71, 84, 103)
+    setFont(pdf, "medium", 7.6, hasThaiFont)
+    const whyLines = wrapText(pdf, data.why, contentWidth - 8, 4)
+    drawCenteredTextBlock(pdf, whyLines, centerX, whyY + 9, 3.65)
   }
 
   pdf.setTextColor(128, 135, 151)

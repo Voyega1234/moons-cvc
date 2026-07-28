@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compassContentTypeHeading,
   normalizeContentTypeForSort,
   sortIdeasByContentType
 } from "./content-type-sort";
@@ -21,5 +22,10 @@ describe("content type sorting", () => {
     ]);
     expect(normalizeContentTypeForSort("1:1 Static")).toBe("STATIC AD");
   });
-});
 
+  it("uses the reference deck's concise page headings", () => {
+    expect(compassContentTypeHeading("STATIC AD")).toBe("Static topics");
+    expect(compassContentTypeHeading("ALBUM AD")).toBe("Album topics");
+    expect(compassContentTypeHeading("UGC VIDEO")).toBe("UGC topics");
+  });
+});

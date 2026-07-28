@@ -1,12 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialWorkflowState } from "./reducer";
 import { DirectionsStage } from "./stages";
+import { BriefConfirmationModal } from "./stages/brief-confirmation-modal";
 import { buildDirectionFixtures } from "./test-fixtures";
 
-describe("DirectionsStage artwork mode", () => {
-  it("shows only Design System and keeps it as the active generation mode", async () => {
+afterEach(cleanup);
+
+describe("Artwork generation settings", () => {
+  it("keeps hook generation controls on Hook and moves artwork controls into confirmation", async () => {
     const user = userEvent.setup();
     const dispatch = vi.fn();
     const state = {
@@ -18,13 +21,10 @@ describe("DirectionsStage artwork mode", () => {
       directions: buildDirectionFixtures("BoneFit")
     };
 
-    render(<DirectionsStage state={state} dispatch={dispatch} />);
+    const directionsView = render(
+      <DirectionsStage state={state} dispatch={dispatch} />
+    );
 
-    expect(
-      screen.getByRole("button", { name: "Design system" }).getAttribute(
-        "aria-pressed"
-      )
-    ).toBe("true");
     const hookModel = screen.getByRole("combobox", {
       name: "Hook generation model"
     }) as HTMLSelectElement;
@@ -38,6 +38,57 @@ describe("DirectionsStage artwork mode", () => {
     expect(
       screen.queryByRole("button", { name: "Reference library" })
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Design system" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Output size" })).toBeNull();
+
+    directionsView.unmount();
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={dispatch}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Standard" }).getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("false");
+    expect(
+      screen.getByRole("button", { name: "Design system" }).getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Design system (new)" }).getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("false");
+    await user.click(
+      screen.getByRole("button", { name: "Design system (new)" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "design-system-new"
+    });
+    await user.click(screen.getByRole("button", { name: "Standard" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "standard"
+    });
 
     const pathSelect = screen.getByRole("combobox", {
       name: "Creative concept model"
@@ -76,9 +127,60 @@ describe("DirectionsStage artwork mode", () => {
       directions: buildDirectionFixtures("BoneFit")
     };
 
-    render(<DirectionsStage state={state} dispatch={dispatch} />);
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={dispatch}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
 
     expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "design-system"
+    });
+  });
+
+  it("keeps Standard mode visible and selected when it is saved", () => {
+    const dispatch = vi.fn();
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "standard" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={dispatch}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Standard" }).getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("true");
+    expect(dispatch).not.toHaveBeenCalledWith({
       type: "set-artwork-mode",
       mode: "design-system"
     });
@@ -117,7 +219,7 @@ describe("DirectionsStage artwork mode", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("shows the selectable art direction model in the Design System path", () => {
+  it("shows the selectable art direction model in confirmation", () => {
     const state = {
       ...createInitialWorkflowState({
         id: "run-1",
@@ -128,16 +230,28 @@ describe("DirectionsStage artwork mode", () => {
       directions: buildDirectionFixtures("BoneFit")
     };
 
-    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
-    const stage = within(view.container);
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={vi.fn()}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
 
-    const pathSelect = stage.getByRole("combobox", {
+    const pathSelect = screen.getByRole("combobox", {
       name: "Creative concept model"
     }) as HTMLSelectElement;
     expect(pathSelect.disabled).toBe(false);
     expect(pathSelect.selectedOptions[0]?.textContent).toBe(
       "GPT · OpenAI → GPT Image 2"
     );
-    expect(stage.getByText("Creative concept model")).toBeTruthy();
+    expect(screen.getByText("Creative concept model")).toBeTruthy();
   });
 });

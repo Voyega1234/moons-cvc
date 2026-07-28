@@ -83,6 +83,7 @@ export function normalizeFormatBeatsForService(
 export const artworkModes = [
   "standard",
   "design-system",
+  "design-system-new",
   "reference-library"
 ] as const;
 export type ArtworkMode = (typeof artworkModes)[number];

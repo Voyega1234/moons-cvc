@@ -32,6 +32,7 @@ import {
   pmApprovedClientSlideItems
 } from "./export-client-slides-pptx";
 import * as googleDriveMaterials from "../../services/google-drive/google-drive-materials";
+import * as qualityCheckService from "../../services/quality-check/run-quality-check";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -53,6 +54,21 @@ function buildCreativeState() {
   });
   state = workflowReducer(state, { type: "auto-select-directions" });
   return workflowReducer(state, { type: "create-outputs" });
+}
+
+function openBriefAssetManager(
+  stage: ReturnType<typeof within>
+) {
+  fireEvent.click(
+    stage.getByRole("button", { name: "Review & continue →" })
+  );
+  const confirmation = within(document.body).getByRole("dialog", {
+    name: "Confirm what Creative Compass should use"
+  });
+  fireEvent.click(
+    within(confirmation).getByRole("tab", { name: /Materials/ })
+  );
+  return within(confirmation);
 }
 
 function qualityReport(passed: boolean, score: number): CreativeQualityReport {
@@ -502,36 +518,26 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const briefStage = within(briefView.container);
-    const activeMaterials = briefStage
-      .getByRole("button", { name: "Add Materials" })
-      .closest(".compass-signal-disclosure-wrap")
-      ?.querySelector("details");
-    if (!activeMaterials) {
-      throw new Error("Expected the active Materials disclosure.");
-    }
-    fireEvent.click(activeMaterials.querySelector("summary")!);
-    expect(
-      within(activeMaterials as HTMLElement)
-        .getByRole("img", { name: material.name })
-        .getAttribute("src")
-    ).toBe(material.url);
     fireEvent.click(
-      briefStage.getByRole("button", { name: "Add Materials" })
+      briefStage.getByRole("button", { name: "Review & continue →" })
     );
-    const briefDialog = briefStage.getByRole("dialog", {
-      name: "Brief materials"
+    const confirmation = within(document.body).getByRole("dialog", {
+      name: "Confirm what Creative Compass should use"
     });
+    fireEvent.click(
+      within(confirmation).getByRole("tab", { name: /Materials/ })
+    );
     expect(
-      briefDialog.querySelector(
+      within(confirmation).getByText(material.name)
+    ).toBeTruthy();
+    expect(
+      confirmation.querySelector(
         `.compass-creative-material-card img[alt="${material.name}"]`
       )
     ).toBeTruthy();
-    expect(within(briefDialog).getByDisplayValue(material.description)).toBeTruthy();
-    fireEvent.click(
-      within(briefDialog).getByRole("button", {
-        name: "Close brief materials"
-      })
-    );
+    expect(
+      within(confirmation).getByDisplayValue(material.description)
+    ).toBeTruthy();
     briefView.unmount();
   });
 
@@ -578,9 +584,9 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const stage = within(view.container);
-    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
-    const dialog = within(
-      stage.getByRole("dialog", { name: "Brief materials" })
+    const dialog = openBriefAssetManager(stage);
+    fireEvent.click(
+      dialog.getByRole("button", { name: "Add Drive folder" })
     );
     fireEvent.change(dialog.getByLabelText("Google Drive folder link"), {
       target: {
@@ -588,16 +594,18 @@ describe("redesigned workflow stages", () => {
       }
     });
     fireEvent.click(
-      dialog.getByRole("button", { name: "Add Drive folder" })
+      dialog.getByRole("button", { name: "Add folder" })
     );
 
-    const yearButton = await dialog.findByRole("button", { name: /2026/ });
+    const yearButton = await dialog.findByRole("button", {
+      name: "2026 Open folder"
+    });
     expect(dialog.queryByText("This folder is empty.")).toBeNull();
     expect(loadFolder).toHaveBeenCalledTimes(1);
 
     fireEvent.click(yearButton);
     const packshotButton = await dialog.findByRole("button", {
-      name: /Packshot/
+      name: "Packshot Open folder"
     });
     expect(loadFolder).toHaveBeenCalledTimes(2);
 
@@ -628,10 +636,7 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const stage = within(view.container);
-    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
-    const dialog = within(
-      stage.getByRole("dialog", { name: "Brief materials" })
-    );
+    const dialog = openBriefAssetManager(stage);
 
     expect(
       await dialog.findByRole("status", { name: "Loading images" })
@@ -654,10 +659,7 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const stage = within(view.container);
-    fireEvent.click(stage.getByRole("button", { name: "Add Materials" }));
-    const dialog = within(
-      stage.getByRole("dialog", { name: "Brief materials" })
-    );
+    const dialog = openBriefAssetManager(stage);
     const image = await dialog.findByRole("img", { name: "Preview.png" });
     const preview = image.closest(".compass-asset-preview");
 
@@ -679,19 +681,17 @@ describe("redesigned workflow stages", () => {
       </BrandMemoryProvider>
     );
     const stage = within(materialsView.container);
-    await user.click(stage.getByRole("button", { name: "Add Materials" }));
-    const dialog = within(
-      stage.getByRole("dialog", { name: "Brief materials" })
-    );
+    const dialog = openBriefAssetManager(stage);
 
-    await user.type(dialog.getByLabelText("New folder name"), "Packshots");
     await user.click(dialog.getByRole("button", { name: "Create folder" }));
+    await user.type(dialog.getByLabelText("New folder name"), "Packshots");
+    await user.click(dialog.getByRole("button", { name: "Create" }));
     await user.click(
       await dialog.findByRole("button", { name: "Packshots Open folder" })
     );
 
     await user.upload(
-      dialog.getByLabelText("Upload images"),
+      dialog.getByLabelText("Upload Materials"),
       new File(["material"], "Packshot.png", { type: "image/png" })
     );
     await waitFor(() => expect(createAssetImage).toHaveBeenCalled());
@@ -731,13 +731,14 @@ describe("redesigned workflow stages", () => {
     await user.click(
       libraryDialog.getByRole("button", { name: /References/ })
     );
+    await user.click(
+      libraryDialog.getByRole("button", { name: "Create folder" })
+    );
     await user.type(
       libraryDialog.getByLabelText("New folder name"),
       "Moodboard"
     );
-    await user.click(
-      libraryDialog.getByRole("button", { name: "Create folder" })
-    );
+    await user.click(libraryDialog.getByRole("button", { name: "Create" }));
     await user.click(
       await libraryDialog.findByRole("button", {
         name: "Moodboard Open folder"
@@ -1615,60 +1616,17 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("heading", { name: "Creative brief" })
     ).toBeTruthy();
-    expect(stage.getByRole("heading", { name: "Brief materials" })).toBeTruthy();
+    expect(stage.getByRole("heading", { name: "Signal stack" })).toBeTruthy();
     expect(
       stage.getByRole("heading", { name: "Primary success metric" })
     ).toBeTruthy();
-    const productTruthOptions = stage.getAllByRole("checkbox", {
-      name: /Use product/
-    }) as HTMLInputElement[];
-    expect(productTruthOptions).toHaveLength(
-      state.brand?.library.products.length ?? 0
-    );
-    expect(productTruthOptions.every((option) => option.checked)).toBe(true);
-    const selectAllProducts = stage.getByRole("button", {
-      name: "Select all product truths"
-    }) as HTMLButtonElement;
-    const deselectAllProducts = stage.getByRole("button", {
-      name: "Deselect all product truths"
-    }) as HTMLButtonElement;
-    expect(selectAllProducts.disabled).toBe(true);
-    expect(deselectAllProducts.disabled).toBe(false);
-    await user.click(deselectAllProducts);
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-all-product-context",
-      selected: false
-    });
-    const productTruth = stage
-      .getByText("Product truth")
-      .closest("details");
-    const firstProductDescription =
-      state.brand?.library.products[0]?.description;
-    if (!productTruth || !firstProductDescription) {
-      throw new Error("Expected Product truth fixture.");
-    }
-    expect((productTruth as HTMLDetailsElement).open).toBe(true);
-    expect(
-      within(productTruth).queryByText(firstProductDescription)
-    ).toBeNull();
-    const referenceContext = stage
-      .getByText("Reference context")
-      .closest("details");
-    const materialsContext = stage
-      .getByRole("button", { name: "Add Materials" })
-      .closest(".compass-signal-disclosure-wrap")
-      ?.querySelector("details");
-    expect((referenceContext as HTMLDetailsElement | null)?.open).toBe(true);
-    expect((materialsContext as HTMLDetailsElement | null)?.open).toBe(false);
-    expect(
-      stage.getByRole("button", { name: "Add Product truth" })
-    ).toBeTruthy();
-    expect(
-      stage.getByRole("button", { name: "Add Reference" })
-    ).toBeTruthy();
-    expect(
-      stage.getByRole("button", { name: "Add Materials" })
-    ).toBeTruthy();
+    expect(stage.getByText("Audience tension")).toBeTruthy();
+    expect(stage.getByText("Brand proof")).toBeTruthy();
+    expect(stage.getByText("Past winner")).toBeTruthy();
+    expect(stage.queryByText("Product truth")).toBeNull();
+    expect(stage.queryByText("Reference context")).toBeNull();
+    expect(stage.queryByText("Select all")).toBeNull();
+    expect(stage.queryByText("Deselect all")).toBeNull();
     expect(
       stage.getByRole("button", { name: /CTR/i }).getAttribute("aria-pressed")
     ).toBe("false");
@@ -1678,11 +1636,11 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("alert")).toBeNull();
     expect(stage.queryByRole("combobox", { name: /Content type/i })).toBeNull();
     expect(stage.queryByRole("button", { name: "Add item" })).toBeNull();
-    expect(stage.getByText("Static")).toBeTruthy();
-    expect(stage.getByText("UGC")).toBeTruthy();
+    expect(stage.getByText("Single")).toBeTruthy();
     expect(stage.getByText("Album")).toBeTruthy();
+    expect(stage.getByText("UGC")).toBeTruthy();
     expect(
-      stage.getByRole("spinbutton", { name: "Static quantity" })
+      stage.getByRole("spinbutton", { name: "Single quantity" })
     ).toBeTruthy();
     expect(
       stage.getByRole("spinbutton", { name: "UGC quantity" })
@@ -1719,8 +1677,14 @@ describe("redesigned workflow stages", () => {
     const firstProduct = state.brand?.library.products[0];
     if (!firstProduct) throw new Error("Expected a product fixture.");
     await user.click(
-      stage.getByRole("checkbox", {
-        name: `Use product ${firstProduct.title}`
+      stage.getByRole("button", { name: "Review & continue →" })
+    );
+    const confirmation = within(document.body).getByRole("dialog", {
+      name: "Confirm what Creative Compass should use"
+    });
+    await user.click(
+      within(confirmation).getByRole("button", {
+        name: new RegExp(firstProduct.title)
       })
     );
     expect(dispatch).toHaveBeenCalledWith({
@@ -1728,64 +1692,11 @@ describe("redesigned workflow stages", () => {
       id: firstProduct.id
     });
 
-    await user.click(
-      stage.getByRole("button", { name: "Add Product truth" })
-    );
-    let materialsDialog = stage.getByRole("dialog", {
-      name: "Brief materials"
-    });
-    expect(
-      within(materialsDialog)
-        .getByRole("button", { name: "Product truth" })
-        .getAttribute("aria-expanded")
-    ).toBe("true");
-    await user.click(
-      stage.getByRole("button", { name: "Close brief materials" })
-    );
-
-    await user.click(stage.getByRole("button", { name: "Add Reference" }));
-    materialsDialog = stage.getByRole("dialog", {
-      name: "Brief materials"
-    });
-    expect(
-      within(materialsDialog)
-        .getByRole("button", { name: "Reference board" })
-        .getAttribute("aria-expanded")
-    ).toBe("true");
-    await user.click(
-      stage.getByRole("button", { name: "Close brief materials" })
-    );
-
-    await user.click(stage.getByRole("button", { name: "Add Materials" }));
-    materialsDialog = stage.getByRole("dialog", { name: "Brief materials" });
-    expect(
-      within(materialsDialog)
-        .getByRole("button", { name: "Materials" })
-        .getAttribute("aria-expanded")
-    ).toBe("true");
-    await user.click(
-      stage.getByRole("button", { name: "Close brief materials" })
-    );
-
-    expect(
-      stage.queryByRole("button", { name: "Manage brief materials" })
-    ).toBeNull();
-    await user.click(stage.getByRole("button", { name: "Add Reference" }));
-    materialsDialog = stage.getByRole("dialog", {
-      name: "Brief materials"
-    });
-    expect(materialsDialog).toBeTruthy();
-    expect(
-      within(materialsDialog).getByRole("heading", { name: "Use from library" })
-    ).toBeTruthy();
-    expect(
-      within(materialsDialog).getByRole("button", { name: "Materials" })
-    ).toBeTruthy();
     const referenceFile = new File(["reference"], "Uploaded reference.png", {
       type: "image/png"
     });
     await user.upload(
-      within(materialsDialog).getByLabelText("Upload reference"),
+      within(confirmation).getByLabelText("Upload reference in confirmation"),
       referenceFile
     );
     await waitFor(() =>
@@ -1807,29 +1718,123 @@ describe("redesigned workflow stages", () => {
         role: "style"
       }
     });
-    expect(
-      within(materialsDialog).getByRole("heading", {
-        name: "References in Brief materials"
-      })
-    ).toBeTruthy();
-    expect(
-      within(materialsDialog).getByRole("heading", { name: "Materials" })
-    ).toBeTruthy();
-    expect(
-      within(materialsDialog).getByText(
-        "Upload the exact products, people, or objects you want used in the artwork."
-      )
-    ).toBeTruthy();
-    expect(
-      within(materialsDialog).queryByRole("button", {
-        name: "Product materials"
-      })
-    ).toBeNull();
     await user.click(
-      stage.getByRole("button", { name: "Close brief materials" })
+      within(confirmation).getByRole("tab", { name: /Materials/ })
     );
     expect(
+      within(confirmation).queryByLabelText("New folder name")
+    ).toBeNull();
+    expect(
+      within(confirmation).getByLabelText("Upload Materials")
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("button", { name: "Add Drive folder" })
+    ).toBeTruthy();
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Create folder" })
+    );
+    expect(
+      within(confirmation).getByRole("dialog", { name: "Create a folder" })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByLabelText("New folder name")
+    ).toBeTruthy();
+    await user.click(
+      within(confirmation).getByRole("button", {
+        name: "Close create folder popup"
+      })
+    );
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Add Drive folder" })
+    );
+    expect(
+      within(confirmation).getByRole("dialog", {
+        name: "Add a Google Drive folder"
+      })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByLabelText("Google Drive folder link")
+    ).toBeTruthy();
+    expect(
+      within(confirmation).queryByRole("button", {
+        name: "Browse library / Google Drive"
+      })
+    ).toBeNull();
+    await user.click(within(confirmation).getByRole("button", { name: "Back" }));
+    expect(
       stage.queryByRole("dialog", { name: "Brief materials" })
+    ).toBeNull();
+  });
+
+  it("reviews the complete brief before starting hook generation", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    const mixLabels = stage
+      .getAllByRole("spinbutton")
+      .map((input) => input.getAttribute("aria-label"))
+      .filter((label) => label?.endsWith("quantity"));
+    expect(mixLabels.slice(0, 3)).toEqual([
+      "Single quantity",
+      "Album quantity",
+      "UGC quantity"
+    ]);
+
+    await user.click(
+      stage.getByRole("button", { name: "Review & continue →" })
+    );
+
+    const confirmation = within(document.body).getByRole("dialog", {
+      name: "Confirm what Creative Compass should use"
+    });
+    expect(
+      within(confirmation).getByText("Final check before Hook")
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByText("Selected product info")
+    ).toBeTruthy();
+    expect(within(confirmation).getByText("Image references")).toBeTruthy();
+    expect(
+      within(confirmation).getByLabelText("Upload reference in confirmation")
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("group", { name: "Artwork settings" })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("button", { name: "Design system" })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("combobox", {
+        name: "Creative concept model"
+      })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("combobox", { name: "Output size" })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).getByRole("button", {
+        name: "Confirm & generate hooks →"
+      })
+    ).toBeTruthy();
+    expect(
+      dispatch.mock.calls.some(
+        ([action]) =>
+          (action as WorkflowAction).type === "generate-directions"
+      )
+    ).toBe(false);
+
+    await user.click(within(confirmation).getByRole("button", { name: "Back" }));
+    expect(
+      within(document.body).queryByRole("dialog", {
+        name: "Confirm what Creative Compass should use"
+      })
     ).toBeNull();
   });
 
@@ -1920,10 +1925,12 @@ describe("redesigned workflow stages", () => {
 
     expect(view.container.querySelector(".compass-stage-angles")).toBeTruthy();
     expect(
-      stage.getByRole("region", { name: "Artwork settings" })
-    ).toBeTruthy();
-    expect(view.container.querySelectorAll(".compass-angle-setting")).toHaveLength(3);
-    expect(view.container.querySelectorAll(".compass-angle-settings")).toHaveLength(1);
+      stage.queryByRole("region", { name: "Artwork settings" })
+    ).toBeNull();
+    expect(
+      stage.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
+    expect(stage.queryByRole("combobox", { name: "Output size" })).toBeNull();
     expect(stage.getByRole("heading", { name: "Review hooks" })).toBeTruthy();
     expect(stage.queryByRole("button", { name: "Let Compass pick" })).toBeNull();
     expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
@@ -1981,6 +1988,32 @@ describe("redesigned workflow stages", () => {
     expect(albumCard?.textContent).toContain("Cover hook");
     expect(albumCard?.textContent).toContain("Inside slides · 3 supporting topics");
     expect(albumCard?.textContent).toContain("ปัญหาที่คนมองข้าม");
+    expect(albumCard?.querySelector(".angle-album-format-slot")).toBeTruthy();
+    const albumDirection = state.directions.find(
+      (direction) => direction.service === "album-post" && direction.selected
+    );
+    if (!albumDirection || !(albumCard instanceof HTMLElement)) {
+      throw new Error("Expected a selected Album hook.");
+    }
+    await user.click(
+      within(albumCard).getByRole("button", { name: /Choose Album format/i })
+    );
+    const albumFormatDialog = within(document.body).getByRole("dialog", {
+      name: "Choose the Facebook Album layout"
+    });
+    await user.click(
+      within(albumFormatDialog).getByRole("button", { name: /4 images · Grid/i })
+    );
+    await user.click(
+      within(albumFormatDialog).getByRole("button", {
+        name: "Use this Album format"
+      })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-direction-album-format",
+      id: albumDirection.id,
+      format: "four-grid"
+    });
     expect(ugcCard?.textContent).toContain("Opening hook");
     expect(ugcCard?.textContent).toContain("UGC video flow · 3 beats");
     expect(angleCards[0]?.querySelector(".compass-angle-card-foot")).toBeTruthy();
@@ -2209,13 +2242,13 @@ describe("redesigned workflow stages", () => {
       stage.getByRole("heading", { name: `Creative set · ${state.brand?.name}` })
     ).toBeTruthy();
     expect(
-      stage.getByRole("heading", { name: "STATIC" })
+      stage.getByRole("heading", { name: "Static creatives" })
     ).toBeTruthy();
     expect(
       Array.from(
         view.container.querySelectorAll(".build-section-head h3")
       ).map((heading) => heading.textContent)
-    ).toEqual(["STATIC", "ALBUM", "UGC VIDEO"]);
+    ).toEqual(["Static creatives", "Album creatives", "UGC creatives"]);
     expect(stage.getAllByText(/Creative \d/)).toHaveLength(state.outputs.length);
     const reviewCards = view.container.querySelectorAll(
       ".compass-build-review-card"
@@ -2252,7 +2285,7 @@ describe("redesigned workflow stages", () => {
 
     expect(googleSlidesButton.hasAttribute("disabled")).toBe(false);
     expect(googleSlidesButton.getAttribute("title")).toBe(
-      `Create ${createStageClientSlideItems(state).length} creative slides in Google Slides`
+      `Create ${createStageClientSlideItems(state).length} creative sets in Google Slides`
     );
 
     const pptx = await buildCreateStageSlidesPptx(
@@ -2265,7 +2298,7 @@ describe("redesigned workflow stages", () => {
           _slides: readonly unknown[];
         }
       )._slides
-    ).toHaveLength(createStageClientSlideItems(state).length);
+    ).toHaveLength(createStageClientSlideItems(state).length * 2);
   });
 
   it("keeps Google Slides export enabled for viewers", () => {
@@ -2363,6 +2396,76 @@ describe("redesigned workflow stages", () => {
         lang: "th-TH"
       });
     });
+    expect(
+      textObjects
+        .flatMap((object) => object.text?.map((run) => run.text) ?? [])
+        .join("\n")
+    ).toContain("ใช้งานได้ทั้งเตาแก๊ส เตาไฟฟ้า และเตา Induction");
+  });
+
+  it("shrinks a long caption to fit one artwork-caption slide without overlapping CTA", async () => {
+    const base = buildCreativeState();
+    const firstDirection = base.directions[0];
+    const firstOutput = base.outputs[0];
+    if (!firstDirection || !firstOutput) {
+      throw new Error("Expected creative fixtures for long-caption export.");
+    }
+    const longCaption =
+      "Make Time to Let Your Space Feel Good. 🤍\n\n·\nกลิ่นหอมที่เลือกให้บ้าน ไม่ได้เป็นเพียงรายละเอียดของพื้นที่ แต่เป็นส่วนหนึ่งของช่วงเวลาที่เราเลือกใช้ชีวิต\n\n·\n🌿 Urban + Aroma Oil\nสำหรับเติมกลิ่นหอมและสร้างมู้ดที่ดีในทุกช่วงเวลา\n\n·\nราคาปกติ ฿1,580\nราคาพิเศษ ฿1,185 (25%)\n\n·\nค้นพบกลิ่นหอมที่ช่วยเติมเต็มทุกพื้นที่ของการใช้ชีวิต กับ CHOL Home & Aroma Collection 🤍";
+    const state = {
+      ...base,
+      directions: [{ ...firstDirection, caption: longCaption }],
+      outputs: [
+        {
+          ...firstOutput,
+          directionId: firstDirection.id,
+          assetUrl: "https://example.com/long-caption.png"
+        }
+      ]
+    };
+
+    const pptx = await buildCreateStageSlidesPptx(
+      state,
+      async () =>
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
+    );
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            text?: Array<{ text: string }>;
+            options: { fontSize?: number };
+          }>;
+        }>;
+      }
+    )._slides;
+    const visibleText = slides.map((slide) =>
+      slide._slideObjects
+        .flatMap((object) => object.text?.map((run) => run.text) ?? [])
+        .join("\n")
+    );
+
+    expect(slides).toHaveLength(2);
+    expect(visibleText[0]).toContain("CREATIVE DIRECTION");
+    expect(visibleText[0]).toContain("CREATIVE DRAFT");
+    expect(visibleText[0]).not.toContain("ราคาพิเศษ ฿1,185");
+    expect(visibleText[1]).toContain("ราคาพิเศษ ฿1,185");
+    expect(visibleText[1]).toContain(
+      "ค้นพบกลิ่นหอมที่ช่วยเติมเต็มทุกพื้นที่"
+    );
+    const captionText = slides[1]?._slideObjects.find(
+      (object) =>
+        typeof object.options.fontSize === "number" &&
+        object.options.fontSize < 15 &&
+        object.options.fontSize >= 9 &&
+        object.text?.some((run) => run.text.length > 60)
+    );
+    expect(captionText).toBeDefined();
+    const exportedCaption =
+      captionText?.text?.map((run) => run.text).join("") ?? "";
+    expect(exportedCaption).toContain("\n·\n");
+    expect(exportedCaption).not.toContain("\n\n·\n");
   });
 
   it("exports UGC in the shared deck theme with a phone reference and three-part script", async () => {
@@ -2377,6 +2480,8 @@ describe("redesigned workflow stages", () => {
       service: "ugc-video" as const,
       hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
       concept: "Creator สาธิตมื้อเช้าจริงที่ทำได้ก่อนออกจากบ้าน",
+      caption:
+        "เช้าเร่งรีบก็ยังทำไข่ข้นให้น่ากินได้ในเวลาไม่กี่นาที ด้วยกระทะที่หยิบใช้ได้คล่องทุกวัน",
       formatBeats: ["เปิดด้วยเวลาที่ใกล้หมด", "สาธิตทำไข่ข้น", "ชิมและปิดด้วย CTA"],
       ugcBrief: {
         product: "Korea King Colormic 24cm",
@@ -2417,7 +2522,7 @@ describe("redesigned workflow stages", () => {
       async () =>
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
     );
-    const [slide] = (
+    const [storyboardSlide, captionSlide] = (
       pptx as unknown as {
         _slides: Array<{
           _slideObjects: Array<{
@@ -2427,20 +2532,27 @@ describe("redesigned workflow stages", () => {
         }>;
       }
     )._slides;
-    const visibleText =
-      slide?._slideObjects
+    const storyboardText =
+      storyboardSlide?._slideObjects
+        .flatMap((object) => object.text?.map((run) => run.text) ?? [])
+        .join("\n") ?? "";
+    const captionText =
+      captionSlide?._slideObjects
         .flatMap((object) => object.text?.map((run) => run.text) ?? [])
         .join("\n") ?? "";
 
-    expect(visibleText).toContain("UGC VISUAL REFERENCE");
-    expect(visibleText).toContain("Korea King Colormic 24cm");
-    expect(visibleText).toContain("15–30 วินาที");
-    expect(visibleText).toContain("VIDEO STORYLINE");
-    expect(visibleText).toContain("OPEN / HOOK");
-    expect(visibleText).toContain("SHOWCASE");
-    expect(visibleText).toContain("END / CTA");
+    expect(storyboardText).toContain("UGC VISUAL REFERENCE");
+    expect(storyboardText).toContain("CREATIVE OBJECTIVE");
+    expect(storyboardText).toContain("Korea King Colormic 24cm");
+    expect(storyboardText).toContain("15–30 วินาที");
+    expect(storyboardText).toContain("VIDEO STORYLINE");
+    expect(storyboardText).toContain("OPEN / HOOK");
+    expect(storyboardText).toContain("SHOWCASE");
+    expect(storyboardText).toContain("END / CTA");
+    expect(captionText).toContain("ARTWORK & CAPTION");
+    expect(captionText).toContain("เช้าเร่งรีบก็ยังทำไข่ข้นให้น่ากินได้");
     expect(
-      slide?._slideObjects.some((object) => object._type === "image")
+      storyboardSlide?._slideObjects.some((object) => object._type === "image")
     ).toBe(true);
   });
 
@@ -2465,7 +2577,7 @@ describe("redesigned workflow stages", () => {
     const view = render(<StudioStage state={state} dispatch={dispatch} />);
     const stage = within(view.container);
     const albumHeading = stage.getByRole("heading", {
-      name: "ALBUM"
+      name: "Album creatives"
     });
     const albumSection = albumHeading.closest(".build-type-section");
     if (!(albumSection instanceof HTMLElement)) {
@@ -2498,16 +2610,9 @@ describe("redesigned workflow stages", () => {
       "1"
     );
 
-    await user.click(
-      within(albumSection).getByRole("button", { name: "Save album" })
-    );
-    expect(dispatch).toHaveBeenCalledTimes(3);
-    state.outputs.forEach((output) => {
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "save-output-reference",
-        id: output.id
-      });
-    });
+    expect(
+      within(albumSection).getByRole("button", { name: "Regenerate draft" })
+    ).toBeTruthy();
 
     await user.click(
       within(albumSection).getByRole("button", {
@@ -2544,13 +2649,21 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.queryByText("Clear, distinct, and ready for human review.")
     ).toBeNull();
-    expect(stage.getAllByText("AI draft")).toHaveLength(state.outputs.length);
+    expect(stage.getAllByText("Draft · V1")).toHaveLength(state.outputs.length);
   });
 
-  it("sends unchecked drafts directly to Internal QC", async () => {
+  it("runs quality preflight automatically before sending drafts to Internal QC", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
+    const results = state.outputs.map((output) => ({
+      outputId: output.id,
+      passed: true,
+      reason: "Ready for Internal QC."
+    }));
+    const runQualityCheck = vi
+      .spyOn(qualityCheckService, "runQualityCheck")
+      .mockResolvedValue(results);
     const view = render(<StudioStage state={state} dispatch={dispatch} />);
     const stage = within(view.container);
     const sendButton = stage.getByRole("button", {
@@ -2560,16 +2673,46 @@ describe("redesigned workflow stages", () => {
     expect(state.qaComplete).toBe(false);
     expect(sendButton.disabled).toBe(false);
     expect(
-      stage.getByRole("button", { name: "Quality check (optional)" })
-    ).toBeTruthy();
+      stage.queryByRole("button", { name: /Quality check/i })
+    ).toBeNull();
 
     await user.click(sendButton);
 
     await waitFor(() => {
+      expect(runQualityCheck).toHaveBeenCalledWith(state);
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "run-qa",
+        results
+      });
       expect(dispatch).toHaveBeenCalledWith({
         type: "set-stage",
         stage: "approval"
       });
+    });
+  });
+
+  it("keeps Build open when the automatic quality preflight service fails", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    vi.spyOn(qualityCheckService, "runQualityCheck").mockRejectedValue(
+      new Error("Quality service is temporarily unavailable.")
+    );
+    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const stage = within(view.container);
+
+    await user.click(
+      stage.getByRole("button", { name: "Send to Internal QC →" })
+    );
+
+    await waitFor(() => {
+      expect(
+        stage.getByText("Quality service is temporarily unavailable.")
+      ).toBeTruthy();
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "set-stage",
+      stage: "approval"
     });
   });
 
@@ -2603,21 +2746,16 @@ describe("redesigned workflow stages", () => {
     expect(firstCard?.textContent).not.toContain("88");
   });
 
-  it("saves a Build execution to references through the workflow", async () => {
-    const user = userEvent.setup();
+  it("keeps Build focused on draft editing instead of reference-library actions", () => {
     const state = buildCreativeState();
-    const firstOutput = state.outputs[0];
-    if (!firstOutput) throw new Error("Expected a creative output fixture.");
     const dispatch = vi.fn();
     const view = render(<StudioStage state={state} dispatch={dispatch} />);
     const stage = within(view.container);
 
-    await user.click(stage.getAllByRole("button", { name: "Save reference" })[0]!);
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "save-output-reference",
-      id: firstOutput.id
-    });
+    expect(stage.queryByRole("button", { name: "Save reference" })).toBeNull();
+    expect(
+      stage.getAllByRole("button", { name: "Regenerate draft" })
+    ).toHaveLength(state.outputs.length);
   });
 
   it("opens Build artwork in a view-only image popup", async () => {
@@ -2658,7 +2796,7 @@ describe("redesigned workflow stages", () => {
 
     await user.clear(captionEditor);
     await user.type(captionEditor, "Updated caption for Build review.");
-    await user.click(stage.getAllByRole("button", { name: "Save" })[0]!);
+    await user.click(stage.getAllByRole("button", { name: "Save changes" })[0]!);
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "edit-output-direction",
@@ -2674,11 +2812,16 @@ describe("redesigned workflow stages", () => {
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
 
     expect(view.container.querySelectorAll(".compass-ugc-template").length).toBeGreaterThan(0);
-    expect(within(view.container).getByRole("heading", { name: "UGC VIDEO" })).toBeTruthy();
+    expect(view.container.querySelectorAll(".tiktok-draft-phone").length).toBeGreaterThan(0);
+    expect(within(view.container).getAllByText("For You").length).toBeGreaterThan(0);
+    expect(
+      within(view.container).getAllByText("TikTok native preview").length
+    ).toBeGreaterThan(0);
+    expect(within(view.container).getAllByText("9:16 · Draft").length).toBeGreaterThan(0);
+    expect(within(view.container).getByRole("heading", { name: "UGC creatives" })).toBeTruthy();
   });
 
-  it("gives every failed Build quality result a next step", async () => {
-    const user = userEvent.setup();
+  it("keeps automatic quality results out of the Build UI", () => {
     const base = buildCreativeState();
     const first = base.outputs[0];
     if (!first) throw new Error("Expected a creative output fixture.");
@@ -2691,53 +2834,23 @@ describe("redesigned workflow stages", () => {
         report: qualityReport(output.id !== first.id, output.id === first.id ? 78 : 90)
       }))
     });
-    const dispatch = vi.fn();
-    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
 
-    expect(stage.getByRole("button", { name: "Use suggestion" })).toBeTruthy();
-    const failedCard = stage
-      .getByRole("button", { name: "Use suggestion" })
-      .closest(".compass-build-review-card");
-    expect(failedCard?.textContent).toContain("Tighten the first-frame hook");
-    expect(failedCard?.textContent).toContain("View 2 priority issues");
-    expect(failedCard?.textContent).not.toContain("GD Checklist Review");
-    expect(failedCard?.textContent).not.toContain("CS Checklist Review");
-    expect(failedCard?.textContent).toContain(
-      "Premium features. The difference is visible in one glance."
-    );
-    expect(failedCard?.textContent).toContain("78");
-    expect(failedCard?.textContent).not.toContain("Not obviously AI-generated");
-    expect(failedCard?.textContent).not.toContain("Stop-scroll ready");
-    expect(failedCard?.textContent).not.toContain("AI-origin");
-    expect(failedCard?.textContent).not.toContain("Brand impact");
-    expect(stage.queryByText("Quality check found a fix")).toBeNull();
-    await user.click(stage.getByRole("button", { name: "Use suggestion" }));
-    const regenerateDialog = stage.getByRole("dialog");
-    const regenerationInstructions = within(regenerateDialog).getByRole(
-      "textbox",
-      { name: "Revision instructions" }
-    ) as HTMLTextAreaElement;
-    expect(regenerationInstructions.value).toContain(
-      "Creative review direction:"
-    );
-    expect(regenerationInstructions.value).toContain(
-      "Communicate the benefit faster with less interpretation."
-    );
-    expect(regenerationInstructions.value).not.toContain("quality score");
-    expect(regenerationInstructions.value).not.toContain(
-      "Premium features. The difference is visible in one glance."
-    );
-    expect(within(regenerateDialog).getByText(/improve the full composition/)).toBeTruthy();
-    await user.click(
-      within(regenerateDialog).getAllByRole("button", { name: "Close" })[0]!
-    );
-    await user.click(stage.getByRole("button", { name: "Keep current" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "resolve-qa-output", id: first.id });
+    expect(stage.queryByRole("button", { name: "Use suggestion" })).toBeNull();
+    expect(stage.queryByRole("button", { name: "Keep current" })).toBeNull();
+    expect(
+      stage
+        .getByText("Tighten the first-frame hook")
+        .closest(".compass-build-hidden-preflight")
+        ?.hasAttribute("hidden")
+    ).toBe(true);
+    expect(
+      stage.getAllByRole("button", { name: "Regenerate draft" })
+    ).toHaveLength(state.outputs.length);
   });
 
-  it("resolves every hidden album panel when keeping the grouped creative", async () => {
-    const user = userEvent.setup();
+  it("keeps a failed multi-panel album grouped without exposing QA controls", () => {
     const base = buildCreativeState();
     const source = base.outputs[0];
     if (!source) throw new Error("Expected a creative output fixture.");
@@ -2752,21 +2865,12 @@ describe("redesigned workflow stages", () => {
       qaReport: qualityReport(false, 78)
     }));
     const state = { ...base, qaComplete: true, outputs: albumOutputs };
-    const dispatch = vi.fn();
-    const view = render(<StudioStage state={state} dispatch={dispatch} />);
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
 
-    expect(stage.getByText("1 guided improvement to review.")).toBeTruthy();
-    expect(stage.getAllByRole("button", { name: "Keep current" })).toHaveLength(1);
-
-    await user.click(stage.getByRole("button", { name: "Keep current" }));
-
-    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
-      albumOutputs.map((output) => ({
-        type: "resolve-qa-output",
-        id: output.id
-      }))
-    );
+    expect(view.container.querySelectorAll(".compass-build-review-card")).toHaveLength(1);
+    expect(stage.queryByRole("button", { name: "Keep current" })).toBeNull();
+    expect(stage.getByRole("button", { name: "Regenerate draft" })).toBeTruthy();
   });
 
   it("does not count UGC as a guided image improvement", () => {
@@ -2786,12 +2890,12 @@ describe("redesigned workflow stages", () => {
       name: "Send to Internal QC →"
     }) as HTMLButtonElement;
 
-    expect(stage.getByText("Quality check complete.")).toBeTruthy();
+    expect(stage.queryByText("Quality check complete.")).toBeNull();
     expect(stage.queryByText(/guided improvement.*to review/i)).toBeNull();
     expect(sendButton.disabled).toBe(false);
   });
 
-  it("presents Internal QC as a role-focused asset review queue", async () => {
+  it("presents Internal QC as the v51 proof-card approval board", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
@@ -2803,150 +2907,90 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
     const firstOutput = state.outputs[0];
     if (!firstOutput) throw new Error("Expected a creative output fixture.");
-    const firstDirection = state.directions.find(
-      (direction) => direction.id === firstOutput.directionId
-    );
-    const gdOutputCount = state.outputs.filter(
-      (output) => !output.format.toUpperCase().includes("UGC")
-    ).length;
-    const ugcOutputCount = state.outputs.filter((output) =>
-      output.format.toUpperCase().includes("UGC")
-    ).length;
-    const standardGdOutputCount = state.outputs.filter(
-      (output) =>
-        !output.format.toUpperCase().includes("UGC") &&
-        !output.format.toLowerCase().includes("album")
-    ).length;
 
     expect(view.container.querySelector(".compass-stage-qc")).toBeTruthy();
     expect(
-      stage
-        .getByRole("progressbar", { name: "Internal QC progress" })
-        .getAttribute("aria-valuenow")
-    ).toBe("0");
-    expect(stage.getByRole("heading", { name: "Assets in GD review" })).toBeTruthy();
-    expect(stage.getByRole("button", { name: /Material pack/i })).toBeTruthy();
-    expect(
-      stage.getByRole("button", { name: `Approve all · ${gdOutputCount}` })
+      stage.getByRole("heading", { name: "See every creative at a glance." })
     ).toBeTruthy();
-    expect(stage.queryByText("1:1 Static")).toBeNull();
-    expect(stage.getAllByText("Static").length).toBeGreaterThan(0);
     expect(
-      stage.getAllByText(
-        "Visual Quality และ Design Principles ครบถ้วนบนหน้าจอมือถือ"
+      stage.getByText(
+        `${state.outputs.length} creatives · ${state.outputs.length} in review · 0 fix · 0 QC approved`
       )
-    ).toHaveLength(standardGdOutputCount);
+    ).toBeTruthy();
+    expect(stage.getByRole("group", { name: "QC filters" })).toBeTruthy();
     expect(
-      stage.getAllByText(
-        "แสง เงา วัสดุ perspective และ contact shadow สมจริงเป็นระบบเดียวกัน"
-      )
-    ).toHaveLength(standardGdOutputCount);
+      stage.getByRole("button", { name: `All ${state.outputs.length}` })
+    ).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Needs fix 0" })).toBeTruthy();
     expect(
-      stage.getAllByText(
-        "ไม่พบร่องรอย AI-generated ที่พิสูจน์ได้ วัตถุไม่ลอยหรือตัดแปะ"
-      )
-    ).toHaveLength(standardGdOutputCount);
-    expect(
-      stage.getAllByText(
-        "Logo, Brand CI, ชื่อแบรนด์/สินค้า และข้อความใน Artwork ถูกต้อง"
-      )
-    ).toHaveLength(standardGdOutputCount);
-    expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(
-      gdOutputCount
+      stage.getByRole("button", { name: `In review ${state.outputs.length}` })
+    ).toBeTruthy();
+    expect(stage.getByRole("button", { name: "QC approved 0" })).toBeTruthy();
+    expect(view.container.querySelectorAll(".review-proof-card")).toHaveLength(
+      state.outputs.length
     );
-    const firstCard = view.container.querySelector(".compass-qc-focus-card");
-    const firstCardContent = firstCard?.querySelector(".compass-qc-focus-content");
-    expect(firstCard?.querySelector(".compass-caption-scroll")).toBeTruthy();
-    expect(firstCard?.querySelector(".compass-qc-mini-trail")?.textContent).toContain(
-      "GD→CS→PM→Client"
-    );
-    expect(firstCard?.querySelector(".fb-see-more")).toBeNull();
-    expect(
-      firstCardContent?.querySelector(".download-action")?.textContent
-    ).toContain("Download Image");
-    expect(firstCardContent?.querySelector(".upload-inline")).toBeTruthy();
-    expect(
-      firstCard?.querySelector(".compass-qc-focus-asset .compass-qc-asset-actions")
-    ).toBeNull();
-    expect(stage.queryByText("Review route")).toBeNull();
-    expect(stage.queryByRole("dialog")).toBeNull();
-    expect(stage.queryByRole("button", { name: "Reject" })).toBeNull();
+    expect(view.container.querySelector(".compass-qc-role-tabs")).toBeNull();
+    expect(view.container.querySelector(".compass-qc-revision-route")).toBeNull();
 
-    await user.click(stage.getAllByRole("button", { name: "Approve → CS" })[0]!);
-    expect(stage.getByRole("dialog", { name: "GD → CS" })).toBeTruthy();
-    await user.click(stage.getByRole("button", { name: "Mark ✓ GD approved" }));
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "review-output",
-      id: firstOutput.id,
-      role: "graphicDesign",
-      decision: "approved",
-      comment: ""
-    });
-    expect(stage.queryByRole("dialog")).toBeNull();
-
-    const approvedState = workflowReducer(state, {
-      type: "review-output",
-      id: firstOutput.id,
-      role: "graphicDesign",
-      decision: "approved",
-      comment: ""
-    });
-    view.rerender(
-      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
-        <ApprovalStage state={approvedState} dispatch={dispatch} />
-      </BrandMemoryProvider>
-    );
-
-    expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(
-      gdOutputCount - 1
-    );
-    if (firstDirection) {
-      expect(stage.queryByRole("heading", { name: firstDirection.hook })).toBeNull();
-    }
-
-    await user.click(stage.getByRole("tab", { name: /CS Review/i }));
-
-    expect(stage.getByRole("heading", { name: "Assets in CS review" })).toBeTruthy();
-    expect(stage.queryByRole("button", { name: /Material pack/i })).toBeNull();
-    expect(stage.queryByText("9:16 UGC")).toBeNull();
-    expect(stage.getAllByText("UGC").length).toBeGreaterThan(0);
-    expect(stage.queryByText("ALBUM")).toBeNull();
-    const ugcCard = view.container
-      .querySelector(".compass-qc-ugc-ownership")
-      ?.closest(".compass-qc-focus-card");
+    const ugcCard = Array.from(
+      view.container.querySelectorAll(".review-proof-card")
+    ).find((card) => card.textContent?.includes("UGC"));
     expect(
-      ugcCard?.querySelector(".compass-qc-check-box > b")?.textContent
-    ).toBe("CS checks");
-    expect(ugcCard?.querySelectorAll(".compass-qc-check-chips span")).toHaveLength(4);
-    expect(ugcCard?.querySelector(".compass-qc-check-list")).toBeNull();
-    expect(ugcCard?.querySelector(".compass-qc-mini-trail")?.textContent).toContain(
-      "CS→PM→Client"
-    );
-    expect(ugcCard?.querySelector(".compass-qc-mini-trail")?.textContent).not.toContain(
-      "GD"
-    );
-    expect(
-      stage.getAllByText("Key Message ชัด และตรง Brief / Objective")
-    ).toHaveLength(1);
-    expect(stage.getAllByRole("button", { name: "Approve → PM" })).toHaveLength(
-      ugcOutputCount + 1
-    );
+      (ugcCard?.querySelector(".visual-gate-node.skip") as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+
     await user.click(
-      stage.getAllByRole("button", { name: "Request design changes" })[0]!
+      stage.getByRole("button", { name: "Open creative 1 review" })
     );
-    expect(stage.getByRole("dialog", { name: "Request changes" })).toBeTruthy();
+    const reviewDialog = within(document.body).getByRole("dialog", {
+      name: "Static 01 · Social preview"
+    });
+    expect(within(reviewDialog).getByText("Current action")).toBeTruthy();
+    expect(
+      within(reviewDialog).getByText(
+        "Check artwork quality, layout, hierarchy, and final-file readiness."
+      )
+    ).toBeTruthy();
+    expect(
+      within(reviewDialog).getByRole("group", { name: "Preview platform" })
+    ).toBeTruthy();
+    expect(reviewDialog.querySelector(".social-post-head")).toBeTruthy();
+    expect(reviewDialog.querySelector(".social-post-actions")).toBeTruthy();
+    expect(reviewDialog.querySelector(".qc-review-checklist")).toBeNull();
     await user.type(
-      stage.getByRole("textbox", { name: "Change instruction" }),
+      within(reviewDialog).getByRole("textbox", { name: "Your comment" }),
       "Increase product contrast and keep the brand layout."
     );
-    await user.click(stage.getByRole("button", { name: "Route changes" }));
+    await user.click(
+      within(reviewDialog).getByRole("button", { name: "Artwork" })
+    );
+    await user.click(
+      within(reviewDialog).getByRole("button", { name: "Request changes" })
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "route-output-changes",
       id: firstOutput.id,
-      requestedBy: "clientService",
+      requestedBy: "graphicDesign",
       targetRole: "graphicDesign",
       comment: "Increase product contrast and keep the brand layout."
+    });
+
+    await user.click(
+      stage.getByRole("button", { name: "Open creative 1 review" })
+    );
+    const approvalDialog = within(document.body).getByRole("dialog", {
+      name: "Static 01 · Social preview"
+    });
+    await user.click(
+      within(approvalDialog).getByRole("button", { name: "Approve → CS" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "review-output",
+      id: firstOutput.id,
+      role: "graphicDesign",
+      decision: "approved",
+      comment: ""
     });
   });
 
@@ -2964,26 +3008,45 @@ describe("redesigned workflow stages", () => {
     expect(
       (
         stage.getByRole("button", {
-          name: `Approve all · ${state.outputs.filter(
-            (output) => !output.format.toUpperCase().includes("UGC")
-          ).length}`
+          name: "Approve all → CS"
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+
+    await user.click(
+      stage.getByRole("button", { name: "Open creative 1 review" })
+    );
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Static 01 · Social preview"
+    });
+    expect(
+      (
+        within(dialog).getByRole("button", {
+          name: "Approve → CS"
         }) as HTMLButtonElement
       ).disabled
     ).toBe(true);
     expect(
-      stage
-        .getAllByRole("button", { name: "Approve → CS" })
-        .every((button) => (button as HTMLButtonElement).disabled)
+      (
+        within(dialog).getByRole("button", {
+          name: "Request changes"
+        }) as HTMLButtonElement
+      ).disabled
     ).toBe(true);
-
-    await user.click(
-      stage.getByRole("button", { name: /Open creative 1 preview/i })
-    );
     expect(
-      stage.getByRole("dialog", { name: "Creative 1 preview" })
-    ).toBeTruthy();
-    await user.click(stage.getByRole("button", { name: "Close" }));
-    expect(stage.queryByRole("dialog")).toBeNull();
+      (
+        within(dialog).getByRole("textbox", {
+          name: "Your comment"
+        }) as HTMLTextAreaElement
+      ).disabled
+    ).toBe(true);
+    expect(within(dialog).getByText(/Read-only · Current action belongs to GD/)).toBeTruthy();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close preview" })
+    );
+    await waitFor(() =>
+      expect(document.body.querySelector(".qc-social-review-modal")).toBeNull()
+    );
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -3008,18 +3071,20 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    expect(view.container.querySelectorAll(".compass-qc-focus-card")).toHaveLength(1);
+    expect(view.container.querySelectorAll(".review-proof-card")).toHaveLength(1);
     expect(view.container.querySelectorAll(".compass-album-panels img")).toHaveLength(3);
-    expect(stage.getByRole("button", { name: "Approve all · 1" })).toBeTruthy();
-    expect(stage.getAllByRole("button", { name: "Approve → CS" })).toHaveLength(1);
-    expect(
-      stage
-        .getByRole("progressbar", { name: "Internal QC progress" })
-        .getAttribute("aria-valuemax")
-    ).toBe("3");
+    expect(stage.getByText("1 creative · 1 in review · 0 fix · 0 QC approved")).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Approve all → CS" })).toBeTruthy();
 
-    await user.click(stage.getByRole("button", { name: "Approve → CS" }));
-    await user.click(stage.getByRole("button", { name: "Mark ✓ GD approved" }));
+    await user.click(stage.getByRole("button", { name: "Open creative 1 review" }));
+    const albumDecisionDialog = within(document.body).getByRole("dialog", {
+      name: "Album 01 · Social preview"
+    });
+    await user.click(
+      within(albumDecisionDialog).getByRole("button", {
+        name: "Approve → CS"
+      })
+    );
 
     expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
       albumOutputs.map((output) => ({
@@ -3032,8 +3097,7 @@ describe("redesigned workflow stages", () => {
     );
   });
 
-  it("offers one client deck from PM Review when approved assets are ready", async () => {
-    const user = userEvent.setup();
+  it("offers one client deck from the QC board when approved assets are ready", () => {
     const state = buildCreativeState();
     const dispatch = vi.fn();
     const view = render(
@@ -3043,16 +3107,10 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    await user.click(stage.getByRole("tab", { name: /PM Review/i }));
     const emptyGoogleSlides = stage.getByRole("button", {
-      name: "Open in Google Slides · 0"
+      name: "PM-approved slides · 0"
     }) as HTMLButtonElement;
     expect(emptyGoogleSlides.disabled).toBe(true);
-    expect(
-      stage.getByText(
-        "One Google Slides deck with every PM-approved asset, including UGC."
-      )
-    ).toBeTruthy();
 
     const approvedState = workflowReducer(state, { type: "approve-all" });
     view.rerender(
@@ -3067,12 +3125,12 @@ describe("redesigned workflow stages", () => {
       readyItems.some((item) => item.output.format.toUpperCase().includes("UGC"))
     ).toBe(true);
     const readyGoogleSlides = stage.getByRole("button", {
-      name: `Open in Google Slides · ${approvedState.outputs.length}`
+      name: `PM-approved slides · ${approvedState.outputs.length}`
     }) as HTMLButtonElement;
     expect(readyGoogleSlides.disabled).toBe(false);
   });
 
-  it("exports approved album panels as one composed client slide", async () => {
+  it("exports an approved album as a creative-direction and artwork-caption set", async () => {
     const base = buildCreativeState();
     const source = base.outputs[0];
     if (!source) throw new Error("Expected a creative output fixture.");
@@ -3114,20 +3172,27 @@ describe("redesigned workflow stages", () => {
         }>;
       }
     )._slides;
-    const artwork = slides[0]?._slideObjects
-      .filter((object) => object._type === "image")
-      .map(({ options }) => ({
-        x: Number(options.x.toFixed(3)),
-        y: Number(options.y.toFixed(3)),
-        w: Number(options.w.toFixed(3)),
-        h: Number(options.h.toFixed(3))
-      }));
+    const artwork = slides.map((slide) =>
+      slide._slideObjects
+        .filter((object) => object._type === "image")
+        .map(({ options }) => ({
+          x: Number(options.x.toFixed(3)),
+          y: Number(options.y.toFixed(3)),
+          w: Number(options.w.toFixed(3)),
+          h: Number(options.h.toFixed(3))
+        }))
+    );
 
-    expect(slides).toHaveLength(1);
-    expect(artwork).toEqual([
-      { x: 0.65, y: 0.83, w: 5.85, h: 2.925 },
-      { x: 0.65, y: 3.755, w: 2.925, h: 2.925 },
-      { x: 3.575, y: 3.755, w: 2.925, h: 2.925 }
+    expect(slides).toHaveLength(2);
+    expect(artwork[0]).toEqual([
+      { x: 6.72, y: 1.9, w: 2.34, h: 1.82 },
+      { x: 6.72, y: 3.72, w: 1.17, h: 1.82 },
+      { x: 7.89, y: 3.72, w: 1.17, h: 1.82 }
+    ]);
+    expect(artwork[1]).toEqual([
+      { x: 0.62, y: 1.12, w: 3.78, h: 2.54 },
+      { x: 0.62, y: 3.66, w: 1.89, h: 2.54 },
+      { x: 2.51, y: 3.66, w: 1.89, h: 2.54 }
     ]);
   });
 
@@ -3237,7 +3302,7 @@ describe("redesigned workflow stages", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("opens a client revision in the selected Internal QC queue instead of PM", () => {
+  it("shows a client revision on its proof card at the routed CS gate", () => {
     const state = buildClientState();
     const output = state.outputs[0];
     if (!output) throw new Error("Expected a creative output fixture.");
@@ -3254,15 +3319,19 @@ describe("redesigned workflow stages", () => {
     );
     const stage = within(view.container);
 
-    expect(
-      stage.getByRole("heading", { name: "Assets in CS review" })
-    ).toBeTruthy();
+    expect(stage.getByRole("button", { name: "Needs fix 1" })).toBeTruthy();
     expect(
       stage.getByText("Make the client-facing message more precise.")
     ).toBeTruthy();
+    const revisionCard = view.container.querySelector(".review-proof-card.fix");
+    expect(revisionCard?.querySelector(".visual-gate-node.fix")?.textContent).toContain(
+      "CS"
+    );
     expect(
-      stage.queryByRole("heading", { name: "Assets in PM review" })
-    ).toBeNull();
+      (revisionCard?.querySelector(
+        ".visual-gate-node.future"
+      ) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 
   it("requires client feedback before routing a creative to Internal QC", async () => {
@@ -3293,9 +3362,9 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
 
     await user.click(stage.getByRole("button", { name: "Concept" }));
-    await user.type(
+    fireEvent.change(
       stage.getByRole("textbox", { name: "Change instruction" }),
-      "Make the product benefit easier to scan."
+      { target: { value: "Make the product benefit easier to scan." } }
     );
     await user.click(stage.getByRole("button", { name: "Route changes" }));
 

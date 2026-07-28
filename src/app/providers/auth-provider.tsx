@@ -1,4 +1,5 @@
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -18,7 +19,7 @@ import {
   isSupabaseConfigured
 } from "../../lib/supabase/client";
 
-const PRODUCTION_AUTH_REDIRECT_URL = "https://moons-cvc.vercel.app/";
+const PRODUCTION_AUTH_REDIRECT_URL = "https://creative-compass-os.vercel.app/";
 export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
   "https://www.googleapis.com/auth/drive.readonly",
@@ -28,6 +29,7 @@ export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
 interface AuthContextValue {
   enabled: boolean;
   session: Session | null;
+  reconnectGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -67,11 +69,20 @@ export function useAuth(): AuthContextValue {
   return value;
 }
 
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!shouldRequireAuth()) {
     return (
       <AuthContext.Provider
-        value={{ enabled: false, session: null, signOut: async () => undefined }}
+        value={{
+          enabled: false,
+          session: null,
+          reconnectGoogle: async () => undefined,
+          signOut: async () => undefined
+        }}
       >
         {children}
       </AuthContext.Provider>
@@ -135,13 +146,8 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  async function signInWithGoogle() {
-    if (pending) return;
-    setError(null);
-    setPending(true);
-
-    try {
-      const { error: signInError } = await client.auth.signInWithOAuth({
+  const startGoogleOAuth = useCallback(async () => {
+    const { error: signInError } = await client.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: googleSignInRedirectUrl(),
@@ -154,7 +160,16 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           }
         }
       });
-      if (signInError) throw signInError;
+    if (signInError) throw signInError;
+  }, [client]);
+
+  async function signInWithGoogle() {
+    if (pending) return;
+    setError(null);
+    setPending(true);
+
+    try {
+      await startGoogleOAuth();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed.");
       setPending(false);
@@ -165,13 +180,17 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     () => ({
       enabled: true,
       session,
+      reconnectGoogle: async () => {
+        clearGoogleProviderToken();
+        await startGoogleOAuth();
+      },
       signOut: async () => {
         clearGoogleProviderToken();
         const { error: signOutError } = await client.auth.signOut();
         if (signOutError) throw signOutError;
       }
     }),
-    [client, session]
+    [client, session, startGoogleOAuth]
   );
 
   if (loading) {

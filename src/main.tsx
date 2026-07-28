@@ -10,6 +10,12 @@ import { WorkspaceProvider } from "./app/providers/workspace-provider";
 import { RunCollaborationProvider } from "./app/providers/run-collaboration-provider";
 import "./styles/app.css";
 import "./styles/compass-redesign.css";
+import "./styles/workflow/brief-confirmation.css";
+import "./styles/workflow/hook-album-format.css";
+import "./styles/workflow/preflight.css";
+import "./styles/workflow/create-build.css";
+import "./styles/workflow/ugc-preview.css";
+import "./styles/workflow/internal-qc.css";
 
 const root = document.getElementById("app");
 

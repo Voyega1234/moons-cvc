@@ -136,8 +136,8 @@ export function createInitialWorkflowState({
     librarySection: "brand",
     creativeMix: [
       { id: "creative-mix-1", service: "single-static", quantity: 3 },
-      { id: "creative-mix-2", service: "ugc-video", quantity: 2 },
-      { id: "creative-mix-3", service: "album-post", quantity: 1 }
+      { id: "creative-mix-2", service: "album-post", quantity: 1 },
+      { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ],
     service: "single-static",
     hookIdeaMode: "standard",
@@ -183,7 +183,7 @@ export function workflowActionToast(
     case "apply-monthly-quota":
       return successToast(
         "Monthly quota applied",
-        "3 Static, 2 UGC, and 1 Album are planned."
+        "3 Single, 1 Album, and 2 UGC are planned."
       );
     case "attach-files":
       return successToast(
@@ -509,8 +509,8 @@ export function workflowReducer(
           service: "single-static",
           quantity: 3
         },
-        { id: idFor("ugc-video"), service: "ugc-video", quantity: 2 },
-        { id: idFor("album-post"), service: "album-post", quantity: 1 }
+        { id: idFor("album-post"), service: "album-post", quantity: 1 },
+        { id: idFor("ugc-video"), service: "ugc-video", quantity: 2 }
       ]);
     }
     case "set-creative-mix-quantity": {
@@ -750,6 +750,20 @@ export function workflowReducer(
             ? { ...direction, exportGroup: action.group }
             : direction
         )
+      };
+    case "set-direction-album-format":
+      return {
+        ...state,
+        directions: state.directions.map((direction) =>
+          direction.id === action.id && direction.service === "album-post"
+            ? { ...direction, albumFormat: action.format }
+            : direction
+        ),
+        outputs: [],
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
       };
     case "add-manual-direction": {
       const hook = action.hook.trim();

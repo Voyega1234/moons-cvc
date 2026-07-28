@@ -264,7 +264,7 @@ describe("workspaceReducer", () => {
 
     expect(result.toast).toEqual({
       title: "Monthly quota applied",
-      message: "3 Static, 2 UGC, and 1 Album are planned.",
+      message: "3 Single, 1 Album, and 2 UGC are planned.",
       tone: "success"
     });
   });

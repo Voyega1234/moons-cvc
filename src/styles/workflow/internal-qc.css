@@ -1,0 +1,1048 @@
+.compass-app .review-board {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.compass-app .review-quickbar {
+  min-height: 52px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compass-app .review-quickbar-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.compass-app .review-quickbar-copy > span {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.compass-app .review-quickbar-copy b,
+.compass-app .review-quickbar-copy small {
+  display: block;
+}
+
+.compass-app .review-quickbar-copy b {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.compass-app .review-quickbar-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-app .review-board-top {
+  margin: 0 0 -4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compass-app .review-board-filters {
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.compass-app .review-board-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.compass-app .review-board-filter {
+  height: 31px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.compass-app .review-board-filter:hover {
+  background: #fff;
+  color: var(--ink);
+}
+
+.compass-app .review-board-filter.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.compass-app .review-board-filter strong {
+  margin-left: 5px;
+  font-weight: 850;
+  opacity: 0.68;
+}
+
+.compass-app .review-board-download {
+  height: 31px;
+  flex: 0 0 auto;
+}
+
+.compass-app .review-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.compass-app .review-proof-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e5e8ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.compass-app .review-proof-card:hover {
+  border-color: #d7dce6;
+  box-shadow: 0 4px 16px rgba(38, 49, 74, 0.07);
+  transform: translateY(-2px);
+}
+
+.compass-app .review-proof-preview {
+  position: relative;
+  width: 100%;
+  height: 330px;
+  overflow: hidden;
+  padding: 20px;
+  border: 0;
+  border-bottom: 1px solid #e8ebf1;
+  background: #f2f4f8;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.compass-app .review-proof-preview:focus-visible {
+  outline: 3px solid rgba(89, 103, 242, 0.45);
+  outline-offset: -3px;
+}
+
+.compass-app .review-proof-preview .custom-art-frame {
+  width: min(100%, 230px);
+  height: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.compass-app .review-proof-preview .proof-static-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.compass-app .review-proof-preview .compass-album-panels {
+  width: min(100%, 290px);
+  max-height: 100%;
+}
+
+.compass-app .review-proof-preview .tiktok-draft-shell {
+  zoom: 0.8;
+}
+
+.compass-app .preview-hover {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(31, 36, 48, 0.88);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8.8px;
+  font-weight: 850;
+  white-space: nowrap;
+  opacity: 0;
+  backdrop-filter: blur(8px);
+  transform: translate(-50%, 8px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.compass-app .review-proof-preview:hover .preview-hover,
+.compass-app .review-proof-preview:focus-visible .preview-hover {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.compass-app .review-proof-body {
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+}
+
+.compass-app .review-proof-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compass-app .review-proof-title h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .review-proof-title > span {
+  flex: 0 0 auto;
+  color: #98a0b2;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.compass-app .visual-gate-track {
+  margin: 11px 0 9px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.compass-app .visual-gate-node {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  position: relative;
+  text-align: center;
+  font: inherit;
+}
+
+.compass-app .visual-gate-node:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 10px;
+  left: calc(50% + 10px);
+  right: calc(-50% + 10px);
+  height: 2px;
+  background: #e3e5e9;
+}
+
+.compass-app .visual-gate-node.done:not(:last-child)::after {
+  background: #c9ff4b;
+}
+
+.compass-app .visual-gate-node i {
+  width: 21px;
+  height: 21px;
+  margin: 0 auto 5px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #eceef2;
+  color: inherit;
+  box-shadow: 0 0 0 1px #e2e4e8;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 8px;
+  font-weight: 900;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.compass-app .visual-gate-node > span {
+  display: block;
+  font-size: 7.8px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.compass-app button.visual-gate-node:not(:disabled) {
+  cursor: pointer;
+}
+
+.compass-app button.visual-gate-node:not(:disabled):hover i {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 4px rgba(89, 103, 242, 0.1);
+}
+
+.compass-app .visual-gate-node.done {
+  color: #139a5a;
+}
+
+.compass-app .visual-gate-node.done i {
+  background: #c9ff4b;
+  color: #202719;
+  box-shadow: 0 0 0 1px #a7d92f;
+}
+
+.compass-app .visual-gate-node.current {
+  color: var(--accent);
+}
+
+.compass-app .visual-gate-node.current i {
+  background: #fff;
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.compass-app .visual-gate-node.current i::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.compass-app .visual-gate-node.fix {
+  color: var(--red);
+}
+
+.compass-app .visual-gate-node.fix i {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 0 0 1px var(--red);
+}
+
+.compass-app .visual-gate-node.skip {
+  color: #bbbfc7;
+}
+
+.compass-app .visual-gate-node.skip i {
+  background: #f5f6f8;
+  color: #b8bcc5;
+  box-shadow: none;
+}
+
+.compass-app .proof-comment {
+  min-height: 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: #f6f7fa;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+}
+
+.compass-app .proof-comment.fix {
+  background: #fff4f1;
+}
+
+.compass-app .proof-comment-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.compass-app .proof-comment b,
+.compass-app .proof-comment p {
+  display: block;
+  margin: 0;
+}
+
+.compass-app .proof-comment b {
+  color: var(--muted);
+  font-size: 8.3px;
+}
+
+.compass-app .proof-comment p {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 9px;
+  line-height: 1.32;
+}
+
+.compass-app .review-proof-footer {
+  min-height: 42px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compass-app .proof-action-state {
+  min-width: 0;
+}
+
+.compass-app .proof-action-state small,
+.compass-app .proof-action-state b {
+  display: block;
+}
+
+.compass-app .proof-action-state small {
+  color: #a0a7b5;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.compass-app .proof-action-state b {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.compass-app .proof-action-btn {
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid var(--accent, #5664f5);
+  border-radius: 9px;
+  background: var(--accent, #5664f5);
+  color: #fff;
+  box-shadow: none;
+  opacity: 1;
+  visibility: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compass-app .proof-action-btn:hover {
+  border-color: var(--accentHover, #4857e7);
+  background: var(--accentHover, #4857e7);
+}
+
+.compass-app .proof-action-btn.fix {
+  border-color: #f25f68;
+  background: #f25f68;
+}
+
+.compass-app .proof-action-btn.approved {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+/* Social review: same shell, proportions, and controls as the v51 HTML. */
+.compass-app .qc-social-review-modal {
+  width: min(960px, calc(100vw - 28px));
+  max-width: none;
+  height: min(760px, calc(100vh - 28px));
+  max-height: 92vh;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.compass-app .social-preview-head {
+  min-height: 64px;
+  margin: 0;
+  padding: 13px 16px 13px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compass-app .social-preview-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.compass-app .social-preview-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.compass-app .social-preview-head-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.compass-app .social-platform-toggle {
+  padding: 3px;
+  border-radius: 999px;
+  background: #f2f3f6;
+  display: flex;
+  gap: 4px;
+}
+
+.compass-app .social-platform-toggle button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.compass-app .social-platform-toggle button.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 2px 7px rgba(28, 35, 52, 0.08);
+}
+
+.compass-app .social-preview-close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compass-app .social-preview-shell {
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(145deg, #f1f4fb, #eef8f3);
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.compass-app .social-preview-shell.album-mode {
+  grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+}
+
+.compass-app .social-preview-shell.ugc-mode {
+  grid-template-columns: minmax(0, 0.78fr) minmax(380px, 1.22fr);
+}
+
+.compass-app .social-preview-stage {
+  min-height: 0;
+  overflow: auto;
+  padding: 28px 28px 24px;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+}
+
+.compass-app .social-post {
+  width: min(100%, 480px);
+  overflow: hidden;
+  border: 1px solid #dddfe4;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(28, 35, 52, 0.12);
+}
+
+.compass-app .social-post.facebook {
+  border-radius: 12px;
+}
+
+.compass-app .social-post-head {
+  min-height: 56px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.compass-app .social-post-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--accent), #9a8bff);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.compass-app .social-post-account {
+  min-width: 0;
+  flex: 1;
+}
+
+.compass-app .social-post-account b,
+.compass-app .social-post-account span {
+  display: block;
+}
+
+.compass-app .social-post-account b {
+  color: var(--ink);
+  font-size: 10.5px;
+}
+
+.compass-app .social-post-account span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.compass-app .social-post-more {
+  color: var(--muted);
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+
+.compass-app .social-post-media {
+  min-height: 380px;
+  overflow: hidden;
+  padding: 22px;
+  background: #ebe7df;
+  display: grid;
+  place-items: center;
+}
+
+.compass-app .social-post-media .custom-art-frame {
+  width: min(100%, 310px);
+  max-width: 100%;
+  max-height: 440px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.compass-app .social-post-media .proof-static-image {
+  width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+}
+
+.compass-app .social-post-media .compass-album-panels {
+  width: min(100%, 360px);
+}
+
+.compass-app .social-post.tiktok-review {
+  max-width: 300px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.compass-app .social-post.tiktok-review .tiktok-draft-shell {
+  zoom: 1;
+}
+
+.compass-app .social-post-actions {
+  min-height: 45px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.035);
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.compass-app .social-post-actions span {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.compass-app .social-post-actions span:last-child {
+  margin-left: auto;
+}
+
+.compass-app .social-post-copy {
+  padding: 0 12px 14px;
+}
+
+.compass-app .social-post-copy b {
+  margin-right: 5px;
+  color: var(--ink);
+  font-size: 9.8px;
+}
+
+.compass-app .social-post-copy p {
+  display: inline;
+  margin: 0;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.48;
+  white-space: pre-line;
+}
+
+.compass-app .social-post-copy small {
+  display: block;
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: 8.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.compass-app .social-preview-info {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  border-left: 1px solid var(--line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.compass-app .social-preview-role {
+  margin-bottom: 17px;
+  padding: 9px 10px;
+  border: 1px solid #dce3ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f3f5ff, #f0fbf6);
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.compass-app .social-preview-role > i {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 850;
+}
+
+.compass-app .social-preview-role > span,
+.compass-app .social-preview-role b {
+  display: block;
+}
+
+.compass-app .social-preview-role > span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-app .social-preview-role b {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.compass-app .social-preview-info .eyebrow {
+  margin: 0 0 7px;
+  color: var(--accent);
+}
+
+.compass-app .social-preview-brief {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.compass-app .social-preview-comments {
+  margin-bottom: 14px;
+}
+
+.compass-app .social-comment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.compass-app .social-comment-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid #d7dbe6;
+  border-radius: 9px;
+  background: #fbfcfe;
+}
+
+.compass-app .social-comment-list li b {
+  display: block;
+  margin-bottom: 3px;
+  color: #8b93a4;
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.compass-app .social-comment-list li p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.compass-app .social-comment-empty {
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: #fbfcfe;
+  color: #98a0b2;
+  font-size: 10.5px;
+}
+
+.compass-app .social-review-form {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.compass-app .social-review-form label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.compass-app .social-review-form textarea {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.compass-app .social-review-form textarea:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.compass-app .social-change-type {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.compass-app .social-change-type > span {
+  margin-right: 2px;
+  color: #98a0b2;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compass-app .social-type-chip {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #5c6472;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compass-app .social-type-chip:hover {
+  border-color: #c6cee0;
+  background: #f3f5f9;
+}
+
+.compass-app .social-type-chip.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.compass-app .social-review-error {
+  margin: 9px 0 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #fdece8;
+  color: #a53a22;
+  font-size: 10.5px;
+}
+
+.compass-app .social-review-decisions {
+  margin-top: 11px;
+  display: flex;
+  gap: 7px;
+}
+
+.compass-app .social-review-decisions .btn {
+  flex: 1 1 auto;
+}
+
+.compass-app .social-review-decisions .btn.approval {
+  border-color: #a7d92f !important;
+  background: #c9ff4b !important;
+  color: #202719 !important;
+  box-shadow: 0 5px 12px rgba(126, 168, 35, 0.16) !important;
+}
+
+.compass-app .social-review-decisions .btn.approval:hover:not(:disabled) {
+  border-color: #93c520 !important;
+  background: #bff43f !important;
+  color: #1c2415 !important;
+}
+
+.compass-app .social-review-who,
+.compass-app .qc-gate-readonly-note {
+  margin: 9px 0 0;
+  color: #98a0b2;
+  font-size: 10px;
+  text-align: center;
+}
+
+.compass-app .social-preview-info-actions {
+  margin-top: 12px;
+  padding-top: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.compass-app .social-preview-info-actions .btn {
+  min-width: 92px;
+}
+
+.compass-app .social-preview-info-actions .upload-inline {
+  display: inline-flex;
+}
+
+@media (max-width: 1100px) {
+  .compass-app .review-proof-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compass-app .review-proof-preview {
+    height: 300px;
+  }
+}
+
+@media (max-width: 760px) {
+  .compass-app .review-proof-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compass-app .review-quickbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .compass-app .review-quickbar .review-board-download {
+    width: 100%;
+  }
+
+  .compass-app .review-board-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .compass-app .qc-social-review-modal {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .compass-app .social-preview-head {
+    align-items: flex-start;
+  }
+
+  .compass-app .social-preview-head-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
+  .compass-app .social-preview-shell,
+  .compass-app .social-preview-shell.album-mode,
+  .compass-app .social-preview-shell.ugc-mode {
+    overflow: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .compass-app .social-preview-stage,
+  .compass-app .social-preview-info {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .compass-app .social-preview-stage {
+    padding: 16px;
+  }
+
+  .compass-app .social-preview-info {
+    padding: 18px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .compass-app .social-post-media {
+    min-height: 330px;
+  }
+}

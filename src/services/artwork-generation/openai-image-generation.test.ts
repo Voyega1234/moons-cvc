@@ -465,6 +465,16 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.selectedHooks).toHaveLength(1);
   });
 
+  it("passes design-system-new mode without changing the provider contract", () => {
+    const request = buildArtworkGenerationRequest({
+      run: { ...run, artworkMode: "design-system-new" }
+    });
+
+    expect(request.artworkMode).toBe("design-system-new");
+    expect(request.model).toBe("gpt-image-2");
+    expect(request.selectedHooks).toHaveLength(1);
+  });
+
   it("passes the selected OpenRouter prompt model without changing the image model", () => {
     const request = buildArtworkGenerationRequest({
       run: {

@@ -27,6 +27,7 @@ import type {
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import {
   generateImagePrompt,
+  generateProductionBrief,
   type ImagePromptProvider,
   type ImagePromptAgentTrace
 } from "./image-prompt-agent.js";
@@ -148,7 +149,6 @@ interface ImageRequestDebugLog {
             label?: string;
             mimeType: string;
             bytes: number;
-            localFile: string;
           }[];
         };
       };
@@ -162,6 +162,7 @@ interface ImagePromptAgentDebugLog {
   runId: string;
   directionId: string;
   mode: ArtworkGenerationRequest["artworkMode"];
+  stage?: "production-brief";
   status: "succeeded" | "failed";
   request: {
     endpoint: "/v1/responses" | "/api/v1/responses";
@@ -604,7 +605,8 @@ async function generateOutputForHook({
   let strategy: CreativeStrategyEnrichment | undefined;
   if (
     input.artworkMode === "reference-library" ||
-    input.artworkMode === "design-system"
+    input.artworkMode === "design-system" ||
+    input.artworkMode === "design-system-new"
   ) {
     try {
       strategy = await resolveCreativeStrategy({
@@ -633,8 +635,11 @@ async function generateOutputForHook({
     ...artworkReferences.map(({ image }) => image)
   ];
   const generationReferences = promptReferences;
+  const isDesignSystemMode =
+    input.artworkMode === "design-system" ||
+    input.artworkMode === "design-system-new";
   const creativeProvocation =
-    input.artworkMode === "design-system"
+    isDesignSystemMode
       ? await resolveImagePrompt({
           input,
           hook,
@@ -651,9 +656,8 @@ async function generateOutputForHook({
           fetchImpl
         })
       : undefined;
-  const prompt =
-    input.artworkMode === "design-system"
-      ? await buildDirectDesignSystemPrompt({
+  const compiledDesignSystemPrompt = isDesignSystemMode
+    ? await buildDirectDesignSystemPrompt({
           input,
           hook,
           references: promptReferences,
@@ -662,7 +666,25 @@ async function generateOutputForHook({
           strategy,
           creativeProvocation
         })
-      : await resolveImagePrompt({
+    : undefined;
+  const prompt =
+    input.artworkMode === "design-system-new"
+      ? await resolveProductionBrief({
+          input,
+          hook,
+          promptModel,
+          promptProvider,
+          promptApiKey,
+          debugLogDirectory,
+          writeDebugLog,
+          references: promptReferences,
+          artworkReferences,
+          compiledDesignSystemPrompt: compiledDesignSystemPrompt ?? "",
+          fetchImpl
+        })
+      : input.artworkMode === "design-system"
+        ? compiledDesignSystemPrompt ?? ""
+        : await resolveImagePrompt({
           input,
           hook,
           promptModel,
@@ -678,7 +700,7 @@ async function generateOutputForHook({
           fetchImpl
         });
   const promptParts =
-    input.artworkMode === "design-system"
+    isDesignSystemMode
       ? [prompt]
       : input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
@@ -2404,11 +2426,6 @@ function buildImageRequestDebugBundle({
   assets: readonly ArtworkGenerationDebugAsset[];
 } {
   const createdAt = new Date().toISOString();
-  const fileStem = debugFileStem(createdAt, runId, hook.id);
-  const assets = references.map((reference, index) => ({
-    filename: `${fileStem}-input-${String(index + 1).padStart(2, "0")}.${extensionFromMimeType(reference.mimeType)}`,
-    bytes: reference.bytes
-  }));
 
   return {
     entry: {
@@ -2425,11 +2442,10 @@ function buildImageRequestDebugBundle({
                 prompt,
                 size,
                 ...(quality ? { quality } : {}),
-                images: references.map((reference, index) => ({
+                images: references.map((reference) => ({
                   ...(reference.label ? { label: reference.label } : {}),
                   mimeType: reference.mimeType,
-                  bytes: reference.bytes.length,
-                  localFile: assets[index]!.filename
+                  bytes: reference.bytes.length
                 }))
               }
             }
@@ -2438,7 +2454,7 @@ function buildImageRequestDebugBundle({
               body: { model, prompt, n: 1, size, quality: "medium" }
             }
     },
-    assets
+    assets: []
   };
 }
 
@@ -2502,6 +2518,12 @@ function extensionFromMimeType(mimeType: string): "jpg" | "webp" | "png" {
 function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
   if (!("kind" in entry)) return "";
   if (entry.kind === "creative-strategy-agent") return "-strategy-agent";
+  if (
+    entry.kind === "image-prompt-agent" &&
+    entry.stage === "production-brief"
+  ) {
+    return "-production-brief-agent";
+  }
   return entry.kind === "image-prompt-agent" ? "-image-agent" : "-image-output";
 }
 
@@ -2727,6 +2749,57 @@ async function resolveImagePrompt({
   });
 }
 
+async function resolveProductionBrief({
+  input,
+  hook,
+  promptModel,
+  promptProvider,
+  promptApiKey,
+  debugLogDirectory,
+  writeDebugLog,
+  references,
+  artworkReferences,
+  compiledDesignSystemPrompt,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  promptModel?: string;
+  promptProvider: ImagePromptProvider;
+  promptApiKey: string;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  references: readonly ReferenceImageInput[];
+  artworkReferences: readonly StoredArtworkReference[];
+  compiledDesignSystemPrompt: string;
+  fetchImpl: FetchLike;
+}): Promise<string> {
+  return generateProductionBrief({
+    apiKey: promptApiKey,
+    model: promptModel,
+    provider: promptProvider,
+    fetchImpl,
+    compiledDesignSystemPrompt,
+    referenceImages: references.map((reference) => ({
+      imageUrl:
+        artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
+        `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+      label: reference.label ?? "Reference image"
+    })),
+    writeTrace: async (trace) => {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildImagePromptAgentDebugLog(
+          trace,
+          input.runId,
+          hook.id,
+          references
+        )
+      );
+    }
+  });
+}
+
 function buildCreativeStrategyAgentDebugLog(
   trace: CreativeStrategyEnrichmentTrace,
   runId: string,
@@ -2769,6 +2842,7 @@ function buildImagePromptAgentDebugLog(
     runId,
     directionId,
     mode: trace.mode,
+    ...(trace.stage ? { stage: trace.stage } : {}),
     status: trace.status,
     request: {
       endpoint: trace.endpoint,
@@ -2877,7 +2951,7 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
       : readString(value.artworkMode, "artworkMode");
   if (!artworkModes.includes(artworkMode as (typeof artworkModes)[number])) {
     throw new Error(
-      "artworkMode must be standard, design-system, or reference-library."
+      "artworkMode must be standard, design-system, design-system-new, or reference-library."
     );
   }
   const imagePromptModel =
