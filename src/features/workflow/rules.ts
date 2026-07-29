@@ -223,6 +223,15 @@ export function workflowActionBlockReason(
       return run.outputs.some((output) => output.id === action.id)
         ? null
         : "Output not found.";
+    case "unapprove-output":
+      if (!run.clientSent) return "Send to client first.";
+      {
+        const output = run.outputs.find((item) => item.id === action.id);
+        if (!output) return "Output not found.";
+        return output.clientStatus === "approved"
+          ? null
+          : "Approve this creative before reopening its decision.";
+      }
     case "request-client-change":
       if (!action.comment.trim()) return "Add a comment before requesting changes.";
       {

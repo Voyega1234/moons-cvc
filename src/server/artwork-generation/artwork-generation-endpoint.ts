@@ -176,7 +176,9 @@ interface ImagePromptAgentDebugLog {
     }[];
     responseFormat: {
       type: "json_schema";
-      name: "moons_image_generation_prompt";
+      name:
+        | "moons_image_generation_prompt"
+        | "moons_creative_design_input";
       strict: true;
     };
   };
@@ -1766,17 +1768,11 @@ async function buildDirectDesignSystemPrompt({
     .map((reference, index) => buildCampaignArtifactRole(reference, index));
 
   /**
-   * Static artwork should not receive every available supporting point.
-   * Too many supporting options tend to produce:
-   * - icon rows
-   * - feature cards
-   * - infographic blocks
-   * - crowded bottom strips
+   * The strategy agent has already evaluated the evidence against this idea.
+   * Preserve its semantic choices instead of taking the first N hook details.
+   * The final art director still decides whether any candidate belongs on-art.
    */
-  const selectedSupportingCopy = (hook.supportingPoints ?? [])
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, input.service === "album-post" ? 4 : 2);
+  const selectedSupportingCopy = strategyOptionalCopyCandidates(strategy);
 
   const latestCorrection =
     input.textInputs
@@ -1919,13 +1915,10 @@ async function buildDirectDesignSystemPrompt({
       )
     ].join("\n"),
     "These strategic inputs describe intent only. They do not prescribe the visual solution.",
-    "### Creative provocation",
-    compactPromptText(
-      creativeProvocation ??
-        "Find the strongest campaign-specific visual idea from the verified evidence.",
-      1_200
-    ),
-    "Use this as an imaginative starting point, not a prescribed layout or production blueprint. Freely transform it when a stronger visual execution communicates the campaign more effectively. It does not authorize invented facts, copy, products, or claims.",
+    "### Creative input packet prepared by Creative Graphic Designer",
+    creativeProvocation?.trim() ||
+      "No creative input packet was supplied. Infer conservatively from the authoritative campaign context.",
+    "Use the packet as structured creative preparation, not as artwork copy. Preserve exact fields, omit fields marked OMIT, and retain final art-direction control over optional content and execution. The packet does not authorize invented facts, copy, products, or claims.",
     "### Brand",
     [
       `- Name: ${compactPromptText(input.brand?.name ?? "Not supplied", 180)}`,
@@ -1954,19 +1947,24 @@ async function buildDirectDesignSystemPrompt({
     [
       selectedSupportingCopy.length
         ? selectedSupportingCopy
-            .map(
-              (item) =>
-                `- ${compactPromptText(
-                  item,
+            .map(({ role, text }) =>
+              [
+                `- Strategy-selected ${role} candidate:`,
+                `  “${compactPromptText(
+                  text,
                   input.service === "album-post" ? 800 : 400
-                )}`
+                )}”`
+              ].join("\n")
             )
             .join("\n")
         : "- None supplied.",
       "",
-      "Supporting information above is an approved content pool, not a required copy checklist.",
-      "Select only what strengthens the idea, understanding, persuasion, or required execution.",
+      "Role labels above are instructions and must never be rendered as artwork copy.",
+      "The strategy agent selected these candidates; the final art director must still decide whether each one materially improves the artwork.",
+      "Choose a coherent information structure: no supporting copy, one plain supporting sentence, or a genuine list of at least two distinct items.",
+      "Never give a single supporting sentence a checkbox, bullet, divider, numbered-step, or list-row treatment.",
       "Omit redundant information when the visual already communicates it.",
+      "Omit any candidate that merely repeats the headline or CTA.",
       "Supporting content is optional unless explicitly marked mandatory."
     ].join("\n"),
     "### Information density intent",
@@ -2010,6 +2008,37 @@ async function buildDirectDesignSystemPrompt({
   );
 
   return prompt;
+}
+
+function strategyOptionalCopyCandidates(
+  strategy: CreativeStrategyEnrichment | undefined
+): readonly {
+  role: "proof" | "differentiator" | "offer";
+  text: string;
+}[] {
+  if (!strategy) return [];
+
+  const candidates = [
+    ...strategy.proof.map((claim) => ({
+      role: "proof" as const,
+      text: claim.text
+    })),
+    {
+      role: "differentiator" as const,
+      text: strategy.differentiator.text
+    },
+    { role: "offer" as const, text: strategy.offer.text }
+  ];
+  const seen = new Set<string>();
+
+  return candidates
+    .map((candidate) => ({ ...candidate, text: candidate.text.trim() }))
+    .filter((candidate) => {
+      const key = candidate.text.toLocaleLowerCase();
+      if (!candidate.text || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 export function buildActiveHumanPresenceRules(
@@ -2856,7 +2885,12 @@ function buildImagePromptAgentDebugLog(
       })),
       responseFormat: {
         type: "json_schema",
-        name: "moons_image_generation_prompt",
+        name:
+          trace.mode === "design-system" ||
+          (trace.mode === "design-system-new" &&
+            trace.stage !== "production-brief")
+            ? "moons_creative_design_input"
+            : "moons_image_generation_prompt",
         strict: true
       }
     },

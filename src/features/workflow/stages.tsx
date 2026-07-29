@@ -76,6 +76,7 @@ import type {
 } from "./model";
 import {
   creativeMixItems,
+  selectedBrandProducts,
   totalCreativeMixQuantity
 } from "./model";
 import {
@@ -112,7 +113,6 @@ import {
   AlbumPanelPreview,
   CreativePreviewModal
 } from "./review/creative-previews";
-import { OutputGrid } from "./review/output-grid";
 import {
   downloadAlbumArchive,
   downloadAllOutputs,
@@ -3842,6 +3842,42 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         preflightServiceOrder[left.service ?? state.service] -
         preflightServiceOrder[right.service ?? state.service]
     );
+  const preflightContext = {
+    runId: state.id,
+    brief: state.brief,
+    brandContext: state.brand
+      ? {
+          name: state.brand.name,
+          category: state.brand.category,
+          products: selectedBrandProducts(state).map((item) =>
+            item.description.trim()
+              ? `${item.title}: ${item.description}`
+              : item.title
+          ),
+          documents: state.brand.library.docs.map((item) =>
+            item.description.trim()
+              ? `${item.title}: ${item.description}`
+              : item.title
+          ),
+          working: state.brand.memory.working,
+          avoid: state.brand.memory.avoid
+        }
+      : null
+  };
+  const preflightRevisionFeedback = state.outputs.reduce<
+    Record<string, string>
+  >((feedbackByDirection, output) => {
+    const feedback = Object.values(output.approvalComments)
+      .map((comment) => comment.trim())
+      .filter(Boolean);
+    if (!feedback.length) return feedbackByDirection;
+    const previous = feedbackByDirection[output.directionId];
+    feedbackByDirection[output.directionId] = [
+      previous,
+      ...feedback
+    ].filter(Boolean).join("\n");
+    return feedbackByDirection;
+  }, {});
 
   const editingDirection = state.directions.find(
     (direction) => direction.id === editingDirectionId
@@ -3961,6 +3997,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         <PreflightModal
           directions={preflightDirections}
           fallbackService={state.service}
+          context={preflightContext}
+          revisionFeedbackByDirectionId={preflightRevisionFeedback}
           onContinue={() => {
             setPreflightOpen(false);
             createSelectedHooks();
@@ -4849,10 +4887,14 @@ export function ClientStage({
   const approvedCount = creativeGroups.filter((outputs) =>
     outputs.every((output) => output.clientStatus === "approved")
   ).length;
+  const fixingCount = creativeGroups.filter((outputs) =>
+    outputs.some((output) => output.clientStatus === "revision")
+  ).length;
   const allApproved =
     creativeGroups.length > 0 && approvedCount === creativeGroups.length;
   const [revisionOutputId, setRevisionOutputId] = useState<string | null>(null);
   const [previewOutputId, setPreviewOutputId] = useState<string | null>(null);
+  const [approvalOutputId, setApprovalOutputId] = useState<string | null>(null);
   const [revisionTarget, setRevisionTarget] =
     useState<ClientRevisionTarget | null>(null);
   const [revisionComment, setRevisionComment] = useState("");
@@ -4885,12 +4927,34 @@ export function ClientStage({
   const previewDirection = state.directions.find(
     (direction) => direction.id === previewOutput?.directionId
   );
+  const approvalOutputs =
+    creativeGroups.find((outputs) =>
+      outputs.some((output) => output.id === approvalOutputId)
+    ) ?? [];
+  const approvalOutput = approvalOutputs[0];
+  const approvalDirection = state.directions.find(
+    (direction) => direction.id === approvalOutput?.directionId
+  );
+  const approvalGroupIndex = approvalOutput
+    ? creativeGroups.findIndex((outputs) =>
+        outputs.some((output) => output.id === approvalOutput.id)
+      )
+    : -1;
 
   useEffect(() => {
     if (canEdit && !state.clientSent && !sendClientBlocked) {
       dispatch(sendClientAction);
     }
   }, [canEdit, dispatch, sendClientBlocked, state.clientSent]);
+
+  useEffect(() => {
+    if (!approvalOutputId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setApprovalOutputId(null);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [approvalOutputId]);
 
   function closeRevisionDialog() {
     setRevisionOutputId(null);
@@ -4904,7 +4968,7 @@ export function ClientStage({
     const comment = revisionComment.trim();
     if (!revisionTarget || !comment) {
       setRevisionError(
-        "Choose Artwork, Concept, or Both and add one clear change instruction."
+        "Choose Artwork, Caption, or Both and add one clear change instruction."
       );
       return;
     }
@@ -4919,22 +4983,17 @@ export function ClientStage({
     closeRevisionDialog();
   }
 
-  function approveAllClientOutputs() {
-    if (!canEdit) return;
-    state.outputs.forEach((output) => {
-      if (output.clientStatus !== "approved") {
-        dispatch({ type: "approve-output", id: output.id });
-      }
-    });
-  }
-
   return (
     <DecisionCard
-      eyebrow="06 / Client"
-      title="Make feedback easy to act on."
-      helper="The client sees the idea, not the production clutter. Every requested change records what needs fixing and routes it correctly."
-      status={`${approvedCount} / ${creativeGroups.length} approved`}
-      statusClass={allApproved ? "green" : "blue"}
+      eyebrow="Client Review · Per creative"
+      title="Turn every comment into a clear fix task."
+      helper="The client chooses Artwork, Caption, or Both and leaves one actionable comment. Creative Compass routes the work internally and sends it back to the client only after PM rechecks it."
+      status={
+        fixingCount
+          ? `${approvedCount} approved · ${fixingCount} fixing`
+          : `${approvedCount} / ${creativeGroups.length} approved`
+      }
+      statusClass={allApproved ? "green" : fixingCount ? "amber" : "blue"}
       className="compass-stage-client"
       actions={
         <>
@@ -4947,26 +5006,39 @@ export function ClientStage({
           </button>
           <div className="compass-client-footer-actions">
             <button
-              className="btn compass-client-approve-all"
-              type="button"
-              disabled={!canEdit || !state.clientSent}
-              onClick={approveAllClientOutputs}
-            >
-              Approve all demo assets
-            </button>
-            <button
               className="btn primary"
               type="button"
               disabled={!canEdit || Boolean(deliverBlocked)}
               title={deliverBlocked ?? undefined}
               onClick={() => dispatch(deliverAction)}
             >
-              Deliver and learn →
+              Complete delivery →
             </button>
           </div>
         </>
       }
     >
+      <section className="client-flow-note compass-client-flow-note">
+        <div>
+          <b>Client comments do not reopen Create.</b>
+          <p>
+            The affected creative moves to Internal QC while other approved
+            creatives remain ready for delivery.
+          </p>
+        </div>
+        <div
+          className="client-flow-route compass-client-flow-route"
+          aria-label="Client revision route"
+        >
+          <span>Client comment</span>
+          <i aria-hidden="true">→</i>
+          <span>Fix owner</span>
+          <i aria-hidden="true">→</i>
+          <span>PM recheck</span>
+          <i aria-hidden="true">→</i>
+          <span>Client</span>
+        </div>
+      </section>
       <div className="client-grid compass-client-grid">
         {creativeGroups.map((outputs, index) => {
           const output = outputs[0];
@@ -4992,13 +5064,66 @@ export function ClientStage({
               })
             )
             .find(Boolean);
+          const unapproveBlocked = outputs
+            .map((candidate) =>
+              workflowActionBlockReason(state, {
+                type: "unapprove-output",
+                id: candidate.id
+              })
+            )
+            .find(Boolean);
+          const feedbackOutput = outputs.find(
+            (candidate) =>
+              candidate.approvalComments.graphicDesign.trim() ||
+              candidate.approvalComments.clientService.trim()
+          );
+          const artworkFeedback =
+            feedbackOutput?.approvalComments.graphicDesign.trim() ?? "";
+          const captionFeedback =
+            feedbackOutput?.approvalComments.clientService.trim() ?? "";
+          const feedbackComment = artworkFeedback || captionFeedback;
+          const feedbackLabel =
+            artworkFeedback && captionFeedback
+              ? "Artwork + caption · GD → CS"
+              : artworkFeedback
+                ? "Artwork · GD"
+                : captionFeedback
+                  ? `${isUgcOutput(output) ? "Script" : "Caption"} · CS`
+                  : "";
+          const hasReturnedFeedback =
+            Boolean(feedbackComment) &&
+            (clientStatus === "revision" || output.revisionCount > 0);
+          const statusLabel =
+            clientStatus === "approved"
+              ? "Approved"
+              : clientStatus === "revision"
+                ? "Internal fix in progress"
+                : hasReturnedFeedback
+                  ? "Ready to recheck"
+                  : "Awaiting decision";
+          const statusClass =
+            clientStatus === "approved"
+              ? "green"
+              : clientStatus === "revision"
+                ? "amber"
+                : "blue";
           return (
             <article
-              className={`client-card compass-client-card ${clientStatus}`}
+              className={`client-card compass-client-card ${
+                clientStatus === "revision"
+                  ? "revision fixing"
+                  : clientStatus === "approved"
+                    ? "approved"
+                    : hasReturnedFeedback
+                      ? "resubmitted"
+                      : "sent"
+              }`}
               key={output.id}
             >
               <button
-                className="preview-area compass-client-preview compass-view-preview-button"
+                className={`preview-area client-preview compass-client-preview compass-view-preview-button${
+                  album ? " album-client-preview" : ""
+                }`}
                 type="button"
                 aria-label={`Open ${album ? "album " : ""}creative ${index + 1} preview`}
                 onClick={() => setPreviewOutputId(output.id)}
@@ -5032,54 +5157,91 @@ export function ClientStage({
                   </div>
                 )}
               </button>
-              <div className="client-card-body compass-client-card-body">
+              <div className="client-body client-card-body compass-client-card-body">
+                <div className="client-state-row compass-client-state-row">
+                  <span className={`badge ${statusClass}`}>{statusLabel}</span>
+                  <small>
+                    {qcContentTypeLabel(output)} · V{output.revisionCount + 1}
+                  </small>
+                </div>
                 <div className="compass-client-card-copy">
                   <h3>{clientCreativeTitle(output, index)}</h3>
                   <p>{direction?.hook ?? `Creative ${index + 1}`}</p>
                 </div>
-                <div className="compass-client-card-actions">
-                  <button
-                    className="btn small"
-                    type="button"
-                    disabled={!canEdit || !state.clientSent}
-                    onClick={() => {
-                      setRevisionOutputId(output.id);
-                      setRevisionTarget(
-                        isUgcOutput(output) ? "clientService" : null
-                      );
-                      setRevisionComment("");
-                      setRevisionError(null);
-                    }}
-                  >
-                    Request changes
-                  </button>
-                  <button
-                    className="btn small compass-client-approve"
-                    type="button"
-                    disabled={!canEdit || Boolean(approveBlocked)}
-                    title={approveBlocked ?? undefined}
-                    onClick={() => {
-                      outputs.forEach((candidate) => {
-                        if (candidate.clientStatus !== "approved") {
-                          dispatch({
-                            type: "approve-output",
-                            id: candidate.id
-                          });
-                        }
-                      });
-                    }}
-                  >
-                    Approve
-                  </button>
+                <div className="client-caption compass-client-caption">
+                  <b>{isUgcOutput(output) ? "Caption / script" : "Caption"}</b>
+                  <p>{direction?.caption ?? "No caption provided."}</p>
                 </div>
-                {clientStatus === "approved" ||
-                clientStatus === "revision" ? (
-                  <div className="compass-client-decision-note">
-                    {clientStatus === "approved"
-                      ? "Approved and ready for delivery."
-                      : "Feedback recorded and routed back to Internal QC."}
+                {hasReturnedFeedback ? (
+                  <div className="client-feedback-summary">
+                    <b>{feedbackLabel}</b>
+                    {feedbackComment}
                   </div>
                 ) : null}
+                <div className="client-actions compass-client-card-actions">
+                  {clientStatus === "approved" ? (
+                    <button
+                      className="btn small undo-approval"
+                      type="button"
+                      disabled={!canEdit || Boolean(unapproveBlocked)}
+                      title={unapproveBlocked ?? undefined}
+                      onClick={() => {
+                        outputs.forEach((candidate) => {
+                          dispatch({
+                            type: "unapprove-output",
+                            id: candidate.id
+                          });
+                        });
+                      }}
+                    >
+                      Undo approval
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={
+                          !canEdit ||
+                          !state.clientSent ||
+                          clientStatus === "revision"
+                        }
+                        onClick={() => {
+                          setRevisionOutputId(output.id);
+                          setRevisionTarget(
+                            isUgcOutput(output) ? "clientService" : null
+                          );
+                          setRevisionComment("");
+                          setRevisionError(null);
+                        }}
+                      >
+                        Request changes
+                      </button>
+                      <button
+                        className="btn small compass-client-approve"
+                        type="button"
+                        disabled={
+                          !canEdit ||
+                          Boolean(approveBlocked) ||
+                          clientStatus === "revision"
+                        }
+                        title={approveBlocked ?? undefined}
+                        onClick={() => setApprovalOutputId(output.id)}
+                      >
+                        Approve creative
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="client-note compass-client-decision-note">
+                  {clientStatus === "approved"
+                    ? "Approved and ready for delivery. You can undo before completing delivery."
+                    : clientStatus === "revision"
+                      ? "The fix is with the internal owner. PM will recheck it before it returns here."
+                      : hasReturnedFeedback
+                        ? "Updated version returned after PM recheck."
+                        : "Waiting for the client decision."}
+                </div>
               </div>
             </article>
           );
@@ -5098,6 +5260,77 @@ export function ClientStage({
           brandName={state.brand?.name}
           onClose={() => setPreviewOutputId(null)}
         />
+      ) : null}
+      {approvalOutput ? (
+        <div
+          className="output-modal-backdrop compass-client-approve-backdrop"
+          onClick={() => setApprovalOutputId(null)}
+        >
+          <div
+            className="output-modal compass-client-approve-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="client-approve-title"
+            aria-describedby="client-approve-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="compass-client-approve-mark" aria-hidden="true">
+              ✓
+            </span>
+            <h3 id="client-approve-title">Approve this creative?</h3>
+            <p
+              className="compass-client-approve-sub"
+              id="client-approve-description"
+            >
+              This marks V{approvalOutput.revisionCount + 1} as ready for
+              delivery.
+            </p>
+            <div className="compass-client-approve-asset">
+              <b>
+                {clientCreativeTitle(
+                  approvalOutput,
+                  Math.max(approvalGroupIndex, 0)
+                )}{" "}
+                · V{approvalOutput.revisionCount + 1}
+              </b>
+              <span>
+                {qcContentTypeLabel(approvalOutput)} ·{" "}
+                {approvalDirection?.hook ?? "Creative"}
+              </span>
+            </div>
+            <p className="compass-client-approve-note">
+              You can undo the approval from the card until delivery is
+              completed.
+            </p>
+            <div className="output-modal-actions compass-client-approve-actions">
+              <button
+                className="btn"
+                type="button"
+                autoFocus
+                onClick={() => setApprovalOutputId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn lime compass-client-confirm-approval"
+                type="button"
+                onClick={() => {
+                  approvalOutputs.forEach((candidate) => {
+                    if (candidate.clientStatus !== "approved") {
+                      dispatch({
+                        type: "approve-output",
+                        id: candidate.id
+                      });
+                    }
+                  });
+                  setApprovalOutputId(null);
+                }}
+              >
+                Confirm approval
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       {revisionOutput ? (
         <div className="output-modal-backdrop" onClick={closeRevisionDialog}>
@@ -5157,7 +5390,9 @@ export function ClientStage({
                     {target === "graphicDesign"
                       ? "Artwork"
                       : target === "clientService"
-                        ? "Concept"
+                        ? isUgcOutput(revisionOutput)
+                          ? "Script"
+                          : "Caption"
                         : "Both"}
                   </button>
                 ))}
@@ -5167,10 +5402,10 @@ export function ClientStage({
               {revisionTarget === "graphicDesign"
                 ? "Artwork change · Update and replace the visual in Internal QC."
                 : revisionTarget === "clientService"
-                  ? "Concept change · Update the concept, hook, caption, script, or client-facing details."
+                  ? `${isUgcOutput(revisionOutput) ? "Script" : "Caption"} change · Update the hook, caption, script, or client-facing details.`
                   : revisionTarget === "both"
-                    ? "Both · Update the artwork first, then the concept and copy."
-                    : "Choose Artwork, Concept, or Both to route this request."}
+                    ? "Both · Update the artwork first, then the caption or script."
+                    : `Choose Artwork, ${isUgcOutput(revisionOutput) ? "Script" : "Caption"}, or Both to route this request.`}
             </div>
             <label className="output-modal-prompt-label">
               <span>Change instruction</span>
@@ -5215,75 +5450,191 @@ export function ClientStage({
 export function SummaryStage({
   state,
   dispatch,
-  onCreateRun
-}: StageProps & { onCreateRun: () => void }) {
-  const backAction: WorkflowAction = { type: "set-stage", stage: "client" };
+  onCreateRun,
+  onOpenWorkboard
+}: StageProps & {
+  onCreateRun: () => void;
+  onOpenWorkboard: () => void;
+}) {
   const doneAction: WorkflowAction = { type: "mark-done" };
   const doneBlocked = workflowActionBlockReason(state, doneAction);
+  const creativeGroups = groupOutputsForReview(state.outputs);
+  const approvedCreativeCount = creativeGroups.filter((outputs) =>
+    outputs.every((output) => output.clientStatus === "approved")
+  ).length;
+  const shippedDirections = state.directions.filter((direction) =>
+    state.outputs.some((output) => output.directionId === direction.id)
+  );
+  const elapsedDays = Math.max(
+    0,
+    (Date.parse(state.updatedAt) - Date.parse(state.createdAt)) /
+      (1000 * 60 * 60 * 24)
+  );
+  const elapsedLabel = Number.isFinite(elapsedDays)
+    ? elapsedDays < 0.1
+      ? "<0.1d"
+      : `${elapsedDays.toFixed(1)}d`
+    : "—";
+  const capturedLearnings = summaryCapturedLearnings(state);
+  const savedReferenceCount = state.outputs.filter(
+    (output) => output.savedToReferences
+  ).length;
+
+  const finishRun = () => {
+    if (!doneBlocked) dispatch(doneAction);
+  };
 
   return (
     <DecisionCard
-      eyebrow="07 / Learn"
-      title="Every launch makes the next idea smarter."
-      helper="Close the loop by saving the creative hypothesis, performance result, and the pattern worth repeating."
+      eyebrow="Learn · Captured automatically"
+      title="Delivery complete. Memory updated."
+      helper="Creative hypotheses, approvals, revision routes, and patterns are saved without adding another blocking team step."
       status="Memory updated"
       statusClass="green"
+      className="compass-stage-learn"
       actions={
         <>
-          <button
-            className="btn secondary download-action"
-            type="button"
-            disabled={!state.outputs.some((output) => output.assetUrl)}
-            onClick={() => void downloadAllOutputs(state.outputs)}
-          >
-            Download all
-          </button>
-          <button
-            className="btn secondary"
-            type="button"
-            onClick={() => dispatch(backAction)}
-          >
-            Back to Client
-          </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled={Boolean(doneBlocked)}
-            title={doneBlocked ?? undefined}
-            onClick={() => dispatch(doneAction)}
-          >
-            Mark sent
-          </button>
-          <button
-            className="btn ghost"
-            type="button"
-            onClick={onCreateRun}
-          >
-            New creative
-          </button>
+          <span className="pill green compass-learn-memory-pill">
+            Creative memory compounds
+          </span>
+          <div className="compass-learn-footer-actions">
+            <button
+              className="btn secondary download-action"
+              type="button"
+              disabled={!state.outputs.some((output) => output.assetUrl)}
+              onClick={() => void downloadAllOutputs(state.outputs)}
+            >
+              Download all
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={Boolean(doneBlocked)}
+              title={doneBlocked ?? undefined}
+              onClick={() => {
+                finishRun();
+                onOpenWorkboard();
+              }}
+            >
+              View workboard
+            </button>
+            <button
+              className="btn orange"
+              type="button"
+              disabled={Boolean(doneBlocked)}
+              title={doneBlocked ?? undefined}
+              onClick={() => {
+                finishRun();
+                onCreateRun();
+              }}
+            >
+              Start the next run →
+            </button>
+          </div>
         </>
       }
     >
-      <div className="summary-grid">
-        <Metric value={String(state.outputs.length)} label="Final outputs" />
-        <Metric value={state.brand?.name ?? "-"} label="Client" />
-        <Metric
-          value={
-            creativeMixItems(state).length === 1
-              ? serviceLabels[state.service]
-              : `${creativeMixItems(state).length} content types`
-          }
-          label="Creative mix"
-        />
-        <Metric value="Passed" label="Quality status" />
+      <div className="learn-hero compass-learn-hero">
+        <section className="learn-card dark compass-learn-shipped">
+          <h3>
+            The creative set is shipped.
+            <br />
+            Now let the evidence talk.
+          </h3>
+          <p>
+            Performance feedback will attach to the exact hook, format, and
+            visual pattern that created it.
+          </p>
+          <div className="metric-cards compass-learn-metrics">
+            <Metric
+              value={String(approvedCreativeCount)}
+              label="approved creatives"
+            />
+            <Metric
+              value={String(shippedDirections.length)}
+              label="hypotheses shipped"
+            />
+            <Metric value={elapsedLabel} label="idea-to-launch" />
+          </div>
+        </section>
+        <section className="learn-card compass-learn-captured">
+          <h3>What Creative Compass learned</h3>
+          <div className="learning-list compass-learn-list">
+            {capturedLearnings.map((learning) => (
+              <div className="learning-line" key={learning.title}>
+                <b>{learning.title}</b>
+                <p>{learning.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
-      <div className="summary-panel">
-        <h3>Approved creatives</h3>
-        <OutputGrid state={state} dispatch={dispatch} />
+      <div className="memory-update compass-memory-update">
+        <article className="memory-update-card">
+          <span className="learn-icon">↗</span>
+          <h3>Working pattern captured</h3>
+          <p>
+            Approval decisions and revision routes from this run are preserved
+            as evidence for the next learning review.
+          </p>
+        </article>
+        <article className="memory-update-card">
+          <span className="learn-icon orange">✦</span>
+          <h3>
+            {savedReferenceCount
+              ? "Approved creative saved"
+              : "Approved creative ready"}
+          </h3>
+          <p>
+            {savedReferenceCount
+              ? `${savedReferenceCount} approved creative${savedReferenceCount === 1 ? " is" : "s are"} available in the reference library.`
+              : "The delivered set remains attached to its hypotheses and can be saved to the reference library."}
+          </p>
+        </article>
+        <article className="memory-update-card">
+          <span className="learn-icon blue">∞</span>
+          <h3>Next test ready</h3>
+          <p>
+            Creative Compass can turn an approved hypothesis into one
+            controlled variation instead of starting the next run from zero.
+          </p>
+        </article>
       </div>
       <LearningSuggestionsPanel state={state} />
     </DecisionCard>
   );
+}
+
+function summaryCapturedLearnings(
+  state: WorkflowState
+): readonly { title: string; detail: string }[] {
+  const working = state.brand?.memory.working.slice(0, 3) ?? [];
+  if (working.length) {
+    return working.map((note, index) => ({
+      title: `Working pattern ${index + 1}`,
+      detail: presentBrandMemoryText(note).text
+    }));
+  }
+
+  const shippedDirections = state.directions.filter((direction) =>
+    state.outputs.some((output) => output.directionId === direction.id)
+  );
+  const directionLearnings = shippedDirections.slice(0, 3).map((direction) => ({
+    title: direction.hook,
+    detail:
+      direction.why ||
+      direction.concept ||
+      "The approved hypothesis stays attached to this delivered creative."
+  }));
+  if (directionLearnings.length) return directionLearnings;
+
+  return [
+    {
+      title: "Delivery evidence captured.",
+      detail:
+        "Approved creatives, review decisions, and revision routes remain attached to this run."
+    }
+  ];
 }
 
 function LearningSuggestionsPanel({ state }: { state: WorkflowState }) {

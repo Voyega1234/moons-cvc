@@ -1336,6 +1336,15 @@ describe("workflowReducer", () => {
       type: "approve-output",
       id: approvedOutput.id
     });
+    state = workflowReducer(state, {
+      type: "unapprove-output",
+      id: approvedOutput.id
+    });
+    expect(state.outputs[0]?.clientStatus).toBe("sent");
+    state = workflowReducer(state, {
+      type: "approve-output",
+      id: approvedOutput.id
+    });
 
     const beforeBlankRequest = state;
     state = workflowReducer(state, {

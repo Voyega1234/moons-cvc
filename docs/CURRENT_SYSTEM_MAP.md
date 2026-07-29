@@ -10,7 +10,7 @@ current UX request.
 ## Product flow
 
 ```text
-Overview
+My Work / Overview
   -> Signal / brand selection
   -> Brief
   -> Hook / directions
@@ -45,9 +45,11 @@ Async results must continue targeting the run that started the request.
 | Workspace/run persistence transitions | `src/features/workflow/workspace-reducer.ts` |
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
+| GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
 | Quality check request | `src/features/workflow/use-run-quality-check.ts` |
 | Stage configuration and labels | `src/features/workflow/config.ts` |
 | Main application composition | `src/app/App.tsx` |
+| Personal work queue | `src/features/workflow/my-work.tsx` |
 
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
@@ -63,6 +65,7 @@ imports stay stable. Ownership after the first extraction is:
 | Brief and shared material browser | `stages/brief-stage.tsx` |
 | Pre-generation confirmation | `stages/brief-confirmation-modal.tsx` |
 | Hook selection | `DirectionsStage`, hook edit/regenerate modals |
+| Before-build idea checks | `stages/preflight-modal.tsx` |
 | Create | `stages/studio-stage.tsx` |
 | Shared output workspace | `review/output-grid.tsx` |
 | Shared grouping and display order | `review/output-groups.ts` |
@@ -73,6 +76,7 @@ imports stay stable. Ownership after the first extraction is:
 | Client review | `ClientStage`, client revision and preview UI |
 | Learn | `SummaryStage`, `LearningSuggestionsPanel` |
 | Overview | `Overview`, workboard helpers |
+| My Work | `src/features/workflow/my-work.tsx`, live run assignments and queue state |
 
 `StartStage`, `DirectionsStage`, `ClientStage`, `SummaryStage`, and `Overview`
 still live in the monolith. Structural moves preserve exports so
@@ -102,6 +106,13 @@ Artwork requests are built in
 
 - `design-system` compiles `agent_prompt/agent_design_system.md` and sends the
   rendered master prompt directly to GPT Image 2.
+- Before either design-system path is compiled,
+  `agent_prompt/agent_creative_graphic_designer.md` returns the strict
+  `moons_creative_design_input` packet. It prepares the actual brand,
+  product/service, exact headline and CTA, highlighted phrase, optional feature
+  pair, optional supporting conversion line, required utility information,
+  palette, official assets, and visual concept. The server validates immutable
+  copy and renders the packet into the design-system campaign context.
 - `design-system-new` keeps the same strategy, creative-concept, campaign
   compilation, assets, and image settings. It then runs the compiled master
   prompt through the selected OpenAI/OpenRouter model using
@@ -137,10 +148,15 @@ CSS currently loads in this order:
 1. `src/styles/app.css`
 2. `src/styles/compass-redesign.css`
 3. `src/styles/workflow/brief-confirmation.css`
-4. `src/styles/workflow/hook-album-format.css`
-5. `src/styles/workflow/create-build.css`
-6. `src/styles/workflow/ugc-preview.css`
-7. `src/styles/workflow/internal-qc.css`
+4. `src/styles/workflow/brief-stage.css`
+5. `src/styles/workflow/hook-album-format.css`
+6. `src/styles/workflow/preflight.css`
+7. `src/styles/workflow/create-build.css`
+8. `src/styles/workflow/ugc-preview.css`
+9. `src/styles/workflow/internal-qc.css`
+10. `src/styles/workflow/client-review.css`
+11. `src/styles/workflow/learn-summary.css`
+12. `src/styles/workflow/my-work.css`
 
 `compass-redesign.css` contains several generations of overrides and is not a
 clean component boundary. Before changing a rule:

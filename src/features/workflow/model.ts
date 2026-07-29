@@ -25,7 +25,7 @@ import type {
     ImagePromptModel
 } from "../../domain/creative-run";
 
-export type AppView = "overview" | "studio";
+export type AppView = "overview" | "my-work" | "studio";
 
 export const successMetrics = ["CTR", "CVR", "CPA", "ROAS"] as const;
 export type SuccessMetric = (typeof successMetrics)[number];
@@ -222,6 +222,7 @@ export type WorkflowAction =
     }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
+  | { type: "unapprove-output"; id: string }
   | {
       type: "request-client-change";
       id: string;

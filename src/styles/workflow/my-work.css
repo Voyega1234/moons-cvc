@@ -1,0 +1,600 @@
+.compass-app .my-work-view {
+  display: grid;
+  gap: 18px;
+}
+
+.compass-app .my-work-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(480px, 1.28fr);
+  align-items: center;
+  gap: 32px;
+  min-height: 260px;
+  padding: 30px 34px;
+  overflow: hidden;
+  border: 1px solid #cfd8ff;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 96% 5%, rgba(214, 253, 233, 0.9), transparent 34%),
+    linear-gradient(135deg, #e8eeff 0%, #edf2ff 54%, #effbf6 100%);
+  color: #202735;
+  box-shadow: 0 14px 34px rgba(72, 91, 155, 0.09);
+}
+
+.compass-app .my-work-focus {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.compass-app .my-work-kicker {
+  width: max-content;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.compass-app .my-work-focus-number {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.compass-app .my-work-focus-number strong {
+  color: #202735;
+  font-size: clamp(72px, 7vw, 96px);
+  font-weight: 720;
+  line-height: 0.72;
+  letter-spacing: -0.085em;
+}
+
+.compass-app .my-work-focus-number span {
+  padding-bottom: 2px;
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.compass-app .my-work-focus-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 24px;
+}
+
+.compass-app .my-work-focus-meta span {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #d5dcf3;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #4d5668;
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.compass-app .my-work-focus-meta i {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: #f3b943;
+}
+
+.compass-app .my-work-focus-meta .ready i {
+  background: #7fbe24;
+}
+
+.compass-app .my-work-next-card {
+  position: relative;
+  z-index: 1;
+  min-height: 206px;
+  padding: 21px 22px;
+  border: 1px solid #d7ddec;
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(49, 63, 104, 0.09);
+  color: var(--ink);
+}
+
+.compass-app .my-work-next-card.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  color: var(--green);
+}
+
+.compass-app .my-work-next-card.empty h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.compass-app .my-work-next-card.empty p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compass-app .my-work-next-top,
+.compass-app .my-work-next-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compass-app .my-work-next-top > span:first-child {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.compass-app .my-work-status-badge,
+.compass-app .my-work-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-weight: 780;
+}
+
+.compass-app .my-work-status-badge {
+  min-height: 29px;
+  padding: 0 11px;
+  border: 1px solid #d8def0;
+  background: #edf0ff;
+  color: var(--accent);
+  font-size: 9.5px;
+}
+
+.compass-app .my-work-status-badge.waiting {
+  border-color: #efd8a3;
+  background: #fff5df;
+  color: #9c6507;
+}
+
+.compass-app .my-work-status-badge.ready {
+  border-color: var(--greenLine);
+  background: var(--greenSoft);
+  color: var(--green);
+}
+
+.compass-app .my-work-next-main {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin-top: 15px;
+}
+
+.compass-app .my-work-progress-summary {
+  min-height: 68px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 13px;
+  border: 1px solid #cce98b;
+  border-radius: 13px;
+  background: #f1ffd0;
+}
+
+.compass-app .my-work-progress-summary b {
+  font-size: 18px;
+  letter-spacing: -0.04em;
+}
+
+.compass-app .my-work-progress-summary span {
+  margin-top: 4px;
+  color: #637044;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.compass-app .my-work-next-project small {
+  display: block;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compass-app .my-work-next-project h2 {
+  margin: 5px 0 0;
+  font-size: clamp(19px, 2vw, 25px);
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+}
+
+.compass-app .my-work-stage-track {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  margin: 18px 0 15px;
+}
+
+.compass-app .my-work-stage-track i {
+  height: 7px;
+  border-radius: 4px;
+  background: #e6e9ef;
+}
+
+.compass-app .my-work-stage-track i.done {
+  background: #8ee642;
+}
+
+.compass-app .my-work-stage-track i.current {
+  background: var(--accent);
+}
+
+.compass-app .my-work-next-actions small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-app .my-work-next-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.compass-app .my-work-section {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(24, 27, 31, 0.04);
+}
+
+.compass-app .my-work-section-head {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 19px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compass-app .my-work-section-head h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.compass-app .my-work-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.compass-app .my-work-filters button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.compass-app .my-work-filters button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.compass-app .my-work-filters b {
+  margin-left: 3px;
+}
+
+.compass-app .my-work-queue {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #f2f4f8;
+}
+
+.compass-app .my-work-queue.single {
+  grid-template-columns: 1fr;
+}
+
+.compass-app .my-work-column {
+  min-width: 0;
+  padding: 17px;
+  background: #fff;
+}
+
+.compass-app .my-work-column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.compass-app .my-work-column-title > i {
+  width: 9px;
+  height: 9px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.compass-app .my-work-column.waiting .my-work-column-title > i {
+  background: #ffc65c;
+}
+
+.compass-app .my-work-column.ready .my-work-column-title > i {
+  background: #8ee642;
+}
+
+.compass-app .my-work-column-title b {
+  font-size: 11px;
+}
+
+.compass-app .my-work-column-title span {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 8px;
+  background: #f0f2f6;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.compass-app .my-work-items {
+  display: grid;
+  gap: 10px;
+}
+
+.compass-app .my-work-task {
+  min-height: 154px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.compass-app .my-work-task:hover {
+  border-color: #c8d0e2;
+  box-shadow: 0 8px 20px rgba(24, 27, 31, 0.07);
+  transform: translateY(-1px);
+}
+
+.compass-app .my-work-task:focus-visible {
+  outline: 3px solid rgba(89, 103, 242, 0.24);
+  outline-offset: 2px;
+}
+
+.compass-app .my-work-task-top,
+.compass-app .my-work-task-foot,
+.compass-app .my-work-task-brand,
+.compass-app .my-work-task-count {
+  display: flex;
+  align-items: center;
+}
+
+.compass-app .my-work-task-top,
+.compass-app .my-work-task-foot {
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.compass-app .my-work-task-top > span:last-child {
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.compass-app .my-work-task-brand {
+  min-width: 0;
+  gap: 7px;
+}
+
+.compass-app .my-work-task-brand > i {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eef1ff;
+}
+
+.compass-app .my-work-task-brand img,
+.compass-app .my-work-task-brand svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.compass-app .my-work-task-brand b {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .my-work-task-main {
+  display: grid;
+  grid-template-columns: 45px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.compass-app .my-work-task-signal {
+  width: 45px;
+  height: 45px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: #edf0ff;
+  color: var(--accent);
+}
+
+.compass-app .my-work-task-signal.waiting {
+  background: #fff5df;
+  color: #a66a00;
+}
+
+.compass-app .my-work-task-signal.ready {
+  background: var(--greenSoft);
+  color: var(--green);
+}
+
+.compass-app .my-work-task-main strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.compass-app .my-work-task-main small {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.compass-app .my-work-task-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.compass-app .my-work-stage-pill {
+  min-height: 22px;
+  padding: 0 8px;
+  background: #edf0ff;
+  color: var(--accent);
+  font-size: 8.5px;
+}
+
+.compass-app .my-work-stage-pill.waiting {
+  background: #fff5df;
+  color: #a66a00;
+}
+
+.compass-app .my-work-stage-pill.ready {
+  background: var(--greenSoft);
+  color: var(--green);
+}
+
+.compass-app .my-work-task-count {
+  gap: 4px;
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.compass-app .my-work-column-empty {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 15px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.compass-app .my-work-see-more {
+  min-height: 38px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d9def0;
+  border-radius: 12px;
+  background: #f7f8ff;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.compass-app .my-work-see-more:hover {
+  border-color: var(--accentLine);
+  background: var(--accentSoft);
+}
+
+.compass-app .my-work-see-more:focus-visible {
+  outline: 3px solid rgba(89, 103, 242, 0.2);
+  outline-offset: 2px;
+}
+
+.compass-app .my-work-see-more span {
+  color: var(--muted);
+  font-size: 8.5px;
+  font-weight: 600;
+}
+
+@media (max-width: 1120px) {
+  .compass-app .my-work-hero {
+    grid-template-columns: minmax(220px, 0.65fr) minmax(400px, 1.35fr);
+  }
+
+  .compass-app .my-work-queue {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .compass-app .my-work-hero {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .compass-app .my-work-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .compass-app .my-work-filters {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .compass-app .my-work-next-main {
+    grid-template-columns: 1fr;
+  }
+
+  .compass-app .my-work-focus-number strong {
+    font-size: 66px;
+  }
+
+  .compass-app .my-work-focus-number span {
+    font-size: 19px;
+  }
+}

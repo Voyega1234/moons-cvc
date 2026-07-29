@@ -5,8 +5,14 @@ import {
   type CreativeDirection,
   type ServiceType
 } from "../../../domain/creative-run";
+import {
+  runIdeaPreflight,
+  type IdeaPreflightCheckId,
+  type IdeaPreflightContext,
+  type IdeaPreflightResult
+} from "../../../services/quality-check/run-idea-preflight";
 
-type CheckId = "quality" | "spelling" | "policy";
+type CheckId = IdeaPreflightCheckId;
 
 const CHECKS: readonly {
   id: CheckId;
@@ -133,47 +139,20 @@ function DirectionArtwork({
   );
 }
 
-function findingsFor(
-  direction: CreativeDirection,
-  enabledChecks: Record<CheckId, boolean>
-): readonly string[] {
-  const findings: string[] = [];
-
-  if (enabledChecks.quality) {
-    if (!direction.hook.trim()) findings.push("Hook is missing.");
-    if (!direction.concept.trim()) findings.push("Creative concept is missing.");
-    if (!direction.caption.trim()) findings.push("Caption is missing.");
-    if (!direction.cta.trim()) findings.push("CTA is missing.");
-  }
-
-  if (enabledChecks.spelling) {
-    const copy = `${direction.hook} ${direction.subheadline ?? ""} ${direction.caption}`;
-    if (/\b(\w{3,})\s+\1\b/i.test(copy)) {
-      findings.push("A doubled word may need proofreading.");
-    }
-    if (/ {2,}/.test(copy)) findings.push("Repeated spacing may need cleanup.");
-  }
-
-  if (
-    enabledChecks.policy &&
-    /\b(guaranteed?|always|never|best|number\s*one|#1)\b/i.test(
-      `${direction.hook} ${direction.caption}`
-    )
-  ) {
-    findings.push("An absolute or unproven claim may need verification.");
-  }
-
-  return findings;
-}
-
 export function PreflightModal({
   directions,
   fallbackService,
-  onContinue
+  context,
+  revisionFeedbackByDirectionId = {},
+  onContinue,
+  runChecks = runIdeaPreflight
 }: {
   directions: readonly CreativeDirection[];
   fallbackService: ServiceType;
+  context: IdeaPreflightContext;
+  revisionFeedbackByDirectionId?: Readonly<Record<string, string>>;
   onContinue: () => void;
+  runChecks?: typeof runIdeaPreflight;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -185,20 +164,26 @@ export function PreflightModal({
     policy: false
   });
   const [showResults, setShowResults] = useState(false);
+  const [results, setResults] = useState<readonly IdeaPreflightResult[]>([]);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const selectedDirections = useMemo(
     () => directions.filter((direction) => selectedIds.has(direction.id)),
     [directions, selectedIds]
   );
-  const results = useMemo(
+  const presentedResults = useMemo(
     () =>
       selectedDirections.map((direction) => ({
         direction,
-        findings: findingsFor(direction, checks)
+        findings:
+          results
+            .find((result) => result.directionId === direction.id)
+            ?.findings.map((finding) => finding.message) ?? []
       })),
-    [selectedDirections, checks]
+    [results, selectedDirections]
   );
-  const totalFindings = results.reduce(
+  const totalFindings = presentedResults.reduce(
     (total, result) => total + result.findings.length,
     0
   );
@@ -239,6 +224,42 @@ export function PreflightModal({
     );
   }
 
+  async function handleRunChecks() {
+    const enabledChecks = CHECKS.filter((check) => checks[check.id]).map(
+      (check) => check.id
+    );
+    setRunning(true);
+    setRunError(null);
+    try {
+      const nextResults = await runChecks({
+        ...context,
+        checks: enabledChecks,
+        directions: selectedDirections.map((direction) => ({
+          id: direction.id,
+          service: directionService(direction, fallbackService),
+          hook: direction.hook,
+          subheadline: direction.subheadline ?? "",
+          concept: direction.concept,
+          visual: direction.visual,
+          cta: direction.cta,
+          caption: direction.caption,
+          formatBeats: direction.formatBeats ?? [],
+          revisionFeedback: revisionFeedbackByDirectionId[direction.id] ?? ""
+        }))
+      });
+      setResults(nextResults);
+      setShowResults(true);
+    } catch (caught) {
+      setRunError(
+        caught instanceof Error
+          ? caught.message
+          : "GPT Luna could not check these ideas."
+      );
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return createPortal(
     <div className="preflight-backdrop" onClick={onContinue}>
       <section
@@ -252,11 +273,11 @@ export function PreflightModal({
           <div>
             <p className="eyebrow">Before you build</p>
             <h3 id="preflight-title">
-              Check this creative set before you build
+              Check these ideas before you build
             </h3>
             <p>
-              Pick the artwork you want checked and which checks to run. Nothing
-              is blocked — findings are advisory.
+              Pick the ideas and checks to run with GPT Luna. Nothing is
+              blocked — findings are advisory.
             </p>
           </div>
           <button
@@ -282,11 +303,11 @@ export function PreflightModal({
                 <small>
                   {selectedDirections.length} draft
                   {selectedDirections.length === 1 ? "" : "s"} checked · you can
-                  still open Create
+                  still open Create · GPT Luna
                 </small>
               </div>
             </div>
-            {results.map(({ direction, findings }, index) => {
+            {presentedResults.map(({ direction, findings }, index) => {
               const service = directionService(direction, fallbackService);
               const kind = directionKind(service);
               return (
@@ -430,6 +451,11 @@ export function PreflightModal({
                 })}
               </div>
             </section>
+            {runError ? (
+              <p className="preflight-run-error" role="alert">
+                {runError}
+              </p>
+            ) : null}
           </div>
         )}
 
@@ -455,14 +481,17 @@ export function PreflightModal({
               className="btn primary"
               type="button"
               disabled={
-                !showResults && (selectedIds.size === 0 || !anyCheck)
+                running ||
+                (!showResults && (selectedIds.size === 0 || !anyCheck))
               }
               onClick={() => {
                 if (showResults) onContinue();
-                else setShowResults(true);
+                else void handleRunChecks();
               }}
             >
-              {showResults
+              {running
+                ? "Checking with GPT Luna…"
+                : showResults
                 ? "Open Create →"
                 : selectedIds.size
                   ? `Run checks on ${selectedIds.size}`

@@ -11,6 +11,7 @@ export interface PublicEnv {
   artworkGenerationEndpoint: string | null;
   artworkGenerationWebhookUrl: string | null;
   brandLearningSuggestionEndpoint: string;
+  ideaPreflightEndpoint: string;
   qualityCheckEndpoint: string;
   guidelineAnalysisEndpoint: string;
   clientIngestionTriggerEndpoint: string;
@@ -59,6 +60,9 @@ export const env: PublicEnv = {
   brandLearningSuggestionEndpoint:
     import.meta.env.VITE_BRAND_LEARNING_SUGGESTION_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/suggest-brand-learning`,
+  ideaPreflightEndpoint:
+    import.meta.env.VITE_IDEA_PREFLIGHT_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/idea-preflight`,
   qualityCheckEndpoint:
     import.meta.env.VITE_QUALITY_CHECK_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/quality-check`,

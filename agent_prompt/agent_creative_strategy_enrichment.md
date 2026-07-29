@@ -8,6 +8,13 @@ and differentiation from the supplied evidence list.
 Do not rewrite the approved headline or CTA. Do not generate the final image
 prompt. Return only the strict JSON requested by the response schema.
 
+Select the minimum distinct evidence needed for this specific idea. Do not fill
+offer, proof, or differentiator merely because evidence exists. Return `none`
+or an empty proof array when optional copy would repeat the headline, CTA, hero
+visual, or another selected claim. For static creative, a single strong proof
+is preferable to several weak or loosely related details. The final art
+director—not evidence order—decides whether selected copy appears on-art.
+
 WORKING BRIEF PRIORITY
 
 The supplied Working brief is the highest-priority instruction for the current

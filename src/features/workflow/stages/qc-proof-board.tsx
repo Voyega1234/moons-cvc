@@ -40,6 +40,7 @@ import {
   downloadAlbumArchive,
   downloadOutputAsset
 } from "../review/downloads";
+import { CaptionEditModal } from "../review/caption-edit-modal";
 import { DecisionCard, type StageProps } from "./shared";
 
 type ReviewGroup = readonly CreativeOutput[];
@@ -363,14 +364,20 @@ function ReviewModal({
   const [error, setError] = useState<string | null>(null);
   const [assetBusy, setAssetBusy] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [captionEditorOpen, setCaptionEditorOpen] = useState(false);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (captionEditorOpen) {
+        setCaptionEditorOpen(false);
+        return;
+      }
+      onClose();
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  }, [captionEditorOpen, onClose]);
 
   const comments = reviewRoles.flatMap((role) => {
     const value = outputs
@@ -510,7 +517,8 @@ function ReviewModal({
   }
 
   const modal = (
-    <div className="output-modal-backdrop" onClick={onClose}>
+    <>
+      <div className="output-modal-backdrop" onClick={onClose}>
       <section
         className="output-modal social-preview-modal qc-social-review-modal"
         role="dialog"
@@ -738,6 +746,16 @@ function ReviewModal({
                 >
                   {assetBusy ? "Working…" : "Download"}
                 </button>
+                {currentRole === "clientService" && direction ? (
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => setCaptionEditorOpen(true)}
+                  >
+                    Edit caption
+                  </button>
+                ) : null}
                 <label
                   className={`btn secondary upload-inline ${
                     assetBusy || !canEdit ? "disabled" : ""
@@ -763,7 +781,16 @@ function ReviewModal({
           </aside>
         </div>
       </section>
-    </div>
+      </div>
+      {captionEditorOpen && direction ? (
+        <CaptionEditModal
+          outputs={outputs}
+          direction={direction}
+          dispatch={dispatch}
+          onClose={() => setCaptionEditorOpen(false)}
+        />
+      ) : null}
+    </>
   );
 
   return typeof document === "undefined"

@@ -222,6 +222,57 @@ function briefSignalValue(
   return null;
 }
 
+const SIGNAL_PREVIEW_LIMIT = 150;
+
+function compactSignalPreview(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= SIGNAL_PREVIEW_LIMIT) return normalized;
+  const clipped = normalized.slice(0, SIGNAL_PREVIEW_LIMIT + 1);
+  const wordBoundary = clipped.lastIndexOf(" ");
+  const preview =
+    wordBoundary > SIGNAL_PREVIEW_LIMIT * 0.72
+      ? clipped.slice(0, wordBoundary)
+      : clipped.slice(0, SIGNAL_PREVIEW_LIMIT);
+  return `${preview.trimEnd()}…`;
+}
+
+function SignalStackItem({
+  title,
+  value
+}: {
+  title: string;
+  value: string;
+}) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const preview = compactSignalPreview(normalized);
+  const expandable = normalized.length > SIGNAL_PREVIEW_LIMIT;
+
+  if (!expandable) {
+    return (
+      <div className="compass-signal-line compact">
+        <b>{title}</b>
+        <span>{normalized}</span>
+      </div>
+    );
+  }
+
+  return (
+    <details className="compass-signal-disclosure">
+      <summary>
+        <span className="compass-signal-summary-copy">
+          <b>{title}</b>
+          <span className="compass-signal-preview">{preview}</span>
+          <small>View details</small>
+        </span>
+        <i className="compass-signal-chevron" aria-hidden="true">›</i>
+      </summary>
+      <div className="compass-signal-detail">
+        <p>{normalized}</p>
+      </div>
+    </details>
+  );
+}
+
 function briefServiceLabel(service: ServiceType): string {
   return briefServiceLabels[service] ?? serviceLabels[service];
 }
@@ -1719,18 +1770,12 @@ export function BriefStage({ state, dispatch }: StageProps) {
           <section className="compass-context-card">
             <h3>Signal stack</h3>
             <div className="compass-signal-list">
-              <div className="compass-signal-line">
-                <b>Audience tension</b>
-                <span>{audienceTension}</span>
-              </div>
-              <div className="compass-signal-line">
-                <b>Brand proof</b>
-                <span>{brandProof}</span>
-              </div>
-              <div className="compass-signal-line">
-                <b>Past winner</b>
-                <span>{pastWinner}</span>
-              </div>
+              <SignalStackItem
+                title="Audience tension"
+                value={audienceTension}
+              />
+              <SignalStackItem title="Brand proof" value={brandProof} />
+              <SignalStackItem title="Past winner" value={pastWinner} />
             </div>
           </section>
           <section className="compass-context-card">

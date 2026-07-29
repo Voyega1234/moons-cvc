@@ -12,6 +12,22 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("preserves the My Work workspace view", () => {
+    const workspace = workspaceReducer(
+      createInitialWorkspaceState({
+        runId: "my-work-view",
+        now: "2026-07-29T02:00:00.000Z"
+      }),
+      { type: "set-view", view: "my-work" }
+    );
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-29T02:01:00.000Z")
+    );
+
+    expect(restored?.view).toBe("my-work");
+  });
+
   it("preserves onboarding questionnaire context with the selected brand", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

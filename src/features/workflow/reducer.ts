@@ -350,6 +350,11 @@ export function workflowActionToast(
         "Creative approved",
         "This asset is ready for delivery."
       );
+    case "unapprove-output":
+      return warningToast(
+        "Approval reopened",
+        "This creative needs a new client decision before delivery."
+      );
     case "request-client-change":
       return warningToast(
         "Client feedback routed",
@@ -1117,6 +1122,15 @@ export function workflowReducer(
         outputs: state.outputs.map((output) =>
           output.id === action.id
             ? { ...output, clientStatus: "approved" }
+            : output
+        )
+      };
+    case "unapprove-output":
+      return {
+        ...state,
+        outputs: state.outputs.map((output) =>
+          output.id === action.id && output.clientStatus === "approved"
+            ? { ...output, clientStatus: "sent" }
             : output
         )
       };

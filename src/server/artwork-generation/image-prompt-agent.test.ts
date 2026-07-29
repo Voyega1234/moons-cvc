@@ -295,8 +295,19 @@ describe("generateImagePrompt", () => {
       return new Response(
         JSON.stringify({
           output_text: JSON.stringify({
-            finalPrompt:
-              "Editorial product photography with asymmetrical typography and calm negative space."
+            visualConcept:
+              "A single bouquet softens the hard geometry of a room. The transformation makes the campaign benefit visible before the headline completes it. The audience recognizes the emotional lift of a small environmental change.",
+            brand: "Flora Daily",
+            productOrService: "Flower delivery service",
+            headline: "Flowers that make the room feel softer",
+            highlightedPhrase: "room feel softer",
+            featureName: "OMIT",
+            featureValueProposition: "OMIT",
+            supportingConversionLine: "OMIT",
+            cta: "Order a bouquet",
+            requiredUtilityInformation: "OMIT",
+            brandPalette: "OMIT",
+            officialAssets: "Image 1: brand visual DNA reference"
           })
         }),
         { status: 200 }
@@ -331,7 +342,14 @@ describe("generateImagePrompt", () => {
       }
     });
 
-    expect(result).toContain("Editorial product photography");
+    expect(result).toContain("Brand:\nFlora Daily");
+    expect(result).toContain(
+      "Highlighted phrase:\n“room feel softer”"
+    );
+    expect(result).toContain("Feature name:\nOMIT");
+    expect(result).toContain(
+      "Creative visual concept:\nA single bouquet softens"
+    );
     const promptText = (
       calls[0]?.body.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
@@ -340,6 +358,23 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain("Use warm daylight");
     expect(promptText).toContain('"role": "brand-visual-dna"');
     expect(promptText).not.toContain("Convert Cake");
+    expect(
+      (
+        calls[0]?.body.text as {
+          format?: { name?: string; schema?: { required?: string[] } };
+        }
+      ).format
+    ).toMatchObject({
+      name: "moons_creative_design_input",
+      schema: {
+        required: expect.arrayContaining([
+          "highlightedPhrase",
+          "featureName",
+          "supportingConversionLine",
+          "officialAssets"
+        ])
+      }
+    });
   });
 
   it("uses a compact two-reference contract in reference-library mode", async () => {

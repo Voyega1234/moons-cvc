@@ -251,28 +251,65 @@ produce a stronger and more refined key visual.
 
 ---
 
+## CREATIVE INPUT PACKET
+
+Prepare the authoritative input packet that the Final Art Director will receive.
+Use actual supplied campaign information, not placeholders.
+
+Choose the highlighted phrase yourself. It must be an exact, contiguous excerpt
+of the approved headline and should identify the shortest phrase worth visual
+emphasis. Return `OMIT` when emphasizing a phrase would weaken the headline.
+
+Choose a feature only when the evidence supports one feature that materially
+strengthens this specific idea:
+
+- `featureName` is the concise, evidence-backed name of the feature.
+- `featureValueProposition` explains that feature in one concise line without
+  inventing a benefit, claim, result, or product behavior.
+- Return `OMIT` for both fields when the campaign is not feature-led or the
+  evidence is insufficient.
+
+Choose `supportingConversionLine` only when one supplied proof, offer, or
+supporting point materially improves conversion without repeating the headline
+or CTA. Return `OMIT` when no line earns a place.
+
+Include utility information only when it is explicitly supplied and required,
+such as app-store badges, contact details, promotion terms, dates, prices, or
+legal copy. Otherwise return `OMIT`.
+
+Describe only the palette supported by supplied brand colors or explicit brand
+guidelines. Otherwise return `OMIT`.
+
+List only supplied official assets and their roles. Do not turn style or content
+references into official assets. Return `OMIT` when none are supplied.
+
+`visualConcept` remains one concise English paragraph of exactly three
+sentences and no more than 90 words:
+
+1. Describe the concrete visual proposition.
+2. Explain its intrinsic connection to the campaign message.
+3. Explain the audience recognition, tension, curiosity, or emotional response.
+
+Do not prescribe coordinates, camera settings, layout percentages, typography
+placement, component lists, or production effects. Leave final art direction to
+the Final Art Director.
+
 ## OUTPUT
 
-Return exactly three concise English sentences as one paragraph, using no more
-than 90 words in total.
+Return only strict JSON matching the response schema.
 
-Sentence 1:
-Describe the concrete visual proposition using only the essential subject or
-relationship. Do not prescribe layout or production details.
+Every field is required. Use the exact string `OMIT` for an intentionally absent
+optional field. Never return bracketed placeholders or instructional text.
 
-Sentence 2:
-Explain how the proposition connects intrinsically to the campaign message and
-what meaning the approved headline completes or sharpens.
-
-Sentence 3:
-Explain the specific audience recognition, tension, curiosity, or emotional
-response that makes the image worth noticing.
-
-Use concrete nouns and active verbs.
-
-Do not use headings, bullet points, alternatives, production notes, camera
-specifications, coordinates, color palettes, typography placement, layout
-instructions, component lists, marketing jargon, or negative-prompt
-catalogues.
-
-Return only the three-sentence creative concept paragraph.
+- `visualConcept`
+- `brand`
+- `productOrService`
+- `headline`
+- `highlightedPhrase`
+- `featureName`
+- `featureValueProposition`
+- `supportingConversionLine`
+- `cta`
+- `requiredUtilityInformation`
+- `brandPalette`
+- `officialAssets`

@@ -53,6 +53,21 @@ export interface ImagePromptAgentInput {
   selectedProductIds?: readonly string[];
 }
 
+export interface CreativeDesignInputPacket {
+  visualConcept: string;
+  brand: string;
+  productOrService: string;
+  headline: string;
+  highlightedPhrase: string;
+  featureName: string;
+  featureValueProposition: string;
+  supportingConversionLine: string;
+  cta: string;
+  requiredUtilityInformation: string;
+  brandPalette: string;
+  officialAssets: string;
+}
+
 export interface ImagePromptAgentTrace {
   createdAt: string;
   provider: ImagePromptProvider;
@@ -106,8 +121,10 @@ export async function generateImagePrompt({
   const endpointPath =
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const isCreativeDesignMode =
+    mode === "design-system" || mode === "design-system-new";
   const inputText =
-    mode === "design-system" || mode === "design-system-new"
+    isCreativeDesignMode
       ? renderCreativeGraphicDesignerPrompt(
           await loadCreativeGraphicDesignerPrompt(),
           input
@@ -145,9 +162,13 @@ export async function generateImagePrompt({
         text: {
           format: {
             type: "json_schema",
-            name: "moons_image_generation_prompt",
+            name: isCreativeDesignMode
+              ? "moons_creative_design_input"
+              : "moons_image_generation_prompt",
             strict: true,
-            schema: standardImagePromptSchema
+            schema: isCreativeDesignMode
+              ? creativeDesignInputSchema
+              : standardImagePromptSchema
           }
         }
       })
@@ -165,19 +186,12 @@ export async function generateImagePrompt({
       `${providerLabel} image prompt agent`
     );
     const text = extractResponseText(payload);
-    const parsed = JSON.parse(text) as {
-      prompt?: unknown;
-      finalPrompt?: unknown;
-    };
-    const prompt = parsed.finalPrompt ?? parsed.prompt;
-
-    if (typeof prompt !== "string" || !prompt.trim()) {
-      throw new Error(
-        `${providerLabel} image prompt agent returned an empty prompt.`
-      );
-    }
-
-    const responsePrompt = prompt.trim();
+    const parsed = JSON.parse(text) as unknown;
+    const responsePrompt = isCreativeDesignMode
+      ? renderCreativeDesignInputPacket(
+          parseCreativeDesignInputPacket(parsed, input, providerLabel)
+        )
+      : parseStandardImagePrompt(parsed, providerLabel);
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
       provider,
@@ -428,8 +442,8 @@ function renderCreativeGraphicDesignerPrompt(
   );
   const runtimeInput = {
     brand: {
-      name: input.brand?.name ?? "Unknown",
-      category: input.brand?.category ?? "Unknown",
+      name: input.brand?.name ?? "OMIT",
+      category: input.brand?.category ?? "OMIT",
       personality: input.brand?.personality ?? [],
       colors: input.brand?.colors ?? []
     },
@@ -439,10 +453,32 @@ function renderCreativeGraphicDesignerPrompt(
       concept: compactAgentText(input.hook.concept, 700),
       objective: compactAgentText(input.hook.why || input.brief, 700),
       cta: compactAgentText(input.hook.cta, 300),
+      supportingPoints: (input.hook.supportingPoints ?? [])
+        .map((item) => compactAgentText(item, 400))
+        .filter(Boolean),
+      requiredUtilityInformation: {
+        contactLine: compactAgentText(input.hook.contactLine ?? "", 300) || null,
+        actionType: compactAgentText(input.hook.ctaActionType ?? "", 120) || null,
+        destination:
+          compactAgentText(input.hook.ctaDestination ?? "", 300) || null
+      },
       service: compactServiceName(input.service),
       ratio: input.canvasRatio,
       audienceMoment: input.strategy?.audienceMoment ?? null
     },
+    strategySelectedEvidence: input.strategy
+      ? {
+          proof: input.strategy.proof.map((claim) => claim.text),
+          differentiator:
+            input.strategy.differentiator.source === "none"
+              ? null
+              : input.strategy.differentiator.text,
+          offer:
+            input.strategy.offer.source === "none"
+              ? null
+              : input.strategy.offer.text
+        }
+      : null,
     explicitBrandGuidelines: explicitGuidelines,
     productOrServiceEvidence: selectedProducts.slice(0, 4).map((item) => ({
       title: compactAgentText(item.title, 160),
@@ -460,6 +496,147 @@ function renderCreativeGraphicDesignerPrompt(
     "",
     "AUTHORITATIVE RUNTIME INPUT",
     JSON.stringify(runtimeInput, null, 2)
+  ].join("\n");
+}
+
+function parseStandardImagePrompt(
+  parsed: unknown,
+  providerLabel: string
+): string {
+  if (!isRecord(parsed)) {
+    throw new Error(
+      `${providerLabel} image prompt agent returned invalid JSON.`
+    );
+  }
+  const prompt = parsed.finalPrompt ?? parsed.prompt;
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    throw new Error(
+      `${providerLabel} image prompt agent returned an empty prompt.`
+    );
+  }
+  return prompt.trim();
+}
+
+function parseCreativeDesignInputPacket(
+  parsed: unknown,
+  input: ImagePromptAgentInput,
+  providerLabel: string
+): CreativeDesignInputPacket {
+  if (!isRecord(parsed)) {
+    throw new Error(
+      `${providerLabel} creative design input agent returned invalid JSON.`
+    );
+  }
+
+  const keys = [
+    "visualConcept",
+    "brand",
+    "productOrService",
+    "headline",
+    "highlightedPhrase",
+    "featureName",
+    "featureValueProposition",
+    "supportingConversionLine",
+    "cta",
+    "requiredUtilityInformation",
+    "brandPalette",
+    "officialAssets"
+  ] as const;
+  const packet = Object.fromEntries(
+    keys.map((key) => {
+      const value = parsed[key];
+      if (typeof value !== "string" || !value.trim()) {
+        throw new Error(
+          `${providerLabel} creative design input agent returned an empty ${key}.`
+        );
+      }
+      return [key, value.trim()];
+    })
+  ) as unknown as CreativeDesignInputPacket;
+
+  const exactBrand = input.brand?.name.trim() || "OMIT";
+  const exactHeadline = input.hook.hook.trim();
+  const exactCta = input.hook.cta.trim() || "OMIT";
+  if (packet.brand !== exactBrand) {
+    throw new Error(
+      `${providerLabel} creative design input agent changed the brand name.`
+    );
+  }
+  if (packet.headline !== exactHeadline) {
+    throw new Error(
+      `${providerLabel} creative design input agent changed the approved headline.`
+    );
+  }
+  if (packet.cta !== exactCta) {
+    throw new Error(
+      `${providerLabel} creative design input agent changed the approved CTA.`
+    );
+  }
+  if (
+    packet.highlightedPhrase !== "OMIT" &&
+    !exactHeadline.includes(packet.highlightedPhrase)
+  ) {
+    throw new Error(
+      `${providerLabel} creative design input agent selected a highlighted phrase that is not an exact headline excerpt.`
+    );
+  }
+  if (
+    (packet.featureName === "OMIT") !==
+    (packet.featureValueProposition === "OMIT")
+  ) {
+    throw new Error(
+      `${providerLabel} creative design input agent returned an incomplete feature pair.`
+    );
+  }
+
+  return packet;
+}
+
+function renderCreativeDesignInputPacket(
+  packet: CreativeDesignInputPacket
+): string {
+  return [
+    "Brand:",
+    packet.brand,
+    "",
+    "Product or service:",
+    packet.productOrService,
+    "",
+    "Headline, exactly:",
+    `“${packet.headline}”`,
+    "",
+    "Highlighted phrase:",
+    packet.highlightedPhrase === "OMIT"
+      ? "OMIT"
+      : `“${packet.highlightedPhrase}”`,
+    "",
+    "Feature name:",
+    packet.featureName === "OMIT" ? "OMIT" : `“${packet.featureName}”`,
+    "",
+    "Feature value proposition:",
+    packet.featureValueProposition === "OMIT"
+      ? "OMIT"
+      : `“${packet.featureValueProposition}”`,
+    "",
+    "Supporting conversion line:",
+    packet.supportingConversionLine === "OMIT"
+      ? "OMIT"
+      : `“${packet.supportingConversionLine}”`,
+    "",
+    "CTA, exactly:",
+    packet.cta === "OMIT" ? "OMIT" : `“${packet.cta}”`,
+    "",
+    "Required utility information:",
+    packet.requiredUtilityInformation,
+    "",
+    "Brand palette:",
+    packet.brandPalette,
+    "",
+    "Official assets:",
+    packet.officialAssets,
+    "",
+    "Creative visual concept:",
+    packet.visualConcept
   ].join("\n");
 }
 
@@ -785,6 +962,39 @@ function referenceLibraryRole(label: string): string {
   }
   return `${prefix}client reference — use only for its supplied asset role`;
 }
+
+const creativeDesignInputSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    visualConcept: { type: "string" },
+    brand: { type: "string" },
+    productOrService: { type: "string" },
+    headline: { type: "string" },
+    highlightedPhrase: { type: "string" },
+    featureName: { type: "string" },
+    featureValueProposition: { type: "string" },
+    supportingConversionLine: { type: "string" },
+    cta: { type: "string" },
+    requiredUtilityInformation: { type: "string" },
+    brandPalette: { type: "string" },
+    officialAssets: { type: "string" }
+  },
+  required: [
+    "visualConcept",
+    "brand",
+    "productOrService",
+    "headline",
+    "highlightedPhrase",
+    "featureName",
+    "featureValueProposition",
+    "supportingConversionLine",
+    "cta",
+    "requiredUtilityInformation",
+    "brandPalette",
+    "officialAssets"
+  ]
+} as const;
 
 const standardImagePromptSchema = {
   type: "object",

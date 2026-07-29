@@ -61,21 +61,43 @@ function promptAgentResponse(
 
 function creativeGraphicDesignerResponse(
   direction =
-    "A bouquet appears to soften the hard geometry of a room: rigid architectural shadows visibly relax into gentle curves around the flowers, making the emotional benefit instantly visible and specific to the offer."
+    "A bouquet appears to soften the hard geometry of a room: rigid architectural shadows visibly relax into gentle curves around the flowers, making the emotional benefit instantly visible and specific to the offer.",
+  overrides: Record<string, unknown> = {}
 ): Response {
-  return promptAgentResponse(direction);
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        visualConcept: direction,
+        brand: "Flora Daily",
+        productOrService: "Flower delivery service",
+        headline: "Flowers that make the room feel softer",
+        highlightedPhrase: "room feel softer",
+        featureName: "OMIT",
+        featureValueProposition: "OMIT",
+        supportingConversionLine: "OMIT",
+        cta: "Order a bouquet",
+        requiredUtilityInformation: "OMIT",
+        brandPalette: "OMIT",
+        officialAssets: "OMIT",
+        ...overrides
+      })
+    }),
+    { status: 200 }
+  );
 }
 
 function responseForArtworkAgentRequest(init?: RequestInit): Response {
   const body = JSON.parse(String(init?.body)) as {
     text?: { format?: { name?: string } };
   };
-  return body.text?.format?.name === "moons_image_generation_prompt"
+  return body.text?.format?.name === "moons_creative_design_input"
     ? creativeGraphicDesignerResponse()
     : strategyAgentResponse();
 }
 
-function strategyAgentResponse(): Response {
+function strategyAgentResponse(
+  overrides: Record<string, unknown> = {}
+): Response {
   return new Response(
     JSON.stringify({
       output_text: JSON.stringify({
@@ -95,7 +117,8 @@ function strategyAgentResponse(): Response {
           "beauty lifestyle commercial human photographic composite",
         evidenceStatus: "none",
         requiresTextReview: false,
-        missingEvidence: ["verified offer", "verified proof"]
+        missingEvidence: ["verified offer", "verified proof"],
+        ...overrides
       })
     }),
     { status: 200 }
@@ -186,7 +209,72 @@ async function captureDesignSystemGenerationPrompt(
         });
       }
       if (href.includes("/v1/responses")) {
-        return responseForArtworkAgentRequest(init);
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === "moons_creative_design_input") {
+          const requestText = String(init?.body);
+          return requestText.includes("วิเคราะห์ Budget Allocation ตาม KPI")
+            ? creativeGraphicDesignerResponse(
+                "A disciplined allocation visual makes the cost of mismatched budget and campaign objectives immediately visible. The approved headline sharpens the tension between spending more and planning better. The audience recognizes a familiar performance problem and sees a credible planning path.",
+                {
+                  brand: "Convert Cake Ads",
+                  productOrService: "Performance Marketing Agency",
+                  headline: "ยอดขายนิ่ง อาจไม่ใช่เพราะงบน้อย",
+                  highlightedPhrase: "ไม่ใช่เพราะงบน้อย",
+                  featureName: "Budget Allocation",
+                  featureValueProposition:
+                    "วิเคราะห์ Budget Allocation ตาม KPI",
+                  supportingConversionLine:
+                    "พิจารณาความเหมาะสมของ Platform และเป้าหมายแคมเปญ",
+                  cta: "ขอวางแผนงบ",
+                  brandPalette: "#1D48F3, #000E3F, #FFFFFF",
+                  officialAssets: "Image 1: official logo"
+                }
+              )
+            : creativeGraphicDesignerResponse(undefined, {
+                supportingConversionLine:
+                  "Hand-arranged seasonal stems",
+                requiredUtilityInformation:
+                  "Same-day delivery in Bangkok",
+                officialAssets:
+                  "Image 1: official logo; Image 2: style reference"
+              });
+        }
+        const requestText = String(init?.body);
+        return requestText.includes("วิเคราะห์ Budget Allocation ตาม KPI")
+          ? strategyAgentResponse({
+              offer: {
+                text: "วิเคราะห์ Budget Allocation ตาม KPI",
+                evidenceId: "supporting-point:0",
+                source: "verified"
+              },
+              proof: [
+                {
+                  text: "พิจารณาความเหมาะสมของ Platform และเป้าหมายแคมเปญ",
+                  evidenceId: "supporting-point:1",
+                  source: "verified"
+                }
+              ],
+              evidenceStatus: "verified",
+              missingEvidence: []
+            })
+          : strategyAgentResponse({
+              offer: {
+                text: "Same-day delivery in Bangkok",
+                evidenceId: "supporting-point:0",
+                source: "verified"
+              },
+              proof: [
+                {
+                  text: "Hand-arranged seasonal stems",
+                  evidenceId: "supporting-point:1",
+                  source: "verified"
+                }
+              ],
+              evidenceStatus: "verified",
+              missingEvidence: []
+            });
       }
       if (href.includes("/v1/images/edits")) {
         imageBodies.push({
@@ -975,7 +1063,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+      "# FINAL ART DIRECTOR"
     );
     expect(imageBodies[0]?.prompt).toContain("Album master rules:");
     expect(imageBodies[0]?.prompt).toContain(
@@ -1802,7 +1890,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("{{");
   });
 
-  it("adds a creative provocation before sending the thin brief and artifacts to GPT Image 2", async () => {
+  it("adds a structured creative input packet before sending the campaign to GPT Image 2", async () => {
     const editCalls: FormData[] = [];
     const strategyCalls: Record<string, unknown>[] = [];
     const oversizedContext = "Brand context detail ".repeat(500);
@@ -1824,7 +1912,27 @@ describe("handleArtworkGenerationRequest", () => {
         strategyCalls.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
-        return responseForArtworkAgentRequest(init);
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        return body.text?.format?.name === "moons_creative_design_input"
+          ? creativeGraphicDesignerResponse()
+          : strategyAgentResponse({
+              offer: {
+                text: "Same-day delivery in Bangkok",
+                evidenceId: "supporting-point:0",
+                source: "verified"
+              },
+              proof: [
+                {
+                  text: "Hand-arranged seasonal stems",
+                  evidenceId: "supporting-point:1",
+                  source: "verified"
+                }
+              ],
+              evidenceStatus: "verified",
+              missingEvidence: []
+            });
       }
       if (href.includes("/v1/images/edits")) {
         editCalls.push(init?.body as FormData);
@@ -1932,50 +2040,61 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
     expect(prompt).toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+      "# FINAL ART DIRECTOR"
     );
     expect(prompt).toContain(
-      "Create one complete, publication-ready advertising artwork"
+      "Use the authoritative campaign input below to create the final artwork"
     );
     expect(prompt).toContain(
-      "Act as the final creative director"
+      "Create a complete Thai commercial performance-ad composite"
     );
     expect(prompt).toContain(
-      "Freely determine the strongest"
+      "Build the canvas from four dominant visual masses"
     );
     expect(prompt).toContain(
-      "Treat these principles as design judgement, not as a fixed template"
+      "Use a full-frame designed background as an active graphic stage"
     );
     expect(prompt).toContain(
-      "Let the visual create the first stop"
+      "Let the visual earn first attention"
     );
     expect(prompt).toContain(
-      "Give the eye somewhere to rest"
+      "one coherent lighting world"
     );
     expect(prompt).toContain(
-      "Do not make every part of the canvas equally active"
+      "Organize supporting information into no more than two compact modules"
     );
     expect(prompt).toContain(
-      "inside one coherent visual world"
+      "Use a disciplined commercial palette"
     );
     expect(prompt).toContain(
-      "If an element competes without helping"
+      "Every visible element must earn its place"
     );
     expect(prompt).toContain("Selling mechanism:\ndesire");
     expect(prompt).toContain(
       "Infer whether human presence materially improves the campaign message"
     );
-    expect(prompt).toContain("### Creative provocation");
+    expect(prompt).toContain(
+      "### Creative input packet prepared by Creative Graphic Designer"
+    );
     expect(prompt).toContain(
       "A bouquet appears to soften the hard geometry of a room"
     );
+    expect(prompt).toContain("Brand:\nFlora Daily");
+    expect(prompt).toContain(
+      "Headline, exactly:\n“Flowers that make the room feel softer”"
+    );
+    expect(prompt).toContain(
+      "Highlighted phrase:\n“room feel softer”"
+    );
+    expect(prompt).toContain("Feature name:\nOMIT");
+    expect(prompt).toContain("CTA, exactly:\n“Order a bouquet”");
     expect(prompt).not.toContain("Do not use people, faces, bodies");
     expect(prompt).not.toContain("remain clearly subordinate");
     expect(prompt).toContain(
       "Business problem and communication objective:\nLaunch a soft summer bouquet offer."
     );
     expect(prompt).toContain(
-      "Resolve conflicts in this order:"
+      "Preserve fields marked `exactly` verbatim"
     );
     expect(prompt).toContain(
       "### Mandatory on-artwork copy"
@@ -1996,10 +2115,13 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain("Hand-arranged seasonal stems");
     expect(prompt).not.toContain("Unselected third supporting point");
     expect(prompt).toContain(
-      "approved content pool, not a required copy checklist"
+      "Strategy-selected proof candidate"
     );
     expect(prompt).toContain(
-      "Select only what strengthens the idea, understanding, persuasion, or required execution"
+      "Strategy-selected offer candidate"
+    );
+    expect(prompt).toContain(
+      "Never give a single supporting sentence a checkbox, bullet, divider, numbered-step, or list-row treatment"
     );
     expect(prompt).toContain("### Information density intent");
     expect(prompt).toContain("infer from the Working Brief");
@@ -2023,10 +2145,10 @@ describe("handleArtworkGenerationRequest", () => {
       "Do not use it as a style, composition, lighting, spatial-density, or visual-treatment reference"
     );
     expect(prompt).toContain(
-      "Use each attached reference only for its explicitly stated role"
+      "Use this image only for its stated style-reference role"
     );
     expect(prompt).toContain(
-      "Preserve all official:"
+      "Integrate the supplied product accurately."
     );
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');
@@ -2135,7 +2257,7 @@ describe("handleArtworkGenerationRequest", () => {
             text?: { format?: { name?: string } };
           };
           if (
-            body.text?.format?.name === "moons_image_generation_prompt"
+            body.text?.format?.name === "moons_creative_design_input"
           ) {
             return creativeGraphicDesignerResponse();
           }
@@ -2206,7 +2328,9 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status, await response.clone().text()).toBe(200);
     expect(generationCalls).toHaveLength(1);
-    expect(generationCalls[0]).toContain("### Creative provocation");
+    expect(generationCalls[0]).toContain(
+      "### Creative input packet prepared by Creative Graphic Designer"
+    );
   });
 
   it("uses the new production brief agent before GPT Image 2 in design-system-new mode", async () => {
@@ -2306,11 +2430,11 @@ describe("handleArtworkGenerationRequest", () => {
       "# GPT IMAGE 2 PRODUCTION BRIEF DIRECTOR"
     );
     expect(responseInputs[2]).toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+      "# FINAL ART DIRECTOR"
     );
     expect(generationCalls).toEqual([productionBrief]);
     expect(generationCalls[0]).not.toContain(
-      "# GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER"
+      "# FINAL ART DIRECTOR"
     );
   });
 });

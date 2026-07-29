@@ -56,6 +56,13 @@ describe("redesigned application navigation", () => {
       view: "overview"
     });
 
+    await user.click(screen.getByRole("button", { name: "My Work" }));
+    expect(workspaceDispatch).toHaveBeenCalledWith({
+      type: "set-view",
+      view: "my-work"
+    });
+    expect(screen.queryByRole("button", { name: "Inbox" })).toBeNull();
+
     await user.click(screen.getByRole("button", { name: "Library" }));
     expect(workspaceDispatch).toHaveBeenCalledWith({
       type: "set-view",

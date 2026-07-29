@@ -13,6 +13,7 @@ import {
   ChartLineUp,
   Check,
   CheckCircle,
+  CheckSquare,
   Kanban,
   Lightbulb,
   NotePencil,
@@ -20,7 +21,6 @@ import {
   Plus,
   Sparkle,
   SquaresFour,
-  Tray,
   Users,
   UserCircle,
   WarningCircle,
@@ -69,6 +69,7 @@ import {
   StudioStage,
   SummaryStage
 } from "../features/workflow/stages";
+import { MyWork } from "../features/workflow/my-work";
 
 const CLEAR_TOAST_ACTION = { type: "clear-toast" } as const;
 
@@ -188,7 +189,7 @@ export function App() {
 
   return (
     <div
-      className={`app compass-app ${workspace.view === "overview" ? "mode-overview" : ""}`}
+      className={`app compass-app ${workspace.view !== "studio" ? "mode-overview" : ""}`}
     >
       <NavigationRail
         workspace={workspace}
@@ -219,6 +220,11 @@ export function App() {
                 onOpenStudio={() =>
                   workspaceDispatch({ type: "set-view", view: "studio" })
                 }
+              />
+            ) : workspace.view === "my-work" ? (
+              <MyWork
+                workspace={workspace}
+                workspaceDispatch={workspaceDispatch}
               />
             ) : (
               <>
@@ -336,6 +342,9 @@ export function App() {
                     dispatch={interactiveDispatch}
                     canEdit={runCanEdit}
                     onCreateRun={() => createRun(true)}
+                    onOpenWorkboard={() =>
+                      workspaceDispatch({ type: "set-view", view: "overview" })
+                    }
                   />
                 </fieldset>
               </>
@@ -417,11 +426,12 @@ export function NavigationRail({
           <span>Workboard</span>
         </button>
         <button
+          className={workspace.view === "my-work" ? "active" : ""}
           type="button"
-          onClick={() => workspaceDispatch({ type: "set-view", view: "overview" })}
+          onClick={() => workspaceDispatch({ type: "set-view", view: "my-work" })}
         >
-          <Tray size={21} weight="duotone" aria-hidden="true" />
-          <span>Inbox</span>
+          <CheckSquare size={21} weight="duotone" aria-hidden="true" />
+          <span>My Work</span>
         </button>
         <button type="button" onClick={() => openStudioStage("start")}>
           <Books size={21} weight="duotone" aria-hidden="true" />
@@ -483,8 +493,19 @@ function Header({
             <Journey state={state} dispatch={dispatch} canEdit={canEdit} />
           ) : (
             <div className="compass-workboard-label">
-              <Kanban size={20} weight="duotone" aria-hidden="true" />
-              <span><b>Workboard</b><small>Live workspace decisions</small></span>
+              {workspace.view === "my-work" ? (
+                <CheckSquare size={20} weight="duotone" aria-hidden="true" />
+              ) : (
+                <Kanban size={20} weight="duotone" aria-hidden="true" />
+              )}
+              <span>
+                <b>{workspace.view === "my-work" ? "My Work" : "Workboard"}</b>
+                <small>
+                  {workspace.view === "my-work"
+                    ? "Your next decisions"
+                    : "Live workspace decisions"}
+                </small>
+              </span>
             </div>
           )}
           <div className="nav-right">
@@ -1076,12 +1097,14 @@ function CurrentStage({
   state,
   dispatch,
   canEdit,
-  onCreateRun
+  onCreateRun,
+  onOpenWorkboard
 }: {
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
   canEdit: boolean;
   onCreateRun: () => void;
+  onOpenWorkboard: () => void;
 }) {
   const props = { state, dispatch };
   switch (state.stage) {
@@ -1098,7 +1121,13 @@ function CurrentStage({
     case "client":
       return <ClientStage {...props} canEdit={canEdit} />;
     case "summary":
-      return <SummaryStage {...props} onCreateRun={onCreateRun} />;
+      return (
+        <SummaryStage
+          {...props}
+          onCreateRun={onCreateRun}
+          onOpenWorkboard={onOpenWorkboard}
+        />
+      );
   }
 }
 

@@ -855,7 +855,9 @@ function parseReviewDecision(
 }
 
 function parseView(value: unknown): AppView | null {
-  return value === "overview" || value === "studio" ? value : null;
+  return value === "overview" || value === "my-work" || value === "studio"
+    ? value
+    : null;
 }
 
 function parseString(value: unknown, allowEmpty = false): string | null {
