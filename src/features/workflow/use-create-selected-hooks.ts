@@ -22,10 +22,8 @@ function applyArtworkContextSelection(
       title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
     );
   const brand = run.brand
-    ? {
+      ? {
         ...run.brand,
-        personality: selection.brandCi ? run.brand.personality : [],
-        colors: selection.brandColors ? run.brand.colors : [],
         memory: selection.brandCi
           ? run.brand.memory
           : { working: [], avoid: [] },
