@@ -1,4 +1,10 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialWorkflowState } from "./reducer";
@@ -84,6 +90,13 @@ describe("Artwork generation settings", () => {
       type: "set-artwork-mode",
       mode: "design-system-new"
     });
+    await user.click(
+      screen.getByRole("button", { name: "Final artwork" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "direct-final-artwork"
+    });
     await user.click(screen.getByRole("button", { name: "Standard" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-artwork-mode",
@@ -112,6 +125,25 @@ describe("Artwork generation settings", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-output-size",
       size: "3840x2160"
+    });
+
+    const artworkBrief = screen.getByRole("textbox", {
+      name: "Artwork brief"
+    }) as HTMLTextAreaElement;
+    expect(artworkBrief.value).toBe("");
+    expect(artworkBrief.maxLength).toBe(3000);
+    fireEvent.change(
+      artworkBrief,
+      {
+        target: {
+          value:
+            "Use one natural window light and avoid visible scent effects."
+        }
+      }
+    );
+    expect(dispatch).toHaveBeenLastCalledWith({
+      type: "set-artwork-brief",
+      brief: "Use one natural window light and avoid visible scent effects."
     });
   });
 
@@ -253,5 +285,37 @@ describe("Artwork generation settings", () => {
       "GPT · OpenAI → GPT Image 2"
     );
     expect(screen.getByText("Creative concept model")).toBeTruthy();
+  });
+
+  it("shows the direct GPT Image 2 route without a concept-model control", () => {
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "direct-final-artwork" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={vi.fn()}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Hook JSON → GPT Image 2")).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
   });
 });

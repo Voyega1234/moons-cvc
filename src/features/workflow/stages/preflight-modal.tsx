@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { createPortal } from "react-dom";
 import {
   albumFormatPanelCount,
+  type ArtworkMode,
   type CreativeDirection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -11,6 +18,11 @@ import {
   type IdeaPreflightContext,
   type IdeaPreflightResult
 } from "../../../services/quality-check/run-idea-preflight";
+import {
+  defaultArtworkContextSelection,
+  type ArtworkContextSelection
+} from "../model";
+import { ArtworkModeSelector } from "./artwork-mode-selector";
 
 type CheckId = IdeaPreflightCheckId;
 
@@ -144,6 +156,15 @@ export function PreflightModal({
   fallbackService,
   context,
   revisionFeedbackByDirectionId = {},
+  visualInputs,
+  artworkBrief,
+  onArtworkBriefChange,
+  contextSelection = defaultArtworkContextSelection,
+  onContextSelectionChange = () => undefined,
+  contextAvailability,
+  artworkMode,
+  onArtworkModeChange,
+  onCancel,
   onContinue,
   runChecks = runIdeaPreflight
 }: {
@@ -151,10 +172,28 @@ export function PreflightModal({
   fallbackService: ServiceType;
   context: IdeaPreflightContext;
   revisionFeedbackByDirectionId?: Readonly<Record<string, string>>;
+  visualInputs?: {
+    referenceCount: number;
+    materialCount: number;
+    referenceEditor: ReactNode;
+    materialEditor: ReactNode;
+  };
+  artworkBrief?: string;
+  onArtworkBriefChange?: (brief: string) => void;
+  contextSelection?: ArtworkContextSelection;
+  onContextSelectionChange?: (selection: ArtworkContextSelection) => void;
+  contextAvailability?: {
+    brandCiCount: number;
+    brandColorCount: number;
+  };
+  artworkMode: ArtworkMode;
+  onArtworkModeChange: (mode: ArtworkMode) => void;
+  onCancel: () => void;
   onContinue: () => void;
   runChecks?: typeof runIdeaPreflight;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const onCancelRef = useRef(onCancel);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(directions.map((direction) => direction.id))
   );
@@ -167,6 +206,9 @@ export function PreflightModal({
   const [results, setResults] = useState<readonly IdeaPreflightResult[]>([]);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [visualInputView, setVisualInputView] = useState<
+    "reference" | "material"
+  >("reference");
 
   const selectedDirections = useMemo(
     () => directions.filter((direction) => selectedIds.has(direction.id)),
@@ -188,6 +230,11 @@ export function PreflightModal({
     0
   );
   const anyCheck = Object.values(checks).some(Boolean);
+  const artworkBriefText = artworkBrief ?? "";
+
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -195,7 +242,7 @@ export function PreflightModal({
     closeRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onContinue();
+      if (event.key === "Escape") onCancelRef.current();
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -203,9 +250,10 @@ export function PreflightModal({
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onContinue]);
+  }, []);
 
   if (typeof document === "undefined") return null;
+  const portalRoot = document.querySelector(".compass-app") ?? document.body;
 
   function toggleDirection(id: string) {
     setSelectedIds((current) => {
@@ -222,6 +270,13 @@ export function PreflightModal({
         ? new Set()
         : new Set(directions.map((direction) => direction.id))
     );
+  }
+
+  function toggleContext(key: keyof ArtworkContextSelection) {
+    onContextSelectionChange({
+      ...contextSelection,
+      [key]: !contextSelection[key]
+    });
   }
 
   async function handleRunChecks() {
@@ -261,9 +316,9 @@ export function PreflightModal({
   }
 
   return createPortal(
-    <div className="preflight-backdrop" onClick={onContinue}>
+    <div className="preflight-backdrop" onClick={onCancel}>
       <section
-        className="preflight-modal"
+        className={`preflight-modal ${visualInputs ? "has-visual-inputs" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="preflight-title"
@@ -285,7 +340,7 @@ export function PreflightModal({
             className="preflight-close"
             type="button"
             aria-label="Close"
-            onClick={onContinue}
+            onClick={onCancel}
           >
             ×
           </button>
@@ -397,10 +452,162 @@ export function PreflightModal({
               </div>
             </section>
 
+            {visualInputs ? (
+              <section className="preflight-section preflight-visual-inputs">
+                <header className="preflight-section-head">
+                  <span>
+                    <b>2 · Image references</b>
+                    <small>
+                      Review or change the exact visual context before
+                      generation.
+                    </small>
+                  </span>
+                </header>
+                <div
+                  className="confirm-input-tabs"
+                  role="tablist"
+                  aria-label="Creative input type"
+                >
+                  <button
+                    className={
+                      visualInputView === "reference" ? "active" : ""
+                    }
+                    type="button"
+                    role="tab"
+                    aria-selected={visualInputView === "reference"}
+                    onClick={() => setVisualInputView("reference")}
+                  >
+                    Image Reference
+                    <span>{visualInputs.referenceCount}</span>
+                  </button>
+                  <button
+                    className={visualInputView === "material" ? "active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={visualInputView === "material"}
+                    onClick={() => setVisualInputView("material")}
+                  >
+                    Image Materials
+                    <span>{visualInputs.materialCount}</span>
+                  </button>
+                </div>
+                <div className="brief-confirm-material-browser preflight-visual-input-editor">
+                  {visualInputView === "reference"
+                    ? visualInputs.referenceEditor
+                    : visualInputs.materialEditor}
+                </div>
+                <label className="confirm-artwork-brief preflight-artwork-brief">
+                  <span className="confirm-artwork-brief-head">
+                    <span>
+                      <b>Artwork brief</b>
+                      <small>Optional</small>
+                    </span>
+                    <span>{artworkBriefText.trim().length} / 3000</span>
+                  </span>
+                  <textarea
+                    aria-label="Artwork brief"
+                    maxLength={3000}
+                    value={artworkBriefText}
+                    placeholder="Add visual direction, composition, lighting, mood, or restrictions for the final artwork."
+                    onChange={(event) =>
+                      onArtworkBriefChange?.(event.target.value)
+                    }
+                  />
+                  <small>
+                    Leave blank to let the agent decide. If added, this becomes
+                    a mandatory instruction for artwork generation.
+                  </small>
+                </label>
+              </section>
+            ) : null}
+
             <section className="preflight-section">
               <header className="preflight-section-head">
                 <span>
-                  <b>2 · Checks to run</b>
+                  <b>{visualInputs ? "3" : "2"} · Context to send</b>
+                  <small>
+                    Only enabled inputs will be included in the GPT Image 2
+                    request.
+                  </small>
+                </span>
+              </header>
+              <div className="preflight-context-grid">
+                {[
+                  {
+                    id: "artworkBrief" as const,
+                    label: "Artwork brief",
+                    detail: artworkBriefText.trim()
+                      ? `${artworkBriefText.trim().length} characters ready`
+                      : "No brief added"
+                  },
+                  {
+                    id: "brandCi" as const,
+                    label: "Brand CI / guideline",
+                    detail: `${contextAvailability?.brandCiCount ?? 0} sources`
+                  },
+                  {
+                    id: "brandColors" as const,
+                    label: "Brand colors",
+                    detail: `${contextAvailability?.brandColorCount ?? 0} HEX colors`
+                  },
+                  {
+                    id: "imageReferences" as const,
+                    label: "Image Reference",
+                    detail: `${visualInputs?.referenceCount ?? 0} selected`
+                  },
+                  {
+                    id: "imageMaterials" as const,
+                    label: "Image Materials",
+                    detail: `${visualInputs?.materialCount ?? 0} selected`
+                  }
+                ].map((option) => {
+                  const active = contextSelection[option.id];
+                  return (
+                    <button
+                      className={`preflight-context-option ${active ? "on" : ""}`}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={active}
+                      key={option.id}
+                      onClick={() => toggleContext(option.id)}
+                    >
+                      <span
+                        className="preflight-context-check"
+                        aria-hidden="true"
+                      >
+                        ✓
+                      </span>
+                      <span>
+                        <b>{option.label}</b>
+                        <small>{option.detail}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="preflight-section">
+              <header className="preflight-section-head">
+                <span>
+                  <b>{visualInputs ? "4" : "3"} · Artwork mode</b>
+                  <small>
+                    Inherited from Review &amp; continue. Change it here for
+                    this build if needed.
+                  </small>
+                </span>
+              </header>
+              <ArtworkModeSelector
+                className="preflight-artwork-mode-setting"
+                value={artworkMode}
+                onChange={onArtworkModeChange}
+              />
+            </section>
+
+            <section className="preflight-section">
+              <header className="preflight-section-head">
+                <span>
+                  <b>{visualInputs ? "5" : "4"} · Checks to run</b>
                   <small>Quality and Spelling are on by default</small>
                 </span>
               </header>
@@ -501,6 +708,6 @@ export function PreflightModal({
         </footer>
       </section>
     </div>,
-    document.body
+    portalRoot
   );
 }

@@ -1,0 +1,70 @@
+{
+  "archiveId": "2026-07-28-chol-static-03-v6",
+  "status": "active-upstream-and-rollback-final",
+  "connectedToRuntime": true,
+  "rollbackFinalPrompt": "prompts/03-design-system-v6.reusable.md",
+  "activeRuntimeModes": {
+    "design-system": [
+      "prompts/01-strategy-enrichment.exact.md",
+      "prompts/02-creative-concept-director.exact.md"
+    ]
+  },
+  "runId": "run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375",
+  "directionId": "chol-static-03",
+  "generatedAtUtc": "2026-07-28T06:12:13.208Z",
+  "generatedAtAsiaBangkok": "2026-07-28T13:12:13.208+07:00",
+  "output": {
+    "model": "gpt-image-2",
+    "endpoint": "/v1/images/edits",
+    "size": "1088x1360",
+    "quality": "medium",
+    "sourceImageCount": 4,
+    "localFile": "logs/artwork-generation/2026-07-28T06-12-13-208Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-03-output.png"
+  },
+  "pipeline": [
+    {
+      "stage": "strategy-enrichment",
+      "model": "gpt-5.6-luna",
+      "prompt": "prompts/01-strategy-enrichment.exact.md",
+      "input": "inputs/01-strategy-runtime-input.exact.json",
+      "output": "outputs/strategy-output.exact.json"
+    },
+    {
+      "stage": "creative-concept",
+      "model": "gpt-5.6-terra",
+      "prompt": "prompts/02-creative-concept-director.exact.md",
+      "input": "inputs/02-concept-runtime-input.exact.json",
+      "output": "outputs/creative-concept.exact.txt"
+    },
+    {
+      "stage": "final-image",
+      "model": "gpt-image-2",
+      "rollbackPrompt": "prompts/03-design-system-v6.reusable.md",
+      "activePrompt": "../2026-07-29-design-system-v6.1-adaptive/prompts/03-design-system-v6.1-adaptive.md",
+      "provenancePrompt": "prompts/03-design-system-v6.compiled-exact.md",
+      "input": "inputs/03-final-image-request-metadata.exact.json"
+    }
+  ],
+  "sourceLogs": [
+    "logs/artwork-generation/2026-07-28T06-10-30-127Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-03-strategy-agent.json",
+    "logs/artwork-generation/2026-07-28T06-10-44-074Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-03-image-agent.json",
+    "logs/artwork-generation/2026-07-28T06-10-44-083Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-03.json",
+    "logs/artwork-generation/2026-07-28T06-12-13-208Z-run-6a3c7394-0e89-43a2-b3b7-4b1b71afa375-chol-static-03-image-output.json"
+  ],
+  "recovery": {
+    "finalCompiledPromptExact": true,
+    "finalReusableSourceTemplateExact": false,
+    "providerPromptTruncationApplied": true,
+    "knownRuntimeSourcePath": "agent_prompt/agent_design_system.md",
+    "knownRuntimeVersionHeading": "GPT IMAGE 2 — CREATIVE GRAPHIC DESIGNER V6",
+    "reconstructedReusableSource": "prompts/03-design-system-v6.reusable.md"
+  },
+  "sha256": {
+    "prompts/01-strategy-enrichment.exact.md": "9609b744184eee10751d8df39b4c578e7566f42379dd3dc1293d936ecf7d90ad",
+    "prompts/02-creative-concept-director.exact.md": "25156c272008df4ba13937f04d738592c8341c2e55ca72ca87b5b7a466c06bb3",
+    "prompts/03-design-system-v6.compiled-exact.md": "f8526a501827caaf4f84473c9d2ddbd85e606eae899e5a902fe653977c430365",
+    "prompts/03-design-system-v6.reusable.md": "4ccf305853d475f5c3614bbebcfb8b985a8641db102893a82f64eb872f727892",
+    "outputs/strategy-output.exact.json": "621b0e2708ceab33bdd640d410fea9dfd780d148a6ad942a92465a93372b714b",
+    "outputs/creative-concept.exact.txt": "fe00f843bbbf44d72ab0d50c98174cffc4fabbcd73c410f270784504a482a611"
+  }
+}

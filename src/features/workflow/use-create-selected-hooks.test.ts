@@ -63,4 +63,51 @@ describe("useCreateSelectedHooks", () => {
       })
     );
   });
+
+  it("refreshes Brand Colors before building artwork requests", async () => {
+    vi.mocked(generateArtworkForSelectedHooks).mockResolvedValue([]);
+    const dispatch = vi.fn();
+    const palette = {
+      id: "primary-colors",
+      title: "Colors",
+      description: "#FFFFFF, #E7CEB5, #006072, #A38D5C"
+    };
+    const brandMemoryRepository = {
+      listBrandRules: vi.fn().mockResolvedValue([palette])
+    };
+    const state = createInitialWorkflowState({
+      id: "artwork-run",
+      now: "2026-07-30T00:00:00.000Z",
+      brand: {
+        id: "chol",
+        name: "Chol",
+        category: "Health/beauty",
+        initials: "CH",
+        library: { brand: [], products: [], docs: [], refs: [] },
+        memory: { working: [], avoid: [] }
+      }
+    });
+
+    const view = renderHook(() =>
+      useCreateSelectedHooks(state, dispatch, brandMemoryRepository)
+    );
+    act(() => view.result.current.create());
+
+    await waitFor(() =>
+      expect(generateArtworkForSelectedHooks).toHaveBeenCalledWith(
+        expect.objectContaining({
+          run: expect.objectContaining({
+            brand: expect.objectContaining({
+              library: expect.objectContaining({ brand: [palette] })
+            })
+          })
+        })
+      )
+    );
+    expect(brandMemoryRepository.listBrandRules).toHaveBeenCalledWith("chol");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "sync-brand-rules",
+      items: [palette]
+    });
+  });
 });

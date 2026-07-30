@@ -27,7 +27,6 @@ import type {
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import {
   generateImagePrompt,
-  generateProductionBrief,
   type ImagePromptProvider,
   type ImagePromptAgentTrace
 } from "./image-prompt-agent.js";
@@ -36,6 +35,11 @@ import {
   type CreativeStrategyEnrichment,
   type CreativeStrategyEnrichmentTrace
 } from "./creative-strategy-enrichment-agent.js";
+import {
+  normalizeCampaignTruth,
+  type AuthoritativeCampaignPacket,
+  type CampaignTruthNormalizerTrace
+} from "./campaign-truth-normalizer-agent.js";
 import {
   ARTWORK_REFERENCE_BUCKET,
   buildArtworkReferenceLabel,
@@ -178,7 +182,7 @@ interface ImagePromptAgentDebugLog {
       type: "json_schema";
       name:
         | "moons_image_generation_prompt"
-        | "moons_creative_design_input";
+        | "moons_creative_visual_concept";
       strict: true;
     };
   };
@@ -208,6 +212,28 @@ interface CreativeStrategyAgentDebugLog {
   error?: string;
 }
 
+interface CampaignTruthNormalizerAgentDebugLog {
+  kind: "campaign-truth-normalizer-agent";
+  createdAt: string;
+  provider: ImagePromptProvider;
+  model: string;
+  runId: string;
+  directionId: string;
+  status: "succeeded" | "failed";
+  request: {
+    endpoint: "/v1/responses" | "/api/v1/responses";
+    store: false;
+    inputText: string;
+    responseFormat: {
+      type: "json_schema";
+      name: "moons_authoritative_campaign_packet";
+      strict: true;
+    };
+  };
+  response?: AuthoritativeCampaignPacket;
+  error?: string;
+}
+
 interface ImageOutputDebugLog {
   kind: "image-output";
   createdAt: string;
@@ -231,6 +257,7 @@ interface ArtworkGenerationDebugAsset {
 type ArtworkGenerationDebugLog =
   | ImageRequestDebugLog
   | CreativeStrategyAgentDebugLog
+  | CampaignTruthNormalizerAgentDebugLog
   | ImagePromptAgentDebugLog
   | ImageOutputDebugLog;
 
@@ -317,7 +344,7 @@ export async function handleArtworkGenerationRequest({
       promptProvider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
-    if (!promptApiKey) {
+    if (!promptApiKey && input.artworkMode !== "direct-final-artwork") {
       return jsonResponse(
         { ok: false, error: "OPENROUTER_API_KEY is required." },
         500
@@ -604,6 +631,8 @@ async function generateOutputForHook({
     ? "2048x2048"
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
+  const isDirectFinalArtwork =
+    input.artworkMode === "direct-final-artwork";
   let strategy: CreativeStrategyEnrichment | undefined;
   if (
     input.artworkMode === "reference-library" ||
@@ -637,6 +666,22 @@ async function generateOutputForHook({
     ...artworkReferences.map(({ image }) => image)
   ];
   const generationReferences = promptReferences;
+  const campaignPacket =
+    input.artworkMode === "design-system-new"
+      ? await resolveAuthoritativeCampaignPacket({
+          input,
+          hook,
+          apiKey: promptApiKey,
+          model: promptModel,
+          provider: promptProvider,
+          debugLogDirectory,
+          writeDebugLog,
+          references: promptReferences,
+          strategy,
+          canvasRatio,
+          fetchImpl
+        })
+      : undefined;
   const isDesignSystemMode =
     input.artworkMode === "design-system" ||
     input.artworkMode === "design-system-new";
@@ -653,6 +698,7 @@ async function generateOutputForHook({
           references: promptReferences,
           artworkReferences,
           strategy,
+          campaignPacket,
           canvasRatio,
           albumFormat,
           fetchImpl
@@ -666,27 +712,24 @@ async function generateOutputForHook({
           canvasRatio,
           albumFormat,
           strategy,
-          creativeProvocation
+          creativeProvocation,
+          campaignPacket
         })
     : undefined;
+  const compiledDirectFinalArtworkPrompt = isDirectFinalArtwork
+    ? await buildDirectFinalArtworkPrompt({
+        input,
+        hook,
+        references: promptReferences,
+        albumFormat
+      })
+    : undefined;
   const prompt =
-    input.artworkMode === "design-system-new"
-      ? await resolveProductionBrief({
-          input,
-          hook,
-          promptModel,
-          promptProvider,
-          promptApiKey,
-          debugLogDirectory,
-          writeDebugLog,
-          references: promptReferences,
-          artworkReferences,
-          compiledDesignSystemPrompt: compiledDesignSystemPrompt ?? "",
-          fetchImpl
-        })
-      : input.artworkMode === "design-system"
-        ? compiledDesignSystemPrompt ?? ""
-        : await resolveImagePrompt({
+    isDirectFinalArtwork
+      ? compiledDirectFinalArtworkPrompt ?? ""
+      : isDesignSystemMode
+      ? compiledDesignSystemPrompt ?? ""
+      : await resolveImagePrompt({
           input,
           hook,
           promptModel,
@@ -697,12 +740,13 @@ async function generateOutputForHook({
           references: promptReferences,
           artworkReferences,
           strategy,
+          campaignPacket,
           canvasRatio,
           albumFormat,
           fetchImpl
         });
   const promptParts =
-    isDesignSystemMode
+    isDirectFinalArtwork || isDesignSystemMode
       ? [prompt]
       : input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
@@ -1408,6 +1452,9 @@ async function resolveCreativeStrategy({
     model,
     provider,
     fetchImpl,
+    ...(input.artworkMode === "design-system"
+      ? { loadPrompt: loadDesignSystemV6StrategyPrompt }
+      : {}),
     input: {
       brand: input.brand,
       service: input.service,
@@ -1420,6 +1467,91 @@ async function resolveCreativeStrategy({
       await writeDebugLog(
         debugLogDirectory,
         buildCreativeStrategyAgentDebugLog(trace, input.runId, hook.id)
+      );
+    }
+  });
+}
+
+async function resolveAuthoritativeCampaignPacket({
+  input,
+  hook,
+  apiKey,
+  model,
+  provider,
+  debugLogDirectory,
+  writeDebugLog,
+  references,
+  strategy,
+  canvasRatio,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  apiKey: string;
+  model?: string;
+  provider: ImagePromptProvider;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  references: readonly ReferenceImageInput[];
+  strategy?: CreativeStrategyEnrichment;
+  canvasRatio: string;
+  fetchImpl: FetchLike;
+}): Promise<AuthoritativeCampaignPacket> {
+  const artifactMap = references
+    .slice(0, 16)
+    .map((reference, index) => buildCampaignArtifactRole(reference, index));
+  const officialAssetInventory = artifactMap
+    .filter(
+      (artifact) =>
+        artifact.kind === "official-logo" ||
+        artifact.kind === "official-product"
+    )
+    .map((artifact) => ({
+      assetId: `image-${artifact.image}`,
+      assetType: artifact.kind,
+      role: artifact.role,
+      preservationInstruction: artifact.instruction
+    }));
+  const selectedProducts = selectRelevantProductOrServiceTruth({
+    input,
+    hook,
+    references
+  }).map((item) => ({
+    title: item.title,
+    description: item.description
+  }));
+  const explicitGuidelines = [
+    ...input.brandLibrary.docs.filter(isEditableBrandGuidelineItem),
+    ...input.brandLibrary.brand.filter(isBrandGuidelineItem)
+  ]
+    .slice(0, 4)
+    .map((item) => ({ title: item.title, description: item.description }));
+  const latestUserCorrection =
+    input.textInputs.map((item) => item.trim()).filter(Boolean).at(-1) ?? null;
+
+  return normalizeCampaignTruth({
+    apiKey,
+    model,
+    provider,
+    fetchImpl,
+    input: {
+      brand: input.brand,
+      service: input.service,
+      platform: "Meta Feed",
+      canvas: `${canvasRatio} ${input.service}`,
+      brief: input.brief,
+      hook,
+      latestUserCorrection,
+      strategy,
+      selectedProducts,
+      brandGuidelines: explicitGuidelines,
+      brandRestrictions: input.brandMemory.avoid,
+      officialAssetInventory
+    },
+    writeTrace: async (trace) => {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildCampaignTruthNormalizerDebugLog(trace, input.runId, hook.id)
       );
     }
   });
@@ -1748,7 +1880,8 @@ async function buildDirectDesignSystemPrompt({
   canvasRatio,
   albumFormat,
   strategy,
-  creativeProvocation
+  creativeProvocation,
+  campaignPacket
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
@@ -1757,6 +1890,7 @@ async function buildDirectDesignSystemPrompt({
   albumFormat: AlbumFormat;
   strategy?: CreativeStrategyEnrichment;
   creativeProvocation?: string;
+  campaignPacket?: AuthoritativeCampaignPacket;
 }): Promise<string> {
   /**
    * Describe only the role of each image.
@@ -1896,7 +2030,7 @@ async function buildDirectDesignSystemPrompt({
     2
   );
 
-  const compiledCampaignContext = [
+  const legacyCompiledCampaignContext = [
     "### Strategic intent",
     [
       "Selling mechanism:",
@@ -1915,10 +2049,10 @@ async function buildDirectDesignSystemPrompt({
       )
     ].join("\n"),
     "These strategic inputs describe intent only. They do not prescribe the visual solution.",
-    "### Creative input packet prepared by Creative Graphic Designer",
+    "### Creative provocation",
     creativeProvocation?.trim() ||
-      "No creative input packet was supplied. Infer conservatively from the authoritative campaign context.",
-    "Use the packet as structured creative preparation, not as artwork copy. Preserve exact fields, omit fields marked OMIT, and retain final art-direction control over optional content and execution. The packet does not authorize invented facts, copy, products, or claims.",
+      "No creative provocation was supplied. Infer conservatively from the authoritative campaign context.",
+    "Use this as an imaginative starting point, not a prescribed layout or production blueprint. Freely transform it when a stronger visual execution communicates the campaign more effectively. It does not authorize invented facts, copy, products, or claims.",
     "### Brand",
     [
       `- Name: ${compactPromptText(input.brand?.name ?? "Not supplied", 180)}`,
@@ -1981,7 +2115,7 @@ async function buildDirectDesignSystemPrompt({
     [
       "Latest user correction:",
       latestCorrection
-        ? compactPromptText(latestCorrection, 500)
+        ? compactPromptText(latestCorrection, 4_000)
         : "None supplied."
     ].join("\n"),
     "### Brand and relevant product or service truth",
@@ -1993,12 +2127,34 @@ async function buildDirectDesignSystemPrompt({
       : "No artifacts supplied."
   ].join("\n\n");
 
+  const compiledCampaignContext = campaignPacket
+    ? [
+        "### LOCKED AUTHORITATIVE CAMPAIGN PACKET",
+        JSON.stringify(campaignPacket, null, 2),
+        "This packet is factual and immutable. Preserve the meaning, exact copy, qualifiers, verified facts, restrictions, utility information, and official-asset instructions. It is a truth boundary, not an on-art checklist: verifiedFacts authorize accurate content but remain off-art by default; optional feature and supporting copy may be omitted; only the exact headline, supplied CTA, explicitly required utility information, and official brand identification are mandatory. Never render JSON keys or values marked OMIT.",
+        "### CREATIVE CONCEPT",
+        creativeProvocation?.trim() ||
+          "No visual concept was supplied. Infer one without changing the locked packet.",
+        "The concept controls only the image-native proposition. It does not override the packet or prescribe final composition, typography, background, lighting, or production treatment.",
+        "### ATTACHED ARTIFACT ROLES",
+        artifactMap.length
+          ? JSON.stringify(artifactMap, null, 2)
+          : "No artifacts supplied."
+      ].join("\n\n")
+    : legacyCompiledCampaignContext;
+
   const prompt = renderDesignSystemPromptTemplate(
-    await loadDesignSystemPrompt(),
+    campaignPacket
+      ? await loadCurrentDesignSystemPrompt()
+      : await loadDesignSystemV62JudgmentPrompt(),
     {
       "{{COMPILED_CAMPAIGN_CONTEXT}}": compiledCampaignContext,
       "{{ACTIVE_HUMAN_PRESENCE_RULES}}":
         buildActiveHumanPresenceRules(undefined),
+      "{{ACTIVE_INFORMATION_DENSITY_RULES}}":
+        buildActiveInformationDensityRules(
+          campaignPacket?.creative.informationDensity
+        ),
       "{{ACTIVE_OUTPUT_MODE_RULES}}": buildActiveOutputModeRules(
         input.service,
         hook,
@@ -2008,6 +2164,98 @@ async function buildDirectDesignSystemPrompt({
   );
 
   return prompt;
+}
+
+async function buildDirectFinalArtworkPrompt({
+  input,
+  hook,
+  references,
+  albumFormat
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  references: readonly ReferenceImageInput[];
+  albumFormat: AlbumFormat;
+}): Promise<string> {
+  const ideaJson = JSON.stringify(
+    {
+      Hook: hook.hook.trim(),
+      subheadline: (hook.subheadline || hook.concept).trim(),
+      "Supporting points (one per line)": (hook.supportingPoints ?? [])
+        .map((point) => point.trim())
+        .filter(Boolean),
+      CTA: hook.cta.trim()
+    },
+    null,
+    2
+  );
+  const guidelineItems = [
+    ...input.brandLibrary.docs.filter(isEditableBrandGuidelineItem),
+    ...input.brandLibrary.brand.filter(isBrandGuidelineItem)
+  ];
+  const guidelineIds = new Set(
+    guidelineItems.map((item) => item.id).filter(Boolean)
+  );
+  const brandContext = {
+    brand: input.brand
+      ? {
+          name: input.brand.name,
+          category: input.brand.category,
+          personality: input.brand.personality,
+          colors: input.brand.colors
+        }
+      : null,
+    guidelines: guidelineItems.map((item) => ({
+      ...(item.id ? { id: item.id } : {}),
+      title: item.title,
+      description: item.description
+    })),
+    brandRules: input.brandLibrary.brand
+      .filter(
+        (item) =>
+          !isBrandGuidelineItem(item) &&
+          (!item.id || !guidelineIds.has(item.id))
+      )
+      .map((item) => ({
+        ...(item.id ? { id: item.id } : {}),
+        title: item.title,
+        description: item.description
+      })),
+    selectedProductOrService: selectRelevantProductOrServiceTruth({
+      input,
+      hook,
+      references
+    }),
+    brandMemory: input.brandMemory
+  };
+  const artworkBrief = input.textInputs
+    .map((requirement) => requirement.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const artifactMap = references
+    .slice(0, 16)
+    .map((reference, index) => buildCampaignArtifactRole(reference, index));
+
+  return renderDesignSystemPromptTemplate(
+    await loadDirectFinalArtworkPrompt(),
+    {
+      "{{DIRECT_IDEA_JSON}}": ideaJson,
+      // Keep the complete context, but avoid spending the provider's prompt
+      // budget on JSON indentation. The mandatory artwork brief is positioned
+      // before this larger block in the template so prompt fitting cannot
+      // remove it with lower-priority context.
+      "{{BRAND_CONTEXT_JSON}}": JSON.stringify(brandContext),
+      "{{ARTWORK_BRIEF}}": artworkBrief || "None supplied.",
+      "{{ATTACHED_ARTIFACT_ROLES}}": artifactMap.length
+        ? JSON.stringify(artifactMap)
+        : "No artifacts supplied.",
+      "{{ACTIVE_OUTPUT_MODE_RULES}}": buildActiveOutputModeRules(
+        input.service,
+        hook,
+        albumFormat
+      )
+    }
+  );
 }
 
 function strategyOptionalCopyCandidates(
@@ -2053,6 +2301,41 @@ export function buildActiveHumanPresenceRules(
       return "Human presence is essential to the campaign. A person may become the hero when the message depends on human emotion, care, treatment, hospitality, teaching, physical experience, lifestyle, or interpersonal service.";
     default:
       return "Infer whether human presence materially improves the campaign message. Do not add people merely as decoration, but do not prohibit people by default.";
+  }
+}
+
+export function buildActiveInformationDensityRules(
+  density: AuthoritativeCampaignPacket["creative"]["informationDensity"] | undefined
+): string {
+  const shared = [
+    "Information density is a ceiling, never a target. Do not fill available space simply because more verified facts exist.",
+    "Maintain one obvious first read, one dominant hero, and at least one genuine quiet zone.",
+    "Never repeat the same claim, price, compatibility statement, benefit, or CTA."
+  ];
+
+  switch (density) {
+    case "low":
+      return [
+        "Low information-density rules:",
+        ...shared,
+        "Show the mandatory headline, brand identification, and supplied CTA. Add at most one short supporting point only when it materially improves comprehension.",
+        "Do not add feature grids, icon rows, compatibility lists, service bars, or multiple badges."
+      ].join("\n");
+    case "high":
+      return [
+        "High information-density rules:",
+        ...shared,
+        "Use no more than two compact supporting modules and no more than three distinct supporting facts across the entire artwork.",
+        "High density permits required information; it does not require every verified fact to appear. Group mandatory utility copy quietly and keep the CTA secondary."
+      ].join("\n");
+    case "medium":
+    default:
+      return [
+        "Medium information-density rules:",
+        ...shared,
+        "Use at most one compact supporting group containing no more than two distinct supporting points.",
+        "Prefer omission over shrinking text, adding another badge, or building a bottom utility strip."
+      ].join("\n");
   }
 }
 
@@ -2392,9 +2675,51 @@ function truncatePromptPreservingEnds(
     .trimStart()}`;
 }
 
-function loadDesignSystemPrompt(): Promise<string> {
+function loadDesignSystemV62JudgmentPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "versions",
+      "2026-07-30-design-system-v6.2-judgment",
+      "prompts",
+      "03-design-system-v6.2-judgment.md"
+    ),
+    "utf8"
+  );
+}
+
+function loadCurrentDesignSystemPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_design_system.md"),
+    "utf8"
+  );
+}
+
+function loadDirectFinalArtworkPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "versions",
+      "2026-07-30-direct-final-artwork-v1",
+      "prompts",
+      "01-direct-final-artwork-v1.md"
+    ),
+    "utf8"
+  );
+}
+
+function loadDesignSystemV6StrategyPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "versions",
+      "2026-07-28-chol-static-03-v6",
+      "prompts",
+      "01-strategy-enrichment.exact.md"
+    ),
     "utf8"
   );
 }
@@ -2405,7 +2730,7 @@ function renderDesignSystemPromptTemplate(
 ): string {
   const template = source.trim();
   if (!template) {
-    throw new Error("agent_design_system.md is empty.");
+    throw new Error("The active Design System prompt is empty.");
   }
 
   const missingMarkers = Object.keys(replacements).filter(
@@ -2413,7 +2738,7 @@ function renderDesignSystemPromptTemplate(
   );
   if (missingMarkers.length) {
     throw new Error(
-      `agent_design_system.md is missing required markers: ${missingMarkers.join(", ")}`
+      `The active Design System prompt is missing required markers: ${missingMarkers.join(", ")}`
     );
   }
 
@@ -2427,7 +2752,7 @@ function renderDesignSystemPromptTemplate(
   )?.[0];
   if (unresolvedMarker) {
     throw new Error(
-      `agent_design_system.md contains an unresolved marker: ${unresolvedMarker}`
+      `The active Design System prompt contains an unresolved marker: ${unresolvedMarker}`
     );
   }
 
@@ -2547,6 +2872,9 @@ function extensionFromMimeType(mimeType: string): "jpg" | "webp" | "png" {
 function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
   if (!("kind" in entry)) return "";
   if (entry.kind === "creative-strategy-agent") return "-strategy-agent";
+  if (entry.kind === "campaign-truth-normalizer-agent") {
+    return "-truth-normalizer-agent";
+  }
   if (
     entry.kind === "image-prompt-agent" &&
     entry.stage === "production-brief"
@@ -2610,7 +2938,7 @@ async function resolveReferenceImages(
   storage: ArtworkStorageClient,
   supabaseUrl: string
 ): Promise<readonly ReferenceImageInput[]> {
-  return Promise.all(
+  const resolved = await Promise.all(
     referenceImages.map(async (reference) => {
       if (reference.kind === "url") {
         const response = await fetchImpl(reference.url);
@@ -2654,6 +2982,31 @@ async function resolveReferenceImages(
       );
     })
   );
+
+  return Promise.all(resolved.map(normalizeReferenceImageForOpenAI));
+}
+
+export async function normalizeReferenceImageForOpenAI(
+  reference: ReferenceImageInput
+): Promise<ReferenceImageInput> {
+  const mimeType = reference.mimeType.toLowerCase();
+  if (mimeType !== "image/jpeg" && mimeType !== "image/jpg") return reference;
+
+  try {
+    return {
+      ...reference,
+      bytes: await sharp(reference.bytes, { failOn: "error" })
+        .rotate()
+        .toColourspace("srgb")
+        .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
+        .toBuffer(),
+      mimeType: "image/jpeg"
+    };
+  } catch {
+    throw new Error(
+      `Reference image "${reference.label ?? "Untitled"}" is not a valid JPEG. Re-export it as an RGB JPEG or PNG and try again.`
+    );
+  }
 }
 
 async function recoverSupabaseReferenceImage({
@@ -2711,6 +3064,7 @@ async function resolveImagePrompt({
   references,
   artworkReferences,
   strategy,
+  campaignPacket,
   canvasRatio,
   albumFormat,
   fetchImpl
@@ -2725,6 +3079,7 @@ async function resolveImagePrompt({
   references: readonly ReferenceImageInput[];
   artworkReferences: readonly StoredArtworkReference[];
   strategy?: CreativeStrategyEnrichment;
+  campaignPacket?: AuthoritativeCampaignPacket;
   canvasRatio: string;
   albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
@@ -2767,6 +3122,7 @@ async function resolveImagePrompt({
       })),
       canvasRatio,
       strategy,
+      campaignPacket,
       brandLibrary: {
         brand: input.brandLibrary.brand,
         products: input.brandLibrary.products,
@@ -2774,57 +3130,6 @@ async function resolveImagePrompt({
         refs: input.brandLibrary.refs
       },
       selectedProductIds: input.selectedProductIds
-    }
-  });
-}
-
-async function resolveProductionBrief({
-  input,
-  hook,
-  promptModel,
-  promptProvider,
-  promptApiKey,
-  debugLogDirectory,
-  writeDebugLog,
-  references,
-  artworkReferences,
-  compiledDesignSystemPrompt,
-  fetchImpl
-}: {
-  input: ArtworkGenerationRequest;
-  hook: SelectedHook;
-  promptModel?: string;
-  promptProvider: ImagePromptProvider;
-  promptApiKey: string;
-  debugLogDirectory?: string;
-  writeDebugLog: ArtworkGenerationDebugLogger;
-  references: readonly ReferenceImageInput[];
-  artworkReferences: readonly StoredArtworkReference[];
-  compiledDesignSystemPrompt: string;
-  fetchImpl: FetchLike;
-}): Promise<string> {
-  return generateProductionBrief({
-    apiKey: promptApiKey,
-    model: promptModel,
-    provider: promptProvider,
-    fetchImpl,
-    compiledDesignSystemPrompt,
-    referenceImages: references.map((reference) => ({
-      imageUrl:
-        artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
-        `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
-      label: reference.label ?? "Reference image"
-    })),
-    writeTrace: async (trace) => {
-      await writeDebugLog(
-        debugLogDirectory,
-        buildImagePromptAgentDebugLog(
-          trace,
-          input.runId,
-          hook.id,
-          references
-        )
-      );
     }
   });
 }
@@ -2849,6 +3154,34 @@ function buildCreativeStrategyAgentDebugLog(
       responseFormat: {
         type: "json_schema",
         name: "moons_creative_strategy_enrichment",
+        strict: true
+      }
+    },
+    ...(trace.response ? { response: trace.response } : {}),
+    ...(trace.error ? { error: trace.error } : {})
+  };
+}
+
+function buildCampaignTruthNormalizerDebugLog(
+  trace: CampaignTruthNormalizerTrace,
+  runId: string,
+  directionId: string
+): CampaignTruthNormalizerAgentDebugLog {
+  return {
+    kind: "campaign-truth-normalizer-agent",
+    createdAt: trace.createdAt,
+    provider: trace.provider,
+    model: trace.model,
+    runId,
+    directionId,
+    status: trace.status,
+    request: {
+      endpoint: trace.endpoint,
+      store: false,
+      inputText: trace.inputText,
+      responseFormat: {
+        type: "json_schema",
+        name: "moons_authoritative_campaign_packet",
         strict: true
       }
     },
@@ -2887,9 +3220,8 @@ function buildImagePromptAgentDebugLog(
         type: "json_schema",
         name:
           trace.mode === "design-system" ||
-          (trace.mode === "design-system-new" &&
-            trace.stage !== "production-brief")
-            ? "moons_creative_design_input"
+          trace.mode === "design-system-new"
+              ? "moons_creative_visual_concept"
             : "moons_image_generation_prompt",
         strict: true
       }
@@ -2985,7 +3317,7 @@ function parseRequestBody(value: unknown): ArtworkGenerationRequest {
       : readString(value.artworkMode, "artworkMode");
   if (!artworkModes.includes(artworkMode as (typeof artworkModes)[number])) {
     throw new Error(
-      "artworkMode must be standard, design-system, design-system-new, or reference-library."
+      "artworkMode must be standard, design-system, design-system-new, direct-final-artwork, or reference-library."
     );
   }
   const imagePromptModel =
@@ -3155,6 +3487,9 @@ function parseSelectedHook(value: unknown, index: number): SelectedHook {
   return {
     id: readString(hook.id, `selectedHooks[${index}].id`),
     hook: readString(hook.hook, `selectedHooks[${index}].hook`),
+    ...(typeof hook.subheadline === "string"
+      ? { subheadline: hook.subheadline }
+      : {}),
     concept: readString(hook.concept, `selectedHooks[${index}].concept`),
     why: readString(hook.why, `selectedHooks[${index}].why`),
     visual: readString(hook.visual, `selectedHooks[${index}].visual`),

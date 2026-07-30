@@ -1114,6 +1114,53 @@ describe("redesigned workflow stages", () => {
     );
   });
 
+  it("syncs persisted Brand Kit colors back into the active workflow brand", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    await memoryRepository.createBrandRule({
+      clientId: state.brand!.id,
+      title: "Colors",
+      description: "#FFFFFF, #E7CEB5, #006072, #A38D5C"
+    });
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+
+    await user.click(
+      within(view.container).getByRole("button", { name: "Manage library" })
+    );
+
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "sync-brand-rules",
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            title: "Colors",
+            description: "#FFFFFF, #E7CEB5, #006072, #A38D5C"
+          })
+        ])
+      })
+    );
+  });
+
   it("adds a guideline from the Memory header through file or pasted text", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
@@ -2213,6 +2260,58 @@ describe("redesigned workflow stages", () => {
     expect(stage.queryByRole("button", { name: "+ Upload or choose" })).toBeNull();
   });
 
+  it("carries the confirmed artwork brief into hook preflight", async () => {
+    const user = userEvent.setup();
+    const dispatch = vi.fn();
+    const state = {
+      ...buildCreativeState(),
+      stage: "directions" as const,
+      artworkBrief:
+        "Use natural window light and preserve generous negative space."
+    };
+
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+
+    await user.click(
+      within(view.container).getByRole("button", {
+        name: "Confirm hooks & create →"
+      })
+    );
+
+    const preflight = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const artworkBrief = within(preflight).getByRole("textbox", {
+      name: "Artwork brief"
+    }) as HTMLTextAreaElement;
+    expect(artworkBrief.value).toBe(
+      "Use natural window light and preserve generous negative space."
+    );
+    expect(
+      within(preflight)
+        .getByRole("button", { name: "Design system" })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+    await user.click(
+      within(preflight).getByRole("button", { name: "Final artwork" })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-mode",
+      mode: "direct-final-artwork"
+    });
+    fireEvent.change(artworkBrief, {
+      target: { value: "Use warm afternoon light instead." }
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-artwork-brief",
+      brief: "Use warm afternoon light instead."
+    });
+  });
+
   it("derives Recommended and Option PDF groups from selection and deletion", async () => {
     const base = buildMixedAngleState();
     const state = {
@@ -2350,7 +2449,7 @@ describe("redesigned workflow stages", () => {
           _slides: readonly unknown[];
         }
       )._slides
-    ).toHaveLength(createStageClientSlideItems(state).length * 2);
+    ).toHaveLength(createStageClientSlideItems(state).length);
   });
 
   it("keeps Google Slides export enabled for viewers", () => {
@@ -2398,6 +2497,7 @@ describe("redesigned workflow stages", () => {
         {
           ...firstDirection,
           hook: "เปลี่ยนเตาเมื่อไร กระทะก็ยังไปต่อ",
+          subheadline: "ใช้งานได้ทั้งเตาแก๊ส เตาไฟฟ้า และเตา Induction",
           concept: "สื่อสารว่ากระทะใบเดียวใช้งานได้กับเตาหลายประเภท",
           cta: "เลือกกระทะที่ใช้ได้ทุกเตา",
           caption: "ใช้งานได้ทั้งเตาแก๊ส เตาไฟฟ้า และเตา Induction"
@@ -2455,7 +2555,7 @@ describe("redesigned workflow stages", () => {
     ).toContain("ใช้งานได้ทั้งเตาแก๊ส เตาไฟฟ้า และเตา Induction");
   });
 
-  it("shrinks a long caption to fit one artwork-caption slide without overlapping CTA", async () => {
+  it("exports each static creative as one legacy artwork-and-brief slide", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -2487,7 +2587,13 @@ describe("redesigned workflow stages", () => {
           _slideObjects: Array<{
             _type: string;
             text?: Array<{ text: string }>;
-            options: { fontSize?: number };
+            options: {
+              fontSize?: number;
+              x?: number;
+              y?: number;
+              w?: number;
+              h?: number;
+            };
           }>;
         }>;
       }
@@ -2498,26 +2604,30 @@ describe("redesigned workflow stages", () => {
         .join("\n")
     );
 
-    expect(slides).toHaveLength(2);
-    expect(visibleText[0]).toContain("CREATIVE DIRECTION");
-    expect(visibleText[0]).toContain("CREATIVE DRAFT");
-    expect(visibleText[0]).not.toContain("ราคาพิเศษ ฿1,185");
-    expect(visibleText[1]).toContain("ราคาพิเศษ ฿1,185");
-    expect(visibleText[1]).toContain(
+    expect(slides).toHaveLength(1);
+    expect(visibleText[0]).toContain("SUB-HEADLINE");
+    expect(visibleText[0]).toContain("CREATIVE CONCEPT");
+    expect(visibleText[0]).toContain("CAPTION");
+    expect(visibleText[0]).toContain("CALL TO ACTION");
+    expect(visibleText[0]).not.toContain("CREATIVE DIRECTION");
+    expect(visibleText[0]).not.toContain("CREATIVE DRAFT");
+    expect(visibleText[0]).not.toContain("ARTWORK & CAPTION");
+    expect(visibleText[0]).toContain("ราคาพิเศษ ฿1,185");
+    expect(visibleText[0]).toContain(
       "ค้นพบกลิ่นหอมที่ช่วยเติมเต็มทุกพื้นที่"
     );
-    const captionText = slides[1]?._slideObjects.find(
+    const captionText = slides[0]?._slideObjects.find(
       (object) =>
         typeof object.options.fontSize === "number" &&
-        object.options.fontSize < 15 &&
-        object.options.fontSize >= 9 &&
-        object.text?.some((run) => run.text.length > 60)
+        object.options.fontSize <= 12.5 &&
+        object.text?.some((run) => run.text.includes("Make Time to Let Your Space"))
     );
     expect(captionText).toBeDefined();
-    const exportedCaption =
-      captionText?.text?.map((run) => run.text).join("") ?? "";
-    expect(exportedCaption).toContain("\n·\n");
-    expect(exportedCaption).not.toContain("\n\n·\n");
+    expect(captionText?.options.fontSize).toBeGreaterThanOrEqual(11);
+    expect(captionText?.options.x).toBe(9.15);
+    expect(captionText?.options.y).toBeCloseTo(1.09);
+    expect(captionText?.options.w).toBe(3.38);
+    expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
   it("exports UGC in the shared deck theme with a phone reference and three-part script", async () => {
@@ -2574,7 +2684,7 @@ describe("redesigned workflow stages", () => {
       async () =>
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
     );
-    const [storyboardSlide, captionSlide] = (
+    const [storyboardSlide, ...extraSlides] = (
       pptx as unknown as {
         _slides: Array<{
           _slideObjects: Array<{
@@ -2588,11 +2698,8 @@ describe("redesigned workflow stages", () => {
       storyboardSlide?._slideObjects
         .flatMap((object) => object.text?.map((run) => run.text) ?? [])
         .join("\n") ?? "";
-    const captionText =
-      captionSlide?._slideObjects
-        .flatMap((object) => object.text?.map((run) => run.text) ?? [])
-        .join("\n") ?? "";
 
+    expect(extraSlides).toHaveLength(0);
     expect(storyboardText).toContain("UGC VISUAL REFERENCE");
     expect(storyboardText).toContain("CREATIVE OBJECTIVE");
     expect(storyboardText).toContain("Korea King Colormic 24cm");
@@ -2601,8 +2708,8 @@ describe("redesigned workflow stages", () => {
     expect(storyboardText).toContain("OPEN / HOOK");
     expect(storyboardText).toContain("SHOWCASE");
     expect(storyboardText).toContain("END / CTA");
-    expect(captionText).toContain("ARTWORK & CAPTION");
-    expect(captionText).toContain("เช้าเร่งรีบก็ยังทำไข่ข้นให้น่ากินได้");
+    expect(storyboardText).not.toContain("CREATIVE DIRECTION");
+    expect(storyboardText).not.toContain("ARTWORK & CAPTION");
     expect(
       storyboardSlide?._slideObjects.some((object) => object._type === "image")
     ).toBe(true);
@@ -3253,7 +3360,7 @@ describe("redesigned workflow stages", () => {
     expect(readyGoogleSlides.disabled).toBe(false);
   });
 
-  it("exports an approved album as a creative-direction and artwork-caption set", async () => {
+  it("exports an approved album as one legacy artwork-and-brief slide", async () => {
     const base = buildCreativeState();
     const source = base.outputs[0];
     if (!source) throw new Error("Expected a creative output fixture.");
@@ -3306,16 +3413,11 @@ describe("redesigned workflow stages", () => {
         }))
     );
 
-    expect(slides).toHaveLength(2);
+    expect(slides).toHaveLength(1);
     expect(artwork[0]).toEqual([
-      { x: 6.72, y: 1.9, w: 2.34, h: 1.82 },
-      { x: 6.72, y: 3.72, w: 1.17, h: 1.82 },
-      { x: 7.89, y: 3.72, w: 1.17, h: 1.82 }
-    ]);
-    expect(artwork[1]).toEqual([
-      { x: 0.62, y: 1.12, w: 3.78, h: 2.54 },
-      { x: 0.62, y: 3.66, w: 1.89, h: 2.54 },
-      { x: 2.51, y: 3.66, w: 1.89, h: 2.54 }
+      { x: 4.04, y: 0.68, w: 5.62, h: 3.07 },
+      { x: 4.04, y: 3.75, w: 2.81, h: 3.07 },
+      { x: 6.85, y: 3.75, w: 2.81, h: 3.07 }
     ]);
   });
 

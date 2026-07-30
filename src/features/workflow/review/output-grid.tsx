@@ -22,6 +22,8 @@ function artworkModeLabel(mode: ArtworkMode): string {
       return "Design system";
     case "design-system-new":
       return "Design system (new)";
+    case "direct-final-artwork":
+      return "Final artwork";
     case "reference-library":
       return "Reference library";
   }

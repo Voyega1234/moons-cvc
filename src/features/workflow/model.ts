@@ -33,6 +33,22 @@ export type GenerationStatus = "idle" | "running" | "failed";
 export type IdeaGenerationStatus = GenerationStatus;
 export type ArtworkGenerationStatus = GenerationStatus;
 
+export interface ArtworkContextSelection {
+  artworkBrief: boolean;
+  brandCi: boolean;
+  brandColors: boolean;
+  imageReferences: boolean;
+  imageMaterials: boolean;
+}
+
+export const defaultArtworkContextSelection: ArtworkContextSelection = {
+  artworkBrief: true,
+  brandCi: true,
+  brandColors: true,
+  imageReferences: true,
+  imageMaterials: true
+};
+
 export interface WorkspaceToast {
   title: string;
   message: string;
@@ -74,6 +90,8 @@ export interface WorkflowState {
   quantity: number;
   successMetric: SuccessMetric;
   brief: string;
+  /** Optional final-art instruction. Non-empty values are mandatory for artwork generation. */
+  artworkBrief?: string;
   attachments: readonly string[];
   uploadedMaterials: readonly UploadedCreativeMaterial[];
   referenceImages: readonly ReferenceImageSelection[];
@@ -121,6 +139,7 @@ export type WorkflowAction =
   | { type: "set-creative-mix-quantity"; id: string; quantity: number }
   | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
+  | { type: "set-artwork-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }
   | { type: "add-uploaded-materials"; items: readonly UploadedCreativeMaterial[] }
   | {

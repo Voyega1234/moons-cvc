@@ -1,0 +1,32 @@
+{
+  "commercialStyle": "promotion",
+  "sellingMechanism": "offer",
+  "preferredMode": "luxury",
+  "preferredLayout": "premium_hero_negative_space",
+  "preferredHeroType": "product_group",
+  "humanPresence": "avoid",
+  "audienceMoment": "When a calm, modern home needs a gentle mood refresh without changing too much.",
+  "reasonToBelieve": "The approved concept connects a clearly named Urban + Aroma Oil bundle and verified price reduction to an elegant home atmosphere, making the purchase easy to imagine while preserving CHOL’s quiet premium mood.",
+  "visibleProofDirection": "Show the Aroma Diffuser and Aroma Oil as the clear product focus in a clean, softly lit cream-and-beige home setting, with the diffuser visibly integrated into a restful everyday corner and the offer kept secondary in a restrained text block.",
+  "offer": {
+    "text": "฿1,580 → ฿1,185 (25%)",
+    "evidenceId": "supporting-point:1",
+    "source": "verified"
+  },
+  "proof": [
+    {
+      "text": "Aroma Diffuser เติมบรรยากาศและสร้างมู้ดที่ใช่ในทุกช่วงเวลา",
+      "evidenceId": "supporting-point:2",
+      "source": "verified"
+    }
+  ],
+  "differentiator": {
+    "text": "Urban + Aroma Oil",
+    "evidenceId": "supporting-point:0",
+    "source": "verified"
+  },
+  "referenceSearchText": "tactile premium home aroma product group, editorial diffuser hero, quiet luxury, soft natural light, clean negative space, restrained promotion",
+  "evidenceStatus": "verified",
+  "requiresTextReview": false,
+  "missingEvidence": []
+}

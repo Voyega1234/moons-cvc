@@ -28,6 +28,54 @@ describe("workspace serializer", () => {
     expect(restored?.view).toBe("my-work");
   });
 
+  it("preserves the optional artwork brief", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "artwork-brief-run",
+      now: "2026-07-29T03:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-29T03:01:00.000Z",
+      action: {
+        type: "set-artwork-brief",
+        brief: "Use one natural key light and avoid artificial glow."
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-29T03:02:00.000Z")
+    );
+
+    expect(restored?.runsById["artwork-brief-run"]?.artworkBrief).toBe(
+      "Use one natural key light and avoid artificial glow."
+    );
+  });
+
+  it("preserves the direct Final artwork mode", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "direct-final-artwork-run",
+      now: "2026-07-30T07:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-07-30T07:01:00.000Z",
+      action: {
+        type: "set-artwork-mode",
+        mode: "direct-final-artwork"
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-07-30T07:02:00.000Z")
+    );
+
+    expect(
+      restored?.runsById["direct-final-artwork-run"]?.artworkMode
+    ).toBe("direct-final-artwork");
+  });
+
   it("preserves onboarding questionnaire context with the selected brand", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

@@ -76,7 +76,9 @@ import type {
 } from "./model";
 import {
   creativeMixItems,
+  defaultArtworkContextSelection,
   selectedBrandProducts,
+  selectedUploadedMaterials,
   totalCreativeMixQuantity
 } from "./model";
 import {
@@ -2439,6 +2441,24 @@ function upsertLibraryItem(
     : [...items, saved];
 }
 
+function sameLibraryItems(
+  left: readonly LibraryItem[],
+  right: readonly LibraryItem[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => {
+      const other = right[index];
+      return (
+        other?.id === item.id &&
+        other.title === item.title &&
+        other.description === item.description &&
+        other.assetUrl === item.assetUrl
+      );
+    })
+  );
+}
+
 async function analyzeAndSaveBrandGuideline({
   repository,
   clientId,
@@ -2572,6 +2592,11 @@ function BrandKitMemoryList({
   >(() => new Set());
   const formOpen = editingId !== null;
 
+  function commitBrandRules(nextItems: readonly LibraryItem[]) {
+    setItems(nextItems);
+    onBrandRulesSaved(nextItems);
+  }
+
   useEffect(() => {
     let active = true;
     setItems(initialItems);
@@ -2583,6 +2608,9 @@ function BrandKitMemoryList({
       .then((rules) => {
         if (!active) return;
         setItems(rules);
+        if (rules.length && !sameLibraryItems(rules, initialItems)) {
+          onBrandRulesSaved(rules);
+        }
         setLoading(false);
       })
       .catch((error: unknown) => {
@@ -2637,16 +2665,14 @@ function BrandKitMemoryList({
           title: nextTitle,
           description: nextDescription
         });
-        setItems((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item))
-        );
+        commitBrandRules(upsertLibraryItem(items, updated));
       } else {
         const created = await repository.createBrandRule({
           clientId,
           title: nextTitle,
           description: nextDescription
         });
-        setItems((current) => [...current, created]);
+        commitBrandRules(upsertLibraryItem(items, created));
       }
       closeForm();
     } catch (error) {
@@ -2662,7 +2688,7 @@ function BrandKitMemoryList({
 
     try {
       await repository.deleteBrandRule(item.id);
-      setItems((current) => current.filter((rule) => rule.id !== item.id));
+      commitBrandRules(items.filter((rule) => rule.id !== item.id));
       if (editingId === item.id) closeForm();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not delete rule.");
@@ -2839,11 +2865,7 @@ function BrandKitMemoryList({
         clientId={clientId}
         logoItem={logoItem}
         onSaved={(saved) =>
-          setItems((current) =>
-            current.some((item) => item.id === saved.id)
-              ? current.map((item) => (item.id === saved.id ? saved : item))
-              : [...current, saved]
-          )
+          commitBrandRules(upsertLibraryItem(items, saved))
         }
       />
       <section className="brand-colors-section" aria-label="Brand colors">
@@ -2853,14 +2875,10 @@ function BrandKitMemoryList({
           label="Primary colors"
           colorsItem={colorsItem}
           onSaved={(saved) =>
-            setItems((current) =>
-              current.some((item) => item.id === saved.id)
-                ? current.map((item) => (item.id === saved.id ? saved : item))
-                : [...current, saved]
-            )
+            commitBrandRules(upsertLibraryItem(items, saved))
           }
           onDeleted={(id) =>
-            setItems((current) => current.filter((item) => item.id !== id))
+            commitBrandRules(items.filter((item) => item.id !== id))
           }
         />
         <ColorsCard
@@ -2869,14 +2887,10 @@ function BrandKitMemoryList({
           label="Secondary colors"
           colorsItem={secondaryColorsItem}
           onSaved={(saved) =>
-            setItems((current) =>
-              current.some((item) => item.id === saved.id)
-                ? current.map((item) => (item.id === saved.id ? saved : item))
-                : [...current, saved]
-            )
+            commitBrandRules(upsertLibraryItem(items, saved))
           }
           onDeleted={(id) =>
-            setItems((current) => current.filter((item) => item.id !== id))
+            commitBrandRules(items.filter((item) => item.id !== id))
           }
         />
       </section>
@@ -2913,8 +2927,7 @@ function BrandKitMemoryList({
           initialItems={items}
           initialGuidelines={libraryDocuments}
           onSaved={({ brandRules, guidelines }) => {
-            setItems(brandRules);
-            onBrandRulesSaved(brandRules);
+            commitBrandRules(brandRules);
             onGuidelinesSaved(guidelines);
           }}
           onClose={() => setGuidelineDialogOpen(false)}
@@ -3743,6 +3756,10 @@ function BrandMaterialsMemoryList({
 }
 
 export function DirectionsStage({ state, dispatch }: StageProps) {
+  const brandMemoryRepository = useBrandMemoryRepository();
+  const [artworkContextSelection, setArtworkContextSelection] = useState(
+    defaultArtworkContextSelection
+  );
   const selected = selectedDirectionCount(state);
   const requiredCount = totalCreativeMixQuantity(state);
   const editBriefAction: WorkflowAction = {
@@ -3792,7 +3809,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     loading: creating,
     error: createError,
     progress: artworkProgress
-  } = useCreateSelectedHooks(state, dispatch);
+  } = useCreateSelectedHooks(state, dispatch, brandMemoryRepository);
 
   async function handleExportAngles() {
     setExportingAngles(true);
@@ -3999,9 +4016,59 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           fallbackService={state.service}
           context={preflightContext}
           revisionFeedbackByDirectionId={preflightRevisionFeedback}
+          artworkBrief={state.artworkBrief}
+          onArtworkBriefChange={(brief) =>
+            dispatch({ type: "set-artwork-brief", brief })
+          }
+          contextSelection={artworkContextSelection}
+          onContextSelectionChange={setArtworkContextSelection}
+          contextAvailability={{
+            brandCiCount:
+              (state.brand?.library.docs.length ?? 0) +
+              (state.brand?.library.brand.filter((item) =>
+                isCiOrGuidelineTitle(item.title)
+              ).length ?? 0),
+            brandColorCount: Array.from(
+              new Set([
+                ...extractColorSwatches(
+                  findRuleByTitle(state.brand?.library.brand ?? [], "Colors")
+                ),
+                ...extractColorSwatches(
+                  findRuleByTitle(
+                    state.brand?.library.brand ?? [],
+                    "Secondary colors"
+                  )
+                )
+              ])
+            ).length
+          }}
+          artworkMode={state.artworkMode}
+          onArtworkModeChange={(mode) =>
+            dispatch({ type: "set-artwork-mode", mode })
+          }
+          visualInputs={{
+            referenceCount: state.referenceImages.length,
+            materialCount: selectedUploadedMaterials(state).length,
+            referenceEditor: (
+              <CreativeMaterialsEditor
+                state={state}
+                dispatch={dispatch}
+                kind="reference"
+                legacyReferences={state.brand?.library.refs ?? []}
+              />
+            ),
+            materialEditor: (
+              <CreativeMaterialsEditor
+                state={state}
+                dispatch={dispatch}
+                kind="material"
+              />
+            )
+          }}
+          onCancel={() => setPreflightOpen(false)}
           onContinue={() => {
             setPreflightOpen(false);
-            createSelectedHooks();
+            createSelectedHooks(artworkContextSelection);
           }}
         />
       ) : null}

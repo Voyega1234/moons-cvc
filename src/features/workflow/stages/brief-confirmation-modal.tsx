@@ -22,6 +22,7 @@ import {
   selectedUploadedMaterials,
   totalCreativeMixQuantity
 } from "../model";
+import { ArtworkModeSelector } from "./artwork-mode-selector";
 
 const confirmationServiceLabels: Partial<Record<ServiceType, string>> = {
   "single-static": "Single",
@@ -270,83 +271,46 @@ export function BriefConfirmationModal({
               role="group"
               aria-label="Artwork settings"
             >
-              <div className="confirm-generation-setting">
-                <span className="confirm-generation-label">Artwork mode</span>
-                <div
-                  className="confirm-generation-mode-options"
-                  role="group"
-                  aria-label="Artwork mode"
-                >
-                  <button
-                    className={`confirm-generation-mode ${
-                      state.artworkMode === "standard" ? "active" : ""
-                    }`}
-                    type="button"
-                    aria-pressed={state.artworkMode === "standard"}
-                    onClick={() =>
-                      dispatch({
-                        type: "set-artwork-mode",
-                        mode: "standard"
-                      })
-                    }
-                  >
-                    Standard
-                  </button>
-                  <button
-                    className={`confirm-generation-mode ${
-                      state.artworkMode === "design-system" ? "active" : ""
-                    }`}
-                    type="button"
-                    aria-pressed={state.artworkMode === "design-system"}
-                    onClick={() =>
-                      dispatch({
-                        type: "set-artwork-mode",
-                        mode: "design-system"
-                      })
-                    }
-                  >
-                    Design system
-                  </button>
-                  <button
-                    className={`confirm-generation-mode ${
-                      state.artworkMode === "design-system-new" ? "active" : ""
-                    }`}
-                    type="button"
-                    aria-pressed={state.artworkMode === "design-system-new"}
-                    onClick={() =>
-                      dispatch({
-                        type: "set-artwork-mode",
-                        mode: "design-system-new"
-                      })
-                    }
-                  >
-                    Design system (new)
-                  </button>
+              <ArtworkModeSelector
+                value={state.artworkMode}
+                onChange={(mode) =>
+                  dispatch({ type: "set-artwork-mode", mode })
+                }
+              />
+              {state.artworkMode === "direct-final-artwork" ? (
+                <div className="confirm-generation-setting">
+                  <span className="confirm-generation-label">
+                    Generation route
+                  </span>
+                  <span className="confirm-generation-direct-route">
+                    Hook JSON → GPT Image 2
+                  </span>
                 </div>
-              </div>
-              <label className="confirm-generation-setting">
-                <span className="confirm-generation-label">
-                  Creative concept model
-                </span>
-                <select
-                  aria-label="Creative concept model"
-                  value={state.imagePromptModel}
-                  onChange={(event) =>
-                    dispatch({
-                      type: "set-image-prompt-model",
-                      model: event.target
-                        .value as WorkflowState["imagePromptModel"]
-                    })
-                  }
-                >
-                  <option value="gpt-5.6-terra">
-                    GPT · OpenAI → GPT Image 2
-                  </option>
-                  <option value="anthropic/claude-sonnet-4.6">
-                    Claude · OpenRouter → GPT Image 2
-                  </option>
-                </select>
-              </label>
+              ) : (
+                <label className="confirm-generation-setting">
+                  <span className="confirm-generation-label">
+                    Creative concept model
+                  </span>
+                  <select
+                    aria-label="Creative concept model"
+                    value={state.imagePromptModel}
+                    onChange={(event) =>
+                      dispatch({
+                        type: "set-image-prompt-model",
+                        model: event.target
+                          .value as WorkflowState["imagePromptModel"]
+                      })
+                    }
+                  >
+                    <option value="gpt-5.6-terra">
+                      GPT · OpenAI → GPT Image 2
+                    </option>
+                    <option value="anthropic/claude-sonnet-4.6">
+                      Claude · OpenRouter → GPT Image 2
+                    </option>
+                  </select>
+                </label>
+              )}
               <label className="confirm-generation-setting">
                 <span className="confirm-generation-label">Output size</span>
                 <select
@@ -367,6 +331,31 @@ export function BriefConfirmationModal({
                 </select>
               </label>
             </div>
+            <label className="confirm-artwork-brief">
+              <span className="confirm-artwork-brief-head">
+                <span>
+                  <b>Artwork brief</b>
+                  <small>Optional</small>
+                </span>
+                <span>{(state.artworkBrief ?? "").trim().length} / 3000</span>
+              </span>
+              <textarea
+                aria-label="Artwork brief"
+                maxLength={3000}
+                value={state.artworkBrief ?? ""}
+                placeholder="Add visual direction, composition, lighting, mood, or restrictions for the final artwork."
+                onChange={(event) =>
+                  dispatch({
+                    type: "set-artwork-brief",
+                    brief: event.target.value
+                  })
+                }
+              />
+              <small>
+                Leave blank to let the agent decide. If added, this becomes a
+                mandatory instruction for artwork generation.
+              </small>
+            </label>
           </section>
 
           <section className="confirm-section full">

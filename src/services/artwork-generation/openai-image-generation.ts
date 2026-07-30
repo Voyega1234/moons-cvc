@@ -30,6 +30,32 @@ import { generateArtworkFromWebhook } from "./n8n-artwork-generation";
 const ARTWORK_REQUEST_BATCH_SIZE = 4;
 const ARTWORK_REQUEST_CONCURRENCY = 2;
 
+function mandatoryArtworkInstructions(
+  artworkBrief: string | undefined,
+  textInputs: readonly string[]
+): readonly string[] {
+  const brief = artworkBrief?.trim();
+  const additionalInstructions = textInputs
+    .map((instruction) => instruction.trim())
+    .filter(Boolean);
+  if (!brief) return additionalInstructions;
+
+  return [
+    [
+      "MANDATORY ARTWORK BRIEF — USER-SUPPLIED FINAL-ART REQUIREMENT",
+      "Follow this instruction in the generated artwork. It overrides optional creative suggestions but does not authorize changing locked campaign facts, exact copy, or official assets.",
+      brief,
+      ...(additionalInstructions.length
+        ? [
+            "",
+            "ADDITIONAL ARTWORK CORRECTION",
+            additionalInstructions.join("\n")
+          ]
+        : [])
+    ].join("\n")
+  ];
+}
+
 export type ArtworkReferenceImage =
   | {
       kind: "url";
@@ -97,6 +123,7 @@ export interface ArtworkGenerationRequest {
     CreativeDirection,
     | "id"
     | "hook"
+    | "subheadline"
     | "concept"
     | "why"
     | "visual"
@@ -153,6 +180,7 @@ type ArtworkRegenerationDirection = Pick<
   CreativeDirection,
   | "id"
   | "hook"
+  | "subheadline"
   | "concept"
   | "why"
   | "visual"
@@ -385,7 +413,10 @@ export function buildArtworkRegenerationRequest({
     quantity: 1,
     brief: run.brief,
     selectedHooks: [direction],
-    textInputs: trimmedInstructions ? [trimmedInstructions] : [],
+    textInputs: mandatoryArtworkInstructions(
+      run.artworkBrief,
+      trimmedInstructions ? [trimmedInstructions] : []
+    ),
     referenceImages: [
       ...(trimmedSourceImageUrl
         ? [
@@ -458,6 +489,7 @@ export function buildArtworkGenerationRequests({
       .map(({ direction: {
         id,
         hook,
+        subheadline,
         concept,
         why,
         visual,
@@ -472,6 +504,7 @@ export function buildArtworkGenerationRequests({
       } }) => ({
         id,
         hook,
+        subheadline,
         concept,
         why,
         visual,
@@ -569,7 +602,7 @@ function buildArtworkRequest({
     quantity,
     brief: run.brief,
     selectedHooks,
-    textInputs,
+    textInputs: mandatoryArtworkInstructions(run.artworkBrief, textInputs),
     referenceImages: [
       ...referenceImages,
       ...brandGuidelineReferences(run),
@@ -691,26 +724,17 @@ function extractBrandPaletteColors(
   return compactUnique(
     items.flatMap((item) => {
       const title = item.title.trim().toLowerCase();
-      if (title === "colors" || title === "secondary colors") {
+      if (
+        title === "colors" ||
+        title === "primary colors" ||
+        title === "secondary colors"
+      ) {
         return extractColorTokens(item.description);
-      }
-
-      if (title === "visual guidance") {
-        return extractPaletteLineColors(item.description);
       }
 
       return [];
     })
   );
-}
-
-function extractPaletteLineColors(description: string): readonly string[] {
-  const line = description
-    .split("\n")
-    .find((candidate) => /^color palette\s*:/i.test(candidate.trim()));
-  if (!line) return [];
-
-  return extractColorTokens(line.replace(/^color palette\s*:/i, ""));
 }
 
 function extractColorTokens(value: string): readonly string[] {

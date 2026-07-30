@@ -1,0 +1,31 @@
+{
+  "endpoint": "/v1/images/edits",
+  "multipartFields": {
+    "model": "gpt-image-2",
+    "prompt": "SEE prompts/03-design-system-v6.compiled-exact.md",
+    "size": "1088x1360",
+    "quality": "medium",
+    "images": [
+      {
+        "label": "Supporting reference · Logo · Logo",
+        "mimeType": "image/jpeg",
+        "bytes": 11490
+      },
+      {
+        "label": "Uploaded main object (use as the hero/source object): Aroma Diffuser Back Marble.png",
+        "mimeType": "image/png",
+        "bytes": 5429038
+      },
+      {
+        "label": "Uploaded main object (use as the hero/source object): Aroma Diffuser White Mable.png",
+        "mimeType": "image/png",
+        "bytes": 3804702
+      },
+      {
+        "label": "Uploaded main object (use as the hero/source object): Gemini_Generated_Image_huarqjhuarqjhuar.png",
+        "mimeType": "image/png",
+        "bytes": 895835
+      }
+    ]
+  }
+}

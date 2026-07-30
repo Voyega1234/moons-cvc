@@ -157,18 +157,21 @@ function clampText(value: string | undefined, maxLength: number): string {
   return `${clean.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function cleanMultilineText(
-  value: string | undefined,
-  fallback = "Caption not provided."
-): string {
+function cleanSlideCaption(value: string | undefined): string {
   const clean = value
     ?.replace(/\r\n?/g, "\n")
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/[ \t]+/g, " ").trim())
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
     .filter(Boolean)
-    .join("\n\n")
-    .replace(/\n{2,}[ \t]*([.·])[ \t]*(?=\n)/g, "\n$1");
-  return clean || fallback;
+    .join("\n")
+    .trim();
+  return clean || "—";
+}
+
+function clampSlideCaption(value: string | undefined, maxLength = 900): string {
+  const clean = cleanSlideCaption(value);
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 function estimatedWrappedLines(
@@ -223,11 +226,6 @@ function captionFontSizeForSlide(value: string): number {
   return 8;
 }
 
-function splitCaptionForSlides(value: string | undefined): readonly string[] {
-  const clean = cleanMultilineText(value, "");
-  return clean ? [clean] : [];
-}
-
 function fileSlug(value: string): string {
   const slug = value
     .normalize("NFKC")
@@ -263,6 +261,85 @@ export async function fetchClientSlideImage(url: string): Promise<string> {
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   return `data:${imageMimeType(url, response)};base64,${bytesToBase64(bytes)}`;
+}
+
+function addTextBlock(
+  slide: PptxGenJS.Slide,
+  label: string,
+  value: string | undefined,
+  options: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    maxLength: number;
+    fontSize: number;
+  }
+) {
+  const text = clampText(value, options.maxLength);
+  slide.addText(label.toUpperCase(), {
+    x: options.x,
+    y: options.y,
+    w: options.w,
+    h: 0.2,
+    margin: 0,
+    ...localizedTextStyle(label),
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+  slide.addText(text, {
+    x: options.x,
+    y: options.y + 0.27,
+    w: options.w,
+    h: options.h - 0.27,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize: options.fontSize,
+    color: COLORS.ink,
+    breakLine: false,
+    valign: "top",
+    fit: "shrink",
+    paraSpaceAfter: 0
+  });
+}
+
+function addCaptionBlock(
+  slide: PptxGenJS.Slide,
+  value: string | undefined,
+  options: { x: number; y: number; w: number; h: number }
+) {
+  const text = clampSlideCaption(value);
+  const characterCount = Array.from(text).length;
+  const fontSize =
+    characterCount <= 350 ? 14 : characterCount <= 650 ? 12.5 : 11;
+  slide.addText("CAPTION", {
+    x: options.x,
+    y: options.y,
+    w: options.w,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+  slide.addText(text, {
+    x: options.x,
+    y: options.y + 0.35,
+    w: options.w,
+    h: options.h - 0.35,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize,
+    color: COLORS.ink,
+    breakLine: false,
+    valign: "top",
+    fit: "shrink",
+    paraSpaceAfter: 0
+  });
 }
 
 function resolvedUgcBrief(
@@ -753,6 +830,210 @@ function albumSlidePlacements(
   ];
 }
 
+function addSinglePageArtworkSlide(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  item: ClientSlideItem,
+  brandName: string,
+  slideNumber: number,
+  totalSlides: number,
+  outputSize: WorkflowState["outputSize"],
+  albumFormat: AlbumFormat,
+  imageData: readonly string[]
+) {
+  const { output, direction } = item;
+  const albumLayout = isAlbumOutput(output) && imageData.length > 1;
+  const artworkPanel = albumLayout
+    ? { x: 3.85, y: 0.45, w: 6, h: 6.6 }
+    : { x: 3.85, y: 0.45, w: 4.72, h: 6.6 };
+  const artworkBox = albumLayout
+    ? { x: 4.04, y: 0.68, w: 5.62, h: 6.14 }
+    : { x: 4.04, y: 0.68, w: 4.34, h: 6.14 };
+  const captionPanel = albumLayout
+    ? { x: 10.08, y: 0.45, w: 2.8, h: 6.6 }
+    : { x: 8.8, y: 0.45, w: 4.08, h: 6.6 };
+  const captionBox = albumLayout
+    ? { x: 10.38, y: 0.74, w: 2.2, h: 5.9 }
+    : { x: 9.15, y: 0.74, w: 3.38, h: 5.9 };
+  slide.background = { color: COLORS.canvas };
+
+  slide.addShape(pptx.ShapeType.line, {
+    x: 3.62,
+    y: 0.48,
+    w: 0,
+    h: 6.54,
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    ...artworkPanel,
+    rectRadius: 0.16,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    ...captionPanel,
+    rectRadius: 0.16,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  if (albumLayout) {
+    addAlbumArtworkPreview(
+      slide,
+      imageData,
+      brandName,
+      albumFormat,
+      artworkBox
+    );
+  } else if (imageData[0]) {
+    addArtworkPreview(
+      slide,
+      imageData[0],
+      outputSize,
+      `${brandName} ${output.format} creative artwork`,
+      artworkBox
+    );
+  }
+
+  const displayBrandName = brandName.toUpperCase();
+  slide.addText(displayBrandName, {
+    x: 0.55,
+    y: 0.6,
+    w: 1.72,
+    h: 0.22,
+    margin: 0,
+    ...localizedTextStyle(displayBrandName),
+    fontSize: 8,
+    bold: true,
+    color: COLORS.violet,
+    charSpacing: 1.2
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 2.35,
+    y: 0.5,
+    w: 1.04,
+    h: 0.38,
+    rectRadius: 0.08,
+    fill: { color: COLORS.lime },
+    line: { color: COLORS.lime }
+  });
+  const formatLabel = output.format.toUpperCase();
+  slide.addText(formatLabel, {
+    x: 2.43,
+    y: 0.61,
+    w: 0.88,
+    h: 0.14,
+    margin: 0,
+    ...localizedTextStyle(formatLabel),
+    fontSize: 7.5,
+    bold: true,
+    color: COLORS.limeInk,
+    align: "center",
+    fit: "shrink"
+  });
+  const hook = clampText(direction?.hook, 170);
+  const hookFontSize = fontSizeForFixedTextBox(
+    hook,
+    2.84,
+    1.58,
+    [24, 22, 20, 18]
+  );
+  slide.addText(hook, {
+    x: 0.55,
+    y: 1.13,
+    w: 2.84,
+    h: 1.58,
+    margin: 0,
+    ...localizedTextStyle(hook),
+    fontSize: hookFontSize,
+    bold: true,
+    color: COLORS.ink,
+    valign: "top",
+    fit: "shrink",
+    breakLine: false
+  });
+  addTextBlock(
+    slide,
+    "Sub-headline",
+    direction ? directionSubheadline(direction as CreativeDirection) : undefined,
+    {
+      x: 0.55,
+      y: 2.93,
+      w: 2.84,
+      h: 0.86,
+      maxLength: 260,
+      fontSize: 11.5
+    }
+  );
+  addTextBlock(slide, "Creative concept", direction?.concept, {
+    x: 0.55,
+    y: 4.03,
+    w: 2.84,
+    h: 1.22,
+    maxLength: 260,
+    fontSize: 10.5
+  });
+
+  slide.addText("CALL TO ACTION", {
+    x: 0.55,
+    y: 5.53,
+    w: 2.84,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x: 0.55,
+    y: 5.86,
+    w: 2.84,
+    h: 0.62,
+    rectRadius: 0.12,
+    fill: { color: COLORS.ink },
+    line: { color: COLORS.ink }
+  });
+  const callToAction = clampText(direction?.cta, 120);
+  slide.addText(callToAction, {
+    x: 0.76,
+    y: 6.05,
+    w: 2.42,
+    h: 0.21,
+    margin: 0,
+    ...localizedTextStyle(callToAction),
+    fontSize: 11,
+    bold: true,
+    color: COLORS.paper,
+    align: "center",
+    fit: "shrink"
+  });
+
+  addCaptionBlock(slide, direction?.caption, captionBox);
+
+  slide.addShape(pptx.ShapeType.line, {
+    x: captionBox.x,
+    y: 6.64,
+    w: captionBox.w,
+    h: 0,
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText(`${slideNumber} / ${totalSlides}`, {
+    x: captionPanel.x + captionPanel.w - 1.03,
+    y: 6.78,
+    w: 0.68,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    color: COLORS.muted,
+    align: "right"
+  });
+  slide.addNotes(
+    `[Sources]\n- Headline, sub-headline, creative concept, CTA, and caption: confirmed workflow data for ${brandName}.\n- Artwork: generated creative asset attached to this output.`
+  );
+}
+
 function addClientSlide(
   pptx: PptxGenJS,
   item: ClientSlideItem,
@@ -777,6 +1058,19 @@ function addClientSlide(
     );
     return;
   }
+  addSinglePageArtworkSlide(
+    pptx,
+    slide,
+    item,
+    brandName,
+    slideNumber,
+    totalSlides,
+    outputSize,
+    albumFormat,
+    imageData
+  );
+  return;
+
   slide.background = { color: COLORS.paper };
   const displayBrandName = brandName.toUpperCase();
   slide.addText("CREATIVE DIRECTION", {
@@ -937,7 +1231,7 @@ function addClientSlide(
     charSpacing: 1
   });
   const subheadline = clampText(
-    direction ? directionSubheadline(direction) : undefined,
+    direction ? directionSubheadline(direction as CreativeDirection) : undefined,
     300
   );
   slide.addText(subheadline, {
@@ -984,7 +1278,7 @@ function addClientSlide(
   } else if (imageData[0]) {
     addArtworkPreview(
       slide,
-      imageData[0],
+      imageData[0]!,
       outputSize,
       `${brandName} ${output.format} creative draft`,
       { x: 6.72, y: 1.9, w: 2.34, h: 3.64 }
@@ -1310,6 +1604,10 @@ function addCaptionSlide(
   );
 }
 
+// Retained for backward-compatible deck variants; the restored client export
+// intentionally emits one artwork-and-brief slide per creative.
+void addCaptionSlide;
+
 export async function buildPmApprovedClientSlidesPptx(
   state: ClientSlidesState,
   resolveImage: ClientSlideImageResolver = fetchClientSlideImage
@@ -1367,13 +1665,7 @@ async function buildClientSlidesPptx(
   };
   const ugcReference = preferredUgcReference(state.referenceImages);
   let ugcReferenceData: string | null | undefined;
-  const captionChunksByItem = new Map(
-    items.map((item) => [item, splitCaptionForSlides(item.direction?.caption)])
-  );
-  const totalSlides = items.reduce(
-    (count, item) => count + 1 + (captionChunksByItem.get(item)?.length ?? 0),
-    0
-  );
+  const totalSlides = items.length;
   let slideNumber = 1;
 
   for (const [index, item] of items.entries()) {
@@ -1403,7 +1695,6 @@ async function buildClientSlidesPptx(
       state.albumFormat,
       item.direction?.albumFormat
     );
-    const captionChunks = captionChunksByItem.get(item) ?? [];
     addClientSlide(
       pptx,
       item,
@@ -1415,22 +1706,6 @@ async function buildClientSlidesPptx(
       imageData
     );
     slideNumber += 1;
-    captionChunks.forEach((captionChunk, chunkIndex) => {
-      addCaptionSlide(
-        pptx,
-        item,
-        brandName,
-        captionChunk,
-        chunkIndex,
-        captionChunks.length,
-        slideNumber,
-        totalSlides,
-        state.outputSize,
-        albumFormat,
-        imageData
-      );
-      slideNumber += 1;
-    });
   }
 
   return pptx;

@@ -149,6 +149,7 @@ export function createInitialWorkflowState({
     quantity: 6,
     successMetric: "CVR",
     brief: defaultBrief,
+    artworkBrief: "",
     attachments: [],
     uploadedMaterials: [],
     referenceImages: [],
@@ -489,6 +490,8 @@ export function workflowReducer(
       return resetCreativeWork({ ...state, albumFormat: action.format });
     case "set-output-size":
       return { ...state, outputSize: action.size };
+    case "set-artwork-brief":
+      return { ...state, artworkBrief: action.brief };
     case "set-quantity":
       return withCreativeMix(state, [
         {

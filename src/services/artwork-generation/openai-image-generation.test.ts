@@ -293,6 +293,42 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.output.size).toBe("2160x3840");
   });
 
+  it("marks a non-empty artwork brief as mandatory for the artwork agent", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        artworkBrief:
+          "Use natural window light and do not visualize scent as glowing mist."
+      }
+    });
+
+    expect(request.textInputs).toHaveLength(1);
+    expect(request.textInputs[0]).toContain("MANDATORY ARTWORK BRIEF");
+    expect(request.textInputs[0]).toContain(
+      "Use natural window light and do not visualize scent as glowing mist."
+    );
+  });
+
+  it("keeps the mandatory artwork brief when regenerating with a correction", () => {
+    const direction = run.directions[0];
+    if (!direction) throw new Error("Expected a selected direction fixture.");
+
+    const request = buildArtworkRegenerationRequest({
+      run: {
+        ...run,
+        artworkBrief: "Keep the lighting physically natural."
+      },
+      direction,
+      extraInstructions: "Move the CTA lower."
+    });
+
+    expect(request.textInputs).toHaveLength(1);
+    expect(request.textInputs[0]).toContain(
+      "Keep the lighting physically natural."
+    );
+    expect(request.textInputs[0]).toContain("Move the CTA lower.");
+  });
+
   it("attaches an uploaded image guideline as a visual Brand CI input", () => {
     const request = buildArtworkGenerationRequest({
       run: {
@@ -449,10 +485,11 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request.brand).toMatchObject({
       personality: ["expert", "direct", "approachable"],
-      colors: ["#0A1628", "#1A56DB", "#00D4FF", "#111111", "#222222"]
+      colors: ["#0A1628", "#1A56DB", "#00D4FF"]
     });
     expect(request.brand).not.toHaveProperty("mustAvoid");
     expect(request.brand?.colors).not.toContain("warm blue");
+    expect(request.brand?.colors).not.toContain("#111111");
   });
 
   it("passes design-system mode without changing the provider contract", () => {
@@ -473,6 +510,27 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.artworkMode).toBe("design-system-new");
     expect(request.model).toBe("gpt-image-2");
     expect(request.selectedHooks).toHaveLength(1);
+  });
+
+  it("passes Direct Final Artwork mode with the approved subheadline", () => {
+    const request = buildArtworkGenerationRequest({
+      run: {
+        ...run,
+        artworkMode: "direct-final-artwork",
+        directions: [
+          {
+            ...run.directions[0]!,
+            subheadline: "Designed to soften the whole room"
+          }
+        ]
+      }
+    });
+
+    expect(request.artworkMode).toBe("direct-final-artwork");
+    expect(request.selectedHooks[0]?.subheadline).toBe(
+      "Designed to soften the whole room"
+    );
+    expect(request.model).toBe("gpt-image-2");
   });
 
   it("passes the selected OpenRouter prompt model without changing the image model", () => {

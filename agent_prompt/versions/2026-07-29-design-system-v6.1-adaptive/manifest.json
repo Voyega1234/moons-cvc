@@ -1,0 +1,24 @@
+{
+  "version": "6.1-adaptive",
+  "status": "active-experiment",
+  "createdAt": "2026-07-29",
+  "runtimeMode": "design-system",
+  "upstream": {
+    "strategy": "../2026-07-28-chol-static-03-v6/prompts/01-strategy-enrichment.exact.md",
+    "concept": "../2026-07-28-chol-static-03-v6/prompts/02-creative-concept-director.exact.md"
+  },
+  "finalPrompt": "prompts/03-design-system-v6.1-adaptive.md",
+  "sha256": "485b2c1aaacdd3cdbee96eebe063f184f92ea697dcbf463a5821310fa3bad6c5",
+  "rollbackFinalPrompt": "../2026-07-28-chol-static-03-v6/prompts/03-design-system-v6.reusable.md",
+  "runtimeMarkers": [
+    "{{ACTIVE_INFORMATION_DENSITY_RULES}}",
+    "{{ACTIVE_HUMAN_PRESENCE_RULES}}",
+    "{{COMPILED_CAMPAIGN_CONTEXT}}",
+    "{{ACTIVE_OUTPUT_MODE_RULES}}"
+  ],
+  "notes": [
+    "Final-art-stage experiment only.",
+    "Does not modify the design-system-new pipeline.",
+    "Reference corpus informed principles but is not embedded or copied."
+  ]
+}

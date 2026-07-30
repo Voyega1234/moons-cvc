@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-07-27
+Last verified: 2026-07-30
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -50,6 +50,7 @@ Async results must continue targeting the run that started the request.
 | Stage configuration and labels | `src/features/workflow/config.ts` |
 | Main application composition | `src/app/App.tsx` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
+| Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
 
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
@@ -64,6 +65,7 @@ imports stay stable. Ownership after the first extraction is:
 | Brand selection and setup | `StartStage`, brand setup/profile/library panels |
 | Brief and shared material browser | `stages/brief-stage.tsx` |
 | Pre-generation confirmation | `stages/brief-confirmation-modal.tsx` |
+| Shared artwork mode selector | `stages/artwork-mode-selector.tsx` |
 | Hook selection | `DirectionsStage`, hook edit/regenerate modals |
 | Before-build idea checks | `stages/preflight-modal.tsx` |
 | Create | `stages/studio-stage.tsx` |
@@ -98,30 +100,66 @@ Single, album, and UGC outputs share review helpers:
 These are used by Create, Internal QC, Client review, and Learn. They now live
 under `src/features/workflow/review/` and must not be duplicated per stage.
 
+Client presentation export uses one slide per creative. Static and Album
+creatives use a three-column review layout: campaign information and CTA on
+the left, artwork in the center, and the caption in a dedicated right-hand
+panel. Album slides widen the center artwork panel and use a narrower caption
+panel; Static slides keep the balanced three-column proportions. UGC uses its
+single-slide storyboard layout. Do not add separate Creative Direction or
+Artwork & Caption slides unless the export contract is intentionally changed.
+
 ## Artwork prompt pipeline
 
 Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
 
-- `design-system` compiles `agent_prompt/agent_design_system.md` and sends the
-  rendered master prompt directly to GPT Image 2.
-- Before either design-system path is compiled,
-  `agent_prompt/agent_creative_graphic_designer.md` returns the strict
-  `moons_creative_design_input` packet. It prepares the actual brand,
-  product/service, exact headline and CTA, highlighted phrase, optional feature
-  pair, optional supporting conversion line, required utility information,
-  palette, official assets, and visual concept. The server validates immutable
-  copy and renders the packet into the design-system campaign context.
-- `design-system-new` keeps the same strategy, creative-concept, campaign
-  compilation, assets, and image settings. It then runs the compiled master
-  prompt through the selected OpenAI/OpenRouter model using
-  `agent_prompt/agent_production_brief.md`. Only the returned structured
-  production brief is sent to GPT Image 2.
-- The shared prompt-agent implementation and production-brief validation live
-  in `src/server/artwork-generation/image-prompt-agent.ts`.
-- Production-brief debug traces use the `-production-brief-agent.json` suffix;
-  the final GPT Image 2 request remains the unsuffixed generation JSON.
+- `design-system` uses the V6.2 Judgment final-art prompt at
+  `agent_prompt/versions/2026-07-30-design-system-v6.2-judgment/prompts/03-design-system-v6.2-judgment.md`.
+  V6.2 removes fixed visual presets and percentage-based composition rules. It
+  lets GPT Image 2 select the art direction that best fits the active concept,
+  brand, category, audience, objective, format, and information density while
+  retaining universal hierarchy, coherence, physical-credibility,
+  asset-integrity, and anti-AI-slop gates. V6.1 remains available as the
+  immediate rollback version.
+- `design-system` runs the complete archived V6 upstream chain:
+  `01-strategy-enrichment.exact.md` followed by
+  `02-creative-concept-director.exact.md`. Runtime campaign evidence is appended
+  to the static prompts, and the concept response uses a strict
+  `moons_creative_visual_concept` JSON transport envelope. The resulting
+  three-sentence creative provocation is compiled into the V6.2 Judgment prompt
+  and sent directly to GPT Image 2. Only the final-art stage changed in V6.2;
+  the archived V6 strategy and concept prompts remain active upstream.
+- `design-system-new` separates truth from concept. First,
+  `agent_prompt/agent_campaign_truth_normalizer.md` produces and validates the
+  nested `moons_authoritative_campaign_packet`. Then
+  `agent_prompt/agent_creative_concept_director.md` receives only that locked
+  packet and returns `moons_creative_visual_concept`. The packet and visual
+  concept are compiled into the current
+  `agent_prompt/agent_design_system.md` prompt and sent directly to GPT Image 2.
+- `agent_prompt/agent_design_system.md` remains the active final-art prompt for
+  `design-system-new`; it is not used by the legacy `design-system` mode.
+- `agent_prompt/agent_creative_strategy_enrichment.md`,
+  `agent_prompt/agent_creative_graphic_designer.md`, and
+  `agent_prompt/agent_creative_concept_director.md` remain available to their
+  other/current pipelines; the archived `01` and `02` prompts are selected only
+  when `artworkMode === "design-system"`.
+- `design-system-new` does not call the Production Brief Director. The
+  standalone production-brief helper remains in
+  `src/server/artwork-generation/image-prompt-agent.ts` for isolated callers
+  and tests, but it is not part of the artwork endpoint pipeline.
+- `direct-final-artwork` is the shortest route:
+  `Hook JSON → GPT Image 2`. It does not call strategy enrichment, campaign
+  truth normalization, a creative concept agent, or the image-prompt agent.
+  Each selected idea contributes only `Hook`, `subheadline`,
+  `Supporting points (one per line)`, and `CTA`. The endpoint combines those
+  fields with the complete active brand context, optional Artwork brief, and
+  selected artifact roles using
+  `agent_prompt/versions/2026-07-30-direct-final-artwork-v1/prompts/01-direct-final-artwork-v1.md`.
+- Brand Kit rule changes, including `Colors` / `Primary colors` and
+  `Secondary colors`, must dispatch `sync-brand-rules` into the active run.
+  Artwork request serialization reads that run-bound state to populate
+  `brand.colors`; repository-only changes are not sufficient.
 
 ## Current UX request routing
 

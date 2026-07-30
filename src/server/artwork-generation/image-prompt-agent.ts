@@ -6,6 +6,7 @@ import {
   type ArtworkMode
 } from "../../domain/creative-run.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
+import type { AuthoritativeCampaignPacket } from "./campaign-truth-normalizer-agent.js";
 
 type FetchLike = typeof fetch;
 
@@ -51,21 +52,7 @@ export interface ImagePromptAgentInput {
     refs: readonly { title: string; description: string }[];
   };
   selectedProductIds?: readonly string[];
-}
-
-export interface CreativeDesignInputPacket {
-  visualConcept: string;
-  brand: string;
-  productOrService: string;
-  headline: string;
-  highlightedPhrase: string;
-  featureName: string;
-  featureValueProposition: string;
-  supportingConversionLine: string;
-  cta: string;
-  requiredUtilityInformation: string;
-  brandPalette: string;
-  officialAssets: string;
+  campaignPacket?: AuthoritativeCampaignPacket;
 }
 
 export interface ImagePromptAgentTrace {
@@ -100,7 +87,8 @@ export async function generateImagePrompt({
   writeTrace,
   loadAgentImagePrompt = defaultLoadAgentImagePrompt,
   loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt,
-  loadCreativeGraphicDesignerPrompt = defaultLoadCreativeGraphicDesignerPrompt
+  loadCreativeGraphicDesignerPrompt = defaultLoadCreativeGraphicDesignerPrompt,
+  loadCreativeConceptDirectorPrompt = defaultLoadCreativeConceptDirectorPrompt
 }: {
   apiKey: string;
   model?: string;
@@ -112,6 +100,7 @@ export async function generateImagePrompt({
   loadAgentImagePrompt?: () => Promise<string>;
   loadReferenceLibraryPrompt?: () => Promise<string>;
   loadCreativeGraphicDesignerPrompt?: () => Promise<string>;
+  loadCreativeConceptDirectorPrompt?: () => Promise<string>;
 }): Promise<string> {
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
   const endpoint =
@@ -121,11 +110,16 @@ export async function generateImagePrompt({
   const endpointPath =
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
-  const isCreativeDesignMode =
-    mode === "design-system" || mode === "design-system-new";
+  const isLegacyCreativeDesignMode = mode === "design-system";
+  const isLockedCampaignConceptMode = mode === "design-system-new";
   const inputText =
-    isCreativeDesignMode
-      ? renderCreativeGraphicDesignerPrompt(
+    isLockedCampaignConceptMode
+      ? renderLockedCampaignConceptPrompt(
+          await loadCreativeConceptDirectorPrompt(),
+          input
+        )
+      : isLegacyCreativeDesignMode
+      ? renderLegacyV6CreativeConceptPrompt(
           await loadCreativeGraphicDesignerPrompt(),
           input
         )
@@ -162,12 +156,14 @@ export async function generateImagePrompt({
         text: {
           format: {
             type: "json_schema",
-            name: isCreativeDesignMode
-              ? "moons_creative_design_input"
-              : "moons_image_generation_prompt",
+            name:
+              isLockedCampaignConceptMode || isLegacyCreativeDesignMode
+                ? "moons_creative_visual_concept"
+                : "moons_image_generation_prompt",
             strict: true,
-            schema: isCreativeDesignMode
-              ? creativeDesignInputSchema
+            schema:
+              isLockedCampaignConceptMode || isLegacyCreativeDesignMode
+              ? creativeConceptSchema
               : standardImagePromptSchema
           }
         }
@@ -187,10 +183,9 @@ export async function generateImagePrompt({
     );
     const text = extractResponseText(payload);
     const parsed = JSON.parse(text) as unknown;
-    const responsePrompt = isCreativeDesignMode
-      ? renderCreativeDesignInputPacket(
-          parseCreativeDesignInputPacket(parsed, input, providerLabel)
-        )
+    const responsePrompt =
+      isLockedCampaignConceptMode || isLegacyCreativeDesignMode
+      ? parseCreativeVisualConcept(parsed, providerLabel)
       : parseStandardImagePrompt(parsed, providerLabel);
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
@@ -363,7 +358,21 @@ async function defaultLoadReferenceLibraryPrompt(): Promise<string> {
 
 async function defaultLoadCreativeGraphicDesignerPrompt(): Promise<string> {
   return readFile(
-    join(process.cwd(), "agent_prompt", "agent_creative_graphic_designer.md"),
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "versions",
+      "2026-07-28-chol-static-03-v6",
+      "prompts",
+      "02-creative-concept-director.exact.md"
+    ),
+    "utf8"
+  );
+}
+
+async function defaultLoadCreativeConceptDirectorPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_creative_concept_director.md"),
     "utf8"
   );
 }
@@ -423,7 +432,7 @@ function validateProductionBrief(prompt: string): void {
   }
 }
 
-function renderCreativeGraphicDesignerPrompt(
+function renderLegacyV6CreativeConceptPrompt(
   source: string,
   input: ImagePromptAgentInput
 ): string {
@@ -495,7 +504,38 @@ function renderCreativeGraphicDesignerPrompt(
     source.trim(),
     "",
     "AUTHORITATIVE RUNTIME INPUT",
-    JSON.stringify(runtimeInput, null, 2)
+    JSON.stringify(runtimeInput, null, 2),
+    "",
+    "RUNTIME OUTPUT ENVELOPE",
+    'Return strict JSON matching {"visualConcept":"..."}.',
+    "The visualConcept value must follow the prompt's original three-sentence paragraph requirement. This JSON envelope changes transport only, not the creative task."
+  ].join("\n");
+}
+
+function renderLockedCampaignConceptPrompt(
+  source: string,
+  input: ImagePromptAgentInput
+): string {
+  if (!input.campaignPacket) {
+    throw new Error(
+      "Design System (New) requires an authoritative campaign packet."
+    );
+  }
+  return [
+    source.trim(),
+    "",
+    "LOCKED AUTHORITATIVE CAMPAIGN PACKET",
+    JSON.stringify(input.campaignPacket, null, 2),
+    "",
+    "ATTACHED REFERENCE ROLES",
+    JSON.stringify(
+      input.referenceImages.map((image, index) => ({
+        image: index + 1,
+        ...buildCompactReference(image.label, index)
+      })),
+      null,
+      2
+    )
   ].join("\n");
 }
 
@@ -517,127 +557,24 @@ function parseStandardImagePrompt(
   return prompt.trim();
 }
 
-function parseCreativeDesignInputPacket(
+function parseCreativeVisualConcept(
   parsed: unknown,
-  input: ImagePromptAgentInput,
   providerLabel: string
-): CreativeDesignInputPacket {
+): string {
   if (!isRecord(parsed)) {
     throw new Error(
-      `${providerLabel} creative design input agent returned invalid JSON.`
-    );
-  }
-
-  const keys = [
-    "visualConcept",
-    "brand",
-    "productOrService",
-    "headline",
-    "highlightedPhrase",
-    "featureName",
-    "featureValueProposition",
-    "supportingConversionLine",
-    "cta",
-    "requiredUtilityInformation",
-    "brandPalette",
-    "officialAssets"
-  ] as const;
-  const packet = Object.fromEntries(
-    keys.map((key) => {
-      const value = parsed[key];
-      if (typeof value !== "string" || !value.trim()) {
-        throw new Error(
-          `${providerLabel} creative design input agent returned an empty ${key}.`
-        );
-      }
-      return [key, value.trim()];
-    })
-  ) as unknown as CreativeDesignInputPacket;
-
-  const exactBrand = input.brand?.name.trim() || "OMIT";
-  const exactHeadline = input.hook.hook.trim();
-  const exactCta = input.hook.cta.trim() || "OMIT";
-  if (packet.brand !== exactBrand) {
-    throw new Error(
-      `${providerLabel} creative design input agent changed the brand name.`
-    );
-  }
-  if (packet.headline !== exactHeadline) {
-    throw new Error(
-      `${providerLabel} creative design input agent changed the approved headline.`
-    );
-  }
-  if (packet.cta !== exactCta) {
-    throw new Error(
-      `${providerLabel} creative design input agent changed the approved CTA.`
+      `${providerLabel} creative concept director returned invalid JSON.`
     );
   }
   if (
-    packet.highlightedPhrase !== "OMIT" &&
-    !exactHeadline.includes(packet.highlightedPhrase)
+    typeof parsed.visualConcept !== "string" ||
+    !parsed.visualConcept.trim()
   ) {
     throw new Error(
-      `${providerLabel} creative design input agent selected a highlighted phrase that is not an exact headline excerpt.`
+      `${providerLabel} creative concept director returned an empty visual concept.`
     );
   }
-  if (
-    (packet.featureName === "OMIT") !==
-    (packet.featureValueProposition === "OMIT")
-  ) {
-    throw new Error(
-      `${providerLabel} creative design input agent returned an incomplete feature pair.`
-    );
-  }
-
-  return packet;
-}
-
-function renderCreativeDesignInputPacket(
-  packet: CreativeDesignInputPacket
-): string {
-  return [
-    "Brand:",
-    packet.brand,
-    "",
-    "Product or service:",
-    packet.productOrService,
-    "",
-    "Headline, exactly:",
-    `“${packet.headline}”`,
-    "",
-    "Highlighted phrase:",
-    packet.highlightedPhrase === "OMIT"
-      ? "OMIT"
-      : `“${packet.highlightedPhrase}”`,
-    "",
-    "Feature name:",
-    packet.featureName === "OMIT" ? "OMIT" : `“${packet.featureName}”`,
-    "",
-    "Feature value proposition:",
-    packet.featureValueProposition === "OMIT"
-      ? "OMIT"
-      : `“${packet.featureValueProposition}”`,
-    "",
-    "Supporting conversion line:",
-    packet.supportingConversionLine === "OMIT"
-      ? "OMIT"
-      : `“${packet.supportingConversionLine}”`,
-    "",
-    "CTA, exactly:",
-    packet.cta === "OMIT" ? "OMIT" : `“${packet.cta}”`,
-    "",
-    "Required utility information:",
-    packet.requiredUtilityInformation,
-    "",
-    "Brand palette:",
-    packet.brandPalette,
-    "",
-    "Official assets:",
-    packet.officialAssets,
-    "",
-    "Creative visual concept:",
-    packet.visualConcept
-  ].join("\n");
+  return parsed.visualConcept.trim();
 }
 
 function isExplicitBrandGuideline(item: {
@@ -963,37 +900,13 @@ function referenceLibraryRole(label: string): string {
   return `${prefix}client reference — use only for its supplied asset role`;
 }
 
-const creativeDesignInputSchema = {
+const creativeConceptSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    visualConcept: { type: "string" },
-    brand: { type: "string" },
-    productOrService: { type: "string" },
-    headline: { type: "string" },
-    highlightedPhrase: { type: "string" },
-    featureName: { type: "string" },
-    featureValueProposition: { type: "string" },
-    supportingConversionLine: { type: "string" },
-    cta: { type: "string" },
-    requiredUtilityInformation: { type: "string" },
-    brandPalette: { type: "string" },
-    officialAssets: { type: "string" }
+    visualConcept: { type: "string" }
   },
-  required: [
-    "visualConcept",
-    "brand",
-    "productOrService",
-    "headline",
-    "highlightedPhrase",
-    "featureName",
-    "featureValueProposition",
-    "supportingConversionLine",
-    "cta",
-    "requiredUtilityInformation",
-    "brandPalette",
-    "officialAssets"
-  ]
+  required: ["visualConcept"]
 } as const;
 
 const standardImagePromptSchema = {

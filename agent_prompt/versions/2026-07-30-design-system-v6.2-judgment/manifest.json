@@ -1,0 +1,25 @@
+{
+  "version": "6.2-judgment",
+  "status": "active-experiment",
+  "createdAt": "2026-07-30",
+  "runtimeMode": "design-system",
+  "upstream": {
+    "strategy": "../2026-07-28-chol-static-03-v6/prompts/01-strategy-enrichment.exact.md",
+    "concept": "../2026-07-28-chol-static-03-v6/prompts/02-creative-concept-director.exact.md"
+  },
+  "finalPrompt": "prompts/03-design-system-v6.2-judgment.md",
+  "sha256": "4ed4ea676d33cb92093b7ac47c19d0d3a5c74258bbbc34575d017cf8a25005a4",
+  "rollbackFinalPrompt": "../2026-07-29-design-system-v6.1-adaptive/prompts/03-design-system-v6.1-adaptive.md",
+  "runtimeMarkers": [
+    "{{ACTIVE_INFORMATION_DENSITY_RULES}}",
+    "{{ACTIVE_HUMAN_PRESENCE_RULES}}",
+    "{{COMPILED_CAMPAIGN_CONTEXT}}",
+    "{{ACTIVE_OUTPUT_MODE_RULES}}"
+  ],
+  "notes": [
+    "Final-art-stage experiment only.",
+    "Removes fixed visual presets and percentage-based composition rules.",
+    "Keeps universal design, asset-integrity, credibility, and anti-AI-slop constraints.",
+    "Does not modify direct-final-artwork or design-system-new."
+  ]
+}
