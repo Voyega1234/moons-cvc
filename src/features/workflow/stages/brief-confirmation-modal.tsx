@@ -12,6 +12,7 @@ import type { LibraryItem } from "../../../domain/brand";
 import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
+  inferredReferenceImageRole,
   type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -76,11 +77,17 @@ export function BriefConfirmationModal({
   );
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
+  const imageReferences = state.referenceImages.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
+  const availableImageReferences = references.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
   const selectedProductIds = new Set(
     selectedProducts.map((product) => product.id)
   );
   const selectedReferenceIds = new Set(
-    state.referenceImages.map((reference) => reference.id)
+    imageReferences.map((reference) => reference.id)
   );
   const selectedMaterials = selectedUploadedMaterials(state);
   const activeMix = creativeMixItems(state).filter(
@@ -373,7 +380,7 @@ export function BriefConfirmationModal({
               <div className="confirm-reference-actions">
                 <span className="confirm-section-status">
                   {assetView === "reference"
-                    ? `${state.referenceImages.length} references selected`
+                    ? `${imageReferences.length} references selected`
                     : `${selectedMaterials.length} materials selected`}
                 </span>
                 {assetView === "reference" ? (
@@ -408,7 +415,7 @@ export function BriefConfirmationModal({
                 onClick={() => setAssetView("reference")}
               >
                 Image Reference
-                <span>{state.referenceImages.length}</span>
+                <span>{imageReferences.length}</span>
               </button>
               <button
                 className={assetView === "material" ? "active" : ""}
@@ -426,9 +433,9 @@ export function BriefConfirmationModal({
                 {uploadError}
               </p>
             ) : null}
-            {assetView === "reference" && references.length ? (
+            {assetView === "reference" && availableImageReferences.length ? (
               <div className="confirm-reference-grid">
-                {references.map((reference) => {
+                {availableImageReferences.map((reference) => {
                   const selected = selectedReferenceIds.has(reference.id);
                   return (
                     <button

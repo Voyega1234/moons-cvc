@@ -4,7 +4,7 @@ import { ArrowLeft, FolderSimple, ImageBroken, PencilSimple, Trash } from "@phos
 import { type LibraryItem } from "../../../domain/brand";
 import { env } from "../../../config/env";
 import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type BrandPastWorkItem, type BrandProduct } from "../../../domain/brand-memory";
-import { creativeMaterialRoles, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
+import { creativeMaterialRoles, inferredReferenceImageRole, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import { useOptionalAuth } from "../../../app/providers/auth-provider";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
@@ -154,7 +154,10 @@ export function BrandLogoCard({
       </div>
       <div className="brand-logo-body">
         <b>Logo</b>
-        <p>PNG, JPEG, or WEBP. Used across generation and previews.</p>
+        <p>
+          Official Brand CI identity asset. Shown in previews and sent as a
+          logo—not as a style reference.
+        </p>
         {!logoItem?.assetUrl ? (
           <p className="compass-quality-note">
             Upload your logo to keep generated artwork visually consistent.
@@ -1563,13 +1566,16 @@ export function BriefStage({ state, dispatch }: StageProps) {
 
   const mixItems = creativeMixItems(state);
   const totalDeliverables = totalCreativeMixQuantity(state);
+  const selectedImageReferences = state.referenceImages.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
   const fixedMixItems = briefServiceTypes
     .map((service) => mixItems.find((item) => item.service === service))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const fixedMixReady = fixedMixItems.length === briefServiceTypes.length;
   const confirmationReferences = [
     ...libraryItemsWithImages(state.brand?.library.refs ?? [], "style"),
-    ...state.referenceImages.filter(
+    ...selectedImageReferences.filter(
       (selected) =>
         !(state.brand?.library.refs ?? []).some(
           (reference) => `library-${reference.id}` === selected.id
@@ -1581,29 +1587,14 @@ export function BriefStage({ state, dispatch }: StageProps) {
   }, [dispatch, fixedMixReady]);
 
   useEffect(() => {
-    const clientId = state.brand?.id;
-    if (!clientId) return;
-
-    let active = true;
-    void brandMemoryRepository
-      .listBrandRules(clientId)
-      .then((rules) => {
-        if (!active) return;
-        const logoRule = findRuleByTitle(rules, "Logo");
-        const [logoCandidate] = logoRule
-          ? libraryItemsWithImages([logoRule])
-          : [];
-        dispatch({
-          type: "sync-brand-logo-reference",
-          item: logoCandidate ?? null
-        });
-      })
-      .catch(() => undefined);
-
-    return () => {
-      active = false;
-    };
-  }, [brandMemoryRepository, dispatch, state.brand]);
+    if (
+      state.referenceImages.some(
+        (reference) => inferredReferenceImageRole(reference) === "logo"
+      )
+    ) {
+      dispatch({ type: "sync-brand-logo-reference", item: null });
+    }
+  }, [dispatch, state.brand?.id, state.referenceImages]);
 
   return (
     <DecisionCard
@@ -1854,7 +1845,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                 aria-label="Brief material counts"
               >
                 <span>
-                  <b>{state.referenceImages.length}</b> references
+                  <b>{selectedImageReferences.length}</b> references
                 </span>
                 <span>
                   <b>
@@ -1904,7 +1895,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                       </p>
                     </div>
                     <div className="compass-brief-section-head-actions">
-                      <span>{state.referenceImages.length} selected</span>
+                      <span>{selectedImageReferences.length} selected</span>
                       <label
                         className={`btn small secondary compass-reference-upload ${
                           referenceUploadPending ? "disabled" : ""
@@ -1930,9 +1921,9 @@ export function BriefStage({ state, dispatch }: StageProps) {
                         {referenceUploadError}
                       </p>
                     ) : null}
-                    {state.referenceImages.length ? (
+                    {selectedImageReferences.length ? (
                       <div className="compass-selected-reference-grid">
-                        {state.referenceImages.map((reference) => (
+                        {selectedImageReferences.map((reference) => (
                           <article
                             className="compass-selected-reference"
                             key={reference.id}
@@ -2147,19 +2138,16 @@ function ReferenceLibraryPicker({
   }, [clientId, repository]);
 
   function upsertBrandRule(saved: LibraryItem) {
-    setBrandRules((current) =>
-      current.some((rule) => rule.id === saved.id)
-        ? current.map((rule) => (rule.id === saved.id ? saved : rule))
-        : [...current, saved]
-    );
+    const nextRules = brandRules.some((rule) => rule.id === saved.id)
+      ? brandRules.map((rule) => (rule.id === saved.id ? saved : rule))
+      : [...brandRules, saved];
+    setBrandRules(nextRules);
+    dispatch({ type: "sync-brand-rules", items: nextRules });
   }
 
   function saveLatestLogoReference(saved: LibraryItem) {
     upsertBrandRule(saved);
-    dispatch({
-      type: "sync-brand-logo-reference",
-      item: libraryItemsWithImages([saved], "logo")[0] ?? null
-    });
+    dispatch({ type: "sync-brand-logo-reference", item: null });
   }
 
   async function addColor(hex: string) {
@@ -2225,7 +2213,7 @@ function ReferenceLibraryPicker({
     (ReferenceImageSelection & { displayLabel?: string })[]
   > = {
     guideline: libraryItemsWithImages(brand?.library.docs ?? [], "content"),
-    logo: logoRule ? libraryItemsWithImages([logoRule], "logo") : [],
+    logo: [],
     product: [],
     material: [],
     reference: [
@@ -2351,7 +2339,7 @@ function ReferenceLibraryPicker({
               );
             })}
           </div>
-        ) : !hasToneAndStyle ? (
+        ) : !hasToneAndStyle && key !== "logo" ? (
           <p className="repository-message">
             No{" "}
             {REFERENCE_LIBRARY_CATEGORIES.find(
