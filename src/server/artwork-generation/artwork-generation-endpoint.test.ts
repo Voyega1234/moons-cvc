@@ -163,54 +163,6 @@ function strategyAgentResponse(
   );
 }
 
-function campaignPacketResponse(
-  overrides: Record<string, unknown> = {}
-): Response {
-  return new Response(
-    JSON.stringify({
-      output_text: JSON.stringify({
-        campaign: {
-          brand: "Flora Daily",
-          productOrService: "Flowers / lifestyle",
-          campaignObjective: "Conversion",
-          platform: "Meta Feed",
-          canvas: "1:1 single-static",
-          targetAudience: "OMIT",
-          audienceMoment: "The customer wants to feel more confident.",
-          mainMessage: "Lead with room mood."
-        },
-        copy: {
-          headline: "Flowers that make the room feel softer",
-          highlightedPhrase: "room feel softer",
-          featureName: "OMIT",
-          featureValueProposition: "OMIT",
-          supportingConversionLine: "OMIT",
-          cta: "Order a bouquet",
-          requiredUtilityInformation: []
-        },
-        creative: {
-          executionMode: "lifestyle-commercial",
-          informationDensity: "low",
-          humanPresence: "not-required"
-        },
-        brandVisual: {
-          brandVisualCharacter: [],
-          brandPalette: [],
-          referenceIntent: "OMIT"
-        },
-        truthAndGuardrails: {
-          verifiedFacts: [],
-          restrictions: [],
-          latestUserCorrection: "OMIT"
-        },
-        officialAssets: [],
-        ...overrides
-      })
-    }),
-    { status: 200 }
-  );
-}
-
 function creativeVisualConceptResponse(
   visualConcept =
     "A bouquet visibly softens the rigid geometry of a room. The material contrast makes the emotional benefit immediate before the headline completes it. The audience recognizes how one small addition changes the atmosphere."
@@ -218,6 +170,58 @@ function creativeVisualConceptResponse(
   return new Response(
     JSON.stringify({
       output_text: JSON.stringify({ visualConcept })
+    }),
+    { status: 200 }
+  );
+}
+
+function creativeSetDirectionResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        setDirection:
+          "A quiet botanical campaign world with tactile daylight and disciplined editorial restraint.",
+        ideas: [
+          {
+            directionId: "hook-1",
+            shotOpportunity:
+              "Frame the bouquet through a rigid architectural foreground so its softness visibly changes the room."
+          }
+        ]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+function visualQualityPassResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        decision: "pass",
+        density: "controlled",
+        aiAppearance: "credible",
+        strengths: ["Clear hierarchy", "Natural light and shadow"],
+        issues: [],
+        revisionInstruction: ""
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+function visualQualityReviseResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        decision: "revise",
+        density: "too-dense",
+        aiAppearance: "noticeable",
+        strengths: ["Strong botanical focal idea"],
+        issues: ["Crowded lower edge", "Product contact shadow feels detached"],
+        revisionInstruction:
+          "Open the lower quiet zone and correct the product contact shadow while preserving the concept, copy, brand assets, and crop."
+      })
     }),
     { status: 200 }
   );
@@ -1161,7 +1165,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.1"
+      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
     );
     expect(imageBodies[0]?.prompt).toContain("Album master rules:");
     expect(imageBodies[0]?.prompt).toContain(
@@ -2009,7 +2013,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("{{");
   });
 
-  it("runs V6 upstream with the V6.1 Adaptive final prompt in design-system mode", async () => {
+  it("runs V6 upstream with the V6.2 Judgment final prompt in design-system mode", async () => {
     const editCalls: FormData[] = [];
     const strategyCalls: Record<string, unknown>[] = [];
     const oversizedContext = "Brand context detail ".repeat(500);
@@ -2165,34 +2169,34 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
     expect(prompt).toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.1"
+      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
     );
     expect(prompt).toContain(
-      "Create one finished advertising artwork from the supplied campaign context"
+      "Create one complete, publication-ready advertising artwork"
     );
     expect(prompt).toContain(
-      "Infer the best creative route from the campaign"
+      "Choose the visual language that best serves this specific concept"
     );
     expect(prompt).toContain(
-      "Choose one primary route."
+      "Explore several substantially different executable approaches"
     );
     expect(prompt).toContain(
-      "GRID IS THE HIDDEN OPERATING SYSTEM"
+      "Choose a coherent spatial system from the concept rather than from a preset"
     );
     expect(prompt).toContain(
-      "CONTROL DENSITY; DO NOT CONFUSE DENSITY WITH CLUTTER"
+      "information must form coherent"
     );
     expect(prompt).toContain(
-      "credible photograph or high-end commercial production"
+      "Use motivated light with coherent direction"
     );
     expect(prompt).toContain(
-      "Visual rest does not require a large blank white area."
+      "Quiet space may be empty, atmospheric"
     );
     expect(prompt).toContain(
-      "Design the first, second, and third visual reads."
+      "Create one unmistakable focal relationship and a deliberate reading order"
     );
     expect(prompt).toContain(
-      "The final work should have one memorable design decision."
+      "the result feels selected by human judgement"
     );
     expect(prompt).toContain("Selling mechanism:\ndesire");
     expect(prompt).toContain(
@@ -2211,7 +2215,7 @@ describe("handleArtworkGenerationRequest", () => {
       "Business problem and communication objective:\nLaunch a soft summer bouquet offer."
     );
     expect(prompt).toContain(
-      "Treat supplied logos, packaging, products, UI, badges, and other official"
+      "Treat official assets as evidence"
     );
     expect(prompt).toContain(
       "### Mandatory on-artwork copy"
@@ -2266,7 +2270,7 @@ describe("handleArtworkGenerationRequest", () => {
       "Use this image only for its stated style-reference role"
     );
     expect(prompt).toContain(
-      "When combining supplied assets with generated scenery, match perspective"
+      "focus, texture, and grain"
     );
     expect(prompt).toContain('"brandLibrary"');
     expect(prompt).toContain('"guidelines"');
@@ -2578,10 +2582,10 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(generationCalls).toHaveLength(1);
     const prompt = generationCalls[0]!;
-    expect(prompt).toContain("# GPT IMAGE 2 — DIRECT FINAL ARTWORK V1");
+    expect(prompt).toContain("# GPT IMAGE 2 — DIRECT FINAL ARTWORK V2.0");
     const ideaText = prompt
-      .split("## APPROVED IDEA JSON\n\n")[1]
-      ?.split("\n\nThe JSON above")[0];
+      .split("## 2. APPROVED IDEA\n\n")[1]
+      ?.split("\n\nTreat this JSON")[0];
     expect(ideaText).toBeTruthy();
     const idea = JSON.parse(ideaText!) as Record<string, unknown>;
     expect(Object.keys(idea)).toEqual([
@@ -2615,7 +2619,7 @@ describe("handleArtworkGenerationRequest", () => {
     ).toBe(false);
   });
 
-  it("uses the locked truth packet and concept director before sending Design System (New) directly to GPT Image 2", async () => {
+  it("runs the set director, archived 01/02 prompts, V6.2, and visual QC for Design System (New)", async () => {
     const responseInputs: string[] = [];
     const generationCalls: string[] = [];
     const fetchMock = vi.fn(
@@ -2635,11 +2639,14 @@ describe("handleArtworkGenerationRequest", () => {
             (item) => item.type === "input_text"
           )?.text ?? "";
           responseInputs.push(inputText);
-          if (inputText.includes("# CAMPAIGN TRUTH NORMALIZER")) {
-            return campaignPacketResponse();
+          if (inputText.includes("# CREATIVE SET DIRECTOR")) {
+            return creativeSetDirectionResponse();
           }
           if (inputText.includes("# CREATIVE CONCEPT DIRECTOR")) {
             return creativeVisualConceptResponse();
+          }
+          if (inputText.includes("# VISUAL QUALITY CONTROL")) {
+            return visualQualityPassResponse();
           }
           return strategyAgentResponse();
         }
@@ -2681,37 +2688,127 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(responseInputs).toHaveLength(3);
-    expect(responseInputs[1]).toContain("# CAMPAIGN TRUTH NORMALIZER");
+    expect(responseInputs).toHaveLength(4);
+    expect(responseInputs[0]).toContain("# CREATIVE SET DIRECTOR");
+    expect(responseInputs[0]).toContain("LOCKED CAMPAIGN INPUT");
+    expect(responseInputs[1]).toContain(
+      "CREATIVE COMPASS — STRATEGY ENRICHMENT AGENT V2"
+    );
     expect(responseInputs[2]).toContain("# CREATIVE CONCEPT DIRECTOR");
-    expect(responseInputs[2]).toContain(
-      "LOCKED AUTHORITATIVE CAMPAIGN PACKET"
+    expect(responseInputs[2]).toContain("AUTHORITATIVE RUNTIME INPUT");
+    expect(responseInputs[2]).toContain("campaignSetDirection");
+    expect(responseInputs[2]).toContain("shotOpportunity");
+    expect(responseInputs[3]).toContain("# VISUAL QUALITY CONTROL");
+    expect(responseInputs.join("\n")).not.toContain(
+      "# CAMPAIGN TRUTH NORMALIZER"
     );
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain(
-      "# FINAL ART DIRECTOR"
+      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
     );
+    expect(generationCalls[0]).toContain(
+      "### Campaign set direction"
+    );
+    expect(generationCalls[0]).toContain(
+      "A quiet botanical campaign world"
+    );
+    expect(generationCalls[0]).toContain(
+      "### Per-idea shot opportunity"
+    );
+    expect(generationCalls[0]).toContain("### Creative provocation");
     expect(generationCalls[0]).not.toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.1"
+      "LOCKED AUTHORITATIVE CAMPAIGN PACKET"
     );
-    expect(generationCalls[0]).toContain(
-      "### LOCKED AUTHORITATIVE CAMPAIGN PACKET"
+  });
+
+  it("applies at most one targeted GPT Image 2 edit when visual QC requests revision", async () => {
+    let visualQcCalls = 0;
+    let generationCalls = 0;
+    const editCalls: FormData[] = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          const body = JSON.parse(String(init?.body)) as {
+            input?: { content?: { type?: string; text?: string }[] }[];
+          };
+          const inputText = body.input?.[0]?.content?.find(
+            (item) => item.type === "input_text"
+          )?.text ?? "";
+          if (inputText.includes("# CREATIVE SET DIRECTOR")) {
+            return creativeSetDirectionResponse();
+          }
+          if (inputText.includes("# CREATIVE CONCEPT DIRECTOR")) {
+            return creativeVisualConceptResponse();
+          }
+          if (inputText.includes("# VISUAL QUALITY CONTROL")) {
+            visualQcCalls += 1;
+            return visualQualityReviseResponse();
+          }
+          return strategyAgentResponse();
+        }
+        if (href.includes("/v1/images/generations")) {
+          generationCalls += 1;
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  b64_json: Buffer.from("initial-image").toString("base64")
+                }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/images/edits")) {
+          editCalls.push(init?.body as FormData);
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  b64_json: Buffer.from("revised-image").toString("base64")
+                }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
     );
-    expect(generationCalls[0]).toContain(
-      '"executionMode": "lifestyle-commercial"'
-    );
-    expect(generationCalls[0]).toContain("### CREATIVE CONCEPT");
-    expect(generationCalls[0]).toContain(
-      "Low information-density rules:"
-    );
-    expect(generationCalls[0]).toContain(
-      "Do not add feature grids, icon rows, compatibility lists"
-    );
-    expect(generationCalls[0]).toContain(
-      "verifiedFacts authorize accurate content but remain off-art by default"
-    );
-    expect(generationCalls[0]).not.toContain(
-      "# GPT IMAGE 2 PRODUCTION BRIEF DIRECTOR"
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system-new"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(generationCalls).toBe(1);
+    expect(visualQcCalls).toBe(1);
+    expect(editCalls).toHaveLength(1);
+    expect(editCalls[0]?.getAll("image[]")).toHaveLength(1);
+    expect(String(editCalls[0]?.get("prompt"))).toContain(
+      "Open the lower quiet zone and correct the product contact shadow"
     );
   });
 });

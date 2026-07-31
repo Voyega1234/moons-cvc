@@ -1161,6 +1161,75 @@ describe("redesigned workflow stages", () => {
     );
   });
 
+  it("syncs all persisted products back into the active workflow brand", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const brandRepository = new MockBrandRepository();
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand!.id;
+    const savedProducts = await Promise.all(
+      [
+        "Urban + Aroma Oil",
+        "Aroma Oil",
+        "Urban",
+        "Classic",
+        "Gift Set",
+        "Home Fragrance",
+        "Body Oil"
+      ].map((name) =>
+        memoryRepository.createProduct({
+          clientId,
+          name,
+          description: `${name} product truth`,
+          offer: "",
+          keyBenefit: "",
+          audience: "",
+          claimNotes: ""
+        })
+      )
+    );
+    const dispatch = vi.fn();
+
+    const view = render(
+      <BrandProvider
+        repository={brandRepository}
+        mappingRepository={{ list: async () => [] }}
+      >
+        <ClientIntakeProvider
+          repository={new MockClientIntakeRepository(brandRepository)}
+        >
+          <BrandMemoryProvider repository={memoryRepository}>
+            <StartStage
+              state={{ ...state, stage: "start" }}
+              dispatch={dispatch}
+            />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Manage library" }));
+    const dialog = within(
+      stage.getByRole("dialog", { name: "Manage brand materials" })
+    );
+    await user.click(
+      dialog.getByText("Products", { selector: "b" }).closest("button")!
+    );
+
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "sync-brand-products",
+        items: savedProducts.map((product) => ({
+          id: product.id,
+          title: product.name,
+          description: product.description
+        }))
+      })
+    );
+    expect(await dialog.findByText("Body Oil")).toBeTruthy();
+  });
+
   it("adds a guideline from the Memory header through file or pasted text", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();

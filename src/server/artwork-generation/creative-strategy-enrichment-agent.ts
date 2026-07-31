@@ -129,6 +129,8 @@ export interface CreativeStrategyEnrichmentInput {
     docs: readonly { title: string; description: string }[];
     refs: readonly { title: string; description: string }[];
   };
+  setDirection?: string;
+  shotOpportunity?: string;
 }
 
 export interface CreativeStrategyEnrichmentTrace {
@@ -363,6 +365,12 @@ function buildInputText(
         service: input.service,
         brief: input.brief,
         approvedDirection: input.hook,
+        ...(input.setDirection
+          ? { campaignSetDirection: input.setDirection }
+          : {}),
+        ...(input.shotOpportunity
+          ? { shotOpportunity: input.shotOpportunity }
+          : {}),
         brandMemory: input.brandMemory,
         brandReferences: input.brandLibrary.refs,
         evidence

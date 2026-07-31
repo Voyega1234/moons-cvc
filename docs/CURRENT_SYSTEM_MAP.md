@@ -130,20 +130,30 @@ Artwork requests are built in
   three-sentence creative provocation is compiled into the V6.2 Judgment prompt
   and sent directly to GPT Image 2. Only the final-art stage changed in V6.2;
   the archived V6 strategy and concept prompts remain active upstream.
-- `design-system-new` separates truth from concept. First,
-  `agent_prompt/agent_campaign_truth_normalizer.md` produces and validates the
-  nested `moons_authoritative_campaign_packet`. Then
-  `agent_prompt/agent_creative_concept_director.md` receives only that locked
-  packet and returns `moons_creative_visual_concept`. The packet and visual
-  concept are compiled into the current
-  `agent_prompt/agent_design_system.md` prompt and sent directly to GPT Image 2.
-- `agent_prompt/agent_design_system.md` remains the active final-art prompt for
-  `design-system-new`; it is not used by the legacy `design-system` mode.
+- `design-system-new` now reuses the proven archived V6 chain and V6.2 final-art
+  prompt instead of the former Campaign Truth Normalizer/current-design-system
+  route. At request start the endpoint deterministically locks the confirmed
+  run input once. A set-level Creative Director then chooses one shared campaign
+  grammar and one distinct shot opportunity per selected idea using
+  `agent_prompt/versions/2026-07-30-design-system-new-flow-v1/prompts/00-set-creative-director.md`.
+  Each idea then runs archived `01-strategy-enrichment.exact.md`, archived
+  `02-creative-concept-director.exact.md`, and V6.2 Judgment before GPT Image 2.
+- After each `design-system-new` image is generated, visual-only QC uses
+  `04-visual-qc.md` from the same flow version. It evaluates visual density,
+  hierarchy, physical credibility, and visible AI artefacts while deliberately
+  ignoring factual, spelling, legal, and copy-accuracy review. A `revise`
+  decision permits exactly one targeted GPT Image 2 edit; a `pass` decision
+  preserves the original image.
+- The old `agent_prompt/agent_campaign_truth_normalizer.md`,
+  `agent_prompt/agent_creative_concept_director.md`, and
+  `agent_prompt/agent_design_system.md` are no longer active in the
+  `design-system-new` artwork endpoint. Their standalone modules remain for
+  other isolated callers and rollback history.
 - `agent_prompt/agent_creative_strategy_enrichment.md`,
   `agent_prompt/agent_creative_graphic_designer.md`, and
   `agent_prompt/agent_creative_concept_director.md` remain available to their
-  other/current pipelines; the archived `01` and `02` prompts are selected only
-  when `artworkMode === "design-system"`.
+  other/current pipelines; the archived `01` and `02` prompts are selected when
+  `artworkMode` is either `design-system` or `design-system-new`.
 - `design-system-new` does not call the Production Brief Director. The
   standalone production-brief helper remains in
   `src/server/artwork-generation/image-prompt-agent.ts` for isolated callers
