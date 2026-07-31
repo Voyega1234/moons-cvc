@@ -187,8 +187,9 @@ export const referenceImageRoleLabels: Record<ReferenceImageRole, string> = {
 export function inferredReferenceImageRole(
   reference: Pick<ReferenceImageSelection, "label" | "role">
 ): ReferenceImageRole {
-  if (reference.role) return reference.role;
   const label = reference.label.trim().toLowerCase();
+  if (/^(?:brand\s+)?logo$|^โลโก้(?:แบรนด์)?$/.test(label)) return "logo";
+  if (reference.role) return reference.role;
   if (/logo|โลโก้/.test(label)) return "logo";
   if (/product|packshot|สินค้า/.test(label)) return "product";
   if (/guideline|document|copy|text|brief|คู่มือ|ข้อความ/.test(label)) {
