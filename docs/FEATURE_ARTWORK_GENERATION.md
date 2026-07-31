@@ -19,16 +19,19 @@ endpoint (which keeps `OPENAI_API_KEY` server-side) or an n8n webhook.
 The Hook stage has a separate creative-mode selector. This does not replace or
 reconfigure the OpenAI/n8n provider choice above:
 
-1. `standard` — default; uses `agent_prompt/agent_image.md` as the image-agent
-   instruction and appends the run's compact campaign input.
-   For `album-post`, Standard mode generates one 2048×2048 master artboard with
-   a fixed landscape-first 2×2 composition: panel 1 spans the top row, while
-   panels 2 and 3 occupy the bottom-left and bottom-right squares. The three
-   format beats map to cover/hook, mechanism/proof, and offer/CTA. Essential
-   content stays inside each crop; only non-essential background flow may cross
-   seams. The backend stores the master for debugging, then deterministically
-   returns one 1920×960 image and two 960×960 images. Other modes and Standard
-   non-album services retain their existing generation path.
+1. `standard` — default; combines the complete
+   `agent_prompt/agent_image.md` with the run's compact campaign input in
+   process, then sends that prompt directly to GPT Image 2. It does not call
+   the OpenAI Responses API, OpenRouter, or an intermediary prompt-writing
+   model.
+   For `album-post`, Standard mode generates one 2048×2048 master artboard
+   using the resolved three-vertical, three-horizontal, four-vertical, or
+   four-grid layout. Campaign beats map across the cover, support/proof, and
+   closing offer/CTA areas. Essential content stays inside each crop; only
+   non-essential background flow may cross seams. The backend stores the
+   master for debugging, detects its separators, and crops it into three or
+   four standalone output files. Other modes and Standard non-album services
+   retain their existing generation path.
 2. `design-system` — loads
    `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and applies
    its brief diagnosis, reference forensics, internal execution-route
@@ -241,11 +244,10 @@ Backend flow (as implemented in
 `src/server/artwork-generation/artwork-generation-endpoint.ts`):
 
 1. Receive selected hooks and brief from the frontend.
-2. For each selected hook, call the image prompt agent
-   (`src/server/artwork-generation/image-prompt-agent.ts`) to write a real
-   production-ready image prompt using the run's selected `artworkMode` — see
-   "Image prompt agent" below. If that call fails, stop the artwork request and
-   return the provider error; do not silently substitute another prompt.
+2. For each selected hook, resolve the prompt route for the selected
+   `artworkMode`. Standard assembles `agent_image.md` plus Compact Campaign
+   Input locally without a model call. Modes with an upstream creative or
+   prompt agent call that model and fail closed if the required call fails.
 3. Call OpenAI `gpt-image-2` — `generateImage()` (text-only) or `editImage()`
    (when `referenceImages` is non-empty, via `/v1/images/edits` multipart
    form) in `src/server/artwork-generation/openai-images-client.ts`, using
@@ -315,7 +317,7 @@ two, preserving the selected-hook order in the response. A full-quantity batch
 serial image calls, materially reducing timeout risk without issuing six costly
 image requests at once.
 
-## Image prompt agent
+## Prompt assembly and image prompt agents
 
 Status: implemented 2026-07-10 and corrected 2026-07-14. Previously
 `buildImagePrompt()` was pure deterministic string concatenation of the
@@ -323,23 +325,28 @@ hook/concept/visual/caption/brief fields — no model call and no real art
 direction. That fallback has been removed so a prompt-agent failure cannot
 quietly generate artwork from the wrong instructions.
 
-`resolveImagePrompt()` in `artwork-generation-endpoint.ts` calls
-`generateImagePrompt()` (`image-prompt-agent.ts`) once per selected hook,
-before image generation. The agent's returned prompt is what actually gets
-sent to `gpt-image-2`, not the old deterministic template.
+`resolveImagePrompt()` in `artwork-generation-endpoint.ts` selects the route
+once per hook. Standard calls `buildStandardImagePrompt()` to assemble the
+source Markdown and runtime JSON locally. Modes that require an intermediary
+call `generateImagePrompt()` or their mode-specific upstream agents.
 
 The three modes intentionally use different input strategies:
 
 - `standard` loads the complete `agent_prompt/agent_image.md` as the
-  authoritative image-agent instruction. It then appends one
+  authoritative GPT Image 2 instruction. It then appends one
   `AUTHORITATIVE COMPACT CAMPAIGN INPUT` JSON object assembled in
-  `image-prompt-agent.ts`. That runtime object includes only brand
-  name/category/personality/colors/avoid rules, objective, Angle, exact
-  on-image copy, hero visual, compact reference roles, and output density. It
-  does not append the full campaign Brief, Caption, product library, or
-  repeated runtime blocks. Regeneration adds one optional
-  `revisionInstructions` array only when the user entered instructions. The
-  required response field is `finalPrompt`.
+  `image-prompt-agent.ts`. That runtime object includes brand
+  name/category/colors, objective, Angle headline/concept/supporting
+  details/format beats/CTA, compact reference roles, and output service/ratio.
+  It does not append `workingBrief`, brand personality, Caption, visual
+  direction, product library, or repeated runtime blocks. An optional
+  `revisionInstructions` array carries the user-supplied Artwork brief and any
+  regeneration correction, and is omitted when neither exists. This complete
+  string is passed as the `prompt` field of the GPT Image 2 request; there is
+  no `finalPrompt` response envelope and no Responses API call. Standard
+  references and uploaded materials are attached only to GPT Image 2.
+  Standard does not add separate `REFERENCE-INFORMED DESIGN` or
+  `CONCEPT ALIGNMENT` instruction wrappers.
 - `design-system` reads
   `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and retains
   its `prompt` response field.
@@ -354,20 +361,20 @@ The three modes intentionally use different input strategies:
   actionable GPT Luna strategy fields are forwarded, not its catalog-search
   rationale or the source Brand Analysis blob.
 
-All three prompt Markdown files are bundled into the Vercel function. Artwork
+The prompt Markdown files are bundled into the Vercel function. Artwork
 source image files are not bundled; they are loaded from Supabase Storage.
 Standard-mode reference files are still attached as image inputs, while their
 text metadata is reduced to `{ id, role, fidelity }`. The design-system mode
 retains its full authoritative runtime block and keeps the approved Hook fixed
 while evaluating distinct visual executions internally.
 
-If the prompt-agent call fails or times out, the endpoint fails closed before
-calling `gpt-image-2`. A sanitized provider response detail is recorded in the
-debug trace and returned as the request error. There is no deterministic or
-hidden fallback prompt.
+For modes that use a prompt-agent call, a failure or timeout makes the endpoint
+fail closed before calling `gpt-image-2`. A sanitized provider response detail
+is recorded in the debug trace and returned as the request error. Standard has
+no prompt-agent call to fail or fall back from.
 
-The user chooses the image prompt writer in Angles, and the choice persists on
-the creative run:
+For modes that use an image prompt writer, the user chooses its model in the
+artwork confirmation step and the choice persists on the creative run:
 
 - `gpt-5.6-terra` is the default and calls the OpenAI Responses API using
   `OPENAI_API_KEY`. `OPENAI_IMAGE_PROMPT_MODEL` can override the deployed
@@ -377,9 +384,11 @@ the creative run:
   the deployed OpenRouter model while the UI remains the fixed Claude Sonnet
   4.6 choice.
 
-This selection changes only the model that writes the production prompt. Final
-artwork still uses OpenAI `gpt-image-2`. Older saved workspaces and older API
-requests without `imagePromptModel` default to `gpt-5.6-terra`.
+This selection changes only the model that writes the production prompt for
+the modes that use it. Standard hides the selector and ignores the persisted
+`imagePromptModel`; final artwork goes directly to OpenAI `gpt-image-2`. Older
+saved workspaces and older API requests without `imagePromptModel` still
+default to `gpt-5.6-terra` for compatibility.
 
 Reference Library strategy enrichment always uses OpenAI `gpt-5.6-luna` through
 the existing `OPENAI_API_KEY`. `OPENAI_CREATIVE_STRATEGY_MODEL` can override the

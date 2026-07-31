@@ -47,6 +47,63 @@ function productInitials(title: string): string {
     .toUpperCase();
 }
 
+export function ConfirmationReferenceGrid({
+  references,
+  selectedReferences,
+  onToggle
+}: {
+  references: readonly ReferenceImageSelection[];
+  selectedReferences: readonly ReferenceImageSelection[];
+  onToggle: (reference: ReferenceImageSelection) => void;
+}) {
+  const availableImageReferences = references.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
+  const selectedReferenceIds = new Set(
+    selectedReferences
+      .filter((reference) => inferredReferenceImageRole(reference) !== "logo")
+      .map((reference) => reference.id)
+  );
+
+  if (!availableImageReferences.length) {
+    return (
+      <div className="confirm-empty">
+        <b>No image references</b>
+        <p>
+          Add or select references to guide style and composition. References
+          are not treated as source objects.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="confirm-reference-grid">
+      {availableImageReferences.map((reference) => {
+        const selected = selectedReferenceIds.has(reference.id);
+        return (
+          <button
+            className={`confirm-reference ${selected ? "" : "excluded"}`}
+            type="button"
+            aria-pressed={selected}
+            key={reference.id}
+            onClick={() => onToggle(reference)}
+          >
+            <span className="confirm-reference-preview">
+              <img src={reference.url} alt="" />
+            </span>
+            <b>{reference.label}</b>
+            <small>{selected ? "Selected" : "Not used"}</small>
+            <i className="confirm-reference-check">
+              {selected ? "✓" : "−"}
+            </i>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function BriefConfirmationModal({
   open,
   state,
@@ -80,14 +137,8 @@ export function BriefConfirmationModal({
   const imageReferences = state.referenceImages.filter(
     (reference) => inferredReferenceImageRole(reference) !== "logo"
   );
-  const availableImageReferences = references.filter(
-    (reference) => inferredReferenceImageRole(reference) !== "logo"
-  );
   const selectedProductIds = new Set(
     selectedProducts.map((product) => product.id)
-  );
-  const selectedReferenceIds = new Set(
-    imageReferences.map((reference) => reference.id)
   );
   const selectedMaterials = selectedUploadedMaterials(state);
   const activeMix = creativeMixItems(state).filter(
@@ -293,6 +344,15 @@ export function BriefConfirmationModal({
                     Hook JSON → GPT Image 2
                   </span>
                 </div>
+              ) : state.artworkMode === "standard" ? (
+                <div className="confirm-generation-setting">
+                  <span className="confirm-generation-label">
+                    Generation route
+                  </span>
+                  <span className="confirm-generation-direct-route">
+                    agent_image.md + Campaign input → GPT Image 2
+                  </span>
+                </div>
               ) : (
                 <label className="confirm-generation-setting">
                   <span className="confirm-generation-label">
@@ -433,45 +493,17 @@ export function BriefConfirmationModal({
                 {uploadError}
               </p>
             ) : null}
-            {assetView === "reference" && availableImageReferences.length ? (
-              <div className="confirm-reference-grid">
-                {availableImageReferences.map((reference) => {
-                  const selected = selectedReferenceIds.has(reference.id);
-                  return (
-                    <button
-                      className={`confirm-reference ${
-                        selected ? "" : "excluded"
-                      }`}
-                      type="button"
-                      aria-pressed={selected}
-                      key={reference.id}
-                      onClick={() =>
-                        dispatch({
-                          type: "toggle-reference-image",
-                          item: reference
-                        })
-                      }
-                    >
-                      <span className="confirm-reference-preview">
-                        <img src={reference.url} alt="" />
-                      </span>
-                      <b>{reference.label}</b>
-                      <small>{selected ? "Selected" : "Not used"}</small>
-                      <i className="confirm-reference-check">
-                        {selected ? "✓" : "−"}
-                      </i>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : assetView === "reference" ? (
-              <div className="confirm-empty">
-                <b>No image references</b>
-                <p>
-                  Upload files or browse the library and Google Drive. References
-                  should guide style or composition—not become source objects.
-                </p>
-              </div>
+            {assetView === "reference" ? (
+              <ConfirmationReferenceGrid
+                references={references}
+                selectedReferences={imageReferences}
+                onToggle={(reference) =>
+                  dispatch({
+                    type: "toggle-reference-image",
+                    item: reference
+                  })
+                }
+              />
             ) : (
               <div className="brief-confirm-material-browser">
                 {materialBrowser}

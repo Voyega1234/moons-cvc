@@ -168,9 +168,10 @@ function buildPrompt(input: IdeaPreflightRequest): string {
     enabled.has("spelling")
       ? [
           "SPELLING — ตรวจ Hook, Subheadline, Caption, CTA และ Format beats:",
-          "- คำสะกดผิด คำซ้ำโดยไม่ตั้งใจ และช่องว่างซ้ำ",
-          "- การเว้นวรรคภาษาไทยผิดตำแหน่ง รวมถึงช่องว่างที่แยกสระหรือวรรณยุกต์ออกจากคำ",
-          "- อักขระหลงเหลือ เช่น จุดหรือ bullet ที่อยู่เดี่ยวเพราะการขึ้นบรรทัดผิด"
+          "- ตรวจเฉพาะคำสะกดผิดจริง คำเพี้ยน อักขระภาษาไทยเสีย หรือคำซ้ำโดยไม่ตั้งใจ",
+          "- ตรวจการเว้นวรรคภาษาไทยผิดตำแหน่งเฉพาะเมื่อทำให้คำผิดหรือความหมายเปลี่ยน",
+          "- ห้ามรายงานเรื่องเครื่องหมายวรรคตอน จุด bullet ช่องว่าง การขึ้นบรรทัด การแบ่งย่อหน้า หรือรูปแบบการจัดข้อความ",
+          "- จุดหรือ bullet ที่อยู่เดี่ยวจากการขึ้นบรรทัดถือเป็น formatting และต้องเพิกเฉย"
         ].join("\n")
       : "SPELLING — disabled; ห้ามคืน finding ประเภท spelling",
     "",
@@ -280,33 +281,37 @@ function parseResults(
       throw new Error(`results[${index}].findings must be an array.`);
     }
 
+    const findings = result.findings.map((itemFinding, findingIndex) => {
+      const finding = readRecord(
+        itemFinding,
+        `results[${index}].findings[${findingIndex}]`
+      );
+      const check = readString(
+        finding.check,
+        `results[${index}].findings[${findingIndex}].check`
+      );
+      if (
+        !CHECK_IDS.has(check as CheckId) ||
+        !enabledChecks.has(check as CheckId)
+      ) {
+        throw new Error(
+          `results[${index}].findings[${findingIndex}].check is invalid.`
+        );
+      }
+      return {
+        check: check as CheckId,
+        message: readString(
+          finding.message,
+          `results[${index}].findings[${findingIndex}].message`
+        )
+      };
+    });
+
     return {
       directionId,
-      findings: result.findings.map((itemFinding, findingIndex) => {
-        const finding = readRecord(
-          itemFinding,
-          `results[${index}].findings[${findingIndex}]`
-        );
-        const check = readString(
-          finding.check,
-          `results[${index}].findings[${findingIndex}].check`
-        );
-        if (
-          !CHECK_IDS.has(check as CheckId) ||
-          !enabledChecks.has(check as CheckId)
-        ) {
-          throw new Error(
-            `results[${index}].findings[${findingIndex}].check is invalid.`
-          );
-        }
-        return {
-          check: check as CheckId,
-          message: readString(
-            finding.message,
-            `results[${index}].findings[${findingIndex}].message`
-          )
-        };
-      })
+      findings: findings.filter(
+        (finding) => !isFormattingOnlyFinding(finding)
+      )
     };
   });
 
@@ -314,6 +319,17 @@ function parseResults(
     throw new Error("GPT Luna did not return every requested idea.");
   }
   return results;
+}
+
+function isFormattingOnlyFinding(finding: {
+  check: CheckId;
+  message: string;
+}): boolean {
+  if (finding.check !== "spelling") return false;
+
+  return /(?:เครื่องหมายวรรคตอน|จุด\s*[“"'.]?\.|bullet|บูลเล็ต|อักขระหลงเหลือ|ขึ้นบรรทัด|เว้นบรรทัด|แบ่งย่อหน้า|ย่อหน้า|line[\s-]?break|new[\s-]?line|punctuation|formatting)/iu.test(
+    finding.message
+  );
 }
 
 function parseRequestBody(value: unknown): IdeaPreflightRequest {

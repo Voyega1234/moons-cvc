@@ -177,8 +177,8 @@
 }
 
 .preflight-asset.on {
-  border-color: var(--confirm-selected-line);
-  background: var(--confirm-selected-soft);
+  border-color: #dfe3ec;
+  background: #fff;
 }
 
 .preflight-asset-art {
@@ -562,8 +562,12 @@
 }
 
 .preflight-check.on {
-  border-color: var(--confirm-selected-line);
-  background: var(--confirm-selected-soft);
+  border-color: #dfe3ec;
+  background: #fff;
+}
+
+.preflight-reference-manager {
+  margin-top: 11px;
 }
 
 .preflight-check-toggle {

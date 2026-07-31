@@ -26,6 +26,7 @@ import type {
 } from "../../services/artwork-generation/openai-image-generation.js";
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import {
+  buildStandardImagePrompt,
   generateImagePrompt,
   type ImagePromptProvider,
   type ImagePromptAgentTrace
@@ -44,7 +45,6 @@ import {
 import {
   ARTWORK_REFERENCE_BUCKET,
   buildArtworkReferenceLabel,
-  isArtworkPatternReference,
   selectArtworkReferencePatterns
 } from "./artwork-reference-library.js";
 import {
@@ -358,7 +358,10 @@ export async function handleArtworkGenerationRequest({
       promptProvider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
-    if (!promptApiKey && input.artworkMode !== "direct-final-artwork") {
+    const requiresPromptModel =
+      input.artworkMode !== "standard" &&
+      input.artworkMode !== "direct-final-artwork";
+    if (!promptApiKey && requiresPromptModel) {
       return jsonResponse(
         { ok: false, error: "OPENROUTER_API_KEY is required." },
         500
@@ -868,11 +871,7 @@ async function generateOutputForHook({
       ? [prompt]
       : input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
-        : [
-            buildReferenceFidelityInstruction(promptReferences, "standard"),
-            buildConceptAlignmentInstruction(hook),
-            prompt
-          ];
+        : [prompt];
   if (isAlbum) {
     const assetVersion = input.assetVersion ?? 1;
     const masterPrompt = composeImagePrompt(
@@ -1833,83 +1832,6 @@ function compactReferenceRole(label: string | undefined): string {
     return "supplied supporting component";
   }
   return "client reference";
-}
-
-function buildReferenceFidelityInstruction(
-  references: readonly ReferenceImageInput[],
-  mode: ArtworkGenerationRequest["artworkMode"]
-): string | null {
-  if (!references.length) return null;
-
-  const artworkPatternReferences = references.filter(
-    isArtworkPatternReference
-  );
-  const clientReferences = references.filter(
-    (reference) => !isArtworkPatternReference(reference)
-  );
-  const pastWorkStyleReferences = clientReferences.filter((reference) =>
-    reference.label?.toLowerCase().includes("past work style reference")
-  );
-  const selectedStyleReferences = clientReferences.filter((reference) => {
-    const label = reference.label?.toLowerCase() ?? "";
-    return label.includes("· style ·") ||
-      label.includes("style reference") ||
-      label.includes("past work style reference");
-  });
-  const referenceMap = references.map(
-    (reference, index) =>
-      `Image ${index + 1} — ${reference.label ?? "Reference image"}`
-  );
-  const hasUploadedSourceMaterials = clientReferences.some((reference) =>
-    reference.label?.startsWith("Uploaded ")
-  );
-  const hasRevisionBase = clientReferences.some((reference) =>
-    reference.label?.toLowerCase().includes("current artwork to revise")
-  );
-
-  return [
-    "REFERENCE-INFORMED DESIGN — highest priority:",
-    ...referenceMap,
-    ...(clientReferences.length
-      ? [
-          "Use supplied client references as that account's design system. Carry forward their typography hierarchy and line-break rhythm, logo and CTA discipline, composition and whitespace rhythm, color relationships, material quality, and publishable level of finish."
-        ]
-      : []),
-    ...(selectedStyleReferences.length
-      ? [
-          "STYLE FIDELITY IS MANDATORY: the finished artwork must unmistakably belong to the same mood, tone, and visual style family as the primary selected style reference. Match its visual medium and realism level, emotional temperature, palette relationships, contrast, lighting atmosphere, material response, texture, typography rhythm, density, negative-space behavior, layering, compositing depth, graphic-device language, and production richness. Supporting style references may refine only compatible details; never average them into a different generic style. Adapt the subject, hero action, visual metaphor, setting, and composition to the approved idea while keeping the reference's recognizable style system. The result should feel like the same art director created a new campaign execution for this idea, not like the model returned to its default house style."
-        ]
-      : []),
-    ...(pastWorkStyleReferences.length
-      ? [
-          "PAST-WORK VISUAL DNA: The images labeled Past work style reference are approved examples of this brand's own visual language. Inspect the actual images and infer recurring traits: minimal versus dense composition, premium versus playful mood, photographic/CGI/illustrative medium, font genre and perceived luxury, type width and weight, headline scale and line-break rhythm, preferred Thai/English/mixed language behavior, casing, spacing, grid, palette roles, lighting, material treatment, graphic devices, CTA behavior, and finish. Apply the compatible visual DNA to the new idea so it feels designed by the same brand. Exact approved headline and CTA language still win; use the learned language behavior mainly for supporting copy and typographic styling. Do not copy the past work's main visual, people, products, background, props, readable copy, campaign identity, or recognizable layout."
-        ]
-      : []),
-    ...(artworkPatternReferences.length
-      ? [
-          "The image labeled as a Creative Compass artwork reference is the selected primary execution blueprint from the complete 72-artwork catalog and the minimum visible craft standard. Faithfully carry forward its zone geometry, layout engine, hierarchy, visual medium, hero share and crop, lighting logic, density, layering, texture, compositing depth, CTA/logo behavior, and finish. Treat typography conditionally: preserve compatible font genre, width, weight, scale ratios, line-break rhythm, alignment, containers, emphasis, and effects while using a brand-appropriate typeface. Replace the source brand, product, people, readable copy, offer, and campaign identity with the approved runtime content."
-        ]
-      : []),
-    mode !== "standard"
-      ? "The dominant visual medium and compatible construction shown by the selected reference are authoritative. If it is photographic, editorial, collage, cinematic, or typography-led, stay in that same medium family and comparable production richness. A new execution means a faithful content-and-brand adaptation inside that design construction—not an unrelated composition, simplified isometric 3D, toy-like objects, miniature SaaS scene, generic UI cards, or sterile product render."
-      : hasRevisionBase
-        ? "The image labeled Current artwork to revise is the revision base. Preserve its verified product identity, brand identity, approved message, and strongest working elements. Apply the supplied revision instructions precisely to the diagnosed areas, improving composition, hierarchy, retouching, copy, CTA, and finish where requested. Do not repeat diagnosed defects and do not invent unsupported claims, prices, offers, logos, or product details."
-      : hasUploadedSourceMaterials
-        ? "Create a distinctly new execution for this brief, but preserve and visibly use every uploaded source material according to its label. A main object or product must remain recognisable and serve the requested role; a supporting component must be integrated as a real component. For ordinary style references, invent a different composition and never copy their readable text or recognisable layout."
-        : "Create a distinctly new execution for this brief. Invent a different visual metaphor, hero subject, composition, information arrangement, and layout geometry; never reproduce the reference's objects, scene, text placement, visual sequence, or recognisable layout.",
-    "Do not default to translucent UI cards, floating glass objects, generic search screens, phones, or blue glow merely because the category involves AI, SEO, or technology. Use those only when they are truly the strongest new visual metaphor. Use the new brief and supplied copy; do not reproduce readable reference text, logos, or artwork."
-  ].join("\n");
-}
-
-function buildConceptAlignmentInstruction(hook: SelectedHook): string {
-  return [
-    "CONCEPT ALIGNMENT — highest priority:",
-    `Required headline: ${hook.hook}`,
-    `Strategic concept: ${hook.concept}`,
-    `Reason this concept works: ${hook.why}`,
-    `Approved visual direction: ${hook.visual}`,
-    "The hero visual and every meaningful detail must demonstrate this exact concept. Do not substitute a generic adjacent AI, SEO, paid-media, workshop, or growth idea. When a Creative Compass artwork reference is supplied, use it as the execution blueprint while mapping this approved concept into its structural roles. Uploaded source materials must be used for the role stated in their label."
-  ].join("\n");
 }
 
 // async function buildDirectDesignSystemPrompt({
@@ -3259,6 +3181,42 @@ async function resolveImagePrompt({
   albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
 }): Promise<string> {
+  const imagePromptInput = {
+    brand: input.brand,
+    service: input.service,
+    albumFormat,
+    brief: input.brief,
+    hook,
+    textInputs: input.textInputs,
+    referenceImageLabels: references.map(
+      (reference) => reference.label ?? "Reference image"
+    ),
+    referenceImages: references.map((reference, index) => ({
+      imageUrl:
+        artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
+        `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+      label:
+        reference.label ??
+        input.referenceImages[index]?.label ??
+        "Reference image"
+    })),
+    canvasRatio,
+    strategy,
+    setDirection,
+    shotOpportunity,
+    brandLibrary: {
+      brand: input.brandLibrary.brand,
+      products: input.brandLibrary.products,
+      docs: input.brandLibrary.docs,
+      refs: input.brandLibrary.refs
+    },
+    selectedProductIds: input.selectedProductIds
+  };
+
+  if (input.artworkMode === "standard") {
+    return buildStandardImagePrompt(imagePromptInput);
+  }
+
   return generateImagePrompt({
     apiKey: promptApiKey,
     model: promptModel,
@@ -3276,37 +3234,7 @@ async function resolveImagePrompt({
         )
       );
     },
-    input: {
-      brand: input.brand,
-      service: input.service,
-      albumFormat,
-      brief: input.brief,
-      hook,
-      textInputs: input.textInputs,
-      referenceImageLabels: references.map(
-        (reference) => reference.label ?? "Reference image"
-      ),
-      referenceImages: references.map((reference, index) => ({
-        imageUrl:
-          artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
-          `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
-        label:
-          reference.label ??
-          input.referenceImages[index]?.label ??
-          "Reference image"
-      })),
-      canvasRatio,
-      strategy,
-      setDirection,
-      shotOpportunity,
-      brandLibrary: {
-        brand: input.brandLibrary.brand,
-        products: input.brandLibrary.products,
-        docs: input.brandLibrary.docs,
-        refs: input.brandLibrary.refs
-      },
-      selectedProductIds: input.selectedProductIds
-    }
+    input: imagePromptInput
   });
 }
 
