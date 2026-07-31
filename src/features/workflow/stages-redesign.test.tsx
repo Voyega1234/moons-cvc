@@ -2038,18 +2038,20 @@ describe("redesigned workflow stages", () => {
     ).toEqual([]);
   });
 
-  it("selects an available brand logo as the default artwork reference", async () => {
-    const state = buildCreativeState();
+  it("removes a legacy brand logo from artwork references", async () => {
+    const state = {
+      ...buildCreativeState(),
+      referenceImages: [
+        {
+          id: "library-logo-1",
+          url: "https://example.com/logo.png",
+          label: "Logo",
+          role: "logo" as const
+        }
+      ]
+    };
     const dispatch = vi.fn();
     const memoryRepository = new MockBrandMemoryRepository();
-    vi.spyOn(memoryRepository, "listBrandRules").mockResolvedValue([
-      {
-        id: "logo-1",
-        title: "Logo",
-        description: "Primary logo",
-        assetUrl: "https://example.com/logo.png"
-      }
-    ]);
 
     render(
       <BrandMemoryProvider repository={memoryRepository}>
@@ -2060,11 +2062,7 @@ describe("redesigned workflow stages", () => {
     await waitFor(() =>
       expect(dispatch).toHaveBeenCalledWith({
         type: "sync-brand-logo-reference",
-        item: {
-          id: "library-logo-1",
-          url: "https://example.com/logo.png",
-          label: "Logo"
-        }
+        item: null
       })
     );
   });

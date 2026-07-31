@@ -362,7 +362,7 @@ describe("buildArtworkGenerationRequest", () => {
     );
   });
 
-  it("keeps the latest selected logo instead of the stale brand snapshot logo", () => {
+  it("attaches the Brand CI logo as an identity asset instead of a style reference", () => {
     const request = buildArtworkGenerationRequest({
       run: {
         ...run,
@@ -385,7 +385,7 @@ describe("buildArtworkGenerationRequest", () => {
         {
           kind: "url",
           url: "https://example.com/user-uploaded-color-logo.png",
-          label: "Logo"
+          label: "Supporting reference · Logo · Old selected logo"
         },
         {
           kind: "url",
@@ -398,8 +398,9 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.referenceImages).toEqual([
       {
         kind: "url",
-        url: "https://example.com/user-uploaded-color-logo.png",
-        label: "Logo"
+        url: "https://example.com/extracted-black-white-logo.png",
+        label:
+          "Logo reference · Official Brand CI identity asset only — preserve its identity exactly; do not use it as a style, palette, composition, lighting, density, or visual-treatment reference"
       },
       {
         kind: "url",
@@ -738,7 +739,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(output.model).toBe("gpt-image-2");
   });
 
-  it("adds the logo and selected reference URLs to the n8n request", () => {
+  it("keeps the official Brand CI logo separate from selected reference URLs in the n8n request", () => {
     const brandedRun: WorkflowState = {
       ...run,
       brand: {
@@ -778,7 +779,7 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(n8nRequest.logoUrl).toBe(
-      "https://assets.example.com/latest-uploaded-logo.png"
+      "https://assets.example.com/old-logo.png"
     );
     expect(n8nRequest.referenceImageUrls).toEqual([
       {

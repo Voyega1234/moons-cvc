@@ -4,6 +4,7 @@ import {
   artworkReferencesFromSelections,
   generateArtworkForSelectedHooks
 } from "../../services/artwork-generation/openai-image-generation";
+import { inferredReferenceImageRole } from "../../domain/creative-run";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import {
@@ -45,7 +46,11 @@ function applyArtworkContextSelection(
     ...run,
     brand,
     artworkBrief: selection.artworkBrief ? run.artworkBrief : "",
-    referenceImages: selection.imageReferences ? run.referenceImages : [],
+    referenceImages: selection.imageReferences
+      ? run.referenceImages.filter(
+          (reference) => inferredReferenceImageRole(reference) !== "logo"
+        )
+      : [],
     uploadedMaterials: selection.imageMaterials ? run.uploadedMaterials : []
   };
 }

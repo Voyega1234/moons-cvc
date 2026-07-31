@@ -427,7 +427,10 @@ export function buildArtworkRegenerationRequest({
             }
           ]
         : []),
-      ...artworkReferencesFromSelections(run.referenceImages),
+      ...brandLogoReferences(run),
+      ...withoutLogoReferences(
+        artworkReferencesFromSelections(run.referenceImages)
+      ),
       ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
@@ -604,7 +607,8 @@ function buildArtworkRequest({
     selectedHooks,
     textInputs: mandatoryArtworkInstructions(run.artworkBrief, textInputs),
     referenceImages: [
-      ...referenceImages,
+      ...brandLogoReferences(run),
+      ...withoutLogoReferences(referenceImages),
       ...brandGuidelineReferences(run),
       ...creativeMaterialReferences(run)
     ],
@@ -672,6 +676,35 @@ function brandGuidelineReferences(
       label:
         "Brand CI / Guideline source — follow its identity, typography, color, spacing, imagery, and logo rules; do not copy sample campaign content"
     }));
+}
+
+function brandLogoReferences(
+  run: WorkflowState
+): readonly ArtworkReferenceImage[] {
+  const logo = (run.brand?.library.brand ?? []).find(
+    (item) =>
+      item.assetUrl &&
+      normalizeBrandRuleTitle(item.title) === "logo" &&
+      isSupportedImageUrl(item.assetUrl)
+  );
+  if (!logo?.assetUrl) return [];
+
+  return [
+    {
+      kind: "url" as const,
+      url: logo.assetUrl,
+      label:
+        "Logo reference · Official Brand CI identity asset only — preserve its identity exactly; do not use it as a style, palette, composition, lighting, density, or visual-treatment reference"
+    }
+  ];
+}
+
+function withoutLogoReferences(
+  references: readonly ArtworkReferenceImage[]
+): readonly ArtworkReferenceImage[] {
+  return references.filter(
+    (reference) => !/\blogo\b|โลโก้/i.test(reference.label ?? "")
+  );
 }
 
 function normalizeBrandRuleTitle(value: string): string {
