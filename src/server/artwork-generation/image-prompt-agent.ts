@@ -120,7 +120,7 @@ export async function generateImagePrompt({
           await loadReferenceLibraryPrompt(),
           input
         )
-      : renderStandardPrompt(await loadAgentImagePrompt(), input);
+      : await buildStandardImagePrompt(input, loadAgentImagePrompt);
 
   try {
     const response = await fetchImpl(endpoint, {
@@ -200,6 +200,13 @@ export async function generateImagePrompt({
     });
     throw error;
   }
+}
+
+export async function buildStandardImagePrompt(
+  input: ImagePromptAgentInput,
+  loadAgentImagePrompt: () => Promise<string> = defaultLoadAgentImagePrompt
+): Promise<string> {
+  return renderStandardPrompt(await loadAgentImagePrompt(), input);
 }
 
 export async function generateProductionBrief({
@@ -552,18 +559,25 @@ function renderStandardPrompt(
   source: string,
   input: ImagePromptAgentInput
 ): string {
+  const classifiedReferences = input.referenceImages.map((image, index) =>
+    buildCompactReference(image.label, index)
+  );
+  const explicitlyPrimaryStyleIndex = classifiedReferences.findIndex(
+    (reference) => reference.role === "primary-style"
+  );
+  const primaryStyleIndex =
+    explicitlyPrimaryStyleIndex >= 0
+      ? explicitlyPrimaryStyleIndex
+      : classifiedReferences.findIndex((reference) =>
+          isStandardStyleReferenceRole(reference.role)
+        );
   const compactInput = {
-    workingBrief: {
-      priority: "highest",
-      instruction: input.brief || "Not provided."
-    },
     brand: {
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
-      personality: input.brand?.personality ?? [],
       colors: input.brand?.colors ?? []
     },
-    objective: input.hook.why || input.brief,
+    objective: input.hook.why || input.hook.concept,
     angle: {
       headline: input.hook.hook,
       concept: input.hook.concept,
@@ -575,8 +589,24 @@ function renderStandardPrompt(
         : {}),
       cta: input.hook.cta
     },
-    references: input.referenceImages.map((image, index) =>
-      buildCompactReference(image.label, index)
+    ...(classifiedReferences.length
+      ? {
+          referencePolicy: {
+            mapping:
+              "Image numbers below match the attached image[] order exactly.",
+            visualPriority:
+              "The primary style-and-composition reference is the highest-priority visual authority. It controls composition, camera angle, framing, lighting, color palette, background, spatial depth, typography character, and overall mood.",
+            productIsolation:
+              "Product materials control only the visible identity of the product itself. Preserve the product exactly, but never inherit camera angle, crop, composition, placement, lighting setup, background, surface, props, or scene from a product material."
+          }
+        }
+      : {}),
+    references: classifiedReferences.map((reference, index) =>
+      buildStandardReference(
+        reference,
+        index,
+        index === primaryStyleIndex
+      )
     ),
     output: {
       service: compactServiceName(input.service),
@@ -595,12 +625,63 @@ function renderStandardPrompt(
   return [
     source.trim(),
     "",
-    "WORKING BRIEF PRIORITY",
-    "The runtime workingBrief is the highest-priority creative instruction. Follow its explicit requirements for visual cleanliness, text density, element count, composition, mood, and exclusions even when references, defaults, or optional completion rules suggest otherwise. Preserve only immutable approved copy and official asset fidelity when resolving a conflict.",
-    "",
     "AUTHORITATIVE COMPACT CAMPAIGN INPUT",
     JSON.stringify(compactInput, null, 2)
   ].join("\n");
+}
+
+function isStandardStyleReferenceRole(role: string): boolean {
+  return [
+    "primary-style",
+    "style",
+    "brand-visual-dna",
+    "brand-system",
+    "layout",
+    "primary-reference",
+    "reference"
+  ].includes(role);
+}
+
+function buildStandardReference(
+  reference: ReturnType<typeof buildCompactReference>,
+  index: number,
+  primaryStyle: boolean
+) {
+  const base = {
+    image: index + 1,
+    id: reference.id
+  };
+
+  if (primaryStyle) {
+    return {
+      ...base,
+      role: "primary-style-and-composition-reference",
+      use:
+        "Use this image as the main visual blueprint for the entire artwork, including its composition, camera angle, framing, lighting, color palette, background, spatial depth, typography character, and mood. Adapt that complete visual language to the campaign and products."
+    };
+  }
+
+  if (
+    reference.role === "primary-product" ||
+    reference.role === "product" ||
+    reference.role === "source-object"
+  ) {
+    return {
+      ...base,
+      role: "product-identity-only",
+      use:
+        "Preserve exactly only the product itself: its shape, packaging, label, colors, proportions, materials, and visible identity.",
+      ignore:
+        "Do not use this image as a reference for camera angle, crop, composition, placement, scale in the canvas, lighting setup, background, surface, props, or scene."
+    };
+  }
+
+  return {
+    ...base,
+    role: reference.role,
+    use:
+      "Use only the visual information implied by this role; do not let it override the primary style-and-composition reference."
+  };
 }
 
 function albumSequenceInput(input: ImagePromptAgentInput) {
@@ -609,7 +690,7 @@ function albumSequenceInput(input: ImagePromptAgentInput) {
   const common = {
     format,
     delivery:
-      "separate standalone image files; never a combined master, grid, collage, mosaic, or contact sheet"
+      "one square master artboard using the requested panel layout; the backend will crop it into separate standalone image files"
   };
   if (format === "three-vertical") {
     return {

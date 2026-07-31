@@ -114,6 +114,13 @@ Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
 
+- `standard` is a direct Image API route:
+  `agent_prompt/agent_image.md + Compact Campaign Input → GPT Image 2`.
+  `buildStandardImagePrompt()` assembles the two parts locally; Standard does
+  not call the Responses API or an OpenRouter/OpenAI prompt-writing model.
+  Selected reference images are attached directly to GPT Image 2. Album
+  service adds only the `ALBUM MASTER GRID` instruction before generating and
+  splitting the master artboard.
 - `design-system` uses the V6.2 Judgment final-art prompt at
   `agent_prompt/versions/2026-07-30-design-system-v6.2-judgment/prompts/03-design-system-v6.2-judgment.md`.
   V6.2 removes fixed visual presets and percentage-based composition rules. It

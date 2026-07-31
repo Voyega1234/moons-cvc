@@ -287,6 +287,40 @@ describe("Artwork generation settings", () => {
     expect(screen.getByText("Creative concept model")).toBeTruthy();
   });
 
+  it("shows Standard as a direct GPT Image 2 route without a concept-model control", () => {
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "standard" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={vi.fn()}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText("agent_image.md + Campaign input → GPT Image 2")
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
+  });
+
   it("shows the direct GPT Image 2 route without a concept-model control", () => {
     const state = {
       ...createInitialWorkflowState({

@@ -790,16 +790,6 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
-      if (href.includes("/v1/responses")) {
-        return new Response(
-          JSON.stringify({
-            output_text: JSON.stringify({
-              finalPrompt: "AGENT-WRITTEN PROMPT: soft editorial bouquet."
-            })
-          }),
-          { status: 200 }
-        );
-      }
       if (href.includes("/v1/images/generations")) {
         return new Response(
           JSON.stringify({
@@ -853,29 +843,12 @@ describe("handleArtworkGenerationRequest", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0]?.bucket).toBe("creative-assets");
     expect(uploads[0]?.path).toContain("flora/run-1/outputs/hook-1-v1.png");
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toBe(false);
     expect(debugLogs).toEqual([
-      expect.objectContaining({
-        kind: "image-prompt-agent",
-        model: "gpt-5.6-terra",
-        directionId: "hook-1",
-        mode: "standard",
-        status: "succeeded",
-        request: expect.objectContaining({
-          endpoint: "/v1/responses",
-          store: false,
-          inputText: expect.stringContaining(
-            '"headline": "Flowers that make the room feel softer"'
-          ),
-          referenceImages: [],
-          responseFormat: expect.objectContaining({
-            name: "moons_image_generation_prompt",
-            strict: true
-          })
-        }),
-        response: {
-          prompt: "AGENT-WRITTEN PROMPT: soft editorial bouquet."
-        }
-      }),
       expect.objectContaining({
         model: "gpt-image-2",
         runId: "run-1",
@@ -884,7 +857,9 @@ describe("handleArtworkGenerationRequest", () => {
           endpoint: "/v1/images/generations",
           body: expect.objectContaining({
             model: "gpt-image-2",
-            prompt: expect.stringContaining("Flowers that make the room feel softer"),
+            prompt: expect.stringContaining(
+              "GPT IMAGE 2 — STANDARD DIRECT ART DIRECTOR V1"
+            ),
             size: "1024x1024"
           })
         })
@@ -903,6 +878,12 @@ describe("handleArtworkGenerationRequest", () => {
         })
       })
     ]);
+    expect(JSON.stringify(debugLogs)).toContain(
+      "AUTHORITATIVE COMPACT CAMPAIGN INPUT"
+    );
+    expect(JSON.stringify(debugLogs)).toContain(
+      "Flowers that make the room feel softer"
+    );
     expect(debugAssets).toEqual([
       expect.objectContaining({
         filename: expect.stringMatching(/-output\.png$/),
@@ -924,8 +905,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(JSON.stringify(debugLogs)).not.toContain("Authorization");
   });
 
-  it("uses the requested output size and passes the matching canvas ratio to the prompt agent", async () => {
-    const promptAgentInputs: string[] = [];
+  it("uses the requested output size and passes the matching canvas ratio directly to GPT Image 2", async () => {
     const imageBodies: unknown[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
@@ -934,13 +914,6 @@ describe("handleArtworkGenerationRequest", () => {
           JSON.stringify({ email: "team@convertcake.com" }),
           { status: 200 }
         );
-      }
-      if (href.includes("/v1/responses")) {
-        const body = JSON.parse(String(init?.body)) as {
-          input: Array<{ content: Array<{ type: string; text?: string }> }>;
-        };
-        promptAgentInputs.push(body.input[0]?.content[0]?.text ?? "");
-        return promptAgentResponse("AGENT-WRITTEN PROMPT: landscape artwork.");
       }
       if (href.includes("/v1/images/generations")) {
         imageBodies.push(JSON.parse(String(init?.body)));
@@ -974,8 +947,10 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(promptAgentInputs[0]).toContain('"ratio": "16:9"');
-    expect(imageBodies[0]).toMatchObject({ size: "3840x2160" });
+    expect(imageBodies[0]).toMatchObject({
+      size: "3840x2160",
+      prompt: expect.stringContaining('"ratio": "16:9"')
+    });
   });
 
   it("generates a three-panel master and keeps both the master and adaptive crops", async () => {
@@ -1049,9 +1024,15 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toBe(false);
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER GRID");
+    expect(imageBodies[0]?.prompt).not.toContain("never a combined master");
     expect(imageBodies[0]?.prompt).toContain(
       "horizontal cover occupying the full top half"
     );
@@ -1412,7 +1393,7 @@ describe("handleArtworkGenerationRequest", () => {
     });
   });
 
-  it("downloads reference images and calls the edits endpoint with them attached", async () => {
+  it("attaches Standard references without adding a reference-direction wrapper", async () => {
     const editCalls: { href: string; body: FormData }[] = [];
     const cmykReference = await sharp({
       create: {
@@ -1483,32 +1464,25 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toBe(false);
     expect(editCalls).toHaveLength(1);
     const referenceFile = editCalls[0]?.body.get("image[]") as File;
     expect(referenceFile.type).toBe("image/jpeg");
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "REFERENCE-INFORMED DESIGN — highest priority:"
+    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+      "CONCEPT ALIGNMENT"
     );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "CONCEPT ALIGNMENT — highest priority:"
+    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+      "REFERENCE-INFORMED DESIGN"
     );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "Image 1 — Past work style reference — Convert Cake campaign"
+    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+      "PAST-WORK VISUAL DNA"
     );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "PAST-WORK VISUAL DNA:"
-    );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
+    expect(editCalls[0]?.body.get("prompt")).not.toContain(
       "STYLE FIDELITY IS MANDATORY"
-    );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "same mood, tone, and visual style family"
-    );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "preferred Thai/English/mixed language behavior"
-    );
-    expect(editCalls[0]?.body.get("prompt")).toContain(
-      "Do not copy the past work's main visual"
     );
     expect(uploads).toHaveLength(1);
   });
@@ -1770,23 +1744,13 @@ describe("handleArtworkGenerationRequest", () => {
     expect((editCalls[0]?.get("image[]") as File).type).toBe("image/png");
   });
 
-  it("uses the prompt written by the image prompt agent", async () => {
+  it("sends agent_image.md and Compact Campaign Input directly to GPT Image 2", async () => {
     const generationCalls: string[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
         return new Response(
           JSON.stringify({ email: "team@convertcake.com" }),
-          { status: 200 }
-        );
-      }
-      if (href.includes("/v1/responses")) {
-        return new Response(
-          JSON.stringify({
-            output_text: JSON.stringify({
-              prompt: "AGENT-WRITTEN PROMPT: luxury typography key visual."
-            })
-          }),
           { status: 200 }
         );
       }
@@ -1819,11 +1783,17 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(200);
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain(
-      "AGENT-WRITTEN PROMPT: luxury typography key visual."
+      "สร้างภาพโฆษณาจากข้อมูลและรูปที่แนบมา"
+    );
+    expect(generationCalls[0]).toContain(
+      "AUTHORITATIVE COMPACT CAMPAIGN INPUT"
+    );
+    expect(generationCalls[0]).toContain(
+      '"headline": "Flowers that make the room feel softer"'
     );
   });
 
-  it("routes the selected Claude prompt model through OpenRouter", async () => {
+  it("does not route Standard through a selected intermediary prompt model", async () => {
     const promptCalls: Array<{
       model: string;
       authorization: string | null;
@@ -1882,7 +1852,6 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "openai-image-key",
-        OPENROUTER_API_KEY: "openrouter-prompt-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1891,12 +1860,7 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(promptCalls).toEqual([
-      {
-        model: "anthropic/claude-sonnet-4.6",
-        authorization: "Bearer openrouter-prompt-key"
-      }
-    ]);
+    expect(promptCalls).toEqual([]);
     expect(imageAuthorizations).toEqual(["Bearer openai-image-key"]);
   });
 
@@ -1917,6 +1881,7 @@ describe("handleArtworkGenerationRequest", () => {
         headers: { authorization: "Bearer user-token" },
         body: JSON.stringify({
           ...requestBody,
+          artworkMode: "reference-library",
           imagePromptModel: "anthropic/claude-sonnet-4.6"
         })
       }),
@@ -2361,7 +2326,14 @@ describe("handleArtworkGenerationRequest", () => {
     const { client } = fakeStorage();
 
     const response = await handleArtworkGenerationRequest({
-      request: buildRequest({ authorization: "Bearer user-token" }),
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system"
+        })
+      }),
       env: {
         OPENAI_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildStandardImagePrompt,
   generateImagePrompt,
   generateProductionBrief
 } from "./image-prompt-agent";
@@ -29,7 +30,49 @@ const baseInput = {
 };
 
 describe("generateImagePrompt", () => {
-  it("sends the brief to the Responses API and returns the agent's prompt", async () => {
+  it("gives Standard style references visual priority and isolates product materials", async () => {
+    const promptText = await buildStandardImagePrompt(
+      {
+        ...baseInput,
+        referenceImageLabels: [
+          "Supporting reference · Style · Living room campaign",
+          "Uploaded product (preserve its visible identity): lotion.jpg — Lotion"
+        ],
+        referenceImages: [
+          {
+            label: "Supporting reference · Style · Living room campaign",
+            imageUrl: "data:image/jpeg;base64,c3R5bGU="
+          },
+          {
+            label:
+              "Uploaded product (preserve its visible identity): lotion.jpg — Lotion",
+            imageUrl: "data:image/jpeg;base64,cHJvZHVjdA=="
+          }
+        ]
+      },
+      async () => "STANDARD IMAGE PROMPT"
+    );
+
+    expect(promptText).toContain('"image": 1');
+    expect(promptText).toContain(
+      '"role": "primary-style-and-composition-reference"'
+    );
+    expect(promptText).toContain(
+      "highest-priority visual authority"
+    );
+    expect(promptText).toContain('"image": 2');
+    expect(promptText).toContain('"role": "product-identity-only"');
+    expect(promptText).toContain(
+      "Preserve exactly only the product itself"
+    );
+    expect(promptText).toContain(
+      "Do not use this image as a reference for camera angle"
+    );
+    expect(promptText).not.toContain('"fidelity"');
+    expect(promptText).not.toContain("input_fidelity");
+  });
+
+  it("sends the compact Standard input and returns the agent's prompt", async () => {
     const calls: { url: string; body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({
@@ -49,7 +92,10 @@ describe("generateImagePrompt", () => {
     const result = await generateImagePrompt({
       apiKey: "test-key",
       fetchImpl: fetchMock as unknown as typeof fetch,
-      input: baseInput
+      input: {
+        ...baseInput,
+        hook: { ...baseInput.hook, why: "" }
+      }
     });
 
     expect(result).toBe("Final production-ready prompt.");
@@ -69,15 +115,15 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(
       '"headline": "Flowers that make the room feel softer"'
     );
-    expect(promptText).toContain("WORKING BRIEF PRIORITY");
-    expect(promptText).toContain('"workingBrief": {');
-    expect(promptText).toContain('"priority": "highest"');
-    expect(promptText).toContain(
-      '"instruction": "Launch a soft summer bouquet offer."'
-    );
+    expect(promptText).toContain('"objective": "Lead with room mood."');
     expect(promptText).toContain("AUTHORITATIVE COMPACT CAMPAIGN INPUT");
-    expect(promptText).toContain('"personality": [');
     expect(promptText).toContain('"colors": [');
+    expect(promptText).not.toContain("WORKING BRIEF PRIORITY");
+    expect(promptText).not.toContain('"workingBrief"');
+    expect(promptText).not.toContain('"personality"');
+    expect(promptText).not.toContain(
+      "Launch a soft summer bouquet offer."
+    );
     expect(promptText).not.toContain('"mustAvoid"');
     expect(promptText).not.toContain('"onImageCopy"');
     expect(promptText).not.toContain('"heroVisual"');
@@ -156,7 +202,7 @@ describe("generateImagePrompt", () => {
       '"image4": "Offer"'
     ]
   ] as const)(
-    "describes the %s standalone image sequence for Standard album posts",
+    "describes the %s master-artboard sequence for Standard album posts",
     async (albumFormat, firstImage, finalImage) => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -192,7 +238,7 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(`"image1": "${firstImage}"`);
     expect(promptText).toContain(finalImage);
     expect(promptText).toContain(
-      '"delivery": "separate standalone image files; never a combined master, grid, collage, mosaic, or contact sheet"'
+      '"delivery": "one square master artboard using the requested panel layout; the backend will crop it into separate standalone image files"'
     );
     expect(promptText).not.toContain('"albumMaster"');
     }
@@ -281,8 +327,10 @@ describe("generateImagePrompt", () => {
     expect(content?.[0]?.text).toContain(
       '"id": "primary-reference-style-product-packshot"'
     );
-    expect(content?.[0]?.text).toContain('"role": "primary-style"');
-    expect(content?.[0]?.text).toContain('"fidelity": "inspired"');
+    expect(content?.[0]?.text).toContain(
+      '"role": "primary-style-and-composition-reference"'
+    );
+    expect(content?.[0]?.text).not.toContain('"fidelity"');
     expect(content?.[0]?.text).not.toContain("STYLE SELECTION:");
   });
 

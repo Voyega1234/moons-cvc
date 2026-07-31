@@ -51,7 +51,7 @@ const CHECKS: readonly {
     label: "Spelling",
     mode: "out",
     description:
-      "Typos, doubled words, spacing and the two Thai input errors that survive proofreading."
+      "Clear misspellings, broken Thai characters and unintended duplicated words. Formatting and line breaks are ignored."
   },
   {
     id: "policy",
@@ -195,6 +195,7 @@ export function PreflightModal({
   visualInputs?: {
     referenceCount: number;
     materialCount: number;
+    referencePreview?: ReactNode;
     referenceEditor: ReactNode;
     materialEditor: ReactNode;
   };
@@ -229,6 +230,7 @@ export function PreflightModal({
   const [visualInputView, setVisualInputView] = useState<
     "reference" | "material"
   >("reference");
+  const [managingReferences, setManagingReferences] = useState(false);
 
   const selectedDirections = useMemo(
     () => directions.filter((direction) => selectedIds.has(direction.id)),
@@ -477,8 +479,26 @@ export function PreflightModal({
                   <PreflightSectionTitle
                     number={2}
                     title="Image references"
-                    description="Review or change the exact visual context before generation."
+                    description="Image Reference guides style; Image Materials are source objects used in the artwork"
                   />
+                  <div className="confirm-reference-actions">
+                    <span className="confirm-section-status">
+                      {visualInputView === "reference"
+                        ? `${visualInputs.referenceCount} references selected`
+                        : `${visualInputs.materialCount} materials selected`}
+                    </span>
+                    {visualInputView === "reference" ? (
+                      <button
+                        className="btn secondary small"
+                        type="button"
+                        onClick={() =>
+                          setManagingReferences((current) => !current)
+                        }
+                      >
+                        {managingReferences ? "Close library" : "Upload files"}
+                      </button>
+                    ) : null}
+                  </div>
                 </header>
                 <div
                   className="confirm-input-tabs"
@@ -508,11 +528,21 @@ export function PreflightModal({
                     <span>{visualInputs.materialCount}</span>
                   </button>
                 </div>
-                <div className="brief-confirm-material-browser preflight-visual-input-editor">
-                  {visualInputView === "reference"
-                    ? visualInputs.referenceEditor
-                    : visualInputs.materialEditor}
-                </div>
+                {visualInputView === "reference" ? (
+                  <>
+                    {visualInputs.referencePreview ??
+                      visualInputs.referenceEditor}
+                    {managingReferences ? (
+                      <div className="brief-confirm-material-browser preflight-reference-manager">
+                        {visualInputs.referenceEditor}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="brief-confirm-material-browser preflight-visual-input-editor">
+                    {visualInputs.materialEditor}
+                  </div>
+                )}
                 <label className="confirm-artwork-brief preflight-artwork-brief">
                   <span className="confirm-artwork-brief-head">
                     <span>

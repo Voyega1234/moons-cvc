@@ -105,6 +105,7 @@ import {
   AlbumFormatThumb
 } from "./stages/album-format-modal";
 import { PreflightModal } from "./stages/preflight-modal";
+import { ConfirmationReferenceGrid } from "./stages/brief-confirmation-modal";
 import {
   groupOutputsForReview,
   isAlbumOutput,
@@ -3806,6 +3807,32 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
   const preflightReferenceImages = state.referenceImages.filter(
     (reference) => inferredReferenceImageRole(reference) !== "logo"
   );
+  const preflightAvailableReferences = [
+    ...(state.brand?.library.refs ?? [])
+      .filter((item) => item.assetUrl)
+      .map((item) => {
+        const selectedReference = preflightReferenceImages.find(
+          (reference) => reference.url === item.assetUrl
+        );
+        return (
+          selectedReference ?? {
+            id: `library-${item.id}`,
+            url: item.assetUrl as string,
+            label: item.title || "Untitled",
+            role: "style" as const
+          }
+        );
+      })
+      .filter(
+        (reference) => inferredReferenceImageRole(reference) !== "logo"
+      ),
+    ...preflightReferenceImages.filter(
+      (reference) =>
+        !(state.brand?.library.refs ?? []).some(
+          (item) => item.assetUrl === reference.url
+        )
+    )
+  ];
   const [manualHookGroup, setManualHookGroup] = useState<{
     service: ServiceType;
     title: string;
@@ -4073,6 +4100,18 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           visualInputs={{
             referenceCount: preflightReferenceImages.length,
             materialCount: selectedUploadedMaterials(state).length,
+            referencePreview: (
+              <ConfirmationReferenceGrid
+                references={preflightAvailableReferences}
+                selectedReferences={preflightReferenceImages}
+                onToggle={(reference) =>
+                  dispatch({
+                    type: "toggle-reference-image",
+                    item: reference
+                  })
+                }
+              />
+            ),
             referenceEditor: (
               <CreativeMaterialsEditor
                 state={{
