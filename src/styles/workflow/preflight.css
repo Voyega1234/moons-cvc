@@ -506,8 +506,8 @@
 }
 
 .preflight-context-option.on {
-  border-color: var(--confirm-selected-line);
-  background: var(--confirm-selected-soft);
+  border-color: #dfe3ec;
+  background: #fff;
 }
 
 .preflight-context-check {
@@ -530,6 +530,11 @@
   color: var(--confirm-selected-ink);
 }
 
+.preflight-context-option > span:last-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .preflight-context-option b,
 .preflight-context-option small {
   display: block;
@@ -537,7 +542,8 @@
 
 .preflight-context-option b {
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 10.5px;
+  line-height: 1.25;
   white-space: nowrap;
   text-overflow: ellipsis;
 }

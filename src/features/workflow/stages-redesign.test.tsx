@@ -1,3 +1,4 @@
+import { useReducer } from "react";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -2395,6 +2396,46 @@ describe("redesigned workflow stages", () => {
       type: "set-artwork-brief",
       brief: "Use warm afternoon light instead."
     });
+  });
+
+  it("keeps typing in the preflight artwork brief across workflow updates", async () => {
+    const user = userEvent.setup();
+    const initialState = {
+      ...buildCreativeState(),
+      stage: "directions" as const,
+      artworkBrief: ""
+    };
+
+    function DirectionsHarness() {
+      const [state, dispatch] = useReducer(workflowReducer, initialState);
+
+      return <DirectionsStage state={state} dispatch={dispatch} />;
+    }
+
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsHarness />
+      </BrandMemoryProvider>
+    );
+
+    await user.click(
+      within(view.container).getByRole("button", {
+        name: "Confirm hooks & create →"
+      })
+    );
+
+    const preflight = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const artworkBrief = within(preflight).getByRole("textbox", {
+      name: "Artwork brief"
+    }) as HTMLTextAreaElement;
+
+    await user.click(artworkBrief);
+    await user.type(artworkBrief, "Continuous typing works");
+
+    expect(artworkBrief.value).toBe("Continuous typing works");
+    expect(document.activeElement).toBe(artworkBrief);
   });
 
   it("keeps legacy logo assets out of preflight image references", async () => {
