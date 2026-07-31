@@ -24,8 +24,6 @@ function applyArtworkContextSelection(
   const brand = run.brand
     ? {
         ...run.brand,
-        personality: selection.brandCi ? run.brand.personality : [],
-        colors: selection.brandColors ? run.brand.colors : [],
         memory: selection.brandCi
           ? run.brand.memory
           : { working: [], avoid: [] },

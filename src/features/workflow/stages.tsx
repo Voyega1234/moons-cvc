@@ -1908,7 +1908,7 @@ function BrandProfileSectionContent({
         />
       ) : null}
       {section === "products" ? (
-        <BrandProductsMemoryList clientId={brand.id} />
+        <BrandProductsMemoryList clientId={brand.id} dispatch={dispatch} />
       ) : null}
       {section === "docs" ? (
         <BrandDocumentsMemoryList
@@ -2125,7 +2125,13 @@ function OnboardingQuestionnaireMemory({
   );
 }
 
-function BrandProductsMemoryList({ clientId }: { clientId: string }) {
+function BrandProductsMemoryList({
+  clientId,
+  dispatch
+}: {
+  clientId: string;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
   const repository = useBrandMemoryRepository();
   const [products, setProducts] = useState<readonly BrandProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2139,6 +2145,20 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
   const [claimNotes, setClaimNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const formOpen = editingId !== null;
+  const syncProducts = useCallback(
+    (items: readonly BrandProduct[]) => {
+      setProducts(items);
+      dispatch({
+        type: "sync-brand-products",
+        items: items.map((product) => ({
+          id: product.id,
+          title: product.name,
+          description: product.description
+        }))
+      });
+    },
+    [dispatch]
+  );
 
   useEffect(() => {
     let active = true;
@@ -2149,7 +2169,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
       .listProducts(clientId)
       .then((items) => {
         if (!active) return;
-        setProducts(items);
+        syncProducts(items);
         setLoading(false);
       })
       .catch((error: unknown) => {
@@ -2163,7 +2183,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
     return () => {
       active = false;
     };
-  }, [clientId, repository]);
+  }, [clientId, repository, syncProducts]);
 
   function resetForm() {
     setEditingId(null);
@@ -2216,8 +2236,8 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
           id: editingId,
           ...input
         });
-        setProducts((current) =>
-          current.map((product) =>
+        syncProducts(
+          products.map((product) =>
             product.id === updated.id ? updated : product
           )
         );
@@ -2226,7 +2246,7 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
           clientId,
           ...input
         });
-        setProducts((current) => [...current, created]);
+        syncProducts([...products, created]);
       }
       resetForm();
     } catch (error) {
@@ -2244,8 +2264,8 @@ function BrandProductsMemoryList({ clientId }: { clientId: string }) {
 
     try {
       await repository.deleteProduct(product.id);
-      setProducts((current) =>
-        current.filter((candidate) => candidate.id !== product.id)
+      syncProducts(
+        products.filter((candidate) => candidate.id !== product.id)
       );
       if (editingId === product.id) resetForm();
     } catch (error) {

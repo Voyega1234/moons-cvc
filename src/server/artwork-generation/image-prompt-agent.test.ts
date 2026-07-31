@@ -3,7 +3,6 @@ import {
   generateImagePrompt,
   generateProductionBrief
 } from "./image-prompt-agent";
-import type { AuthoritativeCampaignPacket } from "./campaign-truth-normalizer-agent";
 
 const baseInput = {
   brand: {
@@ -357,45 +356,8 @@ describe("generateImagePrompt", () => {
     });
   });
 
-  it("uses only the locked campaign packet to create a visual concept in design-system-new mode", async () => {
+  it("uses the archived V6 concept director with set direction in design-system-new mode", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
-    const campaignPacket: AuthoritativeCampaignPacket = {
-      campaign: {
-        brand: "Flora Daily",
-        productOrService: "Flower delivery service",
-        campaignObjective: "Conversion",
-        platform: "Meta Feed",
-        canvas: "1:1 single-static",
-        targetAudience: "People refreshing their home",
-        audienceMoment: "They want a small change with emotional impact.",
-        mainMessage: "Lead with room mood."
-      },
-      copy: {
-        headline: "Flowers that make the room feel softer",
-        highlightedPhrase: "room feel softer",
-        featureName: "OMIT",
-        featureValueProposition: "OMIT",
-        supportingConversionLine: "OMIT",
-        cta: "Order a bouquet",
-        requiredUtilityInformation: []
-      },
-      creative: {
-        executionMode: "lifestyle-commercial",
-        informationDensity: "low",
-        humanPresence: "not-required"
-      },
-      brandVisual: {
-        brandVisualCharacter: ["fresh", "soft"],
-        brandPalette: ["#F6B8C8", "#FFFFFF"],
-        referenceIntent: "OMIT"
-      },
-      truthAndGuardrails: {
-        verifiedFacts: [],
-        restrictions: [],
-        latestUserCorrection: "OMIT"
-      },
-      officialAssets: []
-    };
     const fetchMock = vi.fn(
       async (_url: string | URL | Request, init?: RequestInit) => {
         calls.push({
@@ -417,8 +379,15 @@ describe("generateImagePrompt", () => {
       apiKey: "test-key",
       mode: "design-system-new",
       fetchImpl: fetchMock as unknown as typeof fetch,
-      loadCreativeConceptDirectorPrompt: async () => "CONCEPT ONLY TEST",
-      input: { ...baseInput, campaignPacket }
+      loadCreativeGraphicDesignerPrompt: async () =>
+        "V6 CREATIVE CONCEPT DIRECTOR TEST",
+      input: {
+        ...baseInput,
+        setDirection:
+          "Quiet botanical campaign world with tactile daylight.",
+        shotOpportunity:
+          "Frame the bouquet through rigid architecture so softness becomes visible."
+      }
     });
 
     expect(result).toContain("A bouquet visibly softens");
@@ -432,9 +401,15 @@ describe("generateImagePrompt", () => {
     const promptText = (
       body?.input as { content: { text: string }[] }[]
     )[0]?.content[0]?.text;
-    expect(promptText).toContain("LOCKED AUTHORITATIVE CAMPAIGN PACKET");
-    expect(promptText).toContain('"executionMode": "lifestyle-commercial"');
-    expect(promptText).not.toContain("CREATIVE INPUT PACKET");
+    expect(promptText).toContain("V6 CREATIVE CONCEPT DIRECTOR TEST");
+    expect(promptText).toContain("AUTHORITATIVE RUNTIME INPUT");
+    expect(promptText).toContain(
+      '"campaignSetDirection": "Quiet botanical campaign world'
+    );
+    expect(promptText).toContain(
+      '"shotOpportunity": "Frame the bouquet through rigid architecture'
+    );
+    expect(promptText).not.toContain("LOCKED AUTHORITATIVE CAMPAIGN PACKET");
   });
 
   it("uses a compact two-reference contract in reference-library mode", async () => {

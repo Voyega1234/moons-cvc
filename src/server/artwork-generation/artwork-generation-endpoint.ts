@@ -36,10 +36,11 @@ import {
   type CreativeStrategyEnrichmentTrace
 } from "./creative-strategy-enrichment-agent.js";
 import {
-  normalizeCampaignTruth,
-  type AuthoritativeCampaignPacket,
-  type CampaignTruthNormalizerTrace
-} from "./campaign-truth-normalizer-agent.js";
+  directCreativeSet,
+  reviewGeneratedArtwork,
+  type CreativeSetDirection,
+  type DesignSystemFlowTrace
+} from "./design-system-flow-agent.js";
 import {
   ARTWORK_REFERENCE_BUCKET,
   buildArtworkReferenceLabel,
@@ -49,6 +50,7 @@ import {
 import {
   editImage,
   generateImage,
+  type GeneratedImage,
   type ReferenceImageInput
 } from "./openai-images-client.js";
 import {
@@ -65,6 +67,11 @@ type ArtworkOutput = ArtworkGenerationResponse["outputs"][number];
 interface StoredArtworkReference {
   image: ReferenceImageInput;
   signedUrl: string;
+}
+
+interface DesignSystemNewFlowContext {
+  lockedCampaignInput: Readonly<Record<string, unknown>>;
+  setDirection: CreativeSetDirection;
 }
 
 export interface ArtworkGenerationEndpointEnv {
@@ -212,25 +219,32 @@ interface CreativeStrategyAgentDebugLog {
   error?: string;
 }
 
-interface CampaignTruthNormalizerAgentDebugLog {
-  kind: "campaign-truth-normalizer-agent";
+interface DesignSystemFlowAgentDebugLog {
+  kind: "design-system-flow-agent";
   createdAt: string;
   provider: ImagePromptProvider;
   model: string;
   runId: string;
   directionId: string;
+  stage: DesignSystemFlowTrace["stage"];
   status: "succeeded" | "failed";
   request: {
     endpoint: "/v1/responses" | "/api/v1/responses";
     store: false;
     inputText: string;
+    referenceImages: readonly {
+      label?: string;
+      mimeType: string;
+      bytes: number;
+      detail: "high";
+    }[];
     responseFormat: {
       type: "json_schema";
-      name: "moons_authoritative_campaign_packet";
+      name: "moons_creative_set_direction" | "moons_visual_quality_review";
       strict: true;
     };
   };
-  response?: AuthoritativeCampaignPacket;
+  response?: DesignSystemFlowTrace["response"];
   error?: string;
 }
 
@@ -257,7 +271,7 @@ interface ArtworkGenerationDebugAsset {
 type ArtworkGenerationDebugLog =
   | ImageRequestDebugLog
   | CreativeStrategyAgentDebugLog
-  | CampaignTruthNormalizerAgentDebugLog
+  | DesignSystemFlowAgentDebugLog
   | ImagePromptAgentDebugLog
   | ImageOutputDebugLog;
 
@@ -565,6 +579,19 @@ async function generateOutputsForSelectedHooks({
     storage,
     supabaseUrl
   );
+  const designSystemNewFlow =
+    input.artworkMode === "design-system-new"
+      ? await prepareDesignSystemNewFlow({
+          input,
+          references,
+          apiKey: promptApiKey,
+          model: promptModel,
+          provider: promptProvider,
+          debugLogDirectory,
+          writeDebugLog,
+          fetchImpl
+        })
+      : undefined;
 
   const format = outputFormatForService(input.service);
   const outputGroups = await mapWithConcurrency(
@@ -583,12 +610,100 @@ async function generateOutputsForSelectedHooks({
         debugLogDirectory,
         writeDebugLog,
         references,
+        designSystemNewFlow,
         format,
         storage,
         fetchImpl
       })
   );
   return outputGroups.flat();
+}
+
+async function prepareDesignSystemNewFlow({
+  input,
+  references,
+  apiKey,
+  model,
+  provider,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  references: readonly ReferenceImageInput[];
+  apiKey: string;
+  model?: string;
+  provider: ImagePromptProvider;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<DesignSystemNewFlowContext> {
+  const lockedCampaignInput = buildLockedCampaignInput(input, references);
+  const setDirection = await directCreativeSet({
+    apiKey,
+    model,
+    provider,
+    fetchImpl,
+    lockedCampaignInput,
+    ideas: input.selectedHooks.map((hook) => ({
+      directionId: hook.id,
+      headline: hook.hook,
+      concept: hook.concept,
+      visualDirection: hook.visual
+    })),
+    referenceImages: references.slice(0, 16).map((reference) => ({
+      imageUrl: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+      label: reference.label,
+      mimeType: reference.mimeType,
+      bytes: reference.bytes.length
+    })),
+    writeTrace: async (trace) => {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildDesignSystemFlowAgentDebugLog(
+          trace,
+          input.runId,
+          "campaign-set"
+        )
+      );
+    }
+  });
+
+  return { lockedCampaignInput, setDirection };
+}
+
+function buildLockedCampaignInput(
+  input: ArtworkGenerationRequest,
+  references: readonly ReferenceImageInput[]
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    runId: input.runId,
+    brand: input.brand,
+    service: input.service,
+    quantity: input.quantity,
+    canvas: referenceCanvasRatioFromSize(input.output.size),
+    workingBrief: input.brief,
+    artworkBriefAndUserCorrections: input.textInputs,
+    selectedHooks: input.selectedHooks.map((hook) => ({
+      directionId: hook.id,
+      headline: hook.hook,
+      subheadline: hook.subheadline,
+      concept: hook.concept,
+      reason: hook.why,
+      visualDirection: hook.visual,
+      supportingPoints: hook.supportingPoints ?? [],
+      cta: hook.cta,
+      formatBeats: hook.formatBeats ?? []
+    })),
+    brandMemory: input.brandMemory,
+    brandLibrary: input.brandLibrary,
+    selectedProductIds: input.selectedProductIds ?? [],
+    attachedArtifactRoles: references
+      .slice(0, 16)
+      .map((reference, index) =>
+        buildCampaignArtifactRole(reference, index)
+      )
+  });
 }
 
 async function generateOutputForHook({
@@ -603,6 +718,7 @@ async function generateOutputForHook({
   debugLogDirectory,
   writeDebugLog,
   references,
+  designSystemNewFlow,
   format,
   storage,
   fetchImpl
@@ -618,6 +734,7 @@ async function generateOutputForHook({
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
+  designSystemNewFlow?: DesignSystemNewFlowContext;
   format: string;
   storage: ArtworkStorageClient;
   fetchImpl: FetchLike;
@@ -633,6 +750,18 @@ async function generateOutputForHook({
   const canvasRatio = canvasRatioFromSize(generationSize);
   const isDirectFinalArtwork =
     input.artworkMode === "direct-final-artwork";
+  const setDirection = designSystemNewFlow?.setDirection.setDirection;
+  const shotOpportunity = designSystemNewFlow?.setDirection.ideas.find(
+    (idea) => idea.directionId === hook.id
+  )?.shotOpportunity;
+  if (
+    input.artworkMode === "design-system-new" &&
+    (!setDirection || !shotOpportunity)
+  ) {
+    throw new Error(
+      `Design System (New) is missing the set direction for "${hook.id}".`
+    );
+  }
   let strategy: CreativeStrategyEnrichment | undefined;
   if (
     input.artworkMode === "reference-library" ||
@@ -648,6 +777,8 @@ async function generateOutputForHook({
         provider: promptProvider,
         debugLogDirectory,
         writeDebugLog,
+        setDirection,
+        shotOpportunity,
         fetchImpl
       });
     } catch (error) {
@@ -666,22 +797,6 @@ async function generateOutputForHook({
     ...artworkReferences.map(({ image }) => image)
   ];
   const generationReferences = promptReferences;
-  const campaignPacket =
-    input.artworkMode === "design-system-new"
-      ? await resolveAuthoritativeCampaignPacket({
-          input,
-          hook,
-          apiKey: promptApiKey,
-          model: promptModel,
-          provider: promptProvider,
-          debugLogDirectory,
-          writeDebugLog,
-          references: promptReferences,
-          strategy,
-          canvasRatio,
-          fetchImpl
-        })
-      : undefined;
   const isDesignSystemMode =
     input.artworkMode === "design-system" ||
     input.artworkMode === "design-system-new";
@@ -698,7 +813,8 @@ async function generateOutputForHook({
           references: promptReferences,
           artworkReferences,
           strategy,
-          campaignPacket,
+          setDirection,
+          shotOpportunity,
           canvasRatio,
           albumFormat,
           fetchImpl
@@ -713,7 +829,8 @@ async function generateOutputForHook({
           albumFormat,
           strategy,
           creativeProvocation,
-          campaignPacket
+          setDirection,
+          shotOpportunity
         })
     : undefined;
   const compiledDirectFinalArtworkPrompt = isDirectFinalArtwork
@@ -740,7 +857,8 @@ async function generateOutputForHook({
           references: promptReferences,
           artworkReferences,
           strategy,
-          campaignPacket,
+          setDirection,
+          shotOpportunity,
           canvasRatio,
           albumFormat,
           fetchImpl
@@ -776,7 +894,7 @@ async function generateOutputForHook({
       imageRequestDebug.entry,
       imageRequestDebug.assets
     );
-    const image =
+    const generatedImage =
       generationReferences.length > 0
         ? await editImage({
             apiKey,
@@ -794,6 +912,22 @@ async function generateOutputForHook({
             size: generationSize,
             fetchImpl
           });
+    const image = await applyDesignSystemVisualQc({
+      input,
+      hook,
+      image: generatedImage,
+      setDirection,
+      shotOpportunity,
+      apiKey,
+      model,
+      promptModel,
+      promptProvider,
+      promptApiKey,
+      generationSize,
+      debugLogDirectory,
+      writeDebugLog,
+      fetchImpl
+    });
     const imageBytes = Buffer.from(image.base64, "base64");
     const masterOutput = await persistArtworkOutput({
       input,
@@ -847,7 +981,7 @@ async function generateOutputForHook({
     imageRequestDebug.entry,
     imageRequestDebug.assets
   );
-  const image =
+  const generatedImage =
     generationReferences.length > 0
       ? await editImage({
           apiKey,
@@ -865,6 +999,22 @@ async function generateOutputForHook({
           size: generationSize,
           fetchImpl
         });
+  const image = await applyDesignSystemVisualQc({
+    input,
+    hook,
+    image: generatedImage,
+    setDirection,
+    shotOpportunity,
+    apiKey,
+    model,
+    promptModel,
+    promptProvider,
+    promptApiKey,
+    generationSize,
+    debugLogDirectory,
+    writeDebugLog,
+    fetchImpl
+  });
 
   return [
     await persistArtworkOutput({
@@ -882,6 +1032,118 @@ async function generateOutputForHook({
       writeDebugLog
     })
   ];
+}
+
+async function applyDesignSystemVisualQc({
+  input,
+  hook,
+  image,
+  setDirection,
+  shotOpportunity,
+  apiKey,
+  model,
+  promptModel,
+  promptProvider,
+  promptApiKey,
+  generationSize,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  image: GeneratedImage;
+  setDirection?: string;
+  shotOpportunity?: string;
+  apiKey: string;
+  model: string;
+  promptModel?: string;
+  promptProvider: ImagePromptProvider;
+  promptApiKey: string;
+  generationSize: ArtworkOutputSize;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<GeneratedImage> {
+  if (input.artworkMode !== "design-system-new") return image;
+
+  const sourceBytes = Buffer.from(image.base64, "base64");
+  try {
+    const review = await reviewGeneratedArtwork({
+      apiKey: promptApiKey,
+      model: promptModel,
+      provider: promptProvider,
+      fetchImpl,
+      image: {
+        bytes: sourceBytes,
+        mimeType: image.mimeType,
+        label: "Generated artwork before Visual QC"
+      },
+      context: {
+        headline: hook.hook,
+        concept: hook.concept,
+        setDirection: setDirection ?? "",
+        shotOpportunity: shotOpportunity ?? ""
+      },
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildDesignSystemFlowAgentDebugLog(trace, input.runId, hook.id)
+        );
+      }
+    });
+    if (review.decision === "pass") return image;
+
+    const revisionPrompt = buildVisualQcRevisionPrompt(
+      review.revisionInstruction
+    );
+    const sourceReference: ReferenceImageInput = {
+      bytes: sourceBytes,
+      mimeType: image.mimeType,
+      label: "Image 1 — generated artwork to refine"
+    };
+    const revisionHook = { id: `${hook.id}-visual-qc-revision` };
+    const imageRequestDebug = buildImageRequestDebugBundle({
+      model,
+      runId: input.runId,
+      hook: revisionHook,
+      prompt: revisionPrompt,
+      size: generationSize,
+      quality: "medium",
+      references: [sourceReference]
+    });
+    await writeDebugLog(
+      debugLogDirectory,
+      imageRequestDebug.entry,
+      imageRequestDebug.assets
+    );
+    return await editImage({
+      apiKey,
+      model,
+      prompt: revisionPrompt,
+      size: generationSize,
+      quality: "medium",
+      referenceImages: [sourceReference],
+      fetchImpl
+    });
+  } catch (error) {
+    console.warn(
+      `Visual QC could not complete for "${hook.id}"; keeping the original generated artwork.`,
+      error
+    );
+    return image;
+  }
+}
+
+function buildVisualQcRevisionPrompt(instruction: string): string {
+  return [
+    "Refine Image 1 as a senior art director and retoucher.",
+    "Preserve its core campaign concept, approved copy, brand identity, official assets, output ratio, and strongest working visual decisions.",
+    "Apply only the following high-impact visual correction:",
+    instruction.trim(),
+    "Correct the issue across the whole composition so hierarchy, spacing, lighting, shadow, perspective, depth, materials, edges, and asset integration remain coherent.",
+    "Do not add new facts, offers, claims, products, decorative modules, or a different campaign idea. Return one finished publication-ready artwork."
+  ].join("\n\n");
 }
 
 function buildAlbumMasterInstruction(
@@ -1436,6 +1698,8 @@ async function resolveCreativeStrategy({
   provider,
   debugLogDirectory,
   writeDebugLog,
+  setDirection,
+  shotOpportunity,
   fetchImpl
 }: {
   input: ArtworkGenerationRequest;
@@ -1445,6 +1709,8 @@ async function resolveCreativeStrategy({
   provider: ImagePromptProvider;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
+  setDirection?: string;
+  shotOpportunity?: string;
   fetchImpl: FetchLike;
 }): Promise<CreativeStrategyEnrichment> {
   return enrichCreativeStrategy({
@@ -1452,7 +1718,8 @@ async function resolveCreativeStrategy({
     model,
     provider,
     fetchImpl,
-    ...(input.artworkMode === "design-system"
+    ...(input.artworkMode === "design-system" ||
+    input.artworkMode === "design-system-new"
       ? { loadPrompt: loadDesignSystemV6StrategyPrompt }
       : {}),
     input: {
@@ -1461,97 +1728,14 @@ async function resolveCreativeStrategy({
       brief: input.brief,
       hook,
       brandMemory: input.brandMemory,
-      brandLibrary: input.brandLibrary
+      brandLibrary: input.brandLibrary,
+      setDirection,
+      shotOpportunity
     },
     writeTrace: async (trace) => {
       await writeDebugLog(
         debugLogDirectory,
         buildCreativeStrategyAgentDebugLog(trace, input.runId, hook.id)
-      );
-    }
-  });
-}
-
-async function resolveAuthoritativeCampaignPacket({
-  input,
-  hook,
-  apiKey,
-  model,
-  provider,
-  debugLogDirectory,
-  writeDebugLog,
-  references,
-  strategy,
-  canvasRatio,
-  fetchImpl
-}: {
-  input: ArtworkGenerationRequest;
-  hook: SelectedHook;
-  apiKey: string;
-  model?: string;
-  provider: ImagePromptProvider;
-  debugLogDirectory?: string;
-  writeDebugLog: ArtworkGenerationDebugLogger;
-  references: readonly ReferenceImageInput[];
-  strategy?: CreativeStrategyEnrichment;
-  canvasRatio: string;
-  fetchImpl: FetchLike;
-}): Promise<AuthoritativeCampaignPacket> {
-  const artifactMap = references
-    .slice(0, 16)
-    .map((reference, index) => buildCampaignArtifactRole(reference, index));
-  const officialAssetInventory = artifactMap
-    .filter(
-      (artifact) =>
-        artifact.kind === "official-logo" ||
-        artifact.kind === "official-product"
-    )
-    .map((artifact) => ({
-      assetId: `image-${artifact.image}`,
-      assetType: artifact.kind,
-      role: artifact.role,
-      preservationInstruction: artifact.instruction
-    }));
-  const selectedProducts = selectRelevantProductOrServiceTruth({
-    input,
-    hook,
-    references
-  }).map((item) => ({
-    title: item.title,
-    description: item.description
-  }));
-  const explicitGuidelines = [
-    ...input.brandLibrary.docs.filter(isEditableBrandGuidelineItem),
-    ...input.brandLibrary.brand.filter(isBrandGuidelineItem)
-  ]
-    .slice(0, 4)
-    .map((item) => ({ title: item.title, description: item.description }));
-  const latestUserCorrection =
-    input.textInputs.map((item) => item.trim()).filter(Boolean).at(-1) ?? null;
-
-  return normalizeCampaignTruth({
-    apiKey,
-    model,
-    provider,
-    fetchImpl,
-    input: {
-      brand: input.brand,
-      service: input.service,
-      platform: "Meta Feed",
-      canvas: `${canvasRatio} ${input.service}`,
-      brief: input.brief,
-      hook,
-      latestUserCorrection,
-      strategy,
-      selectedProducts,
-      brandGuidelines: explicitGuidelines,
-      brandRestrictions: input.brandMemory.avoid,
-      officialAssetInventory
-    },
-    writeTrace: async (trace) => {
-      await writeDebugLog(
-        debugLogDirectory,
-        buildCampaignTruthNormalizerDebugLog(trace, input.runId, hook.id)
       );
     }
   });
@@ -1881,7 +2065,8 @@ async function buildDirectDesignSystemPrompt({
   albumFormat,
   strategy,
   creativeProvocation,
-  campaignPacket
+  setDirection,
+  shotOpportunity
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
@@ -1890,7 +2075,8 @@ async function buildDirectDesignSystemPrompt({
   albumFormat: AlbumFormat;
   strategy?: CreativeStrategyEnrichment;
   creativeProvocation?: string;
-  campaignPacket?: AuthoritativeCampaignPacket;
+  setDirection?: string;
+  shotOpportunity?: string;
 }): Promise<string> {
   /**
    * Describe only the role of each image.
@@ -2049,6 +2235,20 @@ async function buildDirectDesignSystemPrompt({
       )
     ].join("\n"),
     "These strategic inputs describe intent only. They do not prescribe the visual solution.",
+    ...(setDirection
+      ? [
+          "### Campaign set direction",
+          compactPromptText(setDirection, 1_200),
+          "Keep this shared campaign grammar while allowing this idea to use a genuinely distinct execution."
+        ]
+      : []),
+    ...(shotOpportunity
+      ? [
+          "### Per-idea shot opportunity",
+          compactPromptText(shotOpportunity, 1_200),
+          "Treat this as the strongest opening to explore, not as fixed coordinates or a rigid layout blueprint."
+        ]
+      : []),
     "### Creative provocation",
     creativeProvocation?.trim() ||
       "No creative provocation was supplied. Infer conservatively from the authoritative campaign context.",
@@ -2127,34 +2327,14 @@ async function buildDirectDesignSystemPrompt({
       : "No artifacts supplied."
   ].join("\n\n");
 
-  const compiledCampaignContext = campaignPacket
-    ? [
-        "### LOCKED AUTHORITATIVE CAMPAIGN PACKET",
-        JSON.stringify(campaignPacket, null, 2),
-        "This packet is factual and immutable. Preserve the meaning, exact copy, qualifiers, verified facts, restrictions, utility information, and official-asset instructions. It is a truth boundary, not an on-art checklist: verifiedFacts authorize accurate content but remain off-art by default; optional feature and supporting copy may be omitted; only the exact headline, supplied CTA, explicitly required utility information, and official brand identification are mandatory. Never render JSON keys or values marked OMIT.",
-        "### CREATIVE CONCEPT",
-        creativeProvocation?.trim() ||
-          "No visual concept was supplied. Infer one without changing the locked packet.",
-        "The concept controls only the image-native proposition. It does not override the packet or prescribe final composition, typography, background, lighting, or production treatment.",
-        "### ATTACHED ARTIFACT ROLES",
-        artifactMap.length
-          ? JSON.stringify(artifactMap, null, 2)
-          : "No artifacts supplied."
-      ].join("\n\n")
-    : legacyCompiledCampaignContext;
-
   const prompt = renderDesignSystemPromptTemplate(
-    campaignPacket
-      ? await loadCurrentDesignSystemPrompt()
-      : await loadDesignSystemV62JudgmentPrompt(),
+    await loadDesignSystemV62JudgmentPrompt(),
     {
-      "{{COMPILED_CAMPAIGN_CONTEXT}}": compiledCampaignContext,
+      "{{COMPILED_CAMPAIGN_CONTEXT}}": legacyCompiledCampaignContext,
       "{{ACTIVE_HUMAN_PRESENCE_RULES}}":
         buildActiveHumanPresenceRules(undefined),
       "{{ACTIVE_INFORMATION_DENSITY_RULES}}":
-        buildActiveInformationDensityRules(
-          campaignPacket?.creative.informationDensity
-        ),
+        buildActiveInformationDensityRules(undefined),
       "{{ACTIVE_OUTPUT_MODE_RULES}}": buildActiveOutputModeRules(
         input.service,
         hook,
@@ -2305,7 +2485,7 @@ export function buildActiveHumanPresenceRules(
 }
 
 export function buildActiveInformationDensityRules(
-  density: AuthoritativeCampaignPacket["creative"]["informationDensity"] | undefined
+  density: "low" | "medium" | "high" | undefined
 ): string {
   const shared = [
     "Information density is a ceiling, never a target. Do not fill available space simply because more verified facts exist.",
@@ -2689,13 +2869,6 @@ function loadDesignSystemV62JudgmentPrompt(): Promise<string> {
   );
 }
 
-function loadCurrentDesignSystemPrompt(): Promise<string> {
-  return readFile(
-    join(process.cwd(), "agent_prompt", "agent_design_system.md"),
-    "utf8"
-  );
-}
-
 function loadDirectFinalArtworkPrompt(): Promise<string> {
   return readFile(
     join(
@@ -2872,8 +3045,8 @@ function extensionFromMimeType(mimeType: string): "jpg" | "webp" | "png" {
 function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
   if (!("kind" in entry)) return "";
   if (entry.kind === "creative-strategy-agent") return "-strategy-agent";
-  if (entry.kind === "campaign-truth-normalizer-agent") {
-    return "-truth-normalizer-agent";
+  if (entry.kind === "design-system-flow-agent") {
+    return `-${entry.stage}`;
   }
   if (
     entry.kind === "image-prompt-agent" &&
@@ -3064,7 +3237,8 @@ async function resolveImagePrompt({
   references,
   artworkReferences,
   strategy,
-  campaignPacket,
+  setDirection,
+  shotOpportunity,
   canvasRatio,
   albumFormat,
   fetchImpl
@@ -3079,7 +3253,8 @@ async function resolveImagePrompt({
   references: readonly ReferenceImageInput[];
   artworkReferences: readonly StoredArtworkReference[];
   strategy?: CreativeStrategyEnrichment;
-  campaignPacket?: AuthoritativeCampaignPacket;
+  setDirection?: string;
+  shotOpportunity?: string;
   canvasRatio: string;
   albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
@@ -3122,7 +3297,8 @@ async function resolveImagePrompt({
       })),
       canvasRatio,
       strategy,
-      campaignPacket,
+      setDirection,
+      shotOpportunity,
       brandLibrary: {
         brand: input.brandLibrary.brand,
         products: input.brandLibrary.products,
@@ -3162,26 +3338,34 @@ function buildCreativeStrategyAgentDebugLog(
   };
 }
 
-function buildCampaignTruthNormalizerDebugLog(
-  trace: CampaignTruthNormalizerTrace,
+function buildDesignSystemFlowAgentDebugLog(
+  trace: DesignSystemFlowTrace,
   runId: string,
   directionId: string
-): CampaignTruthNormalizerAgentDebugLog {
+): DesignSystemFlowAgentDebugLog {
   return {
-    kind: "campaign-truth-normalizer-agent",
+    kind: "design-system-flow-agent",
     createdAt: trace.createdAt,
     provider: trace.provider,
     model: trace.model,
     runId,
     directionId,
+    stage: trace.stage,
     status: trace.status,
     request: {
       endpoint: trace.endpoint,
       store: false,
       inputText: trace.inputText,
+      referenceImages: trace.referenceImages.map((reference) => ({
+        ...reference,
+        detail: "high"
+      })),
       responseFormat: {
         type: "json_schema",
-        name: "moons_authoritative_campaign_packet",
+        name:
+          trace.stage === "set-creative-direction"
+            ? "moons_creative_set_direction"
+            : "moons_visual_quality_review",
         strict: true
       }
     },

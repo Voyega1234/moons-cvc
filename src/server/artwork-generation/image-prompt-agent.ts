@@ -6,7 +6,6 @@ import {
   type ArtworkMode
 } from "../../domain/creative-run.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
-import type { AuthoritativeCampaignPacket } from "./campaign-truth-normalizer-agent.js";
 
 type FetchLike = typeof fetch;
 
@@ -52,7 +51,8 @@ export interface ImagePromptAgentInput {
     refs: readonly { title: string; description: string }[];
   };
   selectedProductIds?: readonly string[];
-  campaignPacket?: AuthoritativeCampaignPacket;
+  setDirection?: string;
+  shotOpportunity?: string;
 }
 
 export interface ImagePromptAgentTrace {
@@ -87,8 +87,7 @@ export async function generateImagePrompt({
   writeTrace,
   loadAgentImagePrompt = defaultLoadAgentImagePrompt,
   loadReferenceLibraryPrompt = defaultLoadReferenceLibraryPrompt,
-  loadCreativeGraphicDesignerPrompt = defaultLoadCreativeGraphicDesignerPrompt,
-  loadCreativeConceptDirectorPrompt = defaultLoadCreativeConceptDirectorPrompt
+  loadCreativeGraphicDesignerPrompt = defaultLoadCreativeGraphicDesignerPrompt
 }: {
   apiKey: string;
   model?: string;
@@ -100,7 +99,6 @@ export async function generateImagePrompt({
   loadAgentImagePrompt?: () => Promise<string>;
   loadReferenceLibraryPrompt?: () => Promise<string>;
   loadCreativeGraphicDesignerPrompt?: () => Promise<string>;
-  loadCreativeConceptDirectorPrompt?: () => Promise<string>;
 }): Promise<string> {
   const resolvedModel = model?.trim() || DEFAULT_MODEL;
   const endpoint =
@@ -110,20 +108,14 @@ export async function generateImagePrompt({
   const endpointPath =
     provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
-  const isLegacyCreativeDesignMode = mode === "design-system";
-  const isLockedCampaignConceptMode = mode === "design-system-new";
-  const inputText =
-    isLockedCampaignConceptMode
-      ? renderLockedCampaignConceptPrompt(
-          await loadCreativeConceptDirectorPrompt(),
-          input
-        )
-      : isLegacyCreativeDesignMode
-      ? renderLegacyV6CreativeConceptPrompt(
-          await loadCreativeGraphicDesignerPrompt(),
-          input
-        )
-      : mode === "reference-library"
+  const isDesignSystemMode =
+    mode === "design-system" || mode === "design-system-new";
+  const inputText = isDesignSystemMode
+    ? renderLegacyV6CreativeConceptPrompt(
+        await loadCreativeGraphicDesignerPrompt(),
+        input
+      )
+    : mode === "reference-library"
       ? renderReferenceLibraryPrompt(
           await loadReferenceLibraryPrompt(),
           input
@@ -156,13 +148,11 @@ export async function generateImagePrompt({
         text: {
           format: {
             type: "json_schema",
-            name:
-              isLockedCampaignConceptMode || isLegacyCreativeDesignMode
-                ? "moons_creative_visual_concept"
-                : "moons_image_generation_prompt",
+            name: isDesignSystemMode
+              ? "moons_creative_visual_concept"
+              : "moons_image_generation_prompt",
             strict: true,
-            schema:
-              isLockedCampaignConceptMode || isLegacyCreativeDesignMode
+            schema: isDesignSystemMode
               ? creativeConceptSchema
               : standardImagePromptSchema
           }
@@ -183,8 +173,7 @@ export async function generateImagePrompt({
     );
     const text = extractResponseText(payload);
     const parsed = JSON.parse(text) as unknown;
-    const responsePrompt =
-      isLockedCampaignConceptMode || isLegacyCreativeDesignMode
+    const responsePrompt = isDesignSystemMode
       ? parseCreativeVisualConcept(parsed, providerLabel)
       : parseStandardImagePrompt(parsed, providerLabel);
     await writeTraceSafely(writeTrace, {
@@ -370,13 +359,6 @@ async function defaultLoadCreativeGraphicDesignerPrompt(): Promise<string> {
   );
 }
 
-async function defaultLoadCreativeConceptDirectorPrompt(): Promise<string> {
-  return readFile(
-    join(process.cwd(), "agent_prompt", "agent_creative_concept_director.md"),
-    "utf8"
-  );
-}
-
 async function defaultLoadProductionBriefPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_production_brief.md"),
@@ -475,6 +457,8 @@ function renderLegacyV6CreativeConceptPrompt(
       ratio: input.canvasRatio,
       audienceMoment: input.strategy?.audienceMoment ?? null
     },
+    campaignSetDirection: input.setDirection ?? null,
+    shotOpportunity: input.shotOpportunity ?? null,
     strategySelectedEvidence: input.strategy
       ? {
           proof: input.strategy.proof.map((claim) => claim.text),
@@ -509,33 +493,6 @@ function renderLegacyV6CreativeConceptPrompt(
     "RUNTIME OUTPUT ENVELOPE",
     'Return strict JSON matching {"visualConcept":"..."}.',
     "The visualConcept value must follow the prompt's original three-sentence paragraph requirement. This JSON envelope changes transport only, not the creative task."
-  ].join("\n");
-}
-
-function renderLockedCampaignConceptPrompt(
-  source: string,
-  input: ImagePromptAgentInput
-): string {
-  if (!input.campaignPacket) {
-    throw new Error(
-      "Design System (New) requires an authoritative campaign packet."
-    );
-  }
-  return [
-    source.trim(),
-    "",
-    "LOCKED AUTHORITATIVE CAMPAIGN PACKET",
-    JSON.stringify(input.campaignPacket, null, 2),
-    "",
-    "ATTACHED REFERENCE ROLES",
-    JSON.stringify(
-      input.referenceImages.map((image, index) => ({
-        image: index + 1,
-        ...buildCompactReference(image.label, index)
-      })),
-      null,
-      2
-    )
   ].join("\n");
 }
 
