@@ -37,6 +37,7 @@ import {
 import {
   albumFormatLabel,
   albumFormats,
+  inferredReferenceImageRole,
   type AlbumFormat,
   type CreativeOutput,
   type ServiceType
@@ -3802,6 +3803,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     string | null
   >(null);
   const [preflightOpen, setPreflightOpen] = useState(false);
+  const preflightReferenceImages = state.referenceImages.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
   const [manualHookGroup, setManualHookGroup] = useState<{
     service: ServiceType;
     title: string;
@@ -4067,11 +4071,14 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             dispatch({ type: "set-artwork-mode", mode })
           }
           visualInputs={{
-            referenceCount: state.referenceImages.length,
+            referenceCount: preflightReferenceImages.length,
             materialCount: selectedUploadedMaterials(state).length,
             referenceEditor: (
               <CreativeMaterialsEditor
-                state={state}
+                state={{
+                  ...state,
+                  referenceImages: preflightReferenceImages
+                }}
                 dispatch={dispatch}
                 kind="reference"
                 legacyReferences={state.brand?.library.refs ?? []}

@@ -75,6 +75,26 @@ function directionKind(service: ServiceType): "Static" | "Album" | "UGC" {
   return "Static";
 }
 
+function PreflightSectionTitle({
+  number,
+  title,
+  description
+}: {
+  number: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <span className="confirm-section-title">
+      <span className="confirm-section-number">{number}</span>
+      <span>
+        <b>{title}</b>
+        <small>{description}</small>
+      </span>
+    </span>
+  );
+}
+
 function DirectionArtwork({
   direction,
   fallbackService
@@ -397,14 +417,13 @@ export function PreflightModal({
           </div>
         ) : (
           <div className="preflight-body">
-            <section className="preflight-section">
-              <header className="preflight-section-head">
-                <span>
-                  <b>1 · Ideas to check</b>
-                  <small>
-                    {selectedIds.size} of {directions.length} selected
-                  </small>
-                </span>
+            <section className="preflight-section confirm-section full">
+              <header className="preflight-section-head confirm-section-head">
+                <PreflightSectionTitle
+                  number={1}
+                  title="Ideas to check"
+                  description={`${selectedIds.size} of ${directions.length} selected`}
+                />
                 <button
                   className="btn secondary"
                   type="button"
@@ -453,15 +472,13 @@ export function PreflightModal({
             </section>
 
             {visualInputs ? (
-              <section className="preflight-section preflight-visual-inputs">
-                <header className="preflight-section-head">
-                  <span>
-                    <b>2 · Image references</b>
-                    <small>
-                      Review or change the exact visual context before
-                      generation.
-                    </small>
-                  </span>
+              <section className="preflight-section confirm-section full preflight-visual-inputs">
+                <header className="preflight-section-head confirm-section-head">
+                  <PreflightSectionTitle
+                    number={2}
+                    title="Image references"
+                    description="Review or change the exact visual context before generation."
+                  />
                 </header>
                 <div
                   className="confirm-input-tabs"
@@ -521,15 +538,13 @@ export function PreflightModal({
               </section>
             ) : null}
 
-            <section className="preflight-section">
-              <header className="preflight-section-head">
-                <span>
-                  <b>{visualInputs ? "3" : "2"} · Context to send</b>
-                  <small>
-                    Only enabled inputs will be included in the GPT Image 2
-                    request.
-                  </small>
-                </span>
+            <section className="preflight-section confirm-section">
+              <header className="preflight-section-head confirm-section-head">
+                <PreflightSectionTitle
+                  number={visualInputs ? 3 : 2}
+                  title="Context to send"
+                  description="Only enabled inputs will be included in the GPT Image 2 request."
+                />
               </header>
               <div className="preflight-context-grid">
                 {[
@@ -587,15 +602,13 @@ export function PreflightModal({
               </div>
             </section>
 
-            <section className="preflight-section">
-              <header className="preflight-section-head">
-                <span>
-                  <b>{visualInputs ? "4" : "3"} · Artwork mode</b>
-                  <small>
-                    Inherited from Review &amp; continue. Change it here for
-                    this build if needed.
-                  </small>
-                </span>
+            <section className="preflight-section confirm-section">
+              <header className="preflight-section-head confirm-section-head">
+                <PreflightSectionTitle
+                  number={visualInputs ? 4 : 3}
+                  title="Artwork mode"
+                  description="Inherited from Review & continue. Change it here for this build if needed."
+                />
               </header>
               <ArtworkModeSelector
                 className="preflight-artwork-mode-setting"
@@ -604,12 +617,13 @@ export function PreflightModal({
               />
             </section>
 
-            <section className="preflight-section">
-              <header className="preflight-section-head">
-                <span>
-                  <b>{visualInputs ? "5" : "4"} · Checks to run</b>
-                  <small>Quality and Spelling are on by default</small>
-                </span>
+            <section className="preflight-section confirm-section full">
+              <header className="preflight-section-head confirm-section-head">
+                <PreflightSectionTitle
+                  number={visualInputs ? 5 : 4}
+                  title="Checks to run"
+                  description="Quality and Spelling are on by default"
+                />
               </header>
               <div className="preflight-checks">
                 {CHECKS.map((check) => {

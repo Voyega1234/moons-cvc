@@ -59,14 +59,16 @@ describe("PreflightModal", () => {
     });
     const modal = within(dialog);
 
-    expect(modal.getByText("1 · Ideas to check")).toBeTruthy();
+    expect(modal.getByText("Ideas to check")).toBeTruthy();
     expect(modal.getByText("6 of 6 selected")).toBeTruthy();
     expect(
       modal.queryByRole("textbox", {
         name: "Artwork brief from Review & continue"
       })
     ).toBeNull();
-    expect(modal.getAllByRole("checkbox")).toHaveLength(6);
+    expect(
+      dialog.querySelectorAll(".preflight-asset[role='checkbox']")
+    ).toHaveLength(6);
     expect(modal.getByText("Album 04")).toBeTruthy();
     expect(modal.getByText("UGC 05")).toBeTruthy();
     expect(
@@ -143,7 +145,7 @@ describe("PreflightModal", () => {
     const modal = within(dialog);
 
     expect(portalRoot.contains(dialog)).toBe(true);
-    expect(modal.getByText("2 · Image references")).toBeTruthy();
+    expect(modal.getByText("Image references")).toBeTruthy();
     expect(modal.getByText("Reference editor reused")).toBeTruthy();
     const artworkBrief = modal.getByRole("textbox", {
       name: "Artwork brief"

@@ -2038,7 +2038,8 @@ describe("redesigned workflow stages", () => {
     ).toEqual([]);
   });
 
-  it("removes a legacy brand logo from artwork references", async () => {
+  it("removes a legacy brand logo stored as a style reference", async () => {
+    const user = userEvent.setup();
     const state = {
       ...buildCreativeState(),
       referenceImages: [
@@ -2046,14 +2047,14 @@ describe("redesigned workflow stages", () => {
           id: "library-logo-1",
           url: "https://example.com/logo.png",
           label: "Logo",
-          role: "logo" as const
+          role: "style" as const
         }
       ]
     };
     const dispatch = vi.fn();
     const memoryRepository = new MockBrandMemoryRepository();
 
-    render(
+    const view = render(
       <BrandMemoryProvider repository={memoryRepository}>
         <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
       </BrandMemoryProvider>
@@ -2065,6 +2066,23 @@ describe("redesigned workflow stages", () => {
         item: null
       })
     );
+
+    await user.click(
+      within(view.container).getByRole("button", {
+        name: "Review & continue →"
+      })
+    );
+    const confirmation = within(document.body).getByRole("dialog", {
+      name: "Confirm what Creative Compass should use"
+    });
+    expect(
+      within(confirmation).getByRole("tab", {
+        name: "Image Reference 0"
+      })
+    ).toBeTruthy();
+    expect(
+      within(confirmation).queryByRole("button", { name: /Logo Selected/i })
+    ).toBeNull();
   });
 
   it("presents Angles as the prototype-style hook selection workspace", async () => {
@@ -2377,6 +2395,49 @@ describe("redesigned workflow stages", () => {
       type: "set-artwork-brief",
       brief: "Use warm afternoon light instead."
     });
+  });
+
+  it("keeps legacy logo assets out of preflight image references", async () => {
+    const user = userEvent.setup();
+    const state = {
+      ...buildCreativeState(),
+      stage: "directions" as const,
+      referenceImages: [
+        {
+          id: "legacy-logo-reference",
+          url: "https://example.com/logo.png",
+          label: "Logo",
+          role: "style" as const
+        },
+        {
+          id: "approved-style-reference",
+          url: "https://example.com/style.jpg",
+          label: "Approved room style",
+          role: "style" as const
+        }
+      ]
+    };
+
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+
+    await user.click(
+      within(view.container).getByRole("button", {
+        name: "Confirm hooks & create →"
+      })
+    );
+
+    const preflight = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    expect(
+      within(preflight).getByRole("tab", {
+        name: "Image Reference 1"
+      })
+    ).toBeTruthy();
   });
 
   it("derives Recommended and Option PDF groups from selection and deletion", async () => {
