@@ -595,7 +595,7 @@ function renderStandardPrompt(
             mapping:
               "Image numbers below match the attached image[] order exactly.",
             visualPriority:
-              "The primary style-and-composition reference is the highest-priority visual authority. It controls composition, camera angle, framing, lighting, color palette, background, spatial depth, typography character, and overall mood.",
+              "Treat the primary reference as the strongest source of visual direction, but not as a blanket lock on every visual attribute. Identify its most distinctive transferable visual ideas and select the ones that best serve this campaign concept, such as its interaction pattern, composition rhythm, camera perspective, lighting, palette, atmosphere, typography, or graphic treatment. Preserve and adapt high-salience visual mechanisms when they support the idea; do not mechanically copy the whole image and do not reduce the reference to palette or mood alone.",
             productIsolation:
               "Product materials control only the visible identity of the product itself. Preserve the product exactly, but never inherit camera angle, crop, composition, placement, lighting setup, background, surface, props, or scene from a product material."
           }
@@ -657,7 +657,7 @@ function buildStandardReference(
       ...base,
       role: "primary-style-and-composition-reference",
       use:
-        "Use this image as the main visual blueprint for the entire artwork, including its composition, camera angle, framing, lighting, color palette, background, spatial depth, typography character, and mood. Adapt that complete visual language to the campaign and products."
+        "Use this image as the strongest source of visual direction. Identify the distinctive visual ideas that make it recognizable, then choose and adapt the ones that best support the campaign concept. The useful signal may be its interaction pattern, composition rhythm, camera perspective, lighting, palette, atmosphere, typography, or graphic treatment. Do not automatically copy every attribute, and do not reduce its influence to palette or mood alone."
     };
   }
 

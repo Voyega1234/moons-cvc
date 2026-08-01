@@ -112,6 +112,7 @@ export function BriefConfirmationModal({
   uploadPending,
   uploadError,
   onUploadReference,
+  referenceBrowser,
   materialBrowser,
   onBack,
   onConfirm
@@ -123,15 +124,18 @@ export function BriefConfirmationModal({
   uploadPending: boolean;
   uploadError: string | null;
   onUploadReference: (event: ChangeEvent<HTMLInputElement>) => void;
+  referenceBrowser?: ReactNode;
   materialBrowser: ReactNode;
   onBack: () => void;
   onConfirm: () => void;
 }) {
   const titleId = useId();
   const backButtonRef = useRef<HTMLButtonElement>(null);
+  const onBackRef = useRef(onBack);
   const [assetView, setAssetView] = useState<"reference" | "material">(
     "reference"
   );
+  const [managingReferences, setManagingReferences] = useState(false);
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
   const imageReferences = state.referenceImages.filter(
@@ -152,13 +156,17 @@ export function BriefConfirmationModal({
     products.length === 0 || selectedProducts.length > 0;
 
   useEffect(() => {
+    onBackRef.current = onBack;
+  }, [onBack]);
+
+  useEffect(() => {
     if (!open) return;
     if (state.artworkMode === "reference-library") {
       dispatch({ type: "set-artwork-mode", mode: "design-system" });
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !uploadPending) onBack();
+      if (event.key === "Escape" && !uploadPending) onBackRef.current();
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -167,7 +175,11 @@ export function BriefConfirmationModal({
       document.removeEventListener("keydown", handleKeyDown);
       window.clearTimeout(focusTimer);
     };
-  }, [dispatch, onBack, open, state.artworkMode, uploadPending]);
+  }, [dispatch, open, state.artworkMode, uploadPending]);
+
+  useEffect(() => {
+    if (!open) setManagingReferences(false);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
   const portalRoot = document.querySelector(".compass-app") ?? document.body;
@@ -443,7 +455,18 @@ export function BriefConfirmationModal({
                     ? `${imageReferences.length} references selected`
                     : `${selectedMaterials.length} materials selected`}
                 </span>
-                {assetView === "reference" ? (
+                {assetView === "reference" && referenceBrowser ? (
+                  <button
+                    className="btn secondary small"
+                    type="button"
+                    aria-expanded={managingReferences}
+                    onClick={() =>
+                      setManagingReferences((current) => !current)
+                    }
+                  >
+                    {managingReferences ? "Close library" : "Upload files"}
+                  </button>
+                ) : assetView === "reference" ? (
                   <label
                     className={`btn secondary small ${
                       uploadPending ? "disabled" : ""
@@ -494,16 +517,23 @@ export function BriefConfirmationModal({
               </p>
             ) : null}
             {assetView === "reference" ? (
-              <ConfirmationReferenceGrid
-                references={references}
-                selectedReferences={imageReferences}
-                onToggle={(reference) =>
-                  dispatch({
-                    type: "toggle-reference-image",
-                    item: reference
-                  })
-                }
-              />
+              <>
+                <ConfirmationReferenceGrid
+                  references={references}
+                  selectedReferences={imageReferences}
+                  onToggle={(reference) =>
+                    dispatch({
+                      type: "toggle-reference-image",
+                      item: reference
+                    })
+                  }
+                />
+                {managingReferences && referenceBrowser ? (
+                  <div className="brief-confirm-material-browser preflight-reference-manager">
+                    {referenceBrowser}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="brief-confirm-material-browser">
                 {materialBrowser}

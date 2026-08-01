@@ -57,6 +57,64 @@
   display: none !important;
 }
 
+.compass-app .output-modal-reference-upload {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid #e0e4ec;
+  border-radius: 14px;
+  background: #f8f9fb;
+}
+
+.compass-app .output-modal-reference-upload b {
+  display: block;
+  color: #202534;
+  font-size: 12px;
+}
+
+.compass-app .output-modal-reference-upload p {
+  max-width: 420px;
+  margin: 3px 0 0;
+  color: #737c8f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.compass-app .output-reference-file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.compass-app .output-modal-reference-preview {
+  display: grid;
+  grid-template-columns: 48px minmax(90px, 150px) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.compass-app .output-modal-reference-preview img {
+  width: 48px;
+  height: 48px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.compass-app .output-modal-reference-preview span {
+  overflow: hidden;
+  color: #4f586b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1080px) {
   .compass-app .compass-build-asset-pair {
     min-height: 0;

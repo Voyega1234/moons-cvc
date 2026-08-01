@@ -112,7 +112,29 @@ Artwork & Caption slides unless the export contract is intentionally changed.
 
 Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
+the thin façade at
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
+
+Server-side ownership is split by responsibility:
+
+- `artwork-generation-pipeline.ts` owns request orchestration and the active
+  generation flow.
+- `artwork-request-parser.ts` validates and normalizes generation and revision
+  request bodies.
+- `prompt-runtime.ts` loads, compacts, and renders prompt templates;
+  `prompt-context.ts` compiles active campaign context and runtime rules.
+- `reference-images.ts` resolves, recovers, and normalizes reference assets.
+- `album-master.ts` builds Album master instructions and performs adaptive
+  panel detection and cropping.
+- `artwork-revision.ts` owns revision prompting and image-edit orchestration.
+- `artwork-persistence.ts`, `artwork-paths.ts`, and
+  `artwork-generation-types.ts` own storage paths, uploads, signed URLs, and
+  the storage contract.
+- `artwork-debug-log.ts` owns debug-log schemas, filenames, and artifact
+  writes.
+
+Keep the endpoint façade stable for API and test imports. Add new behavior to
+the smallest owning module above instead of rebuilding the former monolith.
 
 - `standard` is a direct Image API route:
   `agent_prompt/agent_image.md + Compact Campaign Input → GPT Image 2`.

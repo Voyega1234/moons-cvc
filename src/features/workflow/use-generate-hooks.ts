@@ -111,7 +111,7 @@ export function useGenerateMoreHooks(
   const [error, setError] = useState<string | null>(null);
 
   const generateMore = useCallback(
-    (service: ServiceType) => {
+    (service: ServiceType, userDirection?: string) => {
       setLoadingService(service);
       setError(null);
 
@@ -137,12 +137,19 @@ export function useGenerateMoreHooks(
         ]
       };
       const contentTypeLabel = serviceLabels[service];
+      const trimmedUserDirection = userDirection?.trim();
       const combinedInstructions = withCreativeMixInstructions(
         targetedState,
         [
           `Generate additional ${contentTypeLabel} hook ideas only.`,
           `Every returned direction must use the ${contentTypeLabel} content type.`,
-          "Make each new idea meaningfully different from the existing hooks."
+          "Make each new idea meaningfully different from the existing hooks.",
+          ...(trimmedUserDirection
+            ? [
+                "USER DIRECTION FOR THESE ADDITIONAL IDEAS:",
+                trimmedUserDirection
+              ]
+            : [])
         ].join("\n")
       );
       const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);

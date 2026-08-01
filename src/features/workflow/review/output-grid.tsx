@@ -1,10 +1,14 @@
-import { useEffect, useState, type Dispatch } from "react";
+import { useEffect, useState, type ChangeEvent, type Dispatch } from "react";
 import { Sparkle } from "@phosphor-icons/react";
 import { type ArtworkMode, type CreativeOutput } from "../../../domain/creative-run";
 import { directionSubheadline } from "../../../domain/subheadline-highlight";
 import { CREATIVE_STRATEGIST_AGENT_NAME, type CreativeQualityReport } from "../../../domain/quality-check";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
-import { regenerateOutputImages, reviseOutputImage } from "../../../services/artwork-generation/openai-image-generation";
+import {
+  regenerateOutputImages,
+  reviseOutputImage,
+  type ArtworkReferenceImage
+} from "../../../services/artwork-generation/openai-image-generation";
 import { runQualityCheck } from "../../../services/quality-check/run-quality-check";
 import { playGenerationSuccessSound } from "../../../shared/utils/notification-sound";
 import type { WorkflowAction, WorkflowState } from "../model";
@@ -432,6 +436,40 @@ function QualityActionSummary({ text }: { text: string }) {
   );
 }
 
+type OutputReferenceAttachment = {
+  name: string;
+  data: string;
+  mediaType: string;
+  previewUrl: string;
+};
+
+function readOutputReferenceAttachment(
+  file: File
+): Promise<OutputReferenceAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read this image."));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Could not read this image."));
+        return;
+      }
+      const separatorIndex = reader.result.indexOf(",");
+      if (separatorIndex < 0) {
+        reject(new Error("This image format is not supported."));
+        return;
+      }
+      resolve({
+        name: file.name,
+        data: reader.result.slice(separatorIndex + 1),
+        mediaType: file.type || "image/png",
+        previewUrl: reader.result
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function OutputRegenerateModal({
   run,
   output,
@@ -456,8 +494,30 @@ function OutputRegenerateModal({
   );
   const [replacementApplied, setReplacementApplied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [referenceAttachment, setReferenceAttachment] =
+    useState<OutputReferenceAttachment | null>(null);
   const album = isAlbumOutput(output);
   const busy = phase !== "idle";
+
+  const handleReferenceAttachment = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setError("Choose a PNG, JPEG, or WEBP image.");
+      return;
+    }
+    try {
+      setError(null);
+      setReferenceAttachment(await readOutputReferenceAttachment(file));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not read this image."
+      );
+    }
+  };
 
   const handleRegenerate = async () => {
     if (!direction) {
@@ -468,19 +528,35 @@ function OutputRegenerateModal({
     setPhase("regenerating");
     setError(null);
     let imageReplaced = false;
+    const additionalReferenceImages: readonly ArtworkReferenceImage[] =
+      referenceAttachment
+        ? [
+            {
+              kind: "base64",
+              data: referenceAttachment.data,
+              mediaType: referenceAttachment.mediaType,
+              label: `User revision reference — ${referenceAttachment.name}`
+            }
+          ]
+        : [];
+    const revisionInstructions =
+      prompt.trim() ||
+      "Use the attached visual reference to improve this artwork while preserving its core message and brand identity.";
 
     try {
       const updatedOutputs = album
         ? await regenerateOutputImages({
             run,
             direction,
-            extraInstructions: prompt
+            extraInstructions: revisionInstructions,
+            additionalReferenceImages
           })
         : [
             await reviseOutputImage({
               run,
               output,
-              instructions: prompt
+              instructions: revisionInstructions,
+              referenceImages: additionalReferenceImages
             })
           ];
       const orderedUpdated = album
@@ -625,6 +701,44 @@ function OutputRegenerateModal({
             onChange={(event) => setPrompt(event.target.value)}
           />
         </label>
+        <div className="output-modal-reference-upload">
+          <div>
+            <b>Image reference (optional)</b>
+            <p>
+              Attach one image to guide the composition, mood, camera angle,
+              styling, or finish of this revision.
+            </p>
+          </div>
+          {referenceAttachment ? (
+            <div className="output-modal-reference-preview">
+              <img
+                src={referenceAttachment.previewUrl}
+                alt={referenceAttachment.name}
+              />
+              <span title={referenceAttachment.name}>
+                {referenceAttachment.name}
+              </span>
+              <button
+                className="btn ghost small"
+                type="button"
+                disabled={busy || replacementApplied}
+                onClick={() => setReferenceAttachment(null)}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label className="btn secondary small output-reference-file-button">
+              Attach image
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={busy || replacementApplied}
+                onChange={(event) => void handleReferenceAttachment(event)}
+              />
+            </label>
+          )}
+        </div>
         <p className="output-modal-reference-note">
           {album
             ? `${artworkModeLabel(run.artworkMode)} mode · album regeneration uses the selected brief and references.`
@@ -643,7 +757,11 @@ function OutputRegenerateModal({
           <button
             className="btn primary"
             type="button"
-            disabled={busy || replacementApplied || (!album && !prompt.trim())}
+            disabled={
+              busy ||
+              replacementApplied ||
+              (!album && !prompt.trim() && !referenceAttachment)
+            }
             onClick={() => void handleRegenerate()}
           >
             {busy ? <Spinner /> : null}

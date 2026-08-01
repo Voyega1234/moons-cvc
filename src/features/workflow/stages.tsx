@@ -3837,6 +3837,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     service: ServiceType;
     title: string;
   } | null>(null);
+  const [generateMoreGroup, setGenerateMoreGroup] = useState<{
+    service: ServiceType;
+    title: string;
+  } | null>(null);
   const [exportingAngles, setExportingAngles] = useState(false);
   const [exportAnglesError, setExportAnglesError] = useState<string | null>(null);
   const {
@@ -4159,7 +4163,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                     className="btn secondary small compass-angle-generate-ideas"
                     type="button"
                     disabled={generatingMore || regeneratingAllHooks}
-                    onClick={() => generateMore(group.service)}
+                    onClick={() =>
+                      setGenerateMoreGroup({
+                        service: group.service,
+                        title: group.contentType
+                      })
+                    }
                   >
                     {generatingMoreService === group.service ? <Spinner /> : null}
                     {generatingMoreService === group.service
@@ -4382,6 +4391,17 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               ...values
             });
             setManualHookGroup(null);
+          }}
+        />
+      ) : null}
+      {generateMoreGroup ? (
+        <GenerateMoreIdeasModal
+          contentType={generateMoreGroup.title}
+          onClose={() => setGenerateMoreGroup(null)}
+          onGenerate={(direction) => {
+            const service = generateMoreGroup.service;
+            setGenerateMoreGroup(null);
+            generateMore(service, direction);
           }}
         />
       ) : null}
@@ -4823,6 +4843,69 @@ function ManualHookModal({
             }
           >
             Add hook
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GenerateMoreIdeasModal({
+  contentType,
+  onClose,
+  onGenerate
+}: {
+  contentType: string;
+  onClose: () => void;
+  onGenerate: (direction: string) => void;
+}) {
+  const [direction, setDirection] = useState("");
+
+  return (
+    <div className="output-modal-backdrop" onClick={onClose}>
+      <div
+        className="output-modal hook-regenerate-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="generate-more-ideas-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="output-modal-head">
+          <div>
+            <p className="eyebrow">Generate more ideas</p>
+            <h3 id="generate-more-ideas-title">
+              More {contentType} ideas
+            </h3>
+          </div>
+          <button className="btn ghost" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <label className="output-modal-prompt-label">
+          <span>What kind of ideas do you want? (optional)</span>
+          <textarea
+            rows={5}
+            value={direction}
+            autoFocus
+            maxLength={3000}
+            placeholder="Example: Explore quieter premium moments, unusual camera angles, and ideas that make the product part of a real daily ritual."
+            onChange={(event) => setDirection(event.target.value)}
+          />
+        </label>
+        <p className="hook-regenerate-note">
+          Leave this blank to let Creative Compass find a different direction
+          from the current hooks.
+        </p>
+        <div className="output-modal-actions">
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => onGenerate(direction)}
+          >
+            Generate ideas
           </button>
         </div>
       </div>

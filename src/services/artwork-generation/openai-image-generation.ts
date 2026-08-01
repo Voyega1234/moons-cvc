@@ -170,6 +170,7 @@ export interface ArtworkRevisionRequest {
   format: string;
   sourceImageUrl: string;
   instructions: string;
+  referenceImages?: readonly ArtworkReferenceImage[];
   output: {
     size: ArtworkOutputSize;
     format: "png";
@@ -266,11 +267,13 @@ export async function generateArtworkForSelectedHooks({
 export async function reviseOutputImage({
   run,
   output,
-  instructions
+  instructions,
+  referenceImages = []
 }: {
   run: WorkflowState;
   output: CreativeOutput;
   instructions: string;
+  referenceImages?: readonly ArtworkReferenceImage[];
 }): Promise<CreativeOutput> {
   if (
     env.artworkGenerationMode === "openai" &&
@@ -279,7 +282,12 @@ export async function reviseOutputImage({
     throw new Error("Artwork generation endpoint is not configured.");
   }
 
-  const request = buildArtworkRevisionRequest({ run, output, instructions });
+  const request = buildArtworkRevisionRequest({
+    run,
+    output,
+    instructions,
+    referenceImages
+  });
   const endpoint = env.artworkGenerationEndpoint;
   if (!endpoint) {
     throw new Error("Artwork generation endpoint is not configured.");
@@ -309,11 +317,13 @@ export async function reviseOutputImage({
 export function buildArtworkRevisionRequest({
   run,
   output,
-  instructions
+  instructions,
+  referenceImages = []
 }: {
   run: WorkflowState;
   output: CreativeOutput;
   instructions: string;
+  referenceImages?: readonly ArtworkReferenceImage[];
 }): ArtworkRevisionRequest {
   const sourceImageUrl = output.assetUrl?.trim();
   if (!sourceImageUrl) {
@@ -335,6 +345,7 @@ export function buildArtworkRevisionRequest({
     format: output.format,
     sourceImageUrl,
     instructions: trimmedInstructions,
+    ...(referenceImages.length ? { referenceImages } : {}),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"
@@ -346,12 +357,14 @@ export async function regenerateOutputImages({
   run,
   direction,
   extraInstructions,
-  sourceImageUrl
+  sourceImageUrl,
+  additionalReferenceImages = []
 }: {
   run: WorkflowState;
   direction: ArtworkRegenerationDirection;
   extraInstructions?: string;
   sourceImageUrl?: string;
+  additionalReferenceImages?: readonly ArtworkReferenceImage[];
 }): Promise<readonly CreativeOutput[]> {
   if (
     env.artworkGenerationMode === "openai" &&
@@ -364,7 +377,8 @@ export async function regenerateOutputImages({
     run,
     direction,
     extraInstructions,
-    sourceImageUrl
+    sourceImageUrl,
+    additionalReferenceImages
   });
 
   const payload = await requestArtworkGeneration({ request, run });
@@ -380,12 +394,14 @@ export function buildArtworkRegenerationRequest({
   run,
   direction,
   extraInstructions,
-  sourceImageUrl
+  sourceImageUrl,
+  additionalReferenceImages = []
 }: {
   run: WorkflowState;
   direction: ArtworkRegenerationDirection;
   extraInstructions?: string;
   sourceImageUrl?: string;
+  additionalReferenceImages?: readonly ArtworkReferenceImage[];
 }): ArtworkGenerationRequest {
   const trimmedInstructions = extraInstructions?.trim();
   const trimmedSourceImageUrl = sourceImageUrl?.trim();
@@ -427,6 +443,7 @@ export function buildArtworkRegenerationRequest({
             }
           ]
         : []),
+      ...additionalReferenceImages,
       ...brandLogoReferences(run),
       ...withoutLogoReferences(
         artworkReferencesFromSelections(run.referenceImages)

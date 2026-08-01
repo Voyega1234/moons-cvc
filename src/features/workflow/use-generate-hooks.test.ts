@@ -78,7 +78,12 @@ describe("useGenerateMoreHooks", () => {
       useGenerateMoreHooks(state, dispatch)
     );
 
-    act(() => result.current.generateMore("album-post"));
+    act(() =>
+      result.current.generateMore(
+        "album-post",
+        "Explore calmer premium rituals and unusual camera angles."
+      )
+    );
 
     expect(result.current.loadingService).toBe("album-post");
     await waitFor(() =>
@@ -96,7 +101,10 @@ describe("useGenerateMoreHooks", () => {
       expect.objectContaining({
         service: "album-post",
         quantity: 3,
-        contentTypeQuotas: [{ service: "album-post", count: 3 }]
+        contentTypeQuotas: [{ service: "album-post", count: 3 }],
+        extraInstructions: expect.stringContaining(
+          "Explore calmer premium rituals and unusual camera angles."
+        )
       })
     );
     await waitFor(() => expect(result.current.loadingService).toBeNull());

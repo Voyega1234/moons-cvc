@@ -1641,8 +1641,23 @@ export function BriefStage({ state, dispatch }: StageProps) {
         uploadPending={referenceUploadPending}
         uploadError={referenceUploadError}
         onUploadReference={handleReferenceUpload}
+        referenceBrowser={
+          <CreativeMaterialsEditor
+            state={{
+              ...state,
+              referenceImages: selectedImageReferences
+            }}
+            dispatch={dispatch}
+            kind="reference"
+            legacyReferences={state.brand?.library.refs ?? []}
+          />
+        }
         materialBrowser={
-          <CreativeMaterialsEditor state={state} dispatch={dispatch} />
+          <CreativeMaterialsEditor
+            state={state}
+            dispatch={dispatch}
+            kind="material"
+          />
         }
         onBack={() => setConfirmationOpen(false)}
         onConfirm={() => {

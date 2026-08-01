@@ -244,6 +244,49 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request).not.toHaveProperty("imagePromptModel");
   });
 
+  it("includes a user attachment as an additional revision reference", () => {
+    const request = buildArtworkRevisionRequest({
+      run,
+      output: {
+        id: "hook-1-v1",
+        directionId: "hook-1",
+        format: "1:1 Static",
+        status: "ready",
+        clientStatus: "queued",
+        assetUrl: "https://example.com/current-artwork.png",
+        revisionCount: 0,
+        approval: {
+          graphicDesign: null,
+          clientService: null,
+          projectManager: null
+        },
+        approvalComments: {
+          graphicDesign: "",
+          clientService: "",
+          projectManager: ""
+        }
+      },
+      instructions: "Use the reference's quieter lighting.",
+      referenceImages: [
+        {
+          kind: "base64",
+          data: "aW1hZ2U=",
+          mediaType: "image/png",
+          label: "User revision reference"
+        }
+      ]
+    });
+
+    expect(request.referenceImages).toEqual([
+      {
+        kind: "base64",
+        data: "aW1hZ2U=",
+        mediaType: "image/png",
+        label: "User revision reference"
+      }
+    ]);
+  });
+
   it("passes brief, selected hooks, text inputs, and reference images to the backend contract", () => {
     const request = buildArtworkGenerationRequest({
       run,

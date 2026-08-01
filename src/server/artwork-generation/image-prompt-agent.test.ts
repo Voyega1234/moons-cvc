@@ -57,8 +57,10 @@ describe("generateImagePrompt", () => {
     expect(promptText).toContain(
       '"role": "primary-style-and-composition-reference"'
     );
+    expect(promptText).toContain("strongest source of visual direction");
+    expect(promptText).toContain("not as a blanket lock");
     expect(promptText).toContain(
-      "highest-priority visual authority"
+      "do not reduce the reference to palette or mood alone"
     );
     expect(promptText).toContain('"image": 2');
     expect(promptText).toContain('"role": "product-identity-only"');
