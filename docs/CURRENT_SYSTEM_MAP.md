@@ -44,6 +44,7 @@ Async results must continue targeting the run that started the request.
 | Stage gates and action blockers | `src/features/workflow/rules.ts` |
 | Workspace/run persistence transitions | `src/features/workflow/workspace-reducer.ts` |
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
+| Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
 | GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
 | Quality check request | `src/features/workflow/use-run-quality-check.ts` |

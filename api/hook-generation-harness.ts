@@ -1,4 +1,5 @@
 import { handleHookGenerationHarnessRequest } from "../src/server/hook-generation/hook-generation-harness-endpoint.js";
+import { hookGenerationDebugLogDirectory } from "../src/server/hook-generation/hook-generation-debug-log.js";
 
 export const config = {
   maxDuration: 300
@@ -29,6 +30,9 @@ export default async function handler(
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
       OPENROUTER_HOOK_GENERATION_MODEL:
         process.env.OPENROUTER_HOOK_GENERATION_MODEL,
+      HOOK_GENERATION_DEBUG_LOG_DIR: hookGenerationDebugLogDirectory(
+        process.env.VERCEL_ENV
+      ),
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     }

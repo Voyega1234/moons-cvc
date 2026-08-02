@@ -24,6 +24,11 @@ import {
   type ConvertCakeAuthorization
 } from "../shared/convert-cake-auth.js";
 import {
+  writeHookGenerationDebugLog,
+  type HookGenerationDebugLog,
+  type HookGenerationDebugLogger
+} from "./hook-generation-debug-log.js";
+import {
   fetchPastPostExamples,
   type PastPostExample,
   type PastPostsClient
@@ -37,6 +42,7 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_HOOK_SUPPORT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_HOOK_GENERATION_MODEL?: string;
+  HOOK_GENERATION_DEBUG_LOG_DIR?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -51,6 +57,7 @@ export interface HookGenerationHarnessEndpointOptions {
     accessToken: string;
   }) => PastPostsClient;
   loadAgentHookPrompt?: () => Promise<string>;
+  writeDebugLog?: HookGenerationDebugLogger;
 }
 
 type ResponseContent =
@@ -64,29 +71,9 @@ type ResponseContent =
       detail: "high";
     };
 
-interface HookResearchReference {
-  name: string;
-  type:
-    | "provable_moment"
-    | "evidence_backed_behavior"
-    | "cultural_fever"
-    | "platform_buzz"
-    | "category_signal";
-  whyItMatters: string;
-  brandRelevance: string;
-  evidenceSummary: string;
-  evidenceStrength: "strong" | "medium" | "weak";
-}
-
-interface HookResearch {
-  overallFinding: string;
-  references: readonly HookResearchReference[];
-  searchQueriesUsed: readonly string[];
-  limitations: string;
-}
-
 interface GeneratedDirection extends RawDirection {
   id: string;
+  sourceCandidateId: string;
   service: ServiceType;
   hook: string;
   subheadline: string;
@@ -111,6 +98,55 @@ interface HookGenerationResult {
   directions: readonly GeneratedDirection[];
 }
 
+interface HookCandidate {
+  id: string;
+  service: ServiceType;
+  hook: string;
+  premise: string;
+  primaryBenefit: string;
+  creativePattern: string;
+  languageDevice: string;
+  audienceReason: string;
+  formatIdea: string;
+  citations: readonly string[];
+}
+
+interface HookCandidateResult {
+  candidates: readonly HookCandidate[];
+}
+
+interface CaptionStyleResult {
+  items: readonly {
+    id: string;
+    caption: string;
+    contactLine: string;
+  }[];
+}
+
+interface PastContentProfile {
+  styleSignals: readonly string[];
+  creativePatterns: readonly {
+    pattern: string;
+    whyItFitsBrand: string;
+    sourcePostIndexes: readonly number[];
+  }[];
+  reusableDetails: readonly {
+    detail: string;
+    sourcePostIndexes: readonly number[];
+  }[];
+}
+
+interface TracedAgentResult<T> {
+  inputText: string;
+  output: T;
+  rawResponse: unknown;
+}
+
+interface HookGenerationBatchResult {
+  candidateTrace: TracedAgentResult<HookCandidateResult>;
+  directorTrace: TracedAgentResult<HookGenerationResult>;
+}
+
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
@@ -119,14 +155,28 @@ const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
   "https://openrouter.ai/api/v1/chat/completions";
 const HOOK_GENERATION_BATCH_SIZE = 12;
 const HOOK_GENERATION_CONCURRENCY = 3;
+const HOOK_CANDIDATE_MULTIPLIER = 3;
+const MIN_HOOK_CANDIDATES_PER_SERVICE = 4;
+const MAX_HOOK_CANDIDATES_PER_BATCH = 36;
+const THAI_NATURALNESS_RULE =
+  "ภาษาไทยห้ามใช้คำว่า ‘ฉัน’ ทุกกรณี. ให้ละประธานหรือเรียบเรียงใหม่ให้เหมือนภาษาพูดจริงก่อน ใช้ ‘เรา’ เฉพาะเมื่อเป็นธรรมชาติและตรงกับเสียงแบรนด์; ห้ามแทน ‘ฉัน’ ด้วย ‘เรา’ แบบอัตโนมัติทุกประโยค.";
 const SUBHEADLINE_BATCH_SIZE = 24;
+const THAI_WEB_SEARCH_TOOL = {
+  type: "web_search_preview",
+  user_location: {
+    type: "approximate",
+    country: "TH",
+    timezone: "Asia/Bangkok"
+  }
+} as const;
 
 export async function handleHookGenerationHarnessRequest({
   request,
   env,
   fetchImpl = fetch,
   createPastPostsClient = defaultCreatePastPostsClient,
-  loadAgentHookPrompt = defaultLoadAgentHookPrompt
+  loadAgentHookPrompt = defaultLoadAgentHookPrompt,
+  writeDebugLog = writeHookGenerationDebugLog
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -178,32 +228,51 @@ export async function handleHookGenerationHarnessRequest({
       createPastPostsClient
     });
     const agentHookPrompt = await loadAgentHookPrompt();
-    const research = await runResearchStep({
-      input,
-      apiKey: openAiApiKey,
-      model: supportModel,
-      fetchImpl
-    });
+    const pastContentTrace = pastPosts.length
+      ? await withTransientRetry(() =>
+          runPastContentProfileStep({
+            input,
+            pastPosts,
+            apiKey: openAiApiKey,
+            model: supportModel,
+            fetchImpl
+          })
+        )
+      : undefined;
+    const pastContentProfile = pastContentTrace?.output;
     const generationBatches = buildHookGenerationBatches(input);
     const batchResults = await mapWithConcurrency(
       generationBatches,
       HOOK_GENERATION_CONCURRENCY,
-      (batch) =>
-        withTransientRetry(() =>
-          runGenerationStep({
+      async (batch) => {
+        const candidateTrace = await withTransientRetry(() =>
+          runCandidateGenerationStep({
             input: batch,
-            research,
-            pastPosts,
             agentHookPrompt,
+            pastContentProfile,
             apiKey: generationApiKey,
             model,
             provider: generationProvider,
             fetchImpl
           })
-        )
+        );
+        const directorTrace = await withTransientRetry(() =>
+          runCreativeDirectorStep({
+            input: batch,
+            agentHookPrompt,
+            pastContentProfile,
+            candidates: candidateTrace.output,
+            apiKey: generationApiKey,
+            model,
+            provider: generationProvider,
+            fetchImpl
+          })
+        );
+        return { candidateTrace, directorTrace };
+      }
     );
     const directions = makeDirectionIdsUnique(
-      batchResults.flatMap((result) => result.directions)
+      batchResults.flatMap((result) => result.directorTrace.output.directions)
     ).slice(0, input.quantity);
     if (
       input.quantity > HOOK_GENERATION_BATCH_SIZE &&
@@ -213,12 +282,45 @@ export async function handleHookGenerationHarnessRequest({
         `Hook generation returned ${directions.length} of ${input.quantity} requested ideas. Please retry the run.`
       );
     }
+    const captionStyleTrace = pastPosts.length
+      ? await withTransientRetry(() =>
+          runCaptionStyleStep({
+            directions,
+            pastPosts,
+            pastContentProfile,
+            apiKey: openAiApiKey,
+            model: supportModel,
+            fetchImpl
+          })
+        )
+      : undefined;
+    const captionStyledDirections = captionStyleTrace
+      ? applyCaptionStyles(directions, captionStyleTrace.output)
+      : directions;
     const highlightedDirections = await runSubheadlineHighlightStep({
-      directions,
+      directions: captionStyledDirections,
       apiKey: openAiApiKey,
       model: supportModel,
       fetchImpl
     });
+
+    const debugLogDirectory = env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim();
+    if (debugLogDirectory) {
+      await writeDebugLog(
+        debugLogDirectory,
+        buildHookGenerationDebugLog({
+          input,
+          generationBatches,
+          batchResults,
+          generationProvider,
+          generationModel: model,
+          pastContentTrace,
+          captionStyleTrace,
+          supportModel,
+          finalDirections: highlightedDirections
+        })
+      );
+    }
 
     return jsonResponse({
       ok: true,
@@ -281,83 +383,335 @@ async function loadPastPostExamples({
   }
 }
 
-async function runResearchStep({
+async function runCandidateGenerationStep({
   input,
-  apiKey,
-  model,
-  fetchImpl
-}: {
-  input: HookGenerationHarnessRequest;
-  apiKey: string;
-  model: string;
-  fetchImpl: FetchLike;
-}): Promise<HookResearch> {
-  const payload = await callResponsesApi({
-    apiKey,
-    model,
-    fetchImpl,
-    content: [
-      {
-        type: "input_text",
-        text: buildResearchPrompt(input)
-      }
-    ],
-    schemaName: "moons_hook_research",
-    schema: hookResearchSchema,
-    tools: [{ type: "web_search_preview" }]
-  });
-
-  return parseHookResearch(extractResponseText(payload));
-}
-
-async function runGenerationStep({
-  input,
-  research,
-  pastPosts,
   agentHookPrompt,
+  pastContentProfile,
   apiKey,
   model,
   provider,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
-  research: HookResearch;
-  pastPosts: readonly PastPostExample[];
   agentHookPrompt: string;
+  pastContentProfile?: PastContentProfile;
   apiKey: string;
   model: string;
   provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
-}): Promise<HookGenerationResult> {
+}): Promise<TracedAgentResult<HookCandidateResult>> {
+  const inputText = buildCandidateGenerationPrompt(
+    input,
+    agentHookPrompt,
+    pastContentProfile
+  );
+  const requestCandidates = (requestInputText: string) =>
+    callResponsesApi({
+      apiKey,
+      model,
+      fetchImpl,
+      content: [
+        { type: "input_text", text: requestInputText },
+        ...input.uploadedMaterials.map((material) => ({
+          type: "input_image" as const,
+          image_url: material.url,
+          detail: "high" as const
+        }))
+      ],
+      schemaName: "moons_hook_candidates",
+      schema: hookCandidateSchema,
+      tools: provider === "openai" ? [THAI_WEB_SEARCH_TOOL] : undefined,
+      toolChoice: provider === "openai" ? "required" : undefined,
+      provider
+    });
+  let finalInputText = inputText;
+  let payload = await requestCandidates(finalInputText);
+  let result = parseHookCandidateResult(extractResponseText(payload));
+  if (containsForbiddenThaiFirstPerson(result)) {
+    finalInputText = buildThaiNaturalnessRetryPrompt(inputText, "candidate");
+    payload = await requestCandidates(finalInputText);
+    result = parseHookCandidateResult(extractResponseText(payload));
+  }
+  assertNoForbiddenThaiFirstPerson(result, "Hook candidates");
+  validateHookCandidateQuotas(result, input);
+  return { inputText: finalInputText, output: result, rawResponse: payload };
+}
+
+async function runCreativeDirectorStep({
+  input,
+  agentHookPrompt,
+  pastContentProfile,
+  candidates,
+  apiKey,
+  model,
+  provider,
+  fetchImpl
+}: {
+  input: HookGenerationHarnessRequest;
+  agentHookPrompt: string;
+  pastContentProfile?: PastContentProfile;
+  candidates: HookCandidateResult;
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  fetchImpl: FetchLike;
+}): Promise<TracedAgentResult<HookGenerationResult>> {
+  const inputText = buildCreativeDirectorPrompt(
+    input,
+    agentHookPrompt,
+    candidates,
+    pastContentProfile
+  );
+  const requestDirections = (requestInputText: string) =>
+    callResponsesApi({
+      apiKey,
+      model,
+      fetchImpl,
+      content: [{ type: "input_text", text: requestInputText }],
+      schemaName: "moons_hook_generation",
+      schema: hookGenerationSchema,
+      provider
+    });
+  let finalInputText = inputText;
+  let payload = await requestDirections(finalInputText);
+  let result = parseHookGenerationResult(extractResponseText(payload));
+  if (containsForbiddenThaiFirstPerson(result)) {
+    finalInputText = buildThaiNaturalnessRetryPrompt(inputText, "direction");
+    payload = await requestDirections(finalInputText);
+    result = parseHookGenerationResult(extractResponseText(payload));
+  }
+  assertNoForbiddenThaiFirstPerson(result, "Creative directions");
+  validateCreativeDirectorSelection(result, candidates);
+  const preference = input.albumFormat ?? defaultAlbumFormatPreference;
+  if (preference === "auto") {
+    return { inputText: finalInputText, output: result, rawResponse: payload };
+  }
+  return {
+    inputText: finalInputText,
+    output: {
+      directions: result.directions.map((direction) =>
+        direction.service === "album-post"
+          ? { ...direction, albumFormat: preference }
+          : direction
+      )
+    },
+    rawResponse: payload
+  };
+}
+
+async function runPastContentProfileStep({
+  input,
+  pastPosts,
+  apiKey,
+  model,
+  fetchImpl
+}: {
+  input: HookGenerationHarnessRequest;
+  pastPosts: readonly PastPostExample[];
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+}): Promise<TracedAgentResult<PastContentProfile>> {
+  const selectedPosts = selectPastPostsForProfile(pastPosts);
+  const inputText = buildPastContentProfilePrompt(input, selectedPosts);
   const payload = await callResponsesApi({
     apiKey,
     model,
     fetchImpl,
-    content: [
-      {
-        type: "input_text",
-        text: buildGenerationPrompt(input, research, pastPosts, agentHookPrompt)
-      },
-      ...input.uploadedMaterials.map((material) => ({
-        type: "input_image" as const,
-        image_url: material.url,
-        detail: "high" as const
-      }))
-    ],
-    schemaName: "moons_hook_generation",
-    schema: hookGenerationSchema,
-    provider
+    content: [{ type: "input_text", text: inputText }],
+    schemaName: "moons_past_content_profile",
+    schema: pastContentProfileSchema
   });
+  const output = parsePastContentProfile(
+    extractResponseText(payload),
+    selectedPosts.length
+  );
+  return { inputText, output, rawResponse: payload };
+}
 
-  const result = parseHookGenerationResult(extractResponseText(payload));
-  const preference = input.albumFormat ?? defaultAlbumFormatPreference;
-  if (preference === "auto") return result;
+async function runCaptionStyleStep({
+  directions,
+  pastPosts,
+  pastContentProfile,
+  apiKey,
+  model,
+  fetchImpl
+}: {
+  directions: readonly GeneratedDirection[];
+  pastPosts: readonly PastPostExample[];
+  pastContentProfile?: PastContentProfile;
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+}): Promise<TracedAgentResult<CaptionStyleResult>> {
+  const selectedPosts = selectPastPostsForCaption(pastPosts);
+  const inputText = buildCaptionStylePrompt(
+    directions,
+    selectedPosts,
+    pastContentProfile
+  );
+  const requestCaptions = (requestInputText: string) =>
+    callResponsesApi({
+      apiKey,
+      model,
+      fetchImpl,
+      content: [{ type: "input_text", text: requestInputText }],
+      schemaName: "moons_caption_style",
+      schema: captionStyleSchema
+    });
+  let finalInputText = inputText;
+  let payload = await requestCaptions(finalInputText);
+  let output = parseCaptionStyleResult(
+    extractResponseText(payload),
+    directions,
+    selectedPosts
+  );
+  if (containsForbiddenThaiFirstPerson(output)) {
+    finalInputText = buildThaiNaturalnessRetryPrompt(inputText, "caption");
+    payload = await requestCaptions(finalInputText);
+    output = parseCaptionStyleResult(
+      extractResponseText(payload),
+      directions,
+      selectedPosts
+    );
+  }
+  assertNoForbiddenThaiFirstPerson(output, "Styled captions");
+  return { inputText: finalInputText, output, rawResponse: payload };
+}
+
+function applyCaptionStyles(
+  directions: readonly GeneratedDirection[],
+  result: CaptionStyleResult
+): readonly GeneratedDirection[] {
+  const stylesById = new Map(result.items.map((item) => [item.id, item]));
+  return directions.map((direction) => {
+    const style = stylesById.get(direction.id);
+    return style
+      ? {
+          ...direction,
+          caption: style.caption,
+          contactLine: style.contactLine
+        }
+      : direction;
+  });
+}
+
+function buildHookGenerationDebugLog({
+  input,
+  generationBatches,
+  batchResults,
+  generationProvider,
+  generationModel,
+  pastContentTrace,
+  captionStyleTrace,
+  supportModel,
+  finalDirections
+}: {
+  input: HookGenerationHarnessRequest;
+  generationBatches: readonly HookGenerationHarnessRequest[];
+  batchResults: readonly HookGenerationBatchResult[];
+  generationProvider: "openai" | "openrouter";
+  generationModel: string;
+  pastContentTrace?: TracedAgentResult<PastContentProfile>;
+  captionStyleTrace?: TracedAgentResult<CaptionStyleResult>;
+  supportModel: string;
+  finalDirections: readonly GeneratedDirection[];
+}): HookGenerationDebugLog {
   return {
-    directions: result.directions.map((direction) =>
-      direction.service === "album-post"
-        ? { ...direction, albumFormat: preference }
-        : direction
-    )
+    kind: "hook-generation",
+    createdAt: new Date().toISOString(),
+    runId: input.runId,
+    hookIdeaMode: input.hookIdeaMode,
+    candidateAgent: {
+      provider: generationProvider,
+      model: generationModel,
+      promptSource: "agent_prompt/agent_hook.md",
+      batches: batchResults.map((result, index) => ({
+        request: {
+          endpoint:
+            generationProvider === "openrouter"
+              ? "/api/v1/chat/completions"
+              : "/v1/responses",
+          inputText: result.candidateTrace.inputText,
+          tools:
+            generationProvider === "openai" ? [THAI_WEB_SEARCH_TOOL] : [],
+          ...(generationProvider === "openai"
+            ? { toolChoice: "required" as const }
+            : {}),
+          attachedImages: (
+            generationBatches[index]?.uploadedMaterials ?? []
+          ).map((material) => ({
+            id: material.id,
+            name: material.name,
+            mediaType: material.mediaType,
+            role: material.role,
+            description: material.description,
+            detail: "high" as const
+          })),
+          responseSchema: "moons_hook_candidates" as const
+        },
+        response: {
+          parsed: result.candidateTrace.output,
+          raw: result.candidateTrace.rawResponse
+        }
+      }))
+    },
+    hookAgent: {
+      provider: generationProvider,
+      model: generationModel,
+      promptSource: "agent_prompt/agent_hook.md",
+      batches: batchResults.map((result) => ({
+        request: {
+          endpoint:
+            generationProvider === "openrouter"
+              ? "/api/v1/chat/completions"
+              : "/v1/responses",
+          inputText: result.directorTrace.inputText,
+          tools: [],
+          attachedImages: [],
+          responseSchema: "moons_hook_generation"
+        },
+        response: {
+          parsed: result.directorTrace.output,
+          raw: result.directorTrace.rawResponse
+        }
+      }))
+    },
+    ...(pastContentTrace
+      ? {
+          pastContentAgent: {
+            provider: "openai" as const,
+            model: supportModel,
+            request: {
+              endpoint: "/v1/responses" as const,
+              inputText: pastContentTrace.inputText,
+              responseSchema: "moons_past_content_profile" as const
+            },
+            response: {
+              parsed: pastContentTrace.output,
+              raw: pastContentTrace.rawResponse
+            }
+          }
+        }
+      : {}),
+    ...(captionStyleTrace
+      ? {
+          captionAgent: {
+            provider: "openai" as const,
+            model: supportModel,
+            request: {
+              endpoint: "/v1/responses" as const,
+              inputText: captionStyleTrace.inputText,
+              responseSchema: "moons_caption_style" as const
+            },
+            response: {
+              parsed: captionStyleTrace.output,
+              raw: captionStyleTrace.rawResponse
+            }
+          }
+        }
+      : {}),
+    finalResponse: { directions: finalDirections }
   };
 }
 
@@ -517,6 +871,33 @@ async function withTransientRetry<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
+function containsForbiddenThaiFirstPerson(value: unknown): boolean {
+  return JSON.stringify(value).includes("ฉัน");
+}
+
+function buildThaiNaturalnessRetryPrompt(
+  inputText: string,
+  stage: "candidate" | "direction" | "caption"
+): string {
+  return [
+    inputText,
+    "",
+    "# THAI NATURALNESS CORRECTION — REQUIRED",
+    `คำตอบ ${stage} ก่อนหน้าถูกปฏิเสธเพราะมีคำว่า “ฉัน”.`,
+    THAI_NATURALNESS_RULE,
+    "เขียนใหม่ทั้ง JSON โดยรักษา facts, strategic angle, quota, ids และ schema เดิม."
+  ].join("\n");
+}
+
+function assertNoForbiddenThaiFirstPerson(
+  value: unknown,
+  outputName: string
+): void {
+  if (containsForbiddenThaiFirstPerson(value)) {
+    throw new Error(`${outputName} still contains forbidden Thai copy: ฉัน.`);
+  }
+}
+
 function buildSubheadlineHighlightPrompt(
   items: readonly { id: string; subheadline: string }[]
 ): string {
@@ -549,6 +930,7 @@ async function callResponsesApi({
   schemaName,
   schema,
   tools,
+  toolChoice,
   provider = "openai"
 }: {
   apiKey: string;
@@ -557,7 +939,8 @@ async function callResponsesApi({
   content: readonly ResponseContent[];
   schemaName: string;
   schema: unknown;
-  tools?: readonly { type: string }[];
+  tools?: readonly Record<string, unknown>[];
+  toolChoice?: "required";
   provider?: "openai" | "openrouter";
 }): Promise<unknown> {
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
@@ -604,6 +987,7 @@ async function callResponsesApi({
             }
           ],
           ...(tools?.length ? { tools } : {}),
+          ...(toolChoice ? { tool_choice: toolChoice } : {}),
           text: {
             format: {
               type: "json_schema",
@@ -656,169 +1040,380 @@ async function callResponsesApi({
   return readJsonResponse(response, `${providerLabel} hook harness`);
 }
 
-function buildResearchPrompt(input: HookGenerationHarnessRequest): string {
-  return [
-    "# THAI PROVABLE MOMENT, BEHAVIOR & CULTURAL FEVER RESEARCH AGENT",
-    "",
-    "คุณคือ Thai research source agent สำหรับหา reference ที่พิสูจน์ได้และ brand-safe เพื่อช่วยวาง hook โฆษณา",
-    "ใช้ Google/Web search actively โดยค้นภาษาไทยก่อน ใช้ภาษาอังกฤษเมื่อจำเป็น",
-    "",
-    "ห้ามสร้าง hooks, captions, headlines, content ideas หรือ creative suggestions ในขั้น research นี้",
-    "ห้ามแต่ง trend, statistic, source title, publisher, ranking หรือ percentage",
-    "คัดเฉพาะ reference ที่มีหลักฐานจากแหล่งจริงและปลอดภัยต่อแบรนด์",
-    "",
-    "หาได้เฉพาะ 5 ประเภทนี้:",
-    "1. provable moments: วัน/ฤดูกาล/แคมเปญ/บริบทสาธารณะที่มีวันที่ชัดเจน",
-    "2. evidence-backed consumer behaviors: พฤติกรรมผู้บริโภคที่มี survey/report/news/platform data",
-    "3. cultural fever: กระแสบันเทิงหรือวัฒนธรรมที่ mass และ brand-safe",
-    "4. platform buzz: สิ่งที่ติด ranking/trending บน platform",
-    "5. category signal: สัญญาณจริงใน category ของแบรนด์",
-    "",
-    buildInputBlock(input),
-    "",
-    "Return only JSON ตาม schema. เขียนภาษาไทย ยกเว้น source title, publisher, brand, product, platform, special terms."
-  ].join("\n");
-}
-
-function buildGenerationPrompt(
+function buildCandidateGenerationPrompt(
   input: HookGenerationHarnessRequest,
-  research: HookResearch,
-  pastPosts: readonly PastPostExample[],
-  agentHookPrompt: string
+  agentHookPrompt: string,
+  pastContentProfile?: PastContentProfile
 ): string {
   return [
-    renderAgentHookPrompt(agentHookPrompt, input, research, pastPosts),
+    agentHookPrompt.trim(),
     "",
-    "You are a world-class Creative Strategist and Senior Thai Copywriter for paid social advertising, on the level of a senior creative who deeply understands Thai language, brand voice, audience psychology, and paid-social performance.",
+    "# งานรอบนี้",
+    buildInputBlock(input),
+    ...(pastContentProfile
+      ? ["", buildPastContentProfileBlock(pastContentProfile)]
+      : []),
     "",
-    "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
+    hookSearchInstruction(input.hookIdeaMode),
     "",
-    "## CONTENT TYPE CREATIVE RULES",
-    "CONTENT TYPE EXECUTION — แต่ละ format ต้องคิดคนละแบบ ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
-    "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
-    albumHookInstruction(
-      input.albumFormat ?? defaultAlbumFormatPreference
-    ),
-    "- ugc-video: คิดเป็น creator-led vertical video ที่ฟังเหมือนคนจริงพูด ไม่ใช่ headline บนโปสเตอร์. Hook ต้องเปิดเรื่องได้ใน 1-3 วินาที. formatBeats ต้องมี 3 beat พอดี: opening situation/tension → demonstration/proof → brand-fit action/close.",
-    "  สำหรับ ugc-video ให้สร้าง ugcBrief เพิ่มเติม: product = ชื่อสินค้า/บริการที่มีหลักฐานตรง, duration = ความยาวที่เหมาะสม เช่น 15–30 วินาที, objective = เป้าหมายวิดีโอที่ชัด, moodAndTone = mood/tone 3–5 คำพร้อมคำอธิบายสั้น, productionStyle = วิธีถ่ายและตัดต่อที่ creator ทำตามได้, referenceDirection = ลักษณะ reference visual ที่ควรหา/แนบโดยไม่อ้างชื่อ creator จริง, openingScript = คำพูด+action+ข้อความบนจอสำหรับช่วงเปิด, showcaseScript = คำพูด+action+proof/demo ช่วงกลาง, closingScript = คำพูด+action+CTA ช่วงปิด. แต่ละ script ต้อง production-ready 2–5 ประโยค กระชับ เป็นภาษาคนจริง และห้ามแต่ง claim. สำหรับ service อื่นให้คืนทุก field ใน ugcBrief เป็น string ว่าง.",
-    "- motion-static: คิดเป็น short motion creative. Hook ต้องทำงานกับ movement/reveal. formatBeats ต้องมี 3 beat พอดี: opening frame → motion/reveal → resolved message/CTA.",
-    "- resize: adapt approved work ไป placement ใหม่โดยไม่เสียสารหลัก และคืน formatBeats เป็น [].",
-    "",
-    "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
+    "# Divergent ideation",
+    `สร้าง candidate สั้นๆ ตาม quota นี้: ${JSON.stringify(candidateTypeQuotasForPrompt(input))}`,
+    "รอบนี้ยังไม่เขียน direction เต็ม, Caption, CTA หรือ production brief. หน้าที่คือเปิดพื้นที่ความคิดให้กว้างก่อนคัด.",
+    "- กระจาย content archetype, จุดตั้งต้น, primary benefit, emotional entry และ language device; ห้ามเปลี่ยนเพียงคน ฉาก หรือ occasion แล้วขาย feature เดิมซ้ำ.",
+    "- จุดตั้งต้นเลือกได้จาก product truth, desire, identity, useful education, demonstration, occasion, cultural observation, tension, objection, social proof, brand belief, humor หรือ wordplay เมื่อมีเหตุผลกับ Brief.",
+    "- creativePattern ต้องอธิบายโครงวิธีคิดเชิงนามธรรม ไม่ใช่ชื่อฉาก เช่น visual proof, expert warning, identity listicle, product declaration หรือ occasion ritual.",
+    "- ใช้ creativePatterns และ styleSignals จาก Past Content Profile เป็น evidence ว่าแบรนด์ชอบคิดและพูดแบบใด แต่ห้ามคัดลอกหัวข้อ Hook slogan มุก หรือ campaign angle เก่า.",
+    "- Hook ต้องเข้าใจได้ในหนึ่งรอบอ่าน เป็นภาษาไทยธรรมชาติ มี specific tension, desire, surprise, utility หรือ identity ที่ชวนหยุดอ่าน โดยไม่ clickbait.",
+    `- ${THAI_NATURALNESS_RULE}`,
+    "- สำหรับ UGC ให้กระจายระหว่าง demonstration, observation, direct address, checklist, conversation, product reveal และ personal experience. ห้ามใช้ first-person confession/testimonial เป็นค่าเริ่มต้นของทั้งชุด.",
+    "- audienceReason อธิบายสั้นๆ ว่าทำไมคนกลุ่มนี้จึงสนใจ; formatIdea บอกว่าความคิดทำงานกับ format นี้อย่างไร; citations ใส่เฉพาะแหล่ง Search ที่ candidate ใช้จริง.",
     "",
     ...(input.uploadedMaterials.length
       ? [
-          "UPLOADED CREATIVE MATERIALS: inspect every attached image. Build ideas that can genuinely use the visible product/client material. Treat a main-object or product image as an available source object, not loose inspiration. Supporting components may shape the execution without becoming the hero. Never claim an object, feature, or detail that is not visible or stated in the input.",
+          "รูป materials ที่แนบมาคือวัตถุดิบจริงของงาน ใช้สินค้า/วัตถุที่มองเห็นได้ตาม role และห้ามเดารายละเอียดที่ไม่เห็นหรือไม่มีใน input.",
           ""
         ]
       : []),
-    "CONCEPT STRATEGY: ทุก concept ต้องเชื่อมโยงชัดเจน User Brief → Audience Insight → Product Focus → Strategic Angle → Headline โดยเริ่มจาก audience moment/tension/desire/objection ที่จำเพาะ ไม่ใช่เริ่มจาก product feature ตรงๆ ใช้มุมที่หลากหลาย เช่น pain-led, insight-led, desire-led, trust-building, objection-handling, offer-led, contrast, proof-led, before-after — เลือกเฉพาะมุมที่เหมาะกับแบรนด์และ brief จริงๆ",
-    "",
-    "HEADLINE STANDARD: สื่อความคิดเดียวชัดเจน อ่านแล้วเข้าใจทันที ฟังดูเป็นธรรมชาติเมื่ออ่านออกเสียง จำเพาะกับแบรนด์และ audience มีเหตุผลจริงที่ทำให้คนหยุดเลื่อน กระชับแต่ไม่แห้งจนไร้อารมณ์ ปกติยาวประมาณ 6-13 คำภาษาไทย ห้ามใช้ ellipsis, วงเล็บ, ประโยคคำถามเชิงวาทศิลป์ยาวๆ, โครงสร้าง \"เพราะ...จึง...\", การเรียงคำแบบ keyword stacking, สัมผัสเสแสร้ง ห้ามใช้วลีสำเร็จรูปเช่น ตอบโจทย์ทุกความต้องการ / ครบจบในที่เดียว / คุ้มกว่าที่เคย / ดีที่สุดสำหรับคุณ / เพื่อคุณโดยเฉพาะ / ยกระดับประสบการณ์ / ห้ามพลาด / โปรสุดคุ้ม / ราคาโดนใจ / เหนือระดับ / พรีเมียมเหนือใคร",
-    "",
-    "VISUAL DIRECTION: อธิบายเฉพาะ mood, emotional tone, ระดับความ polish, และ information hierarchy ที่ต้องการ (เช่น สะอาด ทันสมัย น่าเชื่อถือ อบอุ่น พรีเมียม) 1-2 ประโยคสั้นๆ ห้ามระบุฉาก, ตัวละคร, มุมกล้อง, พร็อพ, หรือ layout ที่ตายตัว — ทีมสร้างภาพจะกำหนดรายละเอียดที่ execution ต่อจากนี้เอง",
-    "",
-    "Hook ต้อง:",
-    "- เป็นภาษาไทยที่เป็นธรรมชาติ ไม่ใช่ภาษาไทยที่แปลมา",
-    "- brand-native เหมือนแบรนด์นี้พูดเองได้จริง",
-    "- ชัด คม performance-ready แต่ไม่ clickbait",
-    "- ใช้ Brand Memory และ Brief เป็น priority สูงสุด",
-    "- ใช้ research เป็น supporting context เท่านั้น ห้ามฝืนใช้ trend ถ้าไม่เกี่ยว",
-    "- ไม่กล่าว claim ที่ Brand Memory/Products/Brief ไม่รองรับ",
-    "",
-    "Caption ต้อง:",
-    "- เขียนในฐานะที่คุณคือ copywriter ประจำเพจนี้ ไม่ใช่นักเขียนภายนอก",
-    "- วิเคราะห์ตัวอย่างโพสต์/แคปชั่นจริงด้านล่างเป็นชุด ไม่ใช่อ่านแค่โพสต์เดียว: หา pattern ที่เกิดซ้ำของ opening, paragraph length, line breaks, bullets, emoji, hashtag, footer/signature, contact details และวิธีปิดท้ายด้วย CTA",
-    "- เขียน caption ใหม่ด้วย format และจังหวะภาษาที่พบจริงในอดีตของเพจ โดยคง footer/contact ที่เกิดซ้ำในโพสต์ส่วนใหญ่ไว้ในตำแหน่งเดิมและสะกดเหมือนต้นฉบับทุกตัวอักษร",
-    "- ห้ามคัดลอกใจความ campaign เก่า แต่ให้เรียนรู้โครงสร้างการเขียนและองค์ประกอบประจำเพจ",
-    "- ถ้า contact/footer พบเพียงครั้งเดียวหรือหลักฐานไม่ตรงกัน ห้ามเดาและให้ contactLine เป็น string ว่าง",
-    "- นำ supportingPoints ที่เกี่ยวข้องมาร้อยเป็น caption อย่างเป็นธรรมชาติ โดยไม่ยัดทุกข้อถ้าไม่เข้ากับ format ประจำเพจ",
-    "- ถ้าไม่มีตัวอย่างโพสต์เก่า ให้ยึดโทนจาก Brand Memory และ Brief แทน",
-    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' ใน caption แม้ตัวอย่างโพสต์เก่าจะใช้",
-    "",
-    "Supporting points และ business details ต้อง:",
-    "- supportingPoints มี 0-3 ข้อ เป็น facts, proof, service details หรือ offer mechanics ที่สั้นและช่วยให้สร้าง caption/artwork ได้จริง",
-    "- ใช้เฉพาะข้อมูลที่มีหลักฐานตรงจาก Brief, Brand kit, Products, Documents หรือโพสต์จริง ห้ามสร้างราคา โปรโมชัน สถิติ ช่องทางติดต่อ หรือ claim ใหม่",
-    "- contactLine ต้องเป็นบรรทัด contact/footer ที่คัดลอกตรงจากข้อมูลจริงและเกิดซ้ำอย่างสม่ำเสมอ; ถ้าไม่แน่ใจให้คืน string ว่าง",
-    "",
-    "CTA ต้อง:",
-    "- เป็น action + object ที่ชัดและเข้ากับ brand, offer และ conversion route ปกติ 2-7 คำ เช่น 'ดูแพ็กเกจ SEO', 'จองเวลาปรึกษา', 'ขอแผนแคมเปญ'",
-    "- ห้ามใช้ CTA กว้างๆ ที่ไม่บอกว่าจะได้อะไร เช่น 'ดูที่นี่', 'คลิกที่นี่', 'สนใจทัก', 'ดูเพิ่มเติม'",
-    "- เรียนรู้คำและรูปแบบ CTA จากโพสต์จริงของแบรนด์เมื่อมีหลักฐาน แต่ต้องสัมพันธ์กับ direction ใหม่",
-    "- ctaActionType ต้องเป็น website, line, phone, form, inbox, store หรือ other",
-    "- ctaDestination ใส่เฉพาะ URL, เบอร์, LINE ID, inbox หรือปลายทางที่ปรากฏตรงๆ ใน input/โพสต์จริงเท่านั้น ถ้าไม่มีให้คืน string ว่าง",
-    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' และห้ามเขียน CTA เป็นประโยคยาว",
-    "",
-    "Silent internal process (ห้าม output ขั้นตอนนี้ออกมา):",
-    "1. ย่อ brief ให้เหลือ audience insight ที่แข็งแรงที่สุด และ commercial promise ที่ชัดที่สุด",
-    "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
-    "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
-    `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
-    "5. ใส่ concept, why, visual, formatBeats, ugcBrief, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
-    "",
-    "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
-    "",
-    buildInputBlock(input),
-    "",
-    "Research context จาก harness search:",
-    JSON.stringify(research, null, 2),
-    "",
-    buildPastPostsBlock(pastPosts),
-    "",
-    "## Creative Compass output adapter — this overrides only the supplied prompt's final JSON shape",
-    `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; albumFormat = the exact album layout chosen for this idea according to the album rules above (for non-album services return three-horizontal); formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
-    "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
-    "Format-beat validation: album-post, ugc-video, and motion-static must return exactly 3 non-empty formatBeats. single-static and resize must return an empty array. Album formatBeats are the three inside-slide supporting topics—not hidden rationale and not generic filler.",
-    "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
-    "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response. The schema's service field is required."
+    "# Output",
+    "ตอบเฉพาะ JSON schema ที่กำหนด และคืน candidate ครบตาม quota. อย่าจัดอันดับหรือเลือกผู้ชนะในรอบนี้."
   ].join("\n");
 }
 
-function renderAgentHookPrompt(
-  template: string,
+function buildCreativeDirectorPrompt(
   input: HookGenerationHarnessRequest,
-  research: HookResearch,
-  pastPosts: readonly PastPostExample[]
+  agentHookPrompt: string,
+  candidateResult: HookCandidateResult,
+  pastContentProfile?: PastContentProfile
 ): string {
-  const productFocus = input.brandLibrary.products.length
-    ? input.brandLibrary.products
-        .map((item) => `${item.title}: ${item.description}`)
-        .join("\n")
-    : "Use the product or service focus stated in the User Brief.";
-  const pastPostText = pastPosts.length
-    ? pastPosts.map((post) => post.text).join("\n\n")
-    : "No past posts are available. Use the Brand kit and Brief for voice.";
-
-  return template
-    .replaceAll("{{ $('Webhook').first().json.body.instructions }}", input.brief)
-    .replaceAll("{{ $('Webhook').first().json.body.productFocus }}", productFocus)
-    .replaceAll(
-      "{{ $('Webhook').first().json.body.contentTypeQuotas ? $('Webhook').first().json.body.contentTypeQuotas.toJsonString() : '[]' }}",
-      JSON.stringify(contentTypeQuotasForPrompt(input))
-    )
-    .replaceAll("{{ $('Facebook page content').item.json.page_content }}", pastPostText)
-    .replaceAll(
-      "{{ $('Message a model').item.json.content.parts[0].text }}",
-      JSON.stringify(research)
-    );
+  return [
+    agentHookPrompt.trim(),
+    "",
+    "# CREATIVE DIRECTOR — SELECT, SHARPEN, EXPAND",
+    "Candidates ด้านล่างผ่านการค้นและแตกความคิดมาแล้ว. เปรียบเทียบทั้งชุดก่อนเลือก ห้ามเลือกตามลำดับ และห้ามสร้าง strategic angle ใหม่ที่ไม่มีใน candidates.",
+    "",
+    "# Current input",
+    buildInputBlock(input),
+    ...(pastContentProfile
+      ? ["", buildPastContentProfileBlock(pastContentProfile)]
+      : []),
+    "",
+    "# Candidate pool",
+    JSON.stringify(candidateResult.candidates, null, 2),
+    "",
+    "# Selection test",
+    `เลือกและขยาย ${input.quantity} directions ตาม quota นี้และตามลำดับ: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
+    "ผู้ชนะต้องผ่านพร้อมกัน: เข้าใจทันที, specific กับ audience/สินค้า, มีแรงให้หยุดอ่าน, เป็นเสียงของแบรนด์, format-native, ใช้ facts ถูกต้อง และช่วยให้ชุดนี้ต่างกันจริง.",
+    "เปรียบเทียบแบบ relative ทั้งชุด. ตัด candidate ที่ generic, ต้องอธิบายเพิ่มจึงเข้าใจ, เล่นคำแต่ไม่ขายความคิด, คล้าย Hook เดิม หรือซ้ำ primary benefit / creativePattern / sentence template กับผู้ชนะตัวอื่น.",
+    "ถ้า candidate แข็งแรงแต่ Hook ยังไม่คม ให้ sharpen ถ้อยคำได้โดยคง premise, primaryBenefit และ creativePattern เดิม. อ่านออกเสียงและตรวจคำปฏิเสธไม่ให้ความหมายกลับด้าน.",
+    "อย่าบังคับทุก direction ให้เป็น pain → feature → CTA; เลือกส่วนผสมที่เหมาะกับแบรนด์และ Brief จริง.",
+    "",
+    "# Format",
+    "คิดแต่ละ format ตามธรรมชาติของมัน ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
+    "- single-static: หนึ่งความคิดที่จบในภาพเดียว; formatBeats = [].",
+    albumHookInstruction(
+      input.albumFormat ?? defaultAlbumFormatPreference
+    ),
+    "- ugc-video: creator-led vertical video; formatBeats = opening tension → demo/proof → close/CTA. ugcBrief ต้องระบุ product, duration, objective, moodAndTone, productionStyle, referenceDirection และ scripts ช่วง opening/showcase/closing ที่คนถ่ายตามได้จริง.",
+    "- motion-static: ความคิดต้องใช้ movement/reveal; formatBeats = opening frame → reveal → message/CTA.",
+    "- resize: รักษาสารหลักของงานเดิม; formatBeats = [].",
+    "- album-post, ugc-video และ motion-static ต้องมี formatBeats 3 ข้อพอดี; format อื่นต้องเป็น []. ugcBrief ของงานที่ไม่ใช่ UGC ให้ทุก field เป็น string ว่าง.",
+    "",
+    "# Copy และความถูกต้อง",
+    `- ${THAI_NATURALNESS_RULE}`,
+    "- subheadline เป็นหนึ่งประโยคสั้นที่ช่วยให้ Hook ชัดขึ้น ไม่ซ้ำ Hook และไม่อธิบาย strategy.",
+    "- visual บอก mood, tone, polish และ information hierarchy 1–2 ประโยค; ไม่ล็อกฉาก ตัวละคร มุมกล้อง props หรือ layout.",
+    "- supportingPoints มี 0–3 facts ที่ช่วยผลิตงาน. ใช้ reusable details ได้เมื่อเกี่ยวข้อง; ราคา โปรโมชัน หรือข้อมูลตามเวลาต้องยืนยันใน current input เท่านั้น.",
+    "- Caption และ CTA ต้องฟังเหมือนแบรนด์นี้เขียนเอง. Caption เป็น draft จาก direction และข้อมูลแบรนด์ปัจจุบันเท่านั้น; ห้ามดึงหัวข้อ ข้อเสนอ หรือ claim จาก campaign เก่ามาปน. contactLine ใช้เฉพาะข้อมูลที่ยืนยัน; ไม่แน่ใจให้เป็น string ว่าง.",
+    "- CTA เป็น action + object ที่ชัด 2–7 คำ. ห้ามใช้ ‘ดูที่นี่’, ‘คลิกที่นี่’, ‘สนใจทัก’ หรือ ‘ดูเพิ่มเติม’. ctaDestination ต้องมีหลักฐานหรือเป็น string ว่าง.",
+    "- caption และ cta ห้ามมีคำลงท้าย ‘ครับ’ หรือ ‘ค่ะ’. ตอบภาษาไทย ยกเว้นชื่อแบรนด์ สินค้า Tagline แพลตฟอร์ม และศัพท์เฉพาะ.",
+    "",
+    "# Output",
+    "ตอบเฉพาะ JSON schema. service ต้องตรง quota. งานที่ไม่ใช่ Album ใช้ albumFormat=three-horizontal.",
+    "sourceCandidateId ต้องเป็น id ของ candidate ที่เลือกจริง เพื่อให้ตรวจย้อนกลับได้.",
+    "citations ส่งต่อเฉพาะแหล่งจาก candidate ที่ direction นั้นใช้จริง. score 0–100 ต้องสะท้อนการเปรียบเทียบจริง ไม่ใช่ให้ทุกตัวเกิน 85; reasoning ระบุทั้งจุดแข็งและเหตุผลที่ตัวนี้ชนะตัวใกล้เคียงอย่างสั้นๆ."
+  ].join("\n");
 }
 
-function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
-  if (pastPosts.length === 0) {
-    return [
-      "ตัวอย่างโพสต์เก่าของเพจนี้:",
-      "ไม่มีข้อมูลโพสต์เก่าของเพจนี้ในระบบ ให้เขียน caption ตามโทนของ Brand Memory และ Brief แทน"
-    ].join("\n");
-  }
+function buildPastContentProfileBlock(profile: PastContentProfile): string {
+  return [
+    "# Past Content Profile",
+    "ใช้ส่วนนี้เป็น brand memory สำหรับ mood/style และรายละเอียดข้อมูลเท่านั้น ห้ามสร้าง Hook, Concept หรือ campaign angle จากงานเก่า.",
+    "Style signals:",
+    ...profile.styleSignals.map((signal) => `- ${signal}`),
+    "Creative patterns:",
+    ...profile.creativePatterns.map(
+      (item) => `- ${item.pattern}: ${item.whyItFitsBrand}`
+    ),
+    "Reusable details:",
+    ...profile.reusableDetails.map((item) => `- ${item.detail}`)
+  ].join("\n");
+}
+
+function hookSearchInstruction(mode: HookIdeaMode): string {
+  const modeInstruction =
+    mode === "fresh-research"
+      ? "FRESH RESEARCH MODE: ค้นหลาย query ภาษาไทยที่เจาะจงกับ Brief, audience และ category ในประเทศไทย."
+      : "STANDARD MODE: ค้นอย่างน้อยหนึ่ง query ภาษาไทยที่เจาะจงกับ Brief, audience, product หรือ category ในประเทศไทย.";
 
   return [
-    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (วิเคราะห์ร่วมกันเพื่อหา format และรายละเอียดที่เกิดซ้ำ ห้ามคัดลอกใจความ campaign):",
+    "# Search — required",
+    modeInstruction,
+    "ต้องเรียก Web Search ก่อน final JSON ทุก batch. ใช้เฉพาะข้อมูลปัจจุบันที่ตรวจสอบได้และเกี่ยวข้องจริง; ห้ามแต่ง trend, สถิติ, วันที่, ranking, publisher หรือผลวิจัย.",
+    "THAILAND FIRST: หาก Brief ไม่ระบุประเทศอื่น ให้ถือว่ากลุ่มเป้าหมายอยู่ประเทศไทย. ใช้คำค้นภาษาไทยและเลือกแหล่งข้อมูลไทยหรือข้อมูลที่ศึกษาเกี่ยวกับผู้บริโภคไทยก่อน.",
+    "ห้ามใช้พฤติกรรมผู้บริโภค สถิติ หรือ market context จาก US/global มาแทนบริบทไทย. ใช้ query ภาษาอังกฤษได้เฉพาะเมื่อภาษาไทยไม่พบข้อมูล และ query ต้องมีคำว่า Thailand หรือ ไทย.",
+    "Brief และ verified brand/product facts สำคัญกว่าผลค้น. Search ใช้เพิ่ม audience insight หรือ market context เท่านั้น และไม่ต้องฝืนใช้ผลค้นในทุก direction."
+  ].join("\n");
+}
+
+function selectPastPostsForCaption(
+  pastPosts: readonly PastPostExample[]
+): readonly PastPostExample[] {
+  const adCaptions = pastPosts.filter((post) => post.source === "ad_caption");
+  const organicPosts = pastPosts.filter(
+    (post) => post.source === "organic_post"
+  );
+  return [
+    ...adCaptions.slice(0, 4),
+    ...organicPosts.slice(0, 2),
+    ...adCaptions.slice(4),
+    ...organicPosts.slice(2)
+  ].slice(0, 6);
+}
+
+function selectPastPostsForProfile(
+  pastPosts: readonly PastPostExample[]
+): readonly PastPostExample[] {
+  const adCaptions = pastPosts.filter((post) => post.source === "ad_caption");
+  const organicPosts = pastPosts.filter(
+    (post) => post.source === "organic_post"
+  );
+  return [
+    ...selectRecentAndHistoricalPosts(adCaptions, 6),
+    ...selectRecentAndHistoricalPosts(organicPosts, 6)
+  ].slice(0, 12);
+}
+
+function selectRecentAndHistoricalPosts(
+  posts: readonly PastPostExample[],
+  count: number
+): readonly PastPostExample[] {
+  if (posts.length <= count) return posts;
+  const recentCount = Math.ceil(count / 2);
+  const selectedIndexes = new Set(
+    Array.from({ length: recentCount }, (_, index) => index)
+  );
+  const remainingCount = count - recentCount;
+  for (let index = 1; index <= remainingCount; index += 1) {
+    const position =
+      recentCount +
+      Math.round(
+        ((posts.length - recentCount - 1) * index) / remainingCount
+      );
+    selectedIndexes.add(Math.min(position, posts.length - 1));
+  }
+  return [...selectedIndexes]
+    .sort((left, right) => left - right)
+    .slice(0, count)
+    .map((index) => posts[index])
+    .filter((post): post is PastPostExample => post !== undefined);
+}
+
+function buildPastContentProfilePrompt(
+  input: HookGenerationHarnessRequest,
+  pastPosts: readonly PastPostExample[]
+): string {
+  return [
+    "# PAST CONTENT PROFILER",
+    "สกัด brand memory จากโพสต์เก่า ห้ามคิดไอเดียคอนเทนต์ใหม่และห้ามส่งต่อ Hook, Concept, campaign angle หรือถ้อยคำเดิม.",
+    "styleSignals: สกัดทั้ง mood/voice และกลไกภาษาที่ทำให้งานของแบรนด์จำได้ เช่น จังหวะประโยค คำคล้องจอง wordplay bilingual slogan brand declaration มุกเปรียบเทียบ premium statement emoji/hashtag และ CTA style รวม 1–8 ข้อตามหลักฐาน. ต้องเจาะจงกว่าคำกว้างๆ อย่าง ‘ขายตรง’, ‘พรีเมียม’ หรือ ‘เป็นกันเอง’.",
+    "อธิบายกลไกและจังหวะของภาษาโดยไม่คัดลอก Hook, slogan หรือมุกจากโพสต์เดิมมาตรงๆ.",
+    "creativePatterns: สกัดโครงวิธีคิดเชิงนามธรรมที่มีหลักฐานจริง เช่น visual proof/demo, useful education, expert warning, occasion ritual, identity listicle, social proof, brand belief หรือ product declaration. ระบุ whyItFitsBrand และ sourcePostIndexes แบบ 1-based รวม 0–8 รูปแบบ; หากหลักฐานไม่พอให้คืน []. ห้ามเก็บหัวข้อ สินค้าที่พูดถึง ฉาก ประโยค punchline หรือ campaign angle เดิม; pattern ต้องนำไปใช้กับเรื่องใหม่ได้โดยไม่ดูเป็นการก๊อป.",
+    "reusableDetails: เก็บเฉพาะข้อมูลที่มีประโยชน์ต่อการทำงานใหม่ เช่น ชื่อสินค้า/บริการ วิธีใช้ feature ประโยชน์ ขั้นตอน หลักฐาน ช่องทางติดต่อ หรือ brand line พร้อม sourcePostIndexes แบบ 1-based.",
+    "ห้ามเก็บราคา โปรโมชัน deadline event date สถิติ หรือข้อมูลตามเวลา เว้นแต่ current input ด้านล่างยืนยันตรงกัน. ตัด slogan เชิง campaign, headline และข้อความที่เป็น creative idea ออก.",
+    "ตอบเฉพาะ JSON schema ที่กำหนด.",
+    "",
+    "## Current input for fact checking",
+    `Brand: ${input.brand?.name ?? "Unknown"}`,
+    `Brief: ${input.brief}`,
+    `Brand kit: ${JSON.stringify(input.brandLibrary.brand)}`,
+    `Products: ${JSON.stringify(input.brandLibrary.products)}`,
+    `Documents: ${JSON.stringify(input.brandLibrary.docs)}`,
+    "",
+    "## Past posts",
     ...pastPosts.map(
       (post, index) =>
         `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
     )
   ].join("\n");
+}
+
+function parsePastContentProfile(
+  value: string,
+  postCount: number
+): PastContentProfile {
+  const record = readRecord(JSON.parse(value), "past content profile");
+  const styleSignals = readStringArray(
+    record.styleSignals,
+    "past content profile.styleSignals"
+  )
+    .map((signal) => signal.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!Array.isArray(record.creativePatterns)) {
+    throw new Error("past content profile.creativePatterns must be an array.");
+  }
+  const seenPatterns = new Set<string>();
+  const creativePatterns = record.creativePatterns.flatMap((rawItem, index) => {
+    const item = readRecord(
+      rawItem,
+      `past content profile.creativePatterns[${index}]`
+    );
+    const pattern = readString(
+      item.pattern,
+      `past content profile.creativePatterns[${index}].pattern`
+    ).trim();
+    if (!pattern || seenPatterns.has(pattern)) return [];
+    const whyItFitsBrand = readString(
+      item.whyItFitsBrand,
+      `past content profile.creativePatterns[${index}].whyItFitsBrand`
+    ).trim();
+    const sourcePostIndexes = readProfileSourcePostIndexes(
+      item.sourcePostIndexes,
+      `past content profile.creativePatterns[${index}].sourcePostIndexes`,
+      postCount
+    );
+    if (!whyItFitsBrand || sourcePostIndexes.length === 0) return [];
+    seenPatterns.add(pattern);
+    return [{ pattern, whyItFitsBrand, sourcePostIndexes }];
+  });
+  if (!Array.isArray(record.reusableDetails)) {
+    throw new Error("past content profile.reusableDetails must be an array.");
+  }
+  const seenDetails = new Set<string>();
+  const reusableDetails = record.reusableDetails.flatMap((rawItem, index) => {
+    const item = readRecord(
+      rawItem,
+      `past content profile.reusableDetails[${index}]`
+    );
+    const detail = readString(
+      item.detail,
+      `past content profile.reusableDetails[${index}].detail`
+    ).trim();
+    if (!detail || seenDetails.has(detail)) return [];
+    const sourcePostIndexes = readProfileSourcePostIndexes(
+      item.sourcePostIndexes,
+      `past content profile.reusableDetails[${index}].sourcePostIndexes`,
+      postCount
+    );
+    if (sourcePostIndexes.length === 0) return [];
+    seenDetails.add(detail);
+    return [{ detail, sourcePostIndexes }];
+  });
+  return {
+    styleSignals,
+    creativePatterns: creativePatterns.slice(0, 8),
+    reusableDetails: reusableDetails.slice(0, 12)
+  };
+}
+
+function readProfileSourcePostIndexes(
+  value: unknown,
+  field: string,
+  postCount: number
+): readonly number[] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array.`);
+  return value
+    .map((postIndex, index) => readNumber(postIndex, `${field}[${index}]`))
+    .filter(
+      (postIndex) =>
+        Number.isInteger(postIndex) && postIndex >= 1 && postIndex <= postCount
+    );
+}
+
+function buildCaptionStylePrompt(
+  directions: readonly GeneratedDirection[],
+  pastPosts: readonly PastPostExample[],
+  pastContentProfile?: PastContentProfile
+): string {
+  const lockedDirections = directions.map((direction) => ({
+    id: direction.id,
+    service: direction.service,
+    hook: direction.hook,
+    subheadline: direction.subheadline,
+    concept: direction.concept,
+    supportingPoints: direction.supportingPoints,
+    cta: direction.cta,
+    captionDraft: direction.caption
+  }));
+
+  return [
+    "# CAPTION STYLIST",
+    "Directions ด้านล่างถูกล็อกแล้ว ห้ามเปลี่ยนหรือตีความ Hook, Concept, Product, Offer หรือ Strategic angle ใหม่.",
+    "เขียน captionDraft ใหม่โดยใช้โพสต์เก่าเฉพาะเพื่อเรียนรู้ voice, opening, rhythm, line breaks, emoji, hashtag, footer และวิธีปิด CTA.",
+    "ห้ามนำหัวข้อ ไอเดีย campaign หรือวิธีเล่าจากโพสต์เก่ามาใส่ใน direction ใหม่. ใช้ facts จาก locked directions และ reusableDetails ใน Past Content Profile เท่านั้น.",
+    "contactLine ใช้ได้เมื่อเป็นข้อความเดียวกันที่ปรากฏตรงๆ อย่างน้อย 2 ตัวอย่าง มิฉะนั้นคืน string ว่าง.",
+    THAI_NATURALNESS_RULE,
+    "caption ห้ามมีคำลงท้าย ‘ครับ’ หรือ ‘ค่ะ’. ตอบเฉพาะ JSON schema ที่กำหนดและคืนหนึ่ง item ต่อ direction id.",
+    "",
+    "## Locked directions",
+    JSON.stringify(lockedDirections, null, 2),
+    "",
+    "## Past Content Profile",
+    JSON.stringify(
+      pastContentProfile ?? {
+        styleSignals: [],
+        creativePatterns: [],
+        reusableDetails: []
+      },
+      null,
+      2
+    ),
+    "",
+    "## Past posts — style evidence only",
+    ...pastPosts.map(
+      (post, index) =>
+        `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
+    )
+  ].join("\n");
+}
+
+function parseCaptionStyleResult(
+  value: string,
+  directions: readonly GeneratedDirection[],
+  pastPosts: readonly PastPostExample[]
+): CaptionStyleResult {
+  const record = readRecord(JSON.parse(value), "caption style result");
+  if (!Array.isArray(record.items)) {
+    throw new Error("caption style result.items must be an array.");
+  }
+  const allowedIds = new Set(directions.map((direction) => direction.id));
+  const seenIds = new Set<string>();
+  const items = record.items.flatMap((rawItem, index) => {
+    const item = readRecord(rawItem, `caption style result.items[${index}]`);
+    const id = readString(item.id, `caption style result.items[${index}].id`);
+    if (!allowedIds.has(id) || seenIds.has(id)) return [];
+    seenIds.add(id);
+    const contactLine = readString(
+      item.contactLine,
+      `caption style result.items[${index}].contactLine`
+    ).trim();
+    const recurringContactLine =
+      contactLine &&
+      pastPosts.filter((post) => post.text.includes(contactLine)).length >= 2
+        ? contactLine
+        : "";
+    return [
+      {
+        id,
+        caption: readString(
+          item.caption,
+          `caption style result.items[${index}].caption`
+        ),
+        contactLine: recurringContactLine
+      }
+    ];
+  });
+  return { items };
 }
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
@@ -913,60 +1508,70 @@ function contentTypeQuotasForPrompt(input: HookGenerationHarnessRequest) {
   }));
 }
 
+function candidateTypeQuotasForPrompt(input: HookGenerationHarnessRequest) {
+  const quotas = input.contentTypeQuotas.map((quota) => ({
+    service: quota.service,
+    type: servicePromptLabels[quota.service],
+    count: Math.max(
+      MIN_HOOK_CANDIDATES_PER_SERVICE,
+      quota.count * HOOK_CANDIDATE_MULTIPLIER
+    ),
+    requiredFinalCount: quota.count
+  }));
+  let total = quotas.reduce((sum, quota) => sum + quota.count, 0);
+  while (total > MAX_HOOK_CANDIDATES_PER_BATCH) {
+    const reducible = quotas
+      .filter((quota) => quota.count > quota.requiredFinalCount)
+      .sort((left, right) => right.count - left.count)[0];
+    if (!reducible) break;
+    reducible.count -= 1;
+    total -= 1;
+  }
+  return quotas;
+}
+
 const stringArraySchema = {
   type: "array",
   items: { type: "string" }
 } as const;
 
-const hookResearchSchema = {
+const hookCandidateSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    overallFinding: { type: "string" },
-    references: {
+    candidates: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          name: { type: "string" },
-          type: {
-            type: "string",
-            enum: [
-              "provable_moment",
-              "evidence_backed_behavior",
-              "cultural_fever",
-              "platform_buzz",
-              "category_signal"
-            ]
-          },
-          whyItMatters: { type: "string" },
-          brandRelevance: { type: "string" },
-          evidenceSummary: { type: "string" },
-          evidenceStrength: {
-            type: "string",
-            enum: ["strong", "medium", "weak"]
-          }
+          id: { type: "string" },
+          service: { type: "string", enum: serviceTypes },
+          hook: { type: "string" },
+          premise: { type: "string" },
+          primaryBenefit: { type: "string" },
+          creativePattern: { type: "string" },
+          languageDevice: { type: "string" },
+          audienceReason: { type: "string" },
+          formatIdea: { type: "string" },
+          citations: stringArraySchema
         },
         required: [
-          "name",
-          "type",
-          "whyItMatters",
-          "brandRelevance",
-          "evidenceSummary",
-          "evidenceStrength"
+          "id",
+          "service",
+          "hook",
+          "premise",
+          "primaryBenefit",
+          "creativePattern",
+          "languageDevice",
+          "audienceReason",
+          "formatIdea",
+          "citations"
         ]
       }
-    },
-    searchQueriesUsed: stringArraySchema,
-    limitations: { type: "string" }
+    }
   },
-  required: [
-    "overallFinding",
-    "references",
-    "searchQueriesUsed",
-    "limitations"
-  ]
+  required: ["candidates"]
 } as const;
 
 const hookGenerationSchema = {
@@ -980,6 +1585,7 @@ const hookGenerationSchema = {
         additionalProperties: false,
         properties: {
           id: { type: "string" },
+          sourceCandidateId: { type: "string" },
           service: { type: "string", enum: serviceTypes },
           hook: { type: "string" },
           subheadline: { type: "string" },
@@ -1029,6 +1635,7 @@ const hookGenerationSchema = {
         },
         required: [
           "id",
+          "sourceCandidateId",
           "service",
           "hook",
           "subheadline",
@@ -1052,6 +1659,67 @@ const hookGenerationSchema = {
     }
   },
   required: ["directions"]
+} as const;
+
+const pastContentProfileSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    styleSignals: stringArraySchema,
+    creativePatterns: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          pattern: { type: "string" },
+          whyItFitsBrand: { type: "string" },
+          sourcePostIndexes: {
+            type: "array",
+            items: { type: "number" }
+          }
+        },
+        required: ["pattern", "whyItFitsBrand", "sourcePostIndexes"]
+      }
+    },
+    reusableDetails: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          detail: { type: "string" },
+          sourcePostIndexes: {
+            type: "array",
+            items: { type: "number" }
+          }
+        },
+        required: ["detail", "sourcePostIndexes"]
+      }
+    }
+  },
+  required: ["styleSignals", "creativePatterns", "reusableDetails"]
+} as const;
+
+const captionStyleSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          caption: { type: "string" },
+          contactLine: { type: "string" }
+        },
+        required: ["id", "caption", "contactLine"]
+      }
+    }
+  },
+  required: ["items"]
 } as const;
 
 const subheadlineHighlightSchema = {
@@ -1311,47 +1979,88 @@ function readLibraryItems(
   });
 }
 
-function parseHookResearch(text: string): HookResearch {
-  const parsed = JSON.parse(text) as unknown;
-  const value = readRecord(parsed, "research");
-
+function parseHookCandidateResult(text: string): HookCandidateResult {
+  const value = readRecord(JSON.parse(text), "hook candidates");
+  if (!Array.isArray(value.candidates)) {
+    throw new Error("candidates must be an array.");
+  }
   return {
-    overallFinding: readString(value.overallFinding, "overallFinding"),
-    references: readResearchReferences(value.references),
-    searchQueriesUsed: readStringArray(
-      value.searchQueriesUsed,
-      "searchQueriesUsed"
-    ),
-    limitations: readString(value.limitations, "limitations")
+    candidates: value.candidates.map((rawCandidate, index) => {
+      const candidate = readRecord(rawCandidate, `candidates[${index}]`);
+      return {
+        id: readString(candidate.id, `candidates[${index}].id`),
+        service: readServiceType(
+          candidate.service,
+          `candidates[${index}].service`
+        ),
+        hook: readString(candidate.hook, `candidates[${index}].hook`),
+        premise: readString(candidate.premise, `candidates[${index}].premise`),
+        primaryBenefit: readString(
+          candidate.primaryBenefit,
+          `candidates[${index}].primaryBenefit`
+        ),
+        creativePattern: readString(
+          candidate.creativePattern,
+          `candidates[${index}].creativePattern`
+        ),
+        languageDevice: readString(
+          candidate.languageDevice,
+          `candidates[${index}].languageDevice`
+        ),
+        audienceReason: readString(
+          candidate.audienceReason,
+          `candidates[${index}].audienceReason`
+        ),
+        formatIdea: readString(
+          candidate.formatIdea,
+          `candidates[${index}].formatIdea`
+        ),
+        citations: readStringArray(
+          candidate.citations,
+          `candidates[${index}].citations`
+        )
+      };
+    })
   };
 }
 
-function readResearchReferences(value: unknown): readonly HookResearchReference[] {
-  if (!Array.isArray(value)) throw new Error("references must be an array.");
+function validateHookCandidateQuotas(
+  result: HookCandidateResult,
+  input: HookGenerationHarnessRequest
+): void {
+  const expectedQuotas = candidateTypeQuotasForPrompt(input);
+  for (const quota of expectedQuotas) {
+    const actualCount = result.candidates.filter(
+      (candidate) => candidate.service === quota.service
+    ).length;
+    if (actualCount < quota.count) {
+      throw new Error(
+        `Hook candidate generation returned ${actualCount} of ${quota.count} required candidates for ${quota.service}.`
+      );
+    }
+  }
+}
 
-  return value.map((item, index) => {
-    const record = readRecord(item, `references[${index}]`);
-    return {
-      name: readString(record.name, `references[${index}].name`),
-      type: readResearchType(record.type, `references[${index}].type`),
-      whyItMatters: readString(
-        record.whyItMatters,
-        `references[${index}].whyItMatters`
-      ),
-      brandRelevance: readString(
-        record.brandRelevance,
-        `references[${index}].brandRelevance`
-      ),
-      evidenceSummary: readString(
-        record.evidenceSummary,
-        `references[${index}].evidenceSummary`
-      ),
-      evidenceStrength: readEvidenceStrength(
-        record.evidenceStrength,
-        `references[${index}].evidenceStrength`
-      )
-    };
-  });
+function validateCreativeDirectorSelection(
+  result: HookGenerationResult,
+  candidates: HookCandidateResult
+): void {
+  const candidatesById = new Map(
+    candidates.candidates.map((candidate) => [candidate.id, candidate])
+  );
+  for (const direction of result.directions) {
+    const source = candidatesById.get(direction.sourceCandidateId);
+    if (!source) {
+      throw new Error(
+        `Creative Director selected unknown candidate ${direction.sourceCandidateId}.`
+      );
+    }
+    if (source.service !== direction.service) {
+      throw new Error(
+        `Creative Director changed candidate ${source.id} from ${source.service} to ${direction.service}.`
+      );
+    }
+  }
 }
 
 function parseHookGenerationResult(text: string): HookGenerationResult {
@@ -1403,6 +2112,10 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
           : undefined;
       return {
         id: readString(direction.id, `directions[${index}].id`),
+        sourceCandidateId: readString(
+          direction.sourceCandidateId,
+          `directions[${index}].sourceCandidateId`
+        ),
         service,
         hook,
         subheadline: readString(
@@ -1773,34 +2486,6 @@ function readStringArray(value: unknown, field: string): readonly string[] {
     throw new Error(`${field} must be a string array.`);
   }
   return value;
-}
-
-function readResearchType(
-  value: unknown,
-  field: string
-): HookResearchReference["type"] {
-  const valid = [
-    "provable_moment",
-    "evidence_backed_behavior",
-    "cultural_fever",
-    "platform_buzz",
-    "category_signal"
-  ] as const;
-  if (typeof value !== "string" || !valid.includes(value as never)) {
-    throw new Error(`${field} is invalid.`);
-  }
-  return value as HookResearchReference["type"];
-}
-
-function readEvidenceStrength(
-  value: unknown,
-  field: string
-): HookResearchReference["evidenceStrength"] {
-  const valid = ["strong", "medium", "weak"] as const;
-  if (typeof value !== "string" || !valid.includes(value as never)) {
-    throw new Error(`${field} is invalid.`);
-  }
-  return value as HookResearchReference["evidenceStrength"];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

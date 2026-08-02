@@ -13,11 +13,27 @@ Moons supports two hook generation modes:
    - New backend harness mode.
    - Frontend sends the active run context to `/api/hook-generation-harness`.
    - Backend keeps model/search API keys server-side.
-   - Backend performs three model steps:
-     1. research/search for provable Thai moments, consumer behavior, cultural
-        signals, platform buzz, and category signals;
-     2. generate, judge, and rank the requested hook directions;
-     3. select exact Subheadline highlight spans in one dedicated batch pass.
+   - Backend performs three steps when no past content exists, or five when it
+     does:
+     1. a Past Content Profiler extracts style signals, abstract creative
+        patterns, and reusable factual details while discarding old Hooks,
+        Concepts, campaign angles, and wording;
+     2. the GPT-5.6 Candidate Agent searches, then creates a lightweight pool
+        of three candidates per requested direction (at least four per content
+        type, capped at 36 per batch);
+     3. a separate Creative Director compares the complete pool, rejects
+        generic or repetitive candidates, and expands only the winners into
+        full directions;
+     4. when past posts exist, a Caption Stylist rewrites only the locked
+        direction's `caption` and verified recurring `contactLine`;
+     5. a support-model pass selects exact Subheadline highlight spans.
+   - Both idea modes require at least one web search in every Candidate
+     generation batch. The OpenAI request enforces this with
+     `tool_choice: "required"`.
+   - `standard` performs a focused current-context check before writing.
+   - `fresh-research` tells the same Candidate Agent to run multiple focused
+     searches before ideation. There is no separate research-summary handoff;
+     researched candidates go directly to the Creative Director.
 
 Switch modes with:
 
@@ -62,6 +78,7 @@ type HookGenerationHarnessRequest = {
   runId: string;
   brand: {
     id: string;
+    sourceCandidateId: string; // exact candidate selected by Creative Director
     name: string;
     category: string;
   } | null;
@@ -157,8 +174,9 @@ The UI currently persists:
 - `caption`
 - `selected`
 
-`score`, `reasoning`, and `citations` are returned by the backend for future UI
-work but are not persisted in `CreativeDirection` yet.
+`sourceCandidateId`, `score`, `reasoning`, and `citations` are returned by the
+backend for traceability/future UI work but are not persisted in
+`CreativeDirection` yet.
 
 ## Subheadline highlight pass
 
@@ -189,13 +207,17 @@ data where the highlight field is absent uses the deterministic fallback.
 
 ## Prompt source
 
-The harness prompt is adapted from:
+The Hook Agent's stable role and judgment rules live in:
 
 - `agent_prompt/agent_hook.md`
-- `agent_prompt/agent_seasonal.md`
 
-The n8n placeholders from those files are replaced with the current Compass run
-context:
+The file is intentionally concise. It defines the Agent as a Creative
+Strategist that understands the brand, product, audience, and current market;
+uses Search for current context; develops meaningfully distinct,
+format-native ideas; and does not invent brand or product facts.
+
+`buildGenerationPrompt()` appends only the changing runtime context and
+transport contract:
 
 - user brief
 - selected service
@@ -208,54 +230,90 @@ context:
 - onboarding questionnaire text, explicitly marked as historical onboarding
   context rather than a current campaign brief
 - attachment file names
+- the selected format rules and strict JSON output quota
 
-The research step keeps the same discipline as `agent_seasonal.md`: it is
-research-only and must not invent hooks, captions, content ideas, source names,
-rankings, statistics, or trend names.
-
-The generation step keeps the same discipline as `agent_hook.md`: the hook is
-the most important output, must be natural Thai, brand-native, and useful for
-paid social.
-
-**`agent_hook.md` was substantially rewritten on 2026-07-10** — new output
-schema (`recommendations[]` with `content_type` quotas across STATIC AD /
-VIDEO AD / ALBUM AD / SHORT VIDEO, plus `audience_insight`, `strategic_angle`,
-`content_pillar`, and a `copywriting` sub-object with `sub_headline_1/2` and
-`bullets[]`), a much longer set of concrete rules, and no more n8n example
-content baked in. Decision (2026-07-10): **adapt, don't adopt wholesale.**
-`buildGenerationPrompt` absorbed the new file's stronger creative-strategy
-language — content locked to single-image (STATIC AD) behavior, factual
-grounding, concept strategy (audience insight → strategic angle → headline),
-the concrete headline avoid-list, and the mood-only visual-direction rule —
-but the request/response schema and `RawDirection`/`CreativeDirection` shape
-were deliberately left unchanged. The new file's `content_type` quota system
-(mixing video/album/short-video recommendations) was **not** adopted: Moons'
-artwork generation only produces static images via `gpt-image-2` (see
-`docs/FEATURE_ARTWORK_GENERATION.md`), so quota'd video/album recommendations
-would have nowhere to go. Revisit this if/when video or album generation gets
-built — until then every hook is generated as if it were a STATIC AD.
+The OpenAI request gives the Candidate Agent `web_search_preview` directly and
+enforces at least one search with `tool_choice: "required"`. The tool receives
+an approximate Thailand location (`country: "TH"`, timezone
+`Asia/Bangkok`). Unless the Brief names another market, the prompt requires
+Thai-language queries and Thailand-specific sources first; US/global consumer
+behavior cannot substitute for Thai audience context. Search may add audience
+insight or market context, but Brief, Brand Memory, Brand Kit, and verified
+Product data remain higher-priority. Any direction influenced by external
+research names the actual source in `citations`; directions based only on
+campaign input return an empty citation list.
 
 ## Caption grounding in real past posts
 
-The generation step's caption instructions ("Caption ต้อง:" in the prompt
-built by `buildGenerationPrompt`) tell the model to write in the voice of an
-actual copywriter for the page, not to write a generic caption. To make that
-concrete rather than aspirational, `fetchPastPostExamples()`
-(`src/server/hook-generation/past-posts.ts`) queries the brand's real
-`moons.brand_social_posts` and `moons.brand_ad_library_items` rows for past
-caption text and includes a sample directly in the prompt as style
-reference. Falls back to Brand Kit voice notes alone if a brand has no
-ingested post history yet (new clients, or ingestion not yet run).
+`fetchPastPostExamples()` (`src/server/hook-generation/past-posts.ts`) queries
+the brand's real `moons.brand_social_posts` and
+`moons.brand_ad_library_items` rows. Raw past posts go first to a Past Content
+Profiler, which returns only `styleSignals` plus factual `reusableDetails` with
+source-post indexes. It explicitly removes old Hooks, Concepts, campaign
+angles, and time-sensitive prices or promotions not confirmed by current
+input. The Hook Agent receives this compact profile, never the raw posts, so
+it can reuse brand mood, voice, caption patterns, product/service details,
+proof, process, and contact information without being anchored to an old
+creative idea. The Profiler reads at most 12 examples: up to six ad captions
+plus six organic posts. Within each source it keeps the newest half and samples
+the rest across the available history, so brand memory covers both current
+voice and a wider range of proven creative patterns. The smaller Caption
+Stylist sample remains recent-first because its job is current writing texture.
+
+`styleSignals` includes brand-specific creative language mechanisms—not only
+generic tone labels—including rhythm, rhyme, wordplay, bilingual slogans,
+brand declarations, humorous comparisons, premium statements, and recurring
+CTA texture when those patterns exist. `creativePatterns` separately preserves
+abstract, brand-native ways of thinking—such as visual proof, useful education,
+expert warning, occasion ritual, identity listicle, social proof, or brand
+belief—without preserving the old topic, product, scene, punchline, or campaign
+angle. The Candidate Agent can reuse the mechanism without copying the old
+idea.
+
+The divergent candidate pass varies content archetype, primary benefit,
+emotional entry, and language device before any full caption or production
+brief is written. The convergent Creative Director then compares candidates as
+a set. It rejects generic hooks, hooks that need explanation, wordplay without
+a useful idea, and candidates that repeat a selected benefit, pattern, or
+sentence template. Scores are relative to the pool instead of being treated as
+independent self-scores.
+
+Thai copy has a hard naturalness rule: generated Hooks, directions, UGC scripts,
+and styled captions may not use `ฉัน`. The Agent should omit the subject or
+rewrite the sentence as natural spoken Thai, using `เรา` only when it genuinely
+fits the context rather than as a mechanical replacement. Candidate,
+Creative-Director, and Caption-Stylist outputs are checked server-side; a
+violating response gets one correction pass and is rejected if it still
+contains the forbidden wording.
+
+After directions are locked, a separate Caption Stylist receives the locked
+directions, the compact profile, and at most six raw style examples,
+preferring up to four ad captions plus two organic posts. It may rewrite
+`caption` and `contactLine` only; Hook, Concept, Product, Visual, and strategy
+remain unchanged. The server accepts a contact line only when the exact text
+appears in at least two selected examples. If no history exists, both
+past-content passes are skipped and the Hook Agent's Brand Kit-grounded
+caption draft is preserved.
 
 ## Current limitation
 
-Harness mode is synchronous. It performs research and generation in one backend
-request. This is enough for v1 UI wiring, but production-scale orchestration
-should move it to the `moons.jobs` model so the UI can show progress such as:
+Harness mode is synchronous. Past-content profiling happens first when
+history exists. Search and divergent candidate generation happen in one
+GPT-5.6 call; a second GPT-5.6 Creative Director call selects and expands the
+winners, followed by the optional Caption Stylist and Subheadline highlight
+passes.
+This is enough for current UI wiring, but production-scale orchestration could
+move it to the `moons.jobs` model so the UI can show progress such as:
 
-- `Researching references...`
-- `Generating hook candidates...`
+- `Searching and generating hook candidates...`
 - `Ranking shortlist...`
+
+Local development writes one combined trace to `logs/hook-generation/` with
+separate `candidateAgent` and `hookAgent` (Creative Director) requests and
+responses, the exact prompts, Candidate Agent search tools, attached-image
+metadata, optional Past Content Profiler and Caption Stylist traces, parsed
+directions, and final response. Vercel Preview and Production disable this
+logging at the API boundary.
 
 ## Files
 
@@ -265,5 +323,6 @@ should move it to the `moons.jobs` model so the UI can show progress such as:
 - `src/services/creative-generation/harness-hook-generation.ts`
 - `src/services/creative-generation/hook-generation-types.ts`
 - `src/server/hook-generation/hook-generation-harness-endpoint.ts`
+- `src/server/hook-generation/hook-generation-debug-log.ts`
 - `src/server/hook-generation/past-posts.ts`
 - `api/hook-generation-harness.ts`
