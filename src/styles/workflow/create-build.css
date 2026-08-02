@@ -115,6 +115,271 @@
   white-space: nowrap;
 }
 
+.compass-app .output-regenerate-modal {
+  width: min(940px, 100%);
+  max-width: 940px;
+  padding: 20px;
+  border: 1px solid #e2e5eb;
+  border-radius: 22px;
+}
+
+.compass-app .output-regenerate-workspace {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 430px;
+  margin-bottom: 14px;
+}
+
+.compass-app .output-version-rail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #e3e6ec;
+  border-radius: 16px;
+  background: #f7f8fa;
+}
+
+.compass-app .output-version-rail > b {
+  color: #60697a;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.compass-app .output-version-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.compass-app .output-version-list button {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #dfe3ea;
+  border-radius: 12px;
+  background: #fff;
+  color: #626b7c;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.compass-app .output-version-list button:hover {
+  border-color: #aeb6c5;
+}
+
+.compass-app .output-version-list button.selected {
+  border-color: #65b83f;
+  box-shadow: 0 0 0 2px rgba(139, 226, 82, 0.2);
+}
+
+.compass-app .output-version-list img {
+  grid-column: 1 / -1;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: #eef0f4;
+  object-fit: cover;
+}
+
+.compass-app .output-version-list span {
+  padding-left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.compass-app .output-version-list i {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: #b8ff39;
+  color: #254a18;
+  font-style: normal;
+}
+
+.compass-app .output-regenerate-main {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #e3e6ec;
+  border-radius: 16px;
+  background: #f2f3f6;
+  overflow: hidden;
+}
+
+.compass-app .output-regenerate-main .output-modal-image {
+  height: 100%;
+  min-height: 430px;
+  margin: 0;
+  border-radius: 0;
+}
+
+.compass-app .output-regenerate-main .output-modal-image img {
+  max-height: 560px;
+}
+
+.compass-app .output-regenerate-source-label {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 14px rgba(23, 28, 39, 0.08);
+  color: #4a5262;
+  font-size: 10px;
+  font-weight: 700;
+  backdrop-filter: blur(8px);
+}
+
+.compass-app .output-chat-composer {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 10px 9px 14px;
+  border: 1px solid #d9dde5;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(24, 29, 40, 0.06);
+}
+
+.compass-app .output-chat-composer:focus-within {
+  border-color: #9ca5b5;
+  box-shadow: 0 0 0 3px rgba(90, 102, 255, 0.1);
+}
+
+.compass-app .output-chat-composer textarea {
+  grid-column: 1;
+  width: 100%;
+  min-height: 48px;
+  max-height: 150px;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: #202534;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: 0;
+  resize: none;
+}
+
+.compass-app .output-chat-actions {
+  display: flex;
+  grid-column: 2;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.compass-app .output-chat-attach-button,
+.compass-app .output-chat-send-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.compass-app .output-chat-attach-button {
+  border: 1px solid #dfe3ea;
+  background: #fff;
+  color: #4d5668;
+}
+
+.compass-app .output-chat-attach-button:hover {
+  background: #f2f4f7;
+}
+
+.compass-app .output-chat-attach-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.compass-app .output-chat-send-button {
+  border: 0;
+  background: #20242d;
+  color: #fff;
+}
+
+.compass-app .output-chat-send-button:disabled,
+.compass-app .output-chat-attach-button:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compass-app .output-chat-attachment {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 42px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 100%);
+  padding: 6px;
+  border: 1px solid #e1e4ea;
+  border-radius: 12px;
+  background: #f7f8fa;
+}
+
+.compass-app .output-chat-attachment img {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.compass-app .output-chat-attachment span {
+  overflow: hidden;
+  color: #515a6b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .output-chat-attachment button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e6e9ee;
+  color: #4d5668;
+  cursor: pointer;
+}
+
+.compass-app .output-chat-status {
+  min-height: 28px;
+  padding: 7px 4px 0;
+  color: #7a8394;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 @media (max-width: 1080px) {
   .compass-app .compass-build-asset-pair {
     min-height: 0;
@@ -129,5 +394,32 @@
 @media (max-width: 760px) {
   .compass-app .compass-stage-build .output-grid {
     grid-template-columns: 1fr;
+  }
+
+  .compass-app .output-regenerate-modal {
+    padding: 14px;
+  }
+
+  .compass-app .output-regenerate-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .compass-app .output-version-rail {
+    min-height: 0;
+  }
+
+  .compass-app .output-version-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .compass-app .output-version-list button {
+    width: 82px;
+  }
+
+  .compass-app .output-regenerate-main .output-modal-image {
+    min-height: 280px;
   }
 }

@@ -1087,19 +1087,62 @@ export function workflowReducer(
     case "replace-output-asset": {
       const outputs = state.outputs.map((output) =>
         output.id === action.id
-          ? {
-              ...output,
-              assetUrl: action.assetUrl,
-              ...(action.assetStoragePath
-                ? { assetStoragePath: action.assetStoragePath }
-                : {}),
-              ...(action.assetBucket ? { assetBucket: action.assetBucket } : {}),
-              revisionCount: output.revisionCount + 1,
-              status: "draft" as const,
-              qaNote: undefined,
-              qaReport: undefined,
-              approval: emptyApprovalGate
-            }
+          ? (() => {
+              const previousAsset = output.assetUrl
+                ? {
+                    version: output.revisionCount + 1,
+                    assetUrl: output.assetUrl,
+                    ...(output.assetStoragePath
+                      ? { assetStoragePath: output.assetStoragePath }
+                      : {}),
+                    ...(output.assetBucket
+                      ? { assetBucket: output.assetBucket }
+                      : {}),
+                    ...(output.albumMasterAssetUrl
+                      ? { albumMasterAssetUrl: output.albumMasterAssetUrl }
+                      : {}),
+                    ...(output.albumMasterAssetStoragePath
+                      ? {
+                          albumMasterAssetStoragePath:
+                            output.albumMasterAssetStoragePath
+                        }
+                      : {})
+                  }
+                : null;
+              const assetHistory = previousAsset
+                ? [
+                    ...(output.assetHistory ?? []).filter(
+                      (asset) => asset.assetUrl !== previousAsset.assetUrl
+                    ),
+                    previousAsset
+                  ]
+                : output.assetHistory;
+              return {
+                ...output,
+                assetUrl: action.assetUrl,
+                ...(action.assetStoragePath
+                  ? { assetStoragePath: action.assetStoragePath }
+                  : {}),
+                ...(action.assetBucket
+                  ? { assetBucket: action.assetBucket }
+                  : {}),
+                ...(action.albumMasterAssetUrl
+                  ? { albumMasterAssetUrl: action.albumMasterAssetUrl }
+                  : {}),
+                ...(action.albumMasterAssetStoragePath
+                  ? {
+                      albumMasterAssetStoragePath:
+                        action.albumMasterAssetStoragePath
+                    }
+                  : {}),
+                ...(assetHistory?.length ? { assetHistory } : {}),
+                revisionCount: output.revisionCount + 1,
+                status: "draft" as const,
+                qaNote: undefined,
+                qaReport: undefined,
+                approval: emptyApprovalGate
+              };
+            })()
           : output
       );
       return {

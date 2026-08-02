@@ -52,6 +52,68 @@ describe("workspace serializer", () => {
     );
   });
 
+  it("preserves artwork revision history", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "revision-history-run",
+      now: "2026-08-02T01:00:00.000Z"
+    });
+    const run = workspace.runsById[workspace.activeRunId];
+    if (!run) throw new Error("Expected active run.");
+    const withHistory = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [run.id]: {
+          ...run,
+          outputs: [
+            {
+              id: "output-1",
+              directionId: "direction-1",
+              format: "Static",
+              status: "draft" as const,
+              clientStatus: "queued" as const,
+              assetUrl: "https://example.com/v2.png",
+              revisionCount: 1,
+              approval: {
+                graphicDesign: null,
+                clientService: null,
+                projectManager: null
+              },
+              approvalComments: {
+                graphicDesign: "",
+                clientService: "",
+                projectManager: ""
+              },
+              assetHistory: [
+                {
+                  version: 1,
+                  assetUrl: "https://example.com/v1.png",
+                  assetStoragePath: "run/outputs/v1.png",
+                  assetBucket: "creative-assets"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    };
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(withHistory, "2026-08-02T01:01:00.000Z")
+    );
+
+    expect(
+      restored?.runsById["revision-history-run"]?.outputs[0]?.assetHistory
+    ).toEqual([
+      {
+        version: 1,
+        assetUrl: "https://example.com/v1.png",
+        assetStoragePath: "run/outputs/v1.png",
+        assetBucket: "creative-assets"
+      }
+    ]);
+  });
+
   it("preserves the direct Final artwork mode", () => {
     let workspace = createInitialWorkspaceState({
       runId: "direct-final-artwork-run",

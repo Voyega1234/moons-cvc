@@ -296,6 +296,15 @@ export const emptyApprovalComments: ApprovalComments = {
   projectManager: ""
 };
 
+export interface CreativeAssetVersion {
+  version: number;
+  assetUrl: string;
+  assetStoragePath?: string;
+  assetBucket?: string;
+  albumMasterAssetUrl?: string;
+  albumMasterAssetStoragePath?: string;
+}
+
 export interface CreativeOutput {
   id: string;
   directionId: string;
@@ -307,6 +316,7 @@ export interface CreativeOutput {
   assetBucket?: string;
   albumMasterAssetUrl?: string;
   albumMasterAssetStoragePath?: string;
+  assetHistory?: readonly CreativeAssetVersion[];
   provider?: string;
   model?: string;
   revisionCount: number;

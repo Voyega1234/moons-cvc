@@ -3086,6 +3086,59 @@ describe("redesigned workflow stages", () => {
     ).toHaveLength(state.outputs.length);
   });
 
+  it("lets people select an earlier artwork version as the regenerate source", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const first = base.outputs[0];
+    if (!first) throw new Error("Expected a creative output fixture.");
+    const state = {
+      ...base,
+      outputs: base.outputs.map((output) =>
+        output.id === first.id
+          ? {
+              ...output,
+              revisionCount: 2,
+              assetUrl: "https://example.com/version-3.png",
+              assetHistory: [
+                {
+                  version: 1,
+                  assetUrl: "https://example.com/version-1.png"
+                },
+                {
+                  version: 2,
+                  assetUrl: "https://example.com/version-2.png"
+                }
+              ]
+            }
+          : output
+      )
+    };
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+
+    await user.click(
+      stage.getAllByRole("button", { name: "Regenerate draft" })[0]!
+    );
+    const dialog = stage.getByRole("dialog", { name: "Regenerate creative" });
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Use version 3 as revision source"
+      }).getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(within(dialog).getByLabelText("Attach image")).toBeTruthy();
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Use version 1 as revision source"
+      })
+    );
+
+    expect(
+      within(dialog).getByAltText("Version 1 preview").getAttribute("src")
+    ).toBe("https://example.com/version-1.png");
+    expect(within(dialog).getByText("Editing from V1")).toBeTruthy();
+  });
+
   it("opens Build artwork in a view-only image popup", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();

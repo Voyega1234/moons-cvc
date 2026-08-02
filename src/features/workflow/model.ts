@@ -238,6 +238,8 @@ export type WorkflowAction =
       assetUrl: string;
       assetStoragePath?: string;
       assetBucket?: string;
+      albumMasterAssetUrl?: string;
+      albumMasterAssetStoragePath?: string;
     }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }

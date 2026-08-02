@@ -1,6 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type Dispatch } from "react";
-import { Sparkle } from "@phosphor-icons/react";
-import { type ArtworkMode, type CreativeOutput } from "../../../domain/creative-run";
+import { ArrowUp, Check, Paperclip, Sparkle } from "@phosphor-icons/react";
+import {
+  type ArtworkMode,
+  type CreativeAssetVersion,
+  type CreativeOutput
+} from "../../../domain/creative-run";
 import { directionSubheadline } from "../../../domain/subheadline-highlight";
 import { CREATIVE_STRATEGIST_AGENT_NAME, type CreativeQualityReport } from "../../../domain/quality-check";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
@@ -9,7 +13,6 @@ import {
   reviseOutputImage,
   type ArtworkReferenceImage
 } from "../../../services/artwork-generation/openai-image-generation";
-import { runQualityCheck } from "../../../services/quality-check/run-quality-check";
 import { playGenerationSuccessSound } from "../../../shared/utils/notification-sound";
 import type { WorkflowAction, WorkflowState } from "../model";
 import { isBuildQualityCheckOutput } from "../rules";
@@ -470,6 +473,63 @@ function readOutputReferenceAttachment(
   });
 }
 
+function outputAssetVersions(
+  output: CreativeOutput
+): readonly CreativeAssetVersion[] {
+  const versions = [...(output.assetHistory ?? [])];
+  if (output.assetUrl) {
+    versions.push({
+      version: output.revisionCount + 1,
+      assetUrl: output.assetUrl,
+      ...(output.assetStoragePath
+        ? { assetStoragePath: output.assetStoragePath }
+        : {}),
+      ...(output.assetBucket ? { assetBucket: output.assetBucket } : {}),
+      ...(output.albumMasterAssetUrl
+        ? { albumMasterAssetUrl: output.albumMasterAssetUrl }
+        : {}),
+      ...(output.albumMasterAssetStoragePath
+        ? {
+            albumMasterAssetStoragePath: output.albumMasterAssetStoragePath
+          }
+        : {})
+    });
+  }
+  return versions
+    .filter(
+      (version, index, all) =>
+        all.findIndex((candidate) => candidate.version === version.version) ===
+        index
+    )
+    .sort((left, right) => right.version - left.version);
+}
+
+function outputAtVersion(
+  output: CreativeOutput,
+  version: number
+): CreativeOutput {
+  const asset = outputAssetVersions(output).find(
+    (candidate) => candidate.version === version
+  );
+  if (!asset) return output;
+  return {
+    ...output,
+    assetUrl: asset.assetUrl,
+    ...(asset.assetStoragePath
+      ? { assetStoragePath: asset.assetStoragePath }
+      : {}),
+    ...(asset.assetBucket ? { assetBucket: asset.assetBucket } : {}),
+    ...(asset.albumMasterAssetUrl
+      ? { albumMasterAssetUrl: asset.albumMasterAssetUrl }
+      : {}),
+    ...(asset.albumMasterAssetStoragePath
+      ? {
+          albumMasterAssetStoragePath: asset.albumMasterAssetStoragePath
+        }
+      : {})
+  };
+}
+
 function OutputRegenerateModal({
   run,
   output,
@@ -489,15 +549,27 @@ function OutputRegenerateModal({
 }) {
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
-  const [phase, setPhase] = useState<"idle" | "regenerating" | "checking">(
-    "idle"
+  const [phase, setPhase] = useState<"idle" | "regenerating">("idle");
+  const [selectedVersion, setSelectedVersion] = useState(
+    output.revisionCount + 1
   );
-  const [replacementApplied, setReplacementApplied] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [referenceAttachment, setReferenceAttachment] =
     useState<OutputReferenceAttachment | null>(null);
   const album = isAlbumOutput(output);
   const busy = phase !== "idle";
+  const versions = outputAssetVersions(output);
+  const selectedAsset =
+    versions.find((version) => version.version === selectedVersion) ??
+    versions[0];
+  const previewOutputs = outputs.map((candidate) =>
+    outputAtVersion(candidate, selectedVersion)
+  );
+
+  useEffect(() => {
+    setSelectedVersion(output.revisionCount + 1);
+  }, [output.assetUrl, output.revisionCount]);
 
   const handleReferenceAttachment = async (
     event: ChangeEvent<HTMLInputElement>
@@ -527,7 +599,7 @@ function OutputRegenerateModal({
 
     setPhase("regenerating");
     setError(null);
-    let imageReplaced = false;
+    setNotice(null);
     const additionalReferenceImages: readonly ArtworkReferenceImage[] =
       referenceAttachment
         ? [
@@ -549,12 +621,24 @@ function OutputRegenerateModal({
             run,
             direction,
             extraInstructions: revisionInstructions,
+            sourceImageUrl: selectedAsset?.assetUrl,
             additionalReferenceImages
           })
         : [
             await reviseOutputImage({
               run,
-              output,
+              output: selectedAsset
+                ? {
+                    ...output,
+                    assetUrl: selectedAsset.assetUrl,
+                    ...(selectedAsset.assetStoragePath
+                      ? { assetStoragePath: selectedAsset.assetStoragePath }
+                      : {}),
+                    ...(selectedAsset.assetBucket
+                      ? { assetBucket: selectedAsset.assetBucket }
+                      : {})
+                  }
+                : output,
               instructions: revisionInstructions,
               referenceImages: additionalReferenceImages
             })
@@ -585,50 +669,27 @@ function OutputRegenerateModal({
           ...(updated.assetStoragePath
             ? { assetStoragePath: updated.assetStoragePath }
             : {}),
-          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {})
+          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {}),
+          ...(updated.albumMasterAssetUrl
+            ? { albumMasterAssetUrl: updated.albumMasterAssetUrl }
+            : {}),
+          ...(updated.albumMasterAssetStoragePath
+            ? {
+                albumMasterAssetStoragePath:
+                  updated.albumMasterAssetStoragePath
+              }
+            : {})
         });
       });
-      setReplacementApplied(true);
-      imageReplaced = true;
-      setPhase("checking");
-
-      const replacementById = new Map(
-        replacements.map(({ currentOutput, updated }) => [
-          currentOutput.id,
-          updated
-        ])
-      );
-      const nextOutputs = run.outputs.map((currentOutput) => {
-        const updated = replacementById.get(currentOutput.id);
-        if (!updated?.assetUrl) return currentOutput;
-        return {
-          ...currentOutput,
-          assetUrl: updated.assetUrl,
-          ...(updated.assetStoragePath
-            ? { assetStoragePath: updated.assetStoragePath }
-            : {}),
-          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {}),
-          status: "draft" as const,
-          qaNote: undefined,
-          qaReport: undefined
-        };
-      });
-      const qaResults = await runQualityCheck(
-        { ...run, outputs: nextOutputs, qaComplete: false },
-        replacements.map(({ currentOutput }) => currentOutput.id)
-      );
-      dispatch({ type: "run-qa", results: qaResults });
+      setSelectedVersion(output.revisionCount + 2);
       setPrompt("");
+      setReferenceAttachment(null);
+      setNotice(`Version ${output.revisionCount + 2} is ready.`);
       playGenerationSuccessSound();
-      onClose();
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Could not regenerate image.";
-      setError(
-        imageReplaced
-          ? `Image regenerated, but the optional quality check failed: ${message} You can retry it from Build or continue to Internal QC.`
-          : message
-      );
+      setError(message);
     } finally {
       setPhase("idle");
     }
@@ -640,7 +701,7 @@ function OutputRegenerateModal({
       onClick={busy ? undefined : onClose}
     >
       <div
-        className="output-modal"
+        className="output-modal output-regenerate-modal"
         role="dialog"
         aria-modal="true"
         aria-label={album ? "Regenerate album" : "Regenerate creative"}
@@ -660,124 +721,131 @@ function OutputRegenerateModal({
             Close
           </button>
         </div>
-        <div className="output-modal-image">
-          {album ? (
-            <AlbumPanelPreview
-              outputs={outputs}
-              direction={direction}
-              format={resolvedAlbumFormatForDirection(
-                run.albumFormat,
-                direction
-              )}
-            />
-          ) : isUgcOutput(output) ? (
-            <UgcTemplatePreview
-              direction={direction}
-              brandName={run.brand?.name}
-            />
-          ) : output.assetUrl ? (
-            <img src={output.assetUrl} alt={direction?.hook ?? "Creative preview"} />
-          ) : (
-            <div className="static-preview">
-              <span className="static-mark" />
-              <div className="static-copy">
-                <h3>{direction?.hook}</h3>
-                <p>{direction ? directionSubheadline(direction) : null}</p>
-                <span>Learn more</span>
-              </div>
+        <div className="output-regenerate-workspace">
+          <aside className="output-version-rail" aria-label="Artwork versions">
+            <b>Versions</b>
+            <div className="output-version-list">
+              {versions.map((version) => {
+                const selected = version.version === selectedVersion;
+                return (
+                  <button
+                    className={selected ? "selected" : ""}
+                    type="button"
+                    key={`${version.version}-${version.assetUrl}`}
+                    aria-label={`Use version ${version.version} as revision source`}
+                    aria-pressed={selected}
+                    disabled={busy}
+                    onClick={() => setSelectedVersion(version.version)}
+                  >
+                    <img src={version.assetUrl} alt="" />
+                    <span>V{version.version}</span>
+                    {selected ? (
+                      <i aria-hidden="true"><Check size={13} weight="bold" /></i>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </div>
-        <label className="output-modal-prompt-label">
-          <span>
-            {album
-              ? "Regeneration instructions (optional)"
-              : "Revision instructions"}
-          </span>
-          <textarea
-            value={prompt}
-            disabled={busy || replacementApplied}
-            placeholder="Example: Make the background lighter, remove the text overlay, zoom in on the product."
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-        </label>
-        <div className="output-modal-reference-upload">
-          <div>
-            <b>Image reference (optional)</b>
-            <p>
-              Attach one image to guide the composition, mood, camera angle,
-              styling, or finish of this revision.
+          </aside>
+          <div className="output-regenerate-main">
+            <div className="output-modal-image">
+              {album ? (
+                <AlbumPanelPreview
+                  outputs={previewOutputs}
+                  direction={direction}
+                  format={resolvedAlbumFormatForDirection(
+                    run.albumFormat,
+                    direction
+                  )}
+                />
+              ) : isUgcOutput(output) ? (
+                <UgcTemplatePreview
+                  direction={direction}
+                  brandName={run.brand?.name}
+                />
+              ) : selectedAsset?.assetUrl ? (
+                <img
+                  src={selectedAsset.assetUrl}
+                  alt={`Version ${selectedAsset.version} preview`}
+                />
+              ) : (
+                <div className="static-preview">
+                  <span className="static-mark" />
+                  <div className="static-copy">
+                    <h3>{direction?.hook}</h3>
+                    <p>{direction ? directionSubheadline(direction) : null}</p>
+                    <span>Learn more</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="output-regenerate-source-label">
+              Editing from V{selectedAsset?.version ?? output.revisionCount + 1}
             </p>
           </div>
+        </div>
+        <div className="output-chat-composer">
           {referenceAttachment ? (
-            <div className="output-modal-reference-preview">
-              <img
-                src={referenceAttachment.previewUrl}
-                alt={referenceAttachment.name}
-              />
-              <span title={referenceAttachment.name}>
-                {referenceAttachment.name}
-              </span>
+            <div className="output-chat-attachment">
+              <img src={referenceAttachment.previewUrl} alt={referenceAttachment.name} />
+              <span title={referenceAttachment.name}>{referenceAttachment.name}</span>
               <button
-                className="btn ghost small"
                 type="button"
-                disabled={busy || replacementApplied}
+                aria-label="Remove attached image"
+                disabled={busy}
                 onClick={() => setReferenceAttachment(null)}
               >
-                Remove
+                ×
               </button>
             </div>
-          ) : (
-            <label className="btn secondary small output-reference-file-button">
-              Attach image
+          ) : null}
+          <textarea
+            aria-label={album ? "Regeneration instructions" : "Revision instructions"}
+            value={prompt}
+            disabled={busy}
+            placeholder="Describe what you want to change..."
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !busy) {
+                event.preventDefault();
+                if (album || prompt.trim() || referenceAttachment) {
+                  void handleRegenerate();
+                }
+              }
+            }}
+          />
+          <div className="output-chat-actions">
+            <label className="output-chat-attach-button" aria-label="Attach image">
+              <Paperclip size={19} weight="bold" />
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                disabled={busy || replacementApplied}
+                disabled={busy}
                 onChange={(event) => void handleReferenceAttachment(event)}
               />
             </label>
-          )}
+            <button
+              className="output-chat-send-button"
+              type="button"
+              aria-label={album ? "Regenerate album" : "Regenerate image"}
+              disabled={busy || (!album && !prompt.trim() && !referenceAttachment)}
+              onClick={() => void handleRegenerate()}
+            >
+              {busy ? <Spinner /> : <ArrowUp size={18} weight="bold" />}
+            </button>
+          </div>
         </div>
-        <p className="output-modal-reference-note">
-          {album
-            ? `${artworkModeLabel(run.artworkMode)} mode · album regeneration uses the selected brief and references.`
-            : "Art Director enhancement · uses the current artwork and these directions to improve the full composition with GPT Image 2."}
-        </p>
+        <div className="output-chat-status" aria-live="polite">
+          <span>
+            {phase === "regenerating"
+              ? "Generating a new version..."
+              : notice ??
+                (album
+                  ? `${artworkModeLabel(run.artworkMode)} mode · the selected version guides this revision.`
+                  : "Select any version above, then describe the next change.")}
+          </span>
+        </div>
         {error ? <p className="repository-message error">{error}</p> : null}
-        <div className="output-modal-actions">
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-          >
-            Close
-          </button>
-          <button
-            className="btn primary"
-            type="button"
-            disabled={
-              busy ||
-              replacementApplied ||
-              (!album && !prompt.trim() && !referenceAttachment)
-            }
-            onClick={() => void handleRegenerate()}
-          >
-            {busy ? <Spinner /> : null}
-            {phase === "checking"
-              ? "Checking quality..."
-              : phase === "regenerating"
-                ? "Regenerating..."
-                : replacementApplied
-                  ? "Image regenerated"
-                  : initialPrompt
-                    ? "Apply suggestion"
-                    : album
-                      ? "Regenerate album"
-                      : "Regenerate image"}
-          </button>
-        </div>
       </div>
     </div>
   );

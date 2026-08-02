@@ -765,6 +765,10 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       item.albumMasterAssetStoragePath === undefined
         ? undefined
         : parseString(item.albumMasterAssetStoragePath);
+    const assetHistory =
+      item.assetHistory === undefined
+        ? undefined
+        : parseCreativeAssetHistory(item.assetHistory);
     const provider =
       item.provider === undefined ? undefined : parseString(item.provider);
     const model = item.model === undefined ? undefined : parseString(item.model);
@@ -789,6 +793,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       assetBucket === null ||
       albumMasterAssetUrl === null ||
       albumMasterAssetStoragePath === null ||
+      assetHistory === null ||
       provider === null ||
       model === null ||
       savedToReferences === null
@@ -812,6 +817,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       ...(albumMasterAssetStoragePath
         ? { albumMasterAssetStoragePath }
         : {}),
+      ...(assetHistory?.length ? { assetHistory } : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
       ...(savedToReferences !== undefined ? { savedToReferences } : {})
@@ -819,6 +825,55 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
   });
 
   return outputs.every((output) => output !== null) ? outputs : null;
+}
+
+function parseCreativeAssetHistory(
+  value: unknown
+): WorkflowState["outputs"][number]["assetHistory"] | null {
+  if (!Array.isArray(value)) return null;
+  const history = value.map((item) => {
+    if (!isRecord(item)) return null;
+    const version = parseNumber(item.version);
+    const assetUrl = parseString(item.assetUrl);
+    const assetStoragePath =
+      item.assetStoragePath === undefined
+        ? undefined
+        : parseString(item.assetStoragePath);
+    const assetBucket =
+      item.assetBucket === undefined
+        ? undefined
+        : parseString(item.assetBucket);
+    const albumMasterAssetUrl =
+      item.albumMasterAssetUrl === undefined
+        ? undefined
+        : parseString(item.albumMasterAssetUrl);
+    const albumMasterAssetStoragePath =
+      item.albumMasterAssetStoragePath === undefined
+        ? undefined
+        : parseString(item.albumMasterAssetStoragePath);
+    if (
+      version === null ||
+      version < 1 ||
+      !assetUrl ||
+      assetStoragePath === null ||
+      assetBucket === null ||
+      albumMasterAssetUrl === null ||
+      albumMasterAssetStoragePath === null
+    ) {
+      return null;
+    }
+    return {
+      version,
+      assetUrl,
+      ...(assetStoragePath ? { assetStoragePath } : {}),
+      ...(assetBucket ? { assetBucket } : {}),
+      ...(albumMasterAssetUrl ? { albumMasterAssetUrl } : {}),
+      ...(albumMasterAssetStoragePath
+        ? { albumMasterAssetStoragePath }
+        : {})
+    };
+  });
+  return history.every((item) => item !== null) ? history : null;
 }
 
 function parseApprovalGate(value: unknown): WorkflowState["outputs"][number]["approval"] | null {

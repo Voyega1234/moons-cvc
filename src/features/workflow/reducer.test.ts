@@ -815,6 +815,50 @@ describe("workflowReducer", () => {
     expect(updated?.assetUrl).toContain("v2.png");
   });
 
+  it("keeps replaced artwork as revision history", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    const first = state.outputs[0];
+    if (!first) throw new Error("Expected at least one output.");
+
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v1.png",
+      assetStoragePath: "brand/run/outputs/v1.png",
+      assetBucket: "creative-assets"
+    });
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v2.png",
+      assetStoragePath: "brand/run/outputs/v2.png",
+      assetBucket: "creative-assets"
+    });
+
+    const updated = state.outputs.find((output) => output.id === first.id);
+    expect(updated?.assetUrl).toBe("https://example.com/v2.png");
+    expect(updated?.assetHistory).toEqual([
+      {
+        version: 2,
+        assetUrl: "https://example.com/v1.png",
+        assetStoragePath: "brand/run/outputs/v1.png",
+        assetBucket: "creative-assets"
+      }
+    ]);
+  });
+
   it("appends generated-more directions instead of replacing existing ones", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
