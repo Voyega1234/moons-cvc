@@ -2872,7 +2872,7 @@ describe("redesigned workflow stages", () => {
     expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
-  it("exports UGC in the shared deck theme with a phone reference and three-part script", async () => {
+  it("exports the Create UGC preview as one image with the three-part script", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -2921,10 +2921,12 @@ describe("redesigned workflow stages", () => {
       ]
     };
 
+    const previewImage =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
     const pptx = await buildCreateStageSlidesPptx(
       state,
-      async () =>
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
+      async () => previewImage,
+      { [firstOutput.id]: previewImage }
     );
     const [storyboardSlide, ...extraSlides] = (
       pptx as unknown as {
@@ -2943,10 +2945,10 @@ describe("redesigned workflow stages", () => {
 
     expect(extraSlides).toHaveLength(0);
     expect(storyboardText).toContain("UGC VISUAL REFERENCE");
-    expect(storyboardText).toContain("Following");
-    expect(storyboardText).toContain("For You");
-    expect(storyboardText).toContain("@bonefitcreator");
-    expect(storyboardText).toContain("Original sound · BoneFit");
+    expect(storyboardText).not.toContain("Following");
+    expect(storyboardText).not.toContain("For You");
+    expect(storyboardText).not.toContain("@bonefitcreator");
+    expect(storyboardText).not.toContain("Original sound · BoneFit");
     expect(storyboardText).toContain("CREATIVE OBJECTIVE");
     expect(storyboardText).toContain("Korea King Colormic 24cm");
     expect(storyboardText).toContain("15–30 วินาที");
@@ -2957,8 +2959,8 @@ describe("redesigned workflow stages", () => {
     expect(storyboardText).not.toContain("CREATIVE DIRECTION");
     expect(storyboardText).not.toContain("ARTWORK & CAPTION");
     expect(
-      storyboardSlide?._slideObjects.some((object) => object._type === "image")
-    ).toBe(true);
+      storyboardSlide?._slideObjects.filter((object) => object._type === "image")
+    ).toHaveLength(1);
   });
 
   it("groups three album panels into one review card and shows the saved master", async () => {

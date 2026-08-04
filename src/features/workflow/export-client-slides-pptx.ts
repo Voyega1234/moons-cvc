@@ -4,13 +4,15 @@ import {
   type AlbumFormat,
   type CreativeDirection,
   type CreativeOutput,
-  type ReferenceImageSelection,
   type UgcVideoBrief
 } from "../../domain/creative-run";
-import { inferredReferenceImageRole } from "../../domain/creative-run";
 import { directionSubheadline } from "../../domain/subheadline-highlight";
 import type { WorkflowState } from "./model";
 import { approvalRolesForOutput } from "./rules";
+import {
+  captureUgcTemplatePreviewImages,
+  type UgcPreviewImageMap
+} from "./review/creative-previews";
 import {
   requestGoogleDriveAccessToken,
   uploadPptxToGoogleSlides,
@@ -106,27 +108,6 @@ function groupedClientSlideItems(
 
 function isUgcOutput(output: CreativeOutput): boolean {
   return output.format.toUpperCase().includes("UGC");
-}
-
-function preferredUgcReference(
-  references: readonly ReferenceImageSelection[]
-): ReferenceImageSelection | undefined {
-  return (
-    references.find(
-      (reference) =>
-        reference.primary && inferredReferenceImageRole(reference) === "style"
-    ) ??
-    references.find(
-      (reference) => inferredReferenceImageRole(reference) === "style"
-    ) ??
-    references.find(
-      (reference) =>
-        reference.primary && inferredReferenceImageRole(reference) !== "logo"
-    ) ??
-    references.find(
-      (reference) => inferredReferenceImageRole(reference) !== "logo"
-    )
-  );
 }
 
 function isAlbumOutput(output: CreativeOutput): boolean {
@@ -422,14 +403,18 @@ function addUgcScriptRow(
   });
 }
 
-function addUgcPhoneMockup(
-  pptx: PptxGenJS,
+function addCapturedUgcPreview(
   slide: PptxGenJS.Slide,
   brandName: string,
   brief: UgcVideoBrief,
-  direction: CreativeDirection | undefined,
-  referenceImage?: string
+  previewImage: string | undefined
 ) {
+  if (!previewImage) {
+    throw new Error(
+      "The UGC preview image was not captured from Create. Keep the Create page open and retry."
+    );
+  }
+
   slide.addText("UGC VISUAL REFERENCE", {
     x: 0.78,
     y: 0.68,
@@ -442,208 +427,21 @@ function addUgcPhoneMockup(
     color: COLORS.violet,
     charSpacing: 1.1
   });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 1.32,
-    y: 1.02,
-    w: 2.75,
-    h: 5.22,
-    rectRadius: 0.22,
-    fill: { color: "161824" },
-    line: { color: "161824", width: 1 }
+  slide.addImage({
+    data: previewImage,
+    x: 0.87,
+    y: 1.05,
+    w: 3.72,
+    h: 4.65,
+    altText: `${brandName} UGC preview captured from Create`
   });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 1.45,
-    y: 1.17,
-    w: 2.49,
-    h: 4.92,
-    rectRadius: 0.17,
-    fill: { color: "20222B" },
-    line: { color: "2A2D3D", width: 0.4 }
-  });
-  if (referenceImage) {
-    slide.addImage({
-      data: referenceImage,
-      x: 1.48,
-      y: 1.2,
-      w: 2.43,
-      h: 4.86,
-      sizing: { type: "cover", w: 2.43, h: 4.86 },
-      altText: `${brandName} UGC visual reference in phone mockup`
-    });
-  }
-  slide.addShape(pptx.ShapeType.rect, {
-    x: 1.48,
-    y: 1.2,
-    w: 2.43,
-    h: 0.72,
-    fill: { color: "111219", transparency: referenceImage ? 42 : 0 },
-    line: { color: "111219", transparency: 100 }
-  });
-  slide.addShape(pptx.ShapeType.rect, {
-    x: 1.48,
-    y: 4.72,
-    w: 2.43,
-    h: 1.34,
-    fill: { color: "111219", transparency: referenceImage ? 24 : 0 },
-    line: { color: "111219", transparency: 100 }
-  });
-  slide.addText("9:41", {
-    x: 1.63,
-    y: 1.31,
-    w: 0.43,
-    h: 0.13,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.8,
-    bold: true,
-    color: "FFFFFF"
-  });
-  slide.addText("●  ⌑", {
-    x: 3.33,
-    y: 1.31,
-    w: 0.42,
-    h: 0.13,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.5,
-    color: "FFFFFF",
-    align: "right"
-  });
-  slide.addText("Following     For You", {
-    x: 2.05,
-    y: 1.55,
-    w: 1.3,
-    h: 0.16,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 7,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    fit: "shrink"
-  });
-  slide.addShape(pptx.ShapeType.rect, {
-    x: 2.85,
-    y: 1.76,
-    w: 0.28,
-    h: 0.025,
-    fill: { color: "FFFFFF" },
-    line: { color: "FFFFFF", transparency: 100 }
-  });
-  const hook = clampText(direction?.hook, 105);
-  slide.addText(hook, {
-    x: 1.69,
-    y: 2.02,
-    w: 1.82,
-    h: 0.92,
-    margin: 0,
-    ...localizedTextStyle(hook),
-    fontSize: 14.5,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    valign: "middle",
-    fit: "shrink",
-    shadow: {
-      type: "outer",
-      color: "000000",
-      opacity: 0.55,
-      blur: 1.5,
-      angle: 45
-    }
-  });
-  slide.addText("♡\n1.2K\n◯\n86\n↗\nShare", {
-    x: 3.49,
-    y: 3.34,
-    w: 0.3,
-    h: 1.24,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.2,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    valign: "bottom",
-    breakLine: false,
-    fit: "shrink"
-  });
-  const creatorHandle = brandName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 18) || "creativecompass";
-  slide.addText(`@${creatorHandle}creator`, {
-    x: 1.64,
-    y: 4.82,
-    w: 1.65,
-    h: 0.16,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 7.2,
-    bold: true,
-    color: "FFFFFF",
-    fit: "shrink"
-  });
-  const caption = clampText(direction?.caption || brief.referenceDirection, 125);
-  slide.addText(caption, {
-    x: 1.64,
-    y: 5.05,
-    w: 1.82,
-    h: 0.37,
-    margin: 0,
-    ...localizedTextStyle(caption),
-    fontSize: 6.8,
-    color: "FFFFFF",
-    valign: "top",
-    fit: "shrink"
-  });
-  slide.addText(`♫ Original sound · ${brandName}`, {
-    x: 1.64,
-    y: 5.49,
-    w: 1.84,
-    h: 0.14,
-    margin: 0,
-    ...localizedTextStyle(brandName),
-    fontSize: 6.2,
-    color: "FFFFFF",
-    fit: "shrink"
-  });
-  slide.addText("Home       Discover        +        Inbox       Profile", {
-    x: 1.58,
-    y: 5.77,
-    w: 2.22,
-    h: 0.12,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 4.8,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    fit: "shrink"
-  });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 2.17,
-    y: 1.12,
-    w: 1.05,
-    h: 0.18,
-    rectRadius: 0.08,
-    fill: { color: "161824" },
-    line: { color: "161824" }
-  });
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 2.37,
-    y: 5.91,
-    w: 0.65,
-    h: 0.05,
-    rectRadius: 0.02,
-    fill: { color: "FFFFFF", transparency: 15 },
-    line: { color: "FFFFFF", transparency: 100 }
-  });
+
   const referenceDirection = clampText(brief.referenceDirection, 150);
   slide.addText(referenceDirection, {
     x: 0.82,
-    y: 6.43,
+    y: 6.08,
     w: 3.76,
-    h: 0.36,
+    h: 0.42,
     margin: 0,
     ...localizedTextStyle(referenceDirection),
     fontSize: 8.8,
@@ -661,7 +459,7 @@ function addUgcClientSlide(
   brandName: string,
   slideNumber: number,
   totalSlides: number,
-  referenceImage?: string
+  previewImage?: string
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
   slide.background = { color: COLORS.canvas };
@@ -674,14 +472,7 @@ function addUgcClientSlide(
     fill: { color: COLORS.paper },
     line: { color: COLORS.line, width: 1 }
   });
-  addUgcPhoneMockup(
-    pptx,
-    slide,
-    brandName,
-    brief,
-    direction,
-    referenceImage
-  );
+  addCapturedUgcPreview(slide, brandName, brief, previewImage);
 
   const displayBrandName = brandName.toUpperCase();
   slide.addText(displayBrandName, {
@@ -847,7 +638,7 @@ function addUgcClientSlide(
     align: "right"
   });
   slide.addNotes(
-    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual reference: selected UGC reference image in the workflow.`
+    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual reference: UGC preview captured from the Create stage and embedded as one PNG image.`
   );
 }
 
@@ -1740,7 +1531,8 @@ void addCaptionSlide;
 
 export async function buildPmApprovedClientSlidesPptx(
   state: ClientSlidesState,
-  resolveImage: ClientSlideImageResolver = fetchClientSlideImage
+  resolveImage: ClientSlideImageResolver = fetchClientSlideImage,
+  ugcPreviewImages: UgcPreviewImageMap = {}
 ): Promise<PptxGenJS> {
   const items = pmApprovedClientSlideItems(state);
   if (!items.length) {
@@ -1752,13 +1544,15 @@ export async function buildPmApprovedClientSlidesPptx(
     items,
     resolveImage,
     "approved creative concepts",
-    "client slides"
+    "client slides",
+    ugcPreviewImages
   );
 }
 
 export async function buildCreateStageSlidesPptx(
   state: ClientSlidesState,
-  resolveImage: ClientSlideImageResolver = fetchClientSlideImage
+  resolveImage: ClientSlideImageResolver = fetchClientSlideImage,
+  ugcPreviewImages: UgcPreviewImageMap = {}
 ): Promise<PptxGenJS> {
   const items = createStageClientSlideItems(state);
   if (!items.length) {
@@ -1770,7 +1564,8 @@ export async function buildCreateStageSlidesPptx(
     items,
     resolveImage,
     "creative concepts",
-    "creative slides"
+    "creative slides",
+    ugcPreviewImages
   );
 }
 
@@ -1779,7 +1574,8 @@ async function buildClientSlidesPptx(
   items: readonly ClientSlideItem[],
   resolveImage: ClientSlideImageResolver,
   subject: string,
-  title: string
+  title: string,
+  ugcPreviewImages: UgcPreviewImageMap
 ): Promise<PptxGenJS> {
   const { default: PptxGenJSConstructor } = await import("pptxgenjs");
   const pptx = new PptxGenJSConstructor();
@@ -1793,22 +1589,19 @@ async function buildClientSlidesPptx(
     headFontFace: SLIDE_FONT_FACE,
     bodyFontFace: SLIDE_FONT_FACE
   };
-  const ugcReference = preferredUgcReference(state.referenceImages);
-  let ugcReferenceData: string | null | undefined;
   const totalSlides = items.length;
   let slideNumber = 1;
 
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
-    if (isUgcOutput(item.output) && ugcReference) {
-      if (ugcReferenceData === undefined) {
-        try {
-          ugcReferenceData = await resolveImage(ugcReference.url);
-        } catch {
-          ugcReferenceData = null;
-        }
+    if (isUgcOutput(item.output)) {
+      const previewImage = ugcPreviewImages[item.output.id];
+      if (!previewImage) {
+        throw new Error(
+          `The UGC preview for creative ${index + 1} was not captured from Create. Keep the page open and retry.`
+        );
       }
-      imageData = ugcReferenceData ? [ugcReferenceData] : [];
+      imageData = [previewImage];
     } else if (!isUgcOutput(item.output)) {
       imageData = await Promise.all(
         item.outputs.map((output, panelIndex) => {
@@ -1841,10 +1634,27 @@ async function buildClientSlidesPptx(
   return pptx;
 }
 
+async function captureClientUgcPreviewImages(
+  items: readonly ClientSlideItem[]
+): Promise<UgcPreviewImageMap> {
+  return captureUgcTemplatePreviewImages(
+    items
+      .filter((item) => isUgcOutput(item.output))
+      .map((item) => item.output.id)
+  );
+}
+
 export async function downloadCreateStageSlides(
   state: ClientSlidesState
 ): Promise<void> {
-  const pptx = await buildCreateStageSlidesPptx(state);
+  const ugcPreviewImages = await captureClientUgcPreviewImages(
+    createStageClientSlideItems(state)
+  );
+  const pptx = await buildCreateStageSlidesPptx(
+    state,
+    fetchClientSlideImage,
+    ugcPreviewImages
+  );
   await pptx.writeFile({
     fileName: `${fileSlug(state.brand?.name ?? "creative")}-creative-slides.pptx`,
     compression: true
@@ -1854,7 +1664,14 @@ export async function downloadCreateStageSlides(
 export async function downloadPmApprovedClientSlides(
   state: ClientSlidesState
 ): Promise<void> {
-  const pptx = await buildPmApprovedClientSlidesPptx(state);
+  const ugcPreviewImages = await captureClientUgcPreviewImages(
+    pmApprovedClientSlideItems(state)
+  );
+  const pptx = await buildPmApprovedClientSlidesPptx(
+    state,
+    fetchClientSlideImage,
+    ugcPreviewImages
+  );
   await pptx.writeFile({
     fileName: `${fileSlug(state.brand?.name ?? "client")}-client-slides.pptx`,
     compression: true
@@ -1885,8 +1702,16 @@ async function openPptxInGoogleSlides(
 export async function openCreateStageSlidesInGoogleSlides(
   state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
+  const ugcPreviewImages = await captureClientUgcPreviewImages(
+    createStageClientSlideItems(state)
+  );
   return openPptxInGoogleSlides(
-    () => buildCreateStageSlidesPptx(state),
+    () =>
+      buildCreateStageSlidesPptx(
+        state,
+        fetchClientSlideImage,
+        ugcPreviewImages
+      ),
     `${fileSlug(state.brand?.name ?? "creative")}-creative-slides`
   );
 }
@@ -1894,8 +1719,16 @@ export async function openCreateStageSlidesInGoogleSlides(
 export async function openPmApprovedClientSlidesInGoogleSlides(
   state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
+  const ugcPreviewImages = await captureClientUgcPreviewImages(
+    pmApprovedClientSlideItems(state)
+  );
   return openPptxInGoogleSlides(
-    () => buildPmApprovedClientSlidesPptx(state),
+    () =>
+      buildPmApprovedClientSlidesPptx(
+        state,
+        fetchClientSlideImage,
+        ugcPreviewImages
+      ),
     `${fileSlug(state.brand?.name ?? "client")}-client-slides`
   );
 }

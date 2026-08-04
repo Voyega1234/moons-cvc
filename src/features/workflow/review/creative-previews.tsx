@@ -1,5 +1,11 @@
 import { useEffect } from "react";
 import {
+  ArrowUpRight,
+  ChatCircle,
+  Heart,
+  MusicNote
+} from "@phosphor-icons/react";
+import {
   albumFormatPanelCount,
   type AlbumFormat,
   type CreativeOutput
@@ -14,14 +20,50 @@ import {
 
 type CreativeDirection = WorkflowState["directions"][number];
 
+export type UgcPreviewImageMap = Readonly<Record<string, string>>;
+
+export async function captureUgcTemplatePreviewImages(
+  outputIds: readonly string[]
+): Promise<UgcPreviewImageMap> {
+  if (typeof document === "undefined") {
+    throw new Error("UGC previews can only be captured in the browser.");
+  }
+
+  await document.fonts?.ready;
+  const { default: html2canvas } = await import("html2canvas");
+  const images: Record<string, string> = {};
+
+  for (const outputId of [...new Set(outputIds)]) {
+    const preview = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-ugc-preview-id]")
+    ).find((element) => element.dataset.ugcPreviewId === outputId);
+    if (!preview) {
+      throw new Error(
+        `Could not find the Create UGC preview for ${outputId}. Keep the Create page open and retry.`
+      );
+    }
+    const canvas = await html2canvas(preview, {
+      backgroundColor: null,
+      logging: false,
+      scale: Math.max(2, Math.min(3, window.devicePixelRatio || 1)),
+      useCORS: true
+    });
+    images[outputId] = canvas.toDataURL("image/png");
+  }
+
+  return images;
+}
+
 export function UgcTemplatePreview({
   direction,
   compact = false,
-  brandName = "Creative Compass"
+  brandName = "Creative Compass",
+  captureId
 }: {
   direction: CreativeDirection | undefined;
   compact?: boolean;
   brandName?: string;
+  captureId?: string;
 }) {
   const creatorHandle = brandName
     .toLowerCase()
@@ -36,12 +78,17 @@ export function UgcTemplatePreview({
       className={`compass-ugc-template tiktok-draft-shell ${
         compact ? "compact" : ""
       }`}
+      role="img"
       aria-label="TikTok native UGC preview"
+      data-ugc-preview-id={captureId}
     >
       <div className="tiktok-draft-phone">
         <div className="tiktok-draft-status" aria-hidden="true">
           <span>9:41</span>
-          <span>● ︎⌁</span>
+          <span className="tiktok-draft-device-status">
+            <i />
+            <b>⌁</b>
+          </span>
         </div>
         <div className="tiktok-draft-tabs" aria-hidden="true">
           <span>Following</span>
@@ -51,17 +98,31 @@ export function UgcTemplatePreview({
           {direction?.hook ?? "UGC hook"}
         </strong>
         <div className="tiktok-draft-side" aria-hidden="true">
-          <span>♡</span>
-          <small>1.2K</small>
-          <span>◯</span>
-          <small>86</small>
-          <span>↗</span>
-          <small>Share</small>
+          <div>
+            <span>
+              <Heart weight="regular" />
+            </span>
+            <small>1.2K</small>
+          </div>
+          <div>
+            <span>
+              <ChatCircle weight="regular" />
+            </span>
+            <small>86</small>
+          </div>
+          <div>
+            <span>
+              <ArrowUpRight weight="bold" />
+            </span>
+            <small>Share</small>
+          </div>
         </div>
         <div className="tiktok-draft-meta">
           <b>@{creatorHandle || "creativecompass"}creator</b>
           <p>{caption}</p>
-          <span>♫ Original sound · {brandName}</span>
+          <span>
+            <MusicNote weight="fill" /> Original sound · {brandName}
+          </span>
         </div>
         <div className="tiktok-draft-nav" aria-hidden="true">
           <span>Home</span>
@@ -195,6 +256,7 @@ export function CreativePreviewModal({
             <UgcTemplatePreview
               direction={direction}
               brandName={brandName}
+              captureId={output.id}
             />
           ) : output.assetUrl ? (
             <img src={output.assetUrl} alt={direction?.hook ?? title} />

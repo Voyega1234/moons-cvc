@@ -194,6 +194,7 @@ export function OutputGrid({
                           <UgcTemplatePreview
                             direction={direction}
                             brandName={state.brand?.name}
+                            captureId={output.id}
                           />
                         ) : output.assetUrl ? (
                           <img
@@ -762,6 +763,7 @@ function OutputRegenerateModal({
                 <UgcTemplatePreview
                   direction={direction}
                   brandName={run.brand?.name}
+                  captureId={output.id}
                 />
               ) : selectedAsset?.assetUrl ? (
                 <img
