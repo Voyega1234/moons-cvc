@@ -2835,6 +2835,8 @@ describe("redesigned workflow stages", () => {
               y?: number;
               w?: number;
               h?: number;
+              lineSpacing?: number;
+              paraSpaceAfter?: number;
             };
           }>;
         }>;
@@ -2865,7 +2867,10 @@ describe("redesigned workflow stages", () => {
         object.text?.some((run) => run.text.includes("Make Time to Let Your Space"))
     );
     expect(captionText).toBeDefined();
-    expect(captionText?.options.fontSize).toBeGreaterThanOrEqual(11);
+    expect(captionText?.options.fontSize).toBe(10);
+    expect(captionText?.options.lineSpacing).toBe(15);
+    expect(captionText?.options.paraSpaceAfter).toBe(4);
+    expect(captionText?.text?.[0]?.text).toContain("\n\n");
     expect(captionText?.options.x).toBe(9.15);
     expect(captionText?.options.y).toBeCloseTo(1.09);
     expect(captionText?.options.w).toBe(3.38);

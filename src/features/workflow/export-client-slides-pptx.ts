@@ -143,8 +143,8 @@ function cleanSlideCaption(value: string | undefined): string {
     ?.replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .filter(Boolean)
     .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   return clean || "—";
 }
@@ -292,9 +292,6 @@ function addCaptionBlock(
   options: { x: number; y: number; w: number; h: number }
 ) {
   const text = clampSlideCaption(value);
-  const characterCount = Array.from(text).length;
-  const fontSize =
-    characterCount <= 350 ? 14 : characterCount <= 650 ? 12.5 : 11;
   slide.addText("CAPTION", {
     x: options.x,
     y: options.y,
@@ -314,12 +311,13 @@ function addCaptionBlock(
     h: options.h - 0.35,
     margin: 0,
     ...localizedTextStyle(text),
-    fontSize,
+    fontSize: 10,
     color: COLORS.ink,
     breakLine: false,
     valign: "top",
     fit: "shrink",
-    paraSpaceAfter: 0
+    lineSpacing: 15,
+    paraSpaceAfter: 4
   });
 }
 
