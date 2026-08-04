@@ -19,7 +19,13 @@ import { workflowActionBlockReason } from "../rules";
 import { presentBrandMemoryText } from "../brand-memory-presentation";
 import { useGenerateHooks } from "../use-generate-hooks";
 import { BriefConfirmationModal } from "./brief-confirmation-modal";
-import { DecisionCard, HookGenerationModelSelect, Spinner, type StageProps } from "./shared";
+import {
+  DecisionCard,
+  HookGenerationModelSelect,
+  HookIdeaModeSelect,
+  Spinner,
+  type StageProps
+} from "./shared";
 
 export function LibraryEditModal({
   title,
@@ -1615,6 +1621,11 @@ export function BriefStage({ state, dispatch }: StageProps) {
             ← Back to signal
           </button>
           <div className="compass-brief-generate-actions">
+            <HookIdeaModeSelect
+              disabled={loading}
+              state={state}
+              dispatch={dispatch}
+            />
             <HookGenerationModelSelect
               disabled={loading}
               state={state}

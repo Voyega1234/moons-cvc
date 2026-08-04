@@ -1974,6 +1974,40 @@ describe("redesigned workflow stages", () => {
     expect(disclosure.open).toBe(true);
   });
 
+  it("defaults Hook research to off and lets the user enable it before review", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const researchMode = stage.getByRole("combobox", {
+      name: "Hook research mode"
+    }) as HTMLSelectElement;
+
+    expect(researchMode.value).toBe("standard");
+    expect(
+      within(researchMode).getByRole("option", {
+        name: "Default (no research)"
+      })
+    ).toBeTruthy();
+    expect(
+      within(researchMode).getByRole("option", {
+        name: "Use research (Thailand)"
+      })
+    ).toBeTruthy();
+
+    await user.selectOptions(researchMode, "fresh-research");
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-hook-idea-mode",
+      mode: "fresh-research"
+    });
+  });
+
   it("reviews the complete brief before starting hook generation", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();

@@ -400,6 +400,8 @@ async function runCandidateGenerationStep({
   provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookCandidateResult>> {
+  const researchEnabled =
+    input.hookIdeaMode === "fresh-research" && provider === "openai";
   const inputText = buildCandidateGenerationPrompt(
     input,
     agentHookPrompt,
@@ -420,8 +422,8 @@ async function runCandidateGenerationStep({
       ],
       schemaName: "moons_hook_candidates",
       schema: hookCandidateSchema,
-      tools: provider === "openai" ? [THAI_WEB_SEARCH_TOOL] : undefined,
-      toolChoice: provider === "openai" ? "required" : undefined,
+      tools: researchEnabled ? [THAI_WEB_SEARCH_TOOL] : undefined,
+      toolChoice: researchEnabled ? "required" : undefined,
       provider
     });
   let finalInputText = inputText;
@@ -617,6 +619,9 @@ function buildHookGenerationDebugLog({
   supportModel: string;
   finalDirections: readonly GeneratedDirection[];
 }): HookGenerationDebugLog {
+  const researchEnabled =
+    generationProvider === "openai" &&
+    input.hookIdeaMode === "fresh-research";
   return {
     kind: "hook-generation",
     createdAt: new Date().toISOString(),
@@ -633,9 +638,8 @@ function buildHookGenerationDebugLog({
               ? "/api/v1/chat/completions"
               : "/v1/responses",
           inputText: result.candidateTrace.inputText,
-          tools:
-            generationProvider === "openai" ? [THAI_WEB_SEARCH_TOOL] : [],
-          ...(generationProvider === "openai"
+          tools: researchEnabled ? [THAI_WEB_SEARCH_TOOL] : [],
+          ...(researchEnabled
             ? { toolChoice: "required" as const }
             : {}),
           attachedImages: (

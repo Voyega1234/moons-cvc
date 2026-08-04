@@ -6,6 +6,36 @@ export interface StageProps {
   dispatch: Dispatch<WorkflowAction>;
 }
 
+export function HookIdeaModeSelect({
+  disabled,
+  state,
+  dispatch
+}: {
+  disabled: boolean;
+  state: WorkflowState;
+  dispatch: Dispatch<WorkflowAction>;
+}) {
+  return (
+    <label className="compass-hook-mode-toggle">
+      <span className="sr-only">Hook research mode</span>
+      <select
+        aria-label="Hook research mode"
+        disabled={disabled}
+        value={state.hookIdeaMode}
+        onChange={(event) =>
+          dispatch({
+            type: "set-hook-idea-mode",
+            mode: event.target.value as WorkflowState["hookIdeaMode"]
+          })
+        }
+      >
+        <option value="standard">Default (no research)</option>
+        <option value="fresh-research">Use research (Thailand)</option>
+      </select>
+    </label>
+  );
+}
+
 export function HookGenerationModelSelect({
   disabled,
   state,

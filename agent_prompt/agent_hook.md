@@ -81,18 +81,16 @@ STEP 2: IDENTIFY CONSIDERATION GAPS
 
 ไอเดียที่เสนอควรช่วยปิดช่องว่างเหล่านี้
 
-STEP 3: RESEARCH BEFORE IDEATION
-
-ค้นข้อมูลจากอินเทอร์เน็ตก่อนคิดไอเดียทุกครั้ง
+STEP 3: CHOOSE THE EVIDENCE MODE
 
 อ่านค่า `Hook idea mode` จาก Creative Compass current input แล้วทำดังนี้:
 
-- `standard`: ค้นอย่างน้อยหนึ่ง query ภาษาไทยที่เจาะจงกับ Brief, audience, product หรือ category ในประเทศไทย
-- `fresh-research`: ค้นหลาย query ภาษาไทยที่ต่างกันจริงและเจาะจงกับ Brief, audience และ category ในประเทศไทยก่อนคิดไอเดีย
+- `standard`: ห้ามเรียก Web Search ให้คิดจาก Current Brief, verified Brand context, Products, Documents, Past Content Profile และ materials ที่ได้รับเท่านั้น ห้ามแต่งข้อมูลภายนอก และ citations ให้เป็น array ว่าง
+- `fresh-research`: ต้องเรียก Web Search และค้นหลาย query ภาษาไทยที่ต่างกันจริง โดยเจาะจงกับ Brief, audience และ category ในประเทศไทยก่อนคิดไอเดีย
 
-ทุก mode ต้องเรียก Web Search ก่อนตอบ final JSON ทุก batch ใช้เฉพาะข้อมูลปัจจุบันที่ตรวจสอบได้และเกี่ยวข้องจริง ห้ามแต่ง trend, สถิติ, วันที่, ranking, publisher หรือผลวิจัย
+เฉพาะ `fresh-research` เท่านั้นที่ต้องเรียก Web Search ก่อนตอบ final JSON ทุก batch ใช้เฉพาะข้อมูลปัจจุบันที่ตรวจสอบได้และเกี่ยวข้องจริง ห้ามแต่ง trend, สถิติ, วันที่, ranking, publisher หรือผลวิจัย
 
-หาก Brief ไม่ระบุประเทศอื่น ให้ถือว่ากลุ่มเป้าหมายอยู่ประเทศไทย ใช้คำค้นภาษาไทยและเลือกแหล่งข้อมูลไทยหรือข้อมูลที่ศึกษาเกี่ยวกับผู้บริโภคไทยก่อน ห้ามใช้พฤติกรรมผู้บริโภค สถิติ หรือ market context จาก US/global มาแทนบริบทไทย ใช้ query ภาษาอังกฤษได้เฉพาะเมื่อภาษาไทยไม่พบข้อมูล และ query ต้องมีคำว่า Thailand หรือ ไทย
+เมื่อใช้ `fresh-research` และ Brief ไม่ระบุประเทศอื่น ให้ถือว่ากลุ่มเป้าหมายอยู่ประเทศไทย ใช้คำค้นภาษาไทยและเลือกแหล่งข้อมูลไทยหรือข้อมูลที่ศึกษาเกี่ยวกับผู้บริโภคไทยก่อน ห้ามใช้พฤติกรรมผู้บริโภค สถิติ หรือ market context จาก US/global มาแทนบริบทไทย ใช้ query ภาษาอังกฤษได้เฉพาะเมื่อภาษาไทยไม่พบข้อมูล และ query ต้องมีคำว่า Thailand หรือ ไทย
 
 Brief และ verified brand/product facts สำคัญกว่าผลค้น ใช้ Search เพื่อเพิ่ม audience insight หรือ market context เท่านั้น และไม่ต้องฝืนใช้ผลค้นในทุก direction
 

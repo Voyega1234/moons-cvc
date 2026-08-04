@@ -27,9 +27,11 @@ Moons supports two hook generation modes:
      4. when past posts exist, a Caption Stylist rewrites only the locked
         direction's `caption` and verified recurring `contactLine`;
      5. a support-model pass selects exact Subheadline highlight spans.
-   - Both idea modes require at least one web search in every Candidate
-     generation batch. The OpenAI request enforces this with
-     `tool_choice: "required"`.
+   - `standard` is the default and does not attach web search. It uses only the
+     supplied Brief and verified brand, product, document, past-content, and
+     material context.
+   - `fresh-research` attaches web search to every Candidate generation batch.
+     The OpenAI request enforces this with `tool_choice: "required"`.
    - All search instructions live only in `agent_prompt/agent_hook.md`.
      Runtime code passes `Hook idea mode` as input and configures the search
      tool, but does not append a second search prompt.
@@ -38,7 +40,7 @@ Moons supports two hook generation modes:
      `agent_prompt/agent_hook.md`. Runtime prompt builders retain stage
      orchestration, schema/quotas, factual context, validation-related rules,
      and format-specific execution instructions such as Album and UGC.
-   - `standard` performs a focused current-context check before writing.
+   - `standard` writes directly from verified current context.
    - `fresh-research` tells the same Candidate Agent to run multiple focused
      searches before ideation. There is no separate research-summary handoff;
      researched candidates go directly to the Creative Director.

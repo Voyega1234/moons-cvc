@@ -490,7 +490,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
-  it("passes Standard mode as input while keeping search policy in agent_hook.md", async () => {
+  it("keeps Standard mode on verified context without web research", async () => {
     const writeDebugLog = vi.fn(
       async (_directory: string, _entry: HookGenerationDebugLog) => undefined
     );
@@ -548,17 +548,8 @@ describe("handleHookGenerationHarnessRequest", () => {
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { tools?: unknown[]; tool_choice?: string; input: unknown };
-    expect(generationBody.tools).toEqual([
-      {
-        type: "web_search_preview",
-        user_location: {
-          type: "approximate",
-          country: "TH",
-          timezone: "Asia/Bangkok"
-        }
-      }
-    ]);
-    expect(generationBody.tool_choice).toBe("required");
+    expect(generationBody.tools).toBeUndefined();
+    expect(generationBody.tool_choice).toBeUndefined();
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("SEARCH_POLICY_FROM_AGENT_HOOK");
     expect(generationPrompt).toContain("Hook idea mode: standard");
