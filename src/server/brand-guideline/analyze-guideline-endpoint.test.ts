@@ -69,7 +69,7 @@ describe("handleAnalyzeGuidelineRequest", () => {
 
     const content = (calls[0]?.body.input as { content: unknown[] }[])[0]
       ?.content as Record<string, unknown>[];
-    expect(content[1]).toMatchObject({
+    expect(content[1]).toEqual({
       type: "input_file",
       file_url: "https://example.supabase.co/guideline.pdf"
     });

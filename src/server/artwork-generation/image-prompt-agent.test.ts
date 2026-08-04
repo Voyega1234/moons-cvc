@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildStandardImagePrompt,
   generateImagePrompt,
-  generateProductionBrief
+  generateProductionBrief,
+  preflightCampaignInput
 } from "./image-prompt-agent";
 
 const baseInput = {
@@ -30,6 +31,80 @@ const baseInput = {
 };
 
 describe("generateImagePrompt", () => {
+  it("uses Terra to clean Campaign Input without receiving agent_image.md or creating a visual route", async () => {
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>
+        });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              brand: {
+                name: "Flora Daily",
+                category: "Flowers / lifestyle",
+                colors: ["#F6B8C8", "#FFFFFF"]
+              },
+              primaryProductOrService: "Summer bouquet",
+              objective: "Connect the offer to a clear room mood.",
+              targetAudience: "",
+              singleMainMessage: "Flowers make the room feel softer.",
+              concept: "Lead with room mood.",
+              copy: {
+                headline: "Flowers that make the room feel softer",
+                supportingText: [],
+                cta: "Order a bouquet"
+              },
+              requiredElements: ["Summer bouquet"],
+              forbiddenElements: [],
+              references: [],
+              lockedProductFacts: [],
+              excludedInformation: [],
+              albumSequence: [],
+              userInstructions: [],
+              output: { service: "static", ratio: "1:1" }
+            })
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const result = await preflightCampaignInput({
+      apiKey: "openai-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input: baseInput,
+      loadPrompt: async () => "# Campaign Input Preflight\nOrganize facts only."
+    });
+
+    expect(result.copy.headline).toBe(
+      "Flowers that make the room feel softer"
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://api.openai.com/v1/responses");
+    expect(calls[0]?.body.model).toBe("gpt-5.6-terra");
+    expect(calls[0]?.body.store).toBe(false);
+    expect(calls[0]?.body.text).toMatchObject({
+      format: {
+        name: "moons_campaign_input_preflight",
+        strict: true
+      }
+    });
+    const inputText = (
+      calls[0]?.body.input as { content: { text: string }[] }[]
+    )[0]?.content[0]?.text;
+    expect(inputText).toContain("CAMPAIGN INPUT TO PREFLIGHT");
+    expect(inputText).toContain(
+      '"headline": "Flowers that make the room feel softer"'
+    );
+    expect(inputText).not.toContain("AD CREATIVE GENERATION PROMPT");
+    expect(inputText).not.toContain("Visual Mechanism");
+    expect(inputText).not.toContain('"workingBrief"');
+    expect(inputText).not.toContain('"personality"');
+  });
+
   it("gives Standard style references visual priority and isolates product materials", async () => {
     const promptText = await buildStandardImagePrompt(
       {
@@ -118,7 +193,7 @@ describe("generateImagePrompt", () => {
       '"headline": "Flowers that make the room feel softer"'
     );
     expect(promptText).toContain('"objective": "Lead with room mood."');
-    expect(promptText).toContain("AUTHORITATIVE COMPACT CAMPAIGN INPUT");
+    expect(promptText).toContain("AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT");
     expect(promptText).toContain('"colors": [');
     expect(promptText).not.toContain("WORKING BRIEF PRIORITY");
     expect(promptText).not.toContain('"workingBrief"');

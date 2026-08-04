@@ -88,6 +88,47 @@ export const artworkModes = [
   "reference-library"
 ] as const;
 export type ArtworkMode = (typeof artworkModes)[number];
+
+// Product rollout switches live here so modes can be hidden without removing
+// their persisted-data and API compatibility. Add a mode back to this list to
+// expose it in every artwork-mode selector again.
+export const userSelectableArtworkModes = [
+  "standard"
+] as const satisfies readonly ArtworkMode[];
+export type UserSelectableArtworkMode =
+  (typeof userSelectableArtworkModes)[number];
+export const defaultArtworkMode: UserSelectableArtworkMode = "standard";
+
+export function isUserSelectableArtworkMode(
+  mode: ArtworkMode
+): mode is UserSelectableArtworkMode {
+  return (userSelectableArtworkModes as readonly ArtworkMode[]).includes(mode);
+}
+
+export function normalizeUserSelectableArtworkMode(
+  mode: ArtworkMode
+): UserSelectableArtworkMode {
+  return isUserSelectableArtworkMode(mode) ? mode : defaultArtworkMode;
+}
+
+// Temporary rollout switch for post-generation visual QC. Keep the mode list
+// below intact so the capability can be restored without rebuilding the
+// pipeline; flip this flag only after QC is ready to be enabled again.
+export const postGenerationVisualQcEnabled = false;
+
+// Post-generation visual QC is independent from UI rollout. This keeps the
+// capability easy to extend without coupling it to the visible mode buttons.
+export const postGenerationVisualQcModes = [
+  "standard",
+  "design-system-new"
+] as const satisfies readonly ArtworkMode[];
+
+export function usesPostGenerationVisualQc(mode: ArtworkMode): boolean {
+  return (
+    postGenerationVisualQcEnabled &&
+    (postGenerationVisualQcModes as readonly ArtworkMode[]).includes(mode)
+  );
+}
 export const hookIdeaModes = ["standard", "fresh-research"] as const;
 export type HookIdeaMode = (typeof hookIdeaModes)[number];
 export const hookGenerationModels = [

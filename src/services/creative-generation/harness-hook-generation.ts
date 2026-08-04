@@ -66,18 +66,44 @@ export async function generateDirectionsWithHarness({
   run,
   extraInstructions
 }: HookGenerationRunInput): Promise<readonly CreativeDirection[]> {
-  const response = await fetch(env.hookGenerationHarnessEndpoint, {
+  const requestInit: RequestInit = {
     method: "POST",
     headers: await buildHeaders(),
     body: JSON.stringify(
       buildHookGenerationHarnessRequest({ run, extraInstructions })
     )
-  });
+  };
+  const maxAttempts = 2;
+  let response: Response | undefined;
+  let payload: Partial<HookGenerationHarnessResponse> | undefined;
 
-  const payload = await readJsonResponse<Partial<HookGenerationHarnessResponse>>(
-    response,
-    "Harness hook generation"
-  );
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    response = await fetch(env.hookGenerationHarnessEndpoint, requestInit);
+    const attemptLimit = isRetryableGatewayStatus(response.status)
+      ? maxAttempts
+      : 1;
+    try {
+      payload = await readJsonResponse<Partial<HookGenerationHarnessResponse>>(
+        response,
+        "Harness hook generation",
+        attempt,
+        attemptLimit
+      );
+      break;
+    } catch (error) {
+      if (
+        !(error instanceof NonJsonResponseError) ||
+        attempt === maxAttempts ||
+        !isRetryableGatewayStatus(response.status)
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  if (!response || !payload) {
+    throw new Error("Harness hook generation did not return a response.");
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -176,7 +202,9 @@ async function buildHeaders(): Promise<HeadersInit> {
 
 async function readJsonResponse<T>(
   response: Response,
-  label: string
+  label: string,
+  attempt: number,
+  maxAttempts: number
 ): Promise<T> {
   const text = await response.text();
   if (!text.trim()) {
@@ -186,8 +214,41 @@ async function readJsonResponse<T>(
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(`${label} returned a non-JSON response.`);
+    const contentType =
+      response.headers.get("content-type")?.trim() || "unknown content type";
+    const requestId =
+      response.headers.get("x-vercel-id")?.trim() ||
+      response.headers.get("x-request-id")?.trim();
+    const bodyKind = /^\s*</.test(text) ? "HTML" : "a non-JSON body";
+    const context = [
+      String(response.status),
+      contentType,
+      requestId && `request ${requestId}`
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const attemptLabel = `${attempt} ${attempt === 1 ? "attempt" : "attempts"}`;
+    const nextAction =
+      attempt < maxAttempts
+        ? " Retrying once."
+        : response.status === 500 || response.status === 504
+          ? " The hook-generation runtime stopped this long-running request. Do not retry repeatedly; check the server runtime first."
+        : " Please retry the run; if this continues, verify the hook-generation API runtime.";
+    throw new NonJsonResponseError(
+      `${label} returned ${bodyKind} instead of JSON after ${attemptLabel} (${context}).${nextAction}`
+    );
   }
+}
+
+class NonJsonResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NonJsonResponseError";
+  }
+}
+
+function isRetryableGatewayStatus(status: number): boolean {
+  return status === 502 || status === 503;
 }
 
 function readErrorMessage(payload: unknown): string | null {

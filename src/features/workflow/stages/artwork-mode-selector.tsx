@@ -1,14 +1,18 @@
-import type { ArtworkMode } from "../../../domain/creative-run";
+import {
+  normalizeUserSelectableArtworkMode,
+  userSelectableArtworkModes,
+  type ArtworkMode
+} from "../../../domain/creative-run";
 
-const visibleArtworkModes: readonly {
-  mode: Exclude<ArtworkMode, "reference-library">;
-  label: string;
-}[] = [
-  { mode: "standard", label: "Standard" },
-  { mode: "design-system", label: "Design system" },
-  { mode: "design-system-new", label: "Design system (new)" },
-  { mode: "direct-final-artwork", label: "Final artwork" }
-];
+const artworkModeLabels: Record<
+  Exclude<ArtworkMode, "reference-library">,
+  string
+> = {
+  standard: "Standard",
+  "design-system": "Design system",
+  "design-system-new": "Design system (new)",
+  "direct-final-artwork": "Final artwork"
+};
 
 export function ArtworkModeSelector({
   value,
@@ -19,6 +23,8 @@ export function ArtworkModeSelector({
   onChange: (mode: ArtworkMode) => void;
   className?: string;
 }) {
+  const selectedMode = normalizeUserSelectableArtworkMode(value);
+
   return (
     <div
       className={`confirm-generation-setting ${className}`.trim()}
@@ -29,17 +35,17 @@ export function ArtworkModeSelector({
         role="group"
         aria-label="Artwork mode"
       >
-        {visibleArtworkModes.map(({ mode, label }) => (
+        {userSelectableArtworkModes.map((mode) => (
           <button
             className={`confirm-generation-mode ${
-              value === mode ? "active" : ""
+              selectedMode === mode ? "active" : ""
             }`}
             type="button"
-            aria-pressed={value === mode}
+            aria-pressed={selectedMode === mode}
             key={mode}
             onClick={() => onChange(mode)}
           >
-            {label}
+            {artworkModeLabels[mode]}
           </button>
         ))}
       </div>

@@ -2,9 +2,10 @@
 
 ## Goal
 
-Add a client with a required Facebook URL, collect public Facebook signals,
-mirror source images into Supabase Storage, analyze brand/visual signals, and
-write reusable Brand Memory.
+Add a client with a required onboarding questionnaire and an optional Facebook
+URL, collect grounded public signals, analyze brand/visual signals, and write
+reusable Brand Memory. When Facebook is omitted, GPT-5.6 Terra searches
+Thailand-focused web sources and the Facebook extraction route is skipped.
 
 This is a backend harness feature. The frontend must not call Apify, Gemini, or
 OpenAI directly.
@@ -12,7 +13,8 @@ OpenAI directly.
 ## Required frontend input
 
 - client name
-- Facebook URL
+- optional Facebook URL
+- Questionnaire Google Sheet URL
 - optional category
 - optional notes
 
@@ -25,7 +27,8 @@ moons.clients.ingestion_status = 'draft'
 Current frontend slice:
 
 - Step 1 Start has an `Add new client` panel.
-- Facebook URL is required and validated client-side.
+- Facebook URL is optional and validated client-side when supplied.
+- Leaving Facebook blank selects the Terra Thailand web-discovery route.
 - Submit creates a client draft and a queued `brand_analysis_jobs` row.
 - Draft/queued/in-progress/failed clients are visible in the picker but disabled
   until ingestion reaches a usable status.
@@ -47,6 +50,7 @@ Current backend harness core:
 - `src/server/client-ingestion/client-ingestion-harness.ts`
 - `src/server/client-ingestion/client-ingestion-runner.ts`
 - `src/server/client-ingestion/openai-brand-visual-analyzer.ts`
+- `src/server/client-ingestion/openai-brand-discovery-search.ts`
 - `src/server/client-ingestion/gemini-grounding-search-fallback.ts`
 - `src/server/client-ingestion/client-ingestion-worker.ts`
 - `src/server/client-ingestion/client-ingestion-worker-endpoint.ts`
@@ -65,21 +69,16 @@ server/worker runtime that owns backend secrets.
 
 Recommended controlled agent flow:
 
-1. Validate Facebook URL.
+1. Validate the Facebook URL when one is supplied.
 2. Create `moons.brand_analysis_jobs`.
-3. Run the optional Apify Facebook page-details scraper for logo/category defaults.
-4. Run Apify Facebook posts scraper.
-5. Run Apify Facebook Ads Library scraper.
-6. If Facebook sources are inaccessible, use Gemini grounding search fallback.
-7. Normalize post/ad records.
-8. Extract image-only visual candidates.
-9. Download each candidate image immediately.
-10. Upload mirrored images to Supabase Storage bucket `brand-source-assets`.
-11. Save normalized records and visual assets.
-12. Analyze visual mood/style from mirrored Supabase images.
-13. Analyze brand signals.
-14. Write Brand kit, Products, and Brand learning.
-15. Mark client `ready`, `needs_review`, or `failed`.
+3. With Facebook: run page details, Posts, Ads Library, normalization, and image
+   mirroring; Gemini remains the fallback when those sources are empty.
+4. Without Facebook: run GPT-5.6 Terra hosted web search localized to Thailand.
+   Do not call any Facebook Apify actor or image mirroring service.
+5. Save the collected source evidence.
+6. Analyze brand signals, including questionnaire context.
+7. Write Brand kit, Products, Brand learning, and visual guidance.
+8. Mark the client `ready`, `needs_review`, or `failed`.
 
 ## Source collection
 
@@ -277,10 +276,23 @@ The current harness already:
   `SupabaseClientIngestionStore`;
 - can run injected visual analysis and write Brand Memory through
   `OpenAiBrandVisualAnalyzer` + `SupabaseBrandMemoryWriter`;
+- always composes `OpenAiBrandDiscoverySearch` for empty-Facebook jobs, using
+  Terra hosted web search with Thailand location context and Thai/English source
+  discovery;
+- bypasses Facebook page details, Posts, Ads Library, and image mirroring when
+  the saved Facebook URL is null or blank;
 - can run injected Gemini grounding search fallback through
   `GeminiGroundingSearchFallback` when `GEMINI_API_KEY` is present;
+- retries temporary OpenAI network, rate-limit, and server failures once;
+- falls back from a rejected multimodal request to questionnaire/social text,
+  writes Brand Memory, and marks the result `needs_review`;
+- continues from the required questionnaire when Facebook and Gemini providers
+  are temporarily unavailable, while preserving each provider error in the job;
+- records the OpenAI error code, message, and request ID when recovery is not
+  possible;
 - marks the client `failed` with `เข้าถึงลิงก์ Facebook นี้ไม่ได้` when both
-  Facebook sources fail and no fallback is provided;
+  Facebook sources reject the supplied page or no usable fallback evidence is
+  available;
 - marks the client `ready` after Brand Memory write-back when analysis does not
   require review;
 - leaves the job in `needs_review` after mirroring images when no visual
@@ -335,12 +347,25 @@ await runClientIngestionWorkerOnce({
 `OpenAiBrandVisualAnalyzer` uses OpenAI Responses API image inputs with signed
 Supabase `assetUrl` values and Structured Outputs JSON schema. It sets
 `store: false`, does not send base64 assets, and does not send Facebook CDN URLs
-as durable source references.
+as durable source references. Temporary `408`, `409`, `425`, `429`, and `5xx`
+responses are retried once. A `400` from a request containing images degrades to
+text-only analysis when questionnaire/social text exists; the generated memory
+is saved as `needs_review` with the original OpenAI diagnostic attached.
+
+`OpenAiBrandDiscoverySearch` uses the OpenAI Responses API `web_search` tool,
+requires a search call, requests full source metadata, and supplies approximate
+Thailand/Bangkok location context. It uses the brand name plus bounded onboarding
+questionnaire text to distinguish the correct Thai-market brand from namesakes.
+Its grounded summary is stored as a `google_search` brand source for compatibility
+with the existing evidence schema. This no-Facebook result is terminal
+`needs_review`, so it is usable while making the lower-confidence source route
+visible to the team.
 
 `GeminiGroundingSearchFallback` uses Gemini Interactions API with
 `tools: [{ type: "google_search" }]`. It is optional: if `GEMINI_API_KEY` is not
-provided, inaccessible Facebook sources still fail with
-`เข้าถึงลิงก์ Facebook นี้ไม่ได้`.
+provided or temporarily fails, a saved onboarding questionnaire can still drive
+text-only analysis. Explicit Facebook access/private-page errors still fail with
+`เข้าถึงลิงก์ Facebook นี้ไม่ได้` so invalid input is not silently accepted.
 
 ## Immediate Vercel trigger and recovery endpoint
 
@@ -388,14 +413,15 @@ need explicit PostgreSQL grants, so apply
 
 Clients that existed before this pipeline have
 `ingestion_status = 'not_started'` and cannot be selected for a creative run.
-The Start client picker shows **Set up brand** for those rows. The user must
-provide a Facebook URL; `moons.queue_brand_analysis()` then atomically updates
-the client and creates a queued job. Active jobs stay locked, while `ready` and
-`needs_review` clients can continue to Brief.
+The Start client picker shows **Set up brand** for those rows. The user may
+provide a Facebook URL or leave it blank for Terra Thailand web discovery;
+`moons.queue_brand_analysis()` then atomically updates the client and creates a
+queued job. Active jobs stay locked, while `ready` and `needs_review` clients can
+continue to Brief.
 
 Mapping-sheet-only clients remain visually muted and show
 **No Moons data yet** with their mapping/service status. They expose
-**Add to Moons**, which prefills the client name and requires a Facebook URL.
+**Add to Moons**, which prefills the client name and keeps Facebook optional.
 Submitting creates the Supabase client and queues the same ingestion pipeline;
 the row remains locked until analysis finishes.
 

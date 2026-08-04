@@ -37,7 +37,7 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
       name: name.trim(),
       category: category?.trim() || "Awaiting brand ingestion",
       initials: initialsFromClientName(name),
-      facebookUrl: facebookUrl.trim(),
+      ...(facebookUrl.trim() ? { facebookUrl: facebookUrl.trim() } : {}),
       ingestionStatus: "queued",
       library: { brand: [], products: [], docs: [], refs: [] },
       memory: { working: [], avoid: [] },
@@ -85,7 +85,7 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
 
     this.brandRepository.updateClient({
       ...brand,
-      facebookUrl: facebookUrl.trim(),
+      facebookUrl: facebookUrl.trim() || undefined,
       ingestionStatus: "queued",
       ingestionError: undefined,
       onboardingQuestionnaire: {

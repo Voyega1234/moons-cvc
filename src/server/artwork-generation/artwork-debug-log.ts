@@ -55,7 +55,7 @@ interface ImagePromptAgentDebugLog {
   runId: string;
   directionId: string;
   mode: ArtworkGenerationRequest["artworkMode"];
-  stage?: "production-brief";
+  stage?: "campaign-input-preflight" | "production-brief";
   status: "succeeded" | "failed";
   request: {
     endpoint: "/v1/responses" | "/api/v1/responses";
@@ -71,7 +71,8 @@ interface ImagePromptAgentDebugLog {
       type: "json_schema";
       name:
         | "moons_image_generation_prompt"
-        | "moons_creative_visual_concept";
+        | "moons_creative_visual_concept"
+        | "moons_campaign_input_preflight";
       strict: true;
     };
   };
@@ -374,10 +375,12 @@ export function buildImagePromptAgentDebugLog(
       responseFormat: {
         type: "json_schema",
         name:
-          trace.mode === "design-system" ||
-          trace.mode === "design-system-new"
-            ? "moons_creative_visual_concept"
-            : "moons_image_generation_prompt",
+          trace.stage === "campaign-input-preflight"
+            ? "moons_campaign_input_preflight"
+            : trace.mode === "design-system" ||
+                trace.mode === "design-system-new"
+              ? "moons_creative_visual_concept"
+              : "moons_image_generation_prompt",
         strict: true
       }
     },
@@ -417,6 +420,12 @@ function debugLogSuffix(entry: ArtworkGenerationDebugLog): string {
     entry.stage === "production-brief"
   ) {
     return "-production-brief-agent";
+  }
+  if (
+    entry.kind === "image-prompt-agent" &&
+    entry.stage === "campaign-input-preflight"
+  ) {
+    return "-campaign-input-preflight-agent";
   }
   return entry.kind === "image-prompt-agent" ? "-image-agent" : "-image-output";
 }

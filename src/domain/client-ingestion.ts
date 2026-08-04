@@ -34,7 +34,7 @@ export interface QueueClientIngestionResult {
 
 export function validateFacebookUrl(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return "Facebook URL is required.";
+  if (!trimmed) return null;
 
   let parsed: URL;
   try {

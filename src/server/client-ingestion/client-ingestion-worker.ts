@@ -8,6 +8,7 @@ import {
 } from "./client-ingestion-runner.js";
 import type { ClientIngestionRunnerDependencies } from "./client-ingestion-runner.js";
 import { OpenAiBrandVisualAnalyzer } from "./openai-brand-visual-analyzer.js";
+import { OpenAiBrandDiscoverySearch } from "./openai-brand-discovery-search.js";
 import { SupabaseBrandMemoryWriter } from "./supabase-brand-memory-writer.js";
 import { SupabaseClientIngestionStore } from "./supabase-client-ingestion-store.js";
 import { SupabaseImageMirror } from "./supabase-image-mirror.js";
@@ -72,6 +73,11 @@ export function buildClientIngestionWorkerDependencies({
       fetchImpl
     }),
     visualAnalyzer: new OpenAiBrandVisualAnalyzer({
+      apiKey: requiredEnv.OPENAI_API_KEY,
+      model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL,
+      fetchImpl
+    }),
+    brandDiscoverySearch: new OpenAiBrandDiscoverySearch({
       apiKey: requiredEnv.OPENAI_API_KEY,
       model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL,
       fetchImpl

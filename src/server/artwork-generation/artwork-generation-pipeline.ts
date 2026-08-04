@@ -41,6 +41,7 @@ import {
   defaultAlbumFormatPreference,
   outputFormatForService,
   resolveAlbumFormat,
+  usesPostGenerationVisualQc,
   type AlbumFormat,
   type ArtworkOutputSize
 } from "../../domain/creative-run.js";
@@ -53,6 +54,7 @@ import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js"
 import {
   buildStandardImagePrompt,
   generateImagePrompt,
+  preflightCampaignInput,
   type ImagePromptProvider
 } from "./image-prompt-agent.js";
 import {
@@ -211,6 +213,7 @@ export async function handleArtworkGenerationRequest({
     const input = parseRequestBody(requestBody);
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const promptProvider: ImagePromptProvider =
+      input.artworkMode !== "standard" &&
       input.imagePromptModel === "anthropic/claude-sonnet-4.6"
         ? "openrouter"
         : "openai";
@@ -669,7 +672,7 @@ async function generateOutputForHook({
             size: generationSize,
             fetchImpl
           });
-    const image = await applyDesignSystemVisualQc({
+    const image = await applyPostGenerationVisualQc({
       input,
       hook,
       image: generatedImage,
@@ -756,7 +759,7 @@ async function generateOutputForHook({
           size: generationSize,
           fetchImpl
         });
-  const image = await applyDesignSystemVisualQc({
+  const image = await applyPostGenerationVisualQc({
     input,
     hook,
     image: generatedImage,
@@ -791,7 +794,7 @@ async function generateOutputForHook({
   ];
 }
 
-async function applyDesignSystemVisualQc({
+async function applyPostGenerationVisualQc({
   input,
   hook,
   image,
@@ -822,14 +825,24 @@ async function applyDesignSystemVisualQc({
   writeDebugLog: ArtworkGenerationDebugLogger;
   fetchImpl: FetchLike;
 }): Promise<GeneratedImage> {
-  if (input.artworkMode !== "design-system-new") return image;
+  if (!usesPostGenerationVisualQc(input.artworkMode)) return image;
+
+  // Standard does not use a prompt-writing model, so its QC always runs
+  // directly on OpenAI with the image-generation credential. Other modes keep
+  // their configured provider/model behavior.
+  const visualQcProvider =
+    input.artworkMode === "standard" ? "openai" : promptProvider;
+  const visualQcApiKey =
+    input.artworkMode === "standard" ? apiKey : promptApiKey;
+  const visualQcModel =
+    input.artworkMode === "standard" ? undefined : promptModel;
 
   const sourceBytes = Buffer.from(image.base64, "base64");
   try {
     const review = await reviewGeneratedArtwork({
-      apiKey: promptApiKey,
-      model: promptModel,
-      provider: promptProvider,
+      apiKey: visualQcApiKey,
+      model: visualQcModel,
+      provider: visualQcProvider,
       fetchImpl,
       image: {
         bytes: sourceBytes,
@@ -1662,7 +1675,18 @@ async function resolveImagePrompt({
   };
 
   if (input.artworkMode === "standard") {
-    return buildStandardImagePrompt(imagePromptInput);
+    const campaignInput = await preflightCampaignInput({
+      apiKey: promptApiKey,
+      fetchImpl,
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildImagePromptAgentDebugLog(trace, input.runId, hook.id, [])
+        );
+      },
+      input: imagePromptInput
+    });
+    return buildStandardImagePrompt(imagePromptInput, undefined, campaignInput);
   }
 
   return generateImagePrompt({

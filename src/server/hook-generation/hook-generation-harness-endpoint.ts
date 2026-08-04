@@ -1054,19 +1054,14 @@ function buildCandidateGenerationPrompt(
       ? ["", buildPastContentProfileBlock(pastContentProfile)]
       : []),
     "",
-    hookSearchInstruction(input.hookIdeaMode),
-    "",
     "# Divergent ideation",
     `สร้าง candidate สั้นๆ ตาม quota นี้: ${JSON.stringify(candidateTypeQuotasForPrompt(input))}`,
     "รอบนี้ยังไม่เขียน direction เต็ม, Caption, CTA หรือ production brief. หน้าที่คือเปิดพื้นที่ความคิดให้กว้างก่อนคัด.",
-    "- กระจาย content archetype, จุดตั้งต้น, primary benefit, emotional entry และ language device; ห้ามเปลี่ยนเพียงคน ฉาก หรือ occasion แล้วขาย feature เดิมซ้ำ.",
-    "- จุดตั้งต้นเลือกได้จาก product truth, desire, identity, useful education, demonstration, occasion, cultural observation, tension, objection, social proof, brand belief, humor หรือ wordplay เมื่อมีเหตุผลกับ Brief.",
-    "- creativePattern ต้องอธิบายโครงวิธีคิดเชิงนามธรรม ไม่ใช่ชื่อฉาก เช่น visual proof, expert warning, identity listicle, product declaration หรือ occasion ritual.",
+    "- คืน premise, primaryBenefit, creativePattern, languageDevice, audienceReason และ formatIdea ให้ครบตาม schema; creativePattern คือกลไกวิธีคิดเชิงนามธรรม ไม่ใช่ชื่อฉาก.",
     "- ใช้ creativePatterns และ styleSignals จาก Past Content Profile เป็น evidence ว่าแบรนด์ชอบคิดและพูดแบบใด แต่ห้ามคัดลอกหัวข้อ Hook slogan มุก หรือ campaign angle เก่า.",
-    "- Hook ต้องเข้าใจได้ในหนึ่งรอบอ่าน เป็นภาษาไทยธรรมชาติ มี specific tension, desire, surprise, utility หรือ identity ที่ชวนหยุดอ่าน โดยไม่ clickbait.",
     `- ${THAI_NATURALNESS_RULE}`,
     "- สำหรับ UGC ให้กระจายระหว่าง demonstration, observation, direct address, checklist, conversation, product reveal และ personal experience. ห้ามใช้ first-person confession/testimonial เป็นค่าเริ่มต้นของทั้งชุด.",
-    "- audienceReason อธิบายสั้นๆ ว่าทำไมคนกลุ่มนี้จึงสนใจ; formatIdea บอกว่าความคิดทำงานกับ format นี้อย่างไร; citations ใส่เฉพาะแหล่ง Search ที่ candidate ใช้จริง.",
+    "- audienceReason อธิบายสั้นๆ ว่าทำไมคนกลุ่มนี้จึงสนใจ; formatIdea บอกว่าความคิดทำงานกับ format นี้อย่างไร; citations ใส่เฉพาะแหล่งข้อมูลภายนอกที่ candidate ใช้จริง.",
     "",
     ...(input.uploadedMaterials.length
       ? [
@@ -1089,7 +1084,7 @@ function buildCreativeDirectorPrompt(
     agentHookPrompt.trim(),
     "",
     "# CREATIVE DIRECTOR — SELECT, SHARPEN, EXPAND",
-    "Candidates ด้านล่างผ่านการค้นและแตกความคิดมาแล้ว. เปรียบเทียบทั้งชุดก่อนเลือก ห้ามเลือกตามลำดับ และห้ามสร้าง strategic angle ใหม่ที่ไม่มีใน candidates.",
+    "Candidates ด้านล่างผ่านรอบ ideation มาแล้ว. เปรียบเทียบทั้งชุดก่อนเลือก ห้ามเลือกตามลำดับ และห้ามสร้าง strategic angle ใหม่ที่ไม่มีใน candidates.",
     "",
     "# Current input",
     buildInputBlock(input),
@@ -1100,12 +1095,9 @@ function buildCreativeDirectorPrompt(
     "# Candidate pool",
     JSON.stringify(candidateResult.candidates, null, 2),
     "",
-    "# Selection test",
+    "# Selection",
     `เลือกและขยาย ${input.quantity} directions ตาม quota นี้และตามลำดับ: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
-    "ผู้ชนะต้องผ่านพร้อมกัน: เข้าใจทันที, specific กับ audience/สินค้า, มีแรงให้หยุดอ่าน, เป็นเสียงของแบรนด์, format-native, ใช้ facts ถูกต้อง และช่วยให้ชุดนี้ต่างกันจริง.",
-    "เปรียบเทียบแบบ relative ทั้งชุด. ตัด candidate ที่ generic, ต้องอธิบายเพิ่มจึงเข้าใจ, เล่นคำแต่ไม่ขายความคิด, คล้าย Hook เดิม หรือซ้ำ primary benefit / creativePattern / sentence template กับผู้ชนะตัวอื่น.",
     "ถ้า candidate แข็งแรงแต่ Hook ยังไม่คม ให้ sharpen ถ้อยคำได้โดยคง premise, primaryBenefit และ creativePattern เดิม. อ่านออกเสียงและตรวจคำปฏิเสธไม่ให้ความหมายกลับด้าน.",
-    "อย่าบังคับทุก direction ให้เป็น pain → feature → CTA; เลือกส่วนผสมที่เหมาะกับแบรนด์และ Brief จริง.",
     "",
     "# Format",
     "คิดแต่ละ format ตามธรรมชาติของมัน ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
@@ -1146,22 +1138,6 @@ function buildPastContentProfileBlock(profile: PastContentProfile): string {
     ),
     "Reusable details:",
     ...profile.reusableDetails.map((item) => `- ${item.detail}`)
-  ].join("\n");
-}
-
-function hookSearchInstruction(mode: HookIdeaMode): string {
-  const modeInstruction =
-    mode === "fresh-research"
-      ? "FRESH RESEARCH MODE: ค้นหลาย query ภาษาไทยที่เจาะจงกับ Brief, audience และ category ในประเทศไทย."
-      : "STANDARD MODE: ค้นอย่างน้อยหนึ่ง query ภาษาไทยที่เจาะจงกับ Brief, audience, product หรือ category ในประเทศไทย.";
-
-  return [
-    "# Search — required",
-    modeInstruction,
-    "ต้องเรียก Web Search ก่อน final JSON ทุก batch. ใช้เฉพาะข้อมูลปัจจุบันที่ตรวจสอบได้และเกี่ยวข้องจริง; ห้ามแต่ง trend, สถิติ, วันที่, ranking, publisher หรือผลวิจัย.",
-    "THAILAND FIRST: หาก Brief ไม่ระบุประเทศอื่น ให้ถือว่ากลุ่มเป้าหมายอยู่ประเทศไทย. ใช้คำค้นภาษาไทยและเลือกแหล่งข้อมูลไทยหรือข้อมูลที่ศึกษาเกี่ยวกับผู้บริโภคไทยก่อน.",
-    "ห้ามใช้พฤติกรรมผู้บริโภค สถิติ หรือ market context จาก US/global มาแทนบริบทไทย. ใช้ query ภาษาอังกฤษได้เฉพาะเมื่อภาษาไทยไม่พบข้อมูล และ query ต้องมีคำว่า Thailand หรือ ไทย.",
-    "Brief และ verified brand/product facts สำคัญกว่าผลค้น. Search ใช้เพิ่ม audience insight หรือ market context เท่านั้น และไม่ต้องฝืนใช้ผลค้นในทุก direction."
   ].join("\n");
 }
 
@@ -1417,24 +1393,33 @@ function parseCaptionStyleResult(
 }
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
+  const brief = hookRelevantBrief(input.brief);
+  const roundInstructions = hookRelevantRoundInstructions(
+    input.extraInstructions
+  );
+  const brandContext = input.brandLibrary.brand.filter(
+    isHookRelevantLibraryItem
+  );
+  const supportingDocuments = input.brandLibrary.docs.filter(
+    isHookRelevantLibraryItem
+  );
+
   return [
     "## Creative Compass current input",
-    `Run ID: ${input.runId}`,
+    `Hook idea mode: ${input.hookIdeaMode}`,
     `Brand: ${input.brand?.name ?? "Unknown"}`,
     `Category: ${input.brand?.category ?? "Unknown"}`,
     `Service: ${input.service}`,
-    `Generation model: ${input.generationModel ?? DEFAULT_MODEL}`,
-    `Selected output quantity later: ${input.quantity}`,
     `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
     `Album layout preference: ${input.albumFormat ?? defaultAlbumFormatPreference}`,
     "",
     "User Brief — HIGHEST PRIORITY:",
-    input.brief,
+    brief,
     "",
-    ...(input.extraInstructions
+    ...(roundInstructions
       ? [
           "Additional direction for this round — HIGH PRIORITY, on top of the brief above:",
-          input.extraInstructions,
+          roundInstructions,
           ""
         ]
       : []),
@@ -1448,48 +1433,91 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
         ]
       : []),
     "Brand Memory — What's working:",
-    ...input.brandMemory.working.map((item) => `- ${item}`),
+    ...input.brandMemory.working.map(
+      (item) => `- ${cleanHookContextText(item)}`
+    ),
     "",
     "Brand Memory — What to avoid:",
-    ...input.brandMemory.avoid.map((item) => `- ${item}`),
+    ...input.brandMemory.avoid.map(
+      (item) => `- ${cleanHookContextText(item)}`
+    ),
     "",
-    ...(input.onboardingQuestionnaire
+    ...(brandContext.length
       ? [
-          "Onboarding questionnaire — HISTORICAL ONBOARDING CONTEXT ONLY, NOT A CURRENT CAMPAIGN BRIEF:",
-          "Use this only as background about the brand, business, and audience. The current User Brief, Brand Memory, and verified Product data have higher priority. Do not reuse old goals, offers, prices, claims, or instructions unless the current input confirms them.",
-          input.onboardingQuestionnaire,
+          "Brand context — strategy and voice only:",
+          ...brandContext.map(
+            (item) =>
+              `- ${item.title}: ${cleanHookContextText(item.description)}`
+          ),
           ""
         ]
       : []),
-    "Brand kit:",
-    ...input.brandLibrary.brand.map(
-      (item) => `- ${item.title}: ${item.description}`
-    ),
-    "",
     "Products / offers / benefits / audience / claim notes:",
     ...input.brandLibrary.products.map(
-      (item) => `- ${item.title}: ${item.description}`
+      (item) =>
+        `- ${item.title}: ${cleanHookContextText(item.description)}`
     ),
     "",
-    "Documents:",
-    ...input.brandLibrary.docs.map(
-      (item) => `- ${item.title}: ${item.description}`
-    ),
-    "",
-    "References:",
-    ...input.brandLibrary.refs.map(
-      (item) => `- ${item.title}: ${item.description}`
-    ),
-    "",
-    "Attached file names:",
-    ...input.attachments.map((item) => `- ${item}`),
-    "",
+    ...(supportingDocuments.length
+      ? [
+          "Supporting factual documents:",
+          ...supportingDocuments.map(
+            (item) =>
+              `- ${item.title}: ${cleanHookContextText(item.description)}`
+          ),
+          ""
+        ]
+      : []),
     "Uploaded creative image materials (the images follow this text in the same order):",
     ...input.uploadedMaterials.map(
       (item, index) =>
         `${index + 1}. ${item.name} | role=${item.role} | usage note=${item.description || "No additional note"}`
     )
   ].join("\n");
+}
+
+function hookRelevantBrief(value: string): string {
+  const trimmed = value.trim();
+  const questionnaireMarkers = [
+    /launch questionnaire/i,
+    /please complete the questionnaire/i,
+    /about your (?:brand|business)/i,
+    /products, customers\s*&\s*competitors/i
+  ];
+  const markerCount = questionnaireMarkers.filter((pattern) =>
+    pattern.test(trimmed)
+  ).length;
+  if (markerCount < 2) return trimmed;
+
+  return "ไม่มี Current Campaign Brief แยกจากข้อมูล Onboarding. ให้สร้างไอเดียจาก Brand context, Products, audience, content-type quotas และ success metric ที่ยืนยันแล้ว โดยห้ามเดา offer หรือ campaign claim.";
+}
+
+function hookRelevantRoundInstructions(value: string): string {
+  return value
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Creative mix quota:"))
+    .join("\n")
+    .trim();
+}
+
+function isHookRelevantLibraryItem(item: {
+  title: string;
+  description: string;
+}): boolean {
+  return !/(?:^logo$|visual guidance|brand ci|brand guideline|style guide|identity guideline|art direction|typography|font|colou?r system|graphic system|layout)/i.test(
+    item.title.trim()
+  );
+}
+
+function cleanHookContextText(value: string): string {
+  return value
+    .split("\n")
+    .filter(
+      (line) => !/^source:\s*brand_analysis_jobs\//i.test(line.trim())
+    )
+    .join("\n")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 const servicePromptLabels: Record<ServiceType, string> = {

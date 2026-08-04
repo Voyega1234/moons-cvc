@@ -93,7 +93,7 @@ export class SupabaseClientIngestionStore implements ClientIngestionStore {
     clientId: string;
     jobId: string;
     sourceType: "facebook_posts" | "facebook_ads_library" | "google_search";
-    sourceUrl: string;
+    sourceUrl: string | null;
     status: "succeeded" | "partial" | "failed";
     rawPayload: unknown;
     errorMessage?: string | null;

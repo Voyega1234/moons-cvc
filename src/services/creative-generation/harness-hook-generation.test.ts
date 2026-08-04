@@ -355,6 +355,83 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
+  it("retries once when the harness HTTP boundary returns a non-JSON body", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("<html>Temporary gateway response</html>", {
+          status: 502,
+          headers: { "Content-Type": "text/html" }
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          directions: [
+            {
+              id: "direction-recovered",
+              service: "single-static",
+              hook: "กลับมาสร้างไอเดียได้สำเร็จ",
+              subheadline: "ระบบกู้คืนจากคำตอบชั่วคราวของ gateway",
+              concept: "Recovered request",
+              why: "Keeps the run moving after one transient response.",
+              visual: "Clear recovery signal.",
+              formatBeats: [],
+              cta: "ดูรายละเอียด",
+              caption: "สร้างไอเดียต่อได้",
+              score: 85
+            }
+          ]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [direction] = await generateDirectionsWithHarness({ run });
+
+    expect(direction?.id).toBe("direction-recovered");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
+  it("does not replay a timed-out hook run after a non-JSON gateway response", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () =>
+      new Response("<html>FUNCTION_INVOCATION_TIMEOUT</html>", {
+        status: 504,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "x-vercel-id": "dev1::timeout-1"
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generateDirectionsWithHarness({ run })).rejects.toThrow(
+      "Harness hook generation returned HTML instead of JSON after 1 attempt (504, text/html; charset=utf-8, request dev1::timeout-1)."
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
+  it("does not replay a non-JSON 500 response", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () =>
+      new Response("FUNCTION_INVOCATION_FAILED", {
+        status: 500,
+        headers: { "x-vercel-id": "dev1::failed-1" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generateDirectionsWithHarness({ run })).rejects.toThrow(
+      "Harness hook generation returned a non-JSON body instead of JSON after 1 attempt (500, text/plain;charset=UTF-8, request dev1::failed-1)."
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
   it("reports an empty backend response clearly", async () => {
     const originalFetch = globalThis.fetch;
     vi.stubGlobal(

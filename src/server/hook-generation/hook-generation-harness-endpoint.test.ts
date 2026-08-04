@@ -26,7 +26,9 @@ const requestBody = {
   brief: "ต้องการ creative เพื่อชวน B2B เข้าร่วม AI SEO webinar",
   onboardingQuestionnaire:
     "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B ที่เริ่มใช้ AI",
-  attachments: [],
+  extraInstructions:
+    "Creative mix quota: Single static × 3. Generate 6 hook candidates in total.\nPrimary success metric: CTR.",
+  attachments: ["launch-questionnaire.pdf"],
   uploadedMaterials: [
     {
       id: "material-1",
@@ -45,7 +47,16 @@ const requestBody = {
     brand: [
       {
         title: "Positioning",
-        description: "ที่ปรึกษา AI marketing สำหรับธุรกิจ B2B"
+        description:
+          "ที่ปรึกษา AI marketing สำหรับธุรกิจ B2B\nSource: brand_analysis_jobs/test-job · 1 image"
+      },
+      {
+        title: "Visual guidance",
+        description: "Use a blue gradient, Karla typography, and a 12-column layout."
+      },
+      {
+        title: "Logo",
+        description: "Minimum digital width is 80 px."
       }
     ],
     products: [
@@ -54,8 +65,22 @@ const requestBody = {
         description: "Webinar สำหรับเจ้าของธุรกิจ B2B"
       }
     ],
-    docs: [],
-    refs: []
+    docs: [
+      {
+        title: "Brand guideline",
+        description: "Logo sizing, typography, colour system, and stationery."
+      },
+      {
+        title: "Product FAQ",
+        description: "The workshop is designed for B2B marketing teams."
+      }
+    ],
+    refs: [
+      {
+        title: "Screenshot 2026-08-03.png",
+        description: "Reference screenshot file."
+      }
+    ]
   }
 };
 
@@ -251,6 +276,8 @@ describe("handleHookGenerationHarnessRequest", () => {
         HOOK_GENERATION_DEBUG_LOG_DIR: "logs/hook-generation"
       },
       fetchImpl: fetchMock as unknown as typeof fetch,
+      loadAgentHookPrompt: async () =>
+        "# CREATIVE STRATEGIST\nAGENT_HOOK_SEARCH_POLICY_ONLY",
       writeDebugLog
     });
 
@@ -303,29 +330,25 @@ describe("handleHookGenerationHarnessRequest", () => {
     const directorPrompt = JSON.stringify(directorBody.input);
     const combinedCreativePrompts = `${generationPrompt}\n${directorPrompt}`;
     expect(generationPrompt).toContain("# CREATIVE STRATEGIST");
-    expect(generationPrompt).toContain("# Search — required");
-    expect(JSON.stringify(firstBody.input)).toContain(
-      "FRESH RESEARCH MODE"
-    );
-    expect(JSON.stringify(firstBody.input)).toContain(
-      "ค้นหลาย query ภาษาไทย"
-    );
-    expect(JSON.stringify(firstBody.input)).toContain("THAILAND FIRST");
+    expect(generationPrompt).toContain("AGENT_HOOK_SEARCH_POLICY_ONLY");
+    expect(generationPrompt).toContain("Hook idea mode: fresh-research");
+    expect(generationPrompt).not.toContain("# Search — required");
+    expect(generationPrompt).not.toContain("FRESH RESEARCH MODE");
+    expect(generationPrompt).not.toContain("THAILAND FIRST");
     expect(generationPrompt).toContain("# Divergent ideation");
-    expect(generationPrompt).toContain(
+    expect(generationPrompt).not.toContain(
       "กระจาย content archetype"
     );
     expect(generationPrompt).toContain("ภาษาไทยห้ามใช้คำว่า ‘ฉัน’");
-    expect(generationPrompt).toContain(
+    expect(generationPrompt).not.toContain(
       "social proof, brand belief, humor หรือ wordplay"
     );
-    expect(directorPrompt).toContain(
+    expect(directorPrompt).not.toContain(
       "เปรียบเทียบแบบ relative ทั้งชุด"
     );
+    expect(directorPrompt).toContain("creator-led vertical video");
+    expect(directorPrompt).toContain("swipeable story");
     expect(directorPrompt).toContain("ภาษาไทยห้ามใช้คำว่า ‘ฉัน’");
-    expect(JSON.stringify(firstBody.input)).toContain(
-      "ต้องเรียก Web Search ก่อน final JSON ทุก batch"
-    );
     expect(combinedCreativePrompts).toContain(
       "อ่านออกเสียงและตรวจคำปฏิเสธ"
     );
@@ -335,12 +358,24 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(firstBody.input)).toContain(
       "ต้องการ creative เพื่อชวน B2B"
     );
-    expect(JSON.stringify(firstBody.input)).toContain(
+    expect(JSON.stringify(firstBody.input)).not.toContain(
       "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B"
     );
-    expect(JSON.stringify(firstBody.input)).toContain(
+    expect(JSON.stringify(firstBody.input)).not.toContain(
       "NOT A CURRENT CAMPAIGN BRIEF"
     );
+    expect(generationPrompt).toContain("Primary success metric: CTR");
+    expect(generationPrompt).not.toContain("Creative mix quota:");
+    expect(generationPrompt).toContain("Product FAQ");
+    expect(generationPrompt).not.toContain("Visual guidance");
+    expect(generationPrompt).not.toContain("Minimum digital width is 80 px");
+    expect(generationPrompt).not.toContain("Logo sizing, typography");
+    expect(generationPrompt).not.toContain("Screenshot 2026-08-03.png");
+    expect(generationPrompt).not.toContain("launch-questionnaire.pdf");
+    expect(generationPrompt).not.toContain("brand_analysis_jobs/test-job");
+    expect(generationPrompt).not.toContain("Run ID:");
+    expect(generationPrompt).not.toContain("Generation model:");
+    expect(generationPrompt).not.toContain("Selected output quantity later:");
     expect(combinedCreativePrompts).toContain(
       "# Format"
     );
@@ -412,7 +447,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const [debugDirectory, debugEntry] = writeDebugLog.mock.calls[0] ?? [];
     expect(debugDirectory).toBe("logs/hook-generation");
     expect(debugEntry?.candidateAgent.batches[0]?.request.inputText).toContain(
-      "# Search — required"
+      "AGENT_HOOK_SEARCH_POLICY_ONLY"
     );
     expect(debugEntry?.candidateAgent.batches[0]?.request.tools).toEqual([
       {
@@ -455,7 +490,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
-  it("requires web search inside the Hook Agent in Standard mode", async () => {
+  it("passes Standard mode as input while keeping search policy in agent_hook.md", async () => {
     const writeDebugLog = vi.fn(
       async (_directory: string, _entry: HookGenerationDebugLog) => undefined
     );
@@ -494,10 +529,17 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify({ ...requestBody, hookIdeaMode: "standard" })
+        body: JSON.stringify({
+          ...requestBody,
+          hookIdeaMode: "standard",
+          brief:
+            "Launch Questionnaire\nPlease complete the questionnaire below.\nAbout Your Business\nProducts, Customers & Competitors"
+        })
       }),
       env: { OPENAI_API_KEY: "test-key" },
       fetchImpl: fetchMock as unknown as typeof fetch,
+      loadAgentHookPrompt: async () =>
+        "# AGENT HOOK\nSEARCH_POLICY_FROM_AGENT_HOOK",
       writeDebugLog
     });
 
@@ -517,15 +559,17 @@ describe("handleHookGenerationHarnessRequest", () => {
       }
     ]);
     expect(generationBody.tool_choice).toBe("required");
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "STANDARD MODE: ค้นอย่างน้อยหนึ่ง query"
+    const generationPrompt = JSON.stringify(generationBody.input);
+    expect(generationPrompt).toContain("SEARCH_POLICY_FROM_AGENT_HOOK");
+    expect(generationPrompt).toContain("Hook idea mode: standard");
+    expect(generationPrompt).toContain(
+      "ไม่มี Current Campaign Brief แยกจากข้อมูล Onboarding"
     );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "query ภาษาไทย"
-    );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "ห้ามใช้พฤติกรรมผู้บริโภค สถิติ หรือ market context จาก US/global"
-    );
+    expect(generationPrompt).not.toContain("Please complete the questionnaire");
+    expect(generationPrompt).not.toContain("Products, Customers & Competitors");
+    expect(generationPrompt).not.toContain("# Search — required");
+    expect(generationPrompt).not.toContain("STANDARD MODE:");
+    expect(generationPrompt).not.toContain("THAILAND FIRST");
     expect(writeDebugLog).not.toHaveBeenCalled();
   });
 

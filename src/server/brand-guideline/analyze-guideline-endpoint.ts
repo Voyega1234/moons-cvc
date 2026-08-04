@@ -93,7 +93,6 @@ async function callResponsesApi({
       : input.mimeType === "application/pdf"
         ? {
             type: "input_file",
-            filename: "brand-guideline.pdf",
             file_url: input.fileUrl
           }
         : {

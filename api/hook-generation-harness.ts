@@ -2,7 +2,7 @@ import { handleHookGenerationHarnessRequest } from "../src/server/hook-generatio
 import { hookGenerationDebugLogDirectory } from "../src/server/hook-generation/hook-generation-debug-log.js";
 
 export const config = {
-  maxDuration: 300
+  maxDuration: 900
 };
 
 type VercelRequest = {

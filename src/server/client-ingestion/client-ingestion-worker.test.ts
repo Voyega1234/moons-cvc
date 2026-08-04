@@ -7,6 +7,7 @@ import {
 } from "./client-ingestion-worker";
 import { GeminiGroundingSearchFallback } from "./gemini-grounding-search-fallback";
 import { OpenAiBrandVisualAnalyzer } from "./openai-brand-visual-analyzer";
+import { OpenAiBrandDiscoverySearch } from "./openai-brand-discovery-search";
 import { SupabaseBrandMemoryWriter } from "./supabase-brand-memory-writer";
 import { SupabaseClientIngestionStore } from "./supabase-client-ingestion-store";
 import { SupabaseImageMirror } from "./supabase-image-mirror";
@@ -61,6 +62,9 @@ describe("buildClientIngestionWorkerDependencies", () => {
     expect(dependencies.store).toBeInstanceOf(SupabaseClientIngestionStore);
     expect(dependencies.imageMirror).toBeInstanceOf(SupabaseImageMirror);
     expect(dependencies.visualAnalyzer).toBeInstanceOf(OpenAiBrandVisualAnalyzer);
+    expect(dependencies.brandDiscoverySearch).toBeInstanceOf(
+      OpenAiBrandDiscoverySearch
+    );
     expect(dependencies.brandMemoryWriter).toBeInstanceOf(
       SupabaseBrandMemoryWriter
     );

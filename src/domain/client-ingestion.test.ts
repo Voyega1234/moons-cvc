@@ -19,8 +19,8 @@ const brand: Brand = {
 };
 
 describe("client ingestion domain rules", () => {
-  it("requires valid Facebook URLs", () => {
-    expect(validateFacebookUrl("")).toBe("Facebook URL is required.");
+  it("allows an empty Facebook URL and validates one when supplied", () => {
+    expect(validateFacebookUrl("")).toBeNull();
     expect(validateFacebookUrl("not a url")).toBe("Enter a valid Facebook URL.");
     expect(validateFacebookUrl("https://example.com/page")).toBe(
       "Enter a Facebook page URL."

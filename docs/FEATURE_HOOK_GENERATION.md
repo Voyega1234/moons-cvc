@@ -30,6 +30,14 @@ Moons supports two hook generation modes:
    - Both idea modes require at least one web search in every Candidate
      generation batch. The OpenAI request enforces this with
      `tool_choice: "required"`.
+   - All search instructions live only in `agent_prompt/agent_hook.md`.
+     Runtime code passes `Hook idea mode` as input and configures the search
+     tool, but does not append a second search prompt.
+   - Creative judgment such as consideration logic, content angles, Headline
+     quality, and generic-versus-strong selection criteria also lives in
+     `agent_prompt/agent_hook.md`. Runtime prompt builders retain stage
+     orchestration, schema/quotas, factual context, validation-related rules,
+     and format-specific execution instructions such as Album and UGC.
    - `standard` performs a focused current-context check before writing.
    - `fresh-research` tells the same Candidate Agent to run multiple focused
      searches before ideation. There is no separate research-summary handoff;
@@ -211,26 +219,32 @@ The Hook Agent's stable role and judgment rules live in:
 
 - `agent_prompt/agent_hook.md`
 
-The file is intentionally concise. It defines the Agent as a Creative
-Strategist that understands the brand, product, audience, and current market;
-uses Search for current context; develops meaningfully distinct,
-format-native ideas; and does not invent brand or product facts.
+It defines the Agent as a Creative Strategist that understands the brand,
+product, audience, and current market; uses Search for current context;
+develops meaningfully distinct, format-native ideas; and does not invent
+brand or product facts.
 
-`buildGenerationPrompt()` appends only the changing runtime context and
-transport contract:
+`buildInputBlock()` appends only Hook-relevant changing context:
 
 - user brief
-- selected service
-- selected output quantity
-- Brand Kit
-- Products
-- Documents
-- References
+- idea mode, service, and content-type quotas
+- additional round direction after removing runtime-owned quota prose
+- existing Hooks for Generate more
 - Brand Memory working/avoid notes
-- onboarding questionnaire text, explicitly marked as historical onboarding
-  context rather than a current campaign brief
-- attachment file names
-- the selected format rules and strict JSON output quota
+- non-visual Brand strategy and voice context
+- Products
+- non-visual factual Documents such as product FAQs
+- uploaded material descriptions and images
+- Past Content Profile style signals and reusable factual details
+
+The model prompt excludes raw onboarding questionnaire context, run/model
+metadata, duplicate quantity prose, attachment/reference filenames, internal
+brand-analysis source labels, and visual-production items such as Logo rules,
+Brand CI, typography, colour systems, layouts, and art direction. Those visual
+rules belong to Artwork generation. If the current Brief itself contains a raw
+Launch Questionnaire, runtime replaces it with a short no-current-campaign-
+brief notice and relies on the verified Brand/Product context instead. Product
+filtering remains controlled by the Product truth selection flow.
 
 The OpenAI request gives the Candidate Agent `web_search_preview` directly and
 enforces at least one search with `tool_choice: "required"`. The tool receives
@@ -302,6 +316,12 @@ history exists. Search and divergent candidate generation happen in one
 GPT-5.6 call; a second GPT-5.6 Creative Director call selects and expands the
 winners, followed by the optional Caption Stylist and Subheadline highlight
 passes.
+The Vercel function permits up to 900 seconds for this synchronous chain.
+The browser retries once only for a malformed `502` or `503` gateway response.
+It does not replay `500` or `504` responses because those can represent a full
+function timeout; replaying them would duplicate the long-running model work.
+Malformed-response errors report the HTTP status, content type, and available
+request ID without exposing the raw response body.
 This is enough for current UI wiring, but production-scale orchestration could
 move it to the `moons.jobs` model so the UI can show progress such as:
 

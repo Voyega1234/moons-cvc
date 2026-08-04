@@ -90,7 +90,7 @@ export interface ClientIngestionStore {
     clientId: string;
     jobId: string;
     sourceType: "facebook_posts" | "facebook_ads_library" | "google_search";
-    sourceUrl: string;
+    sourceUrl: string | null;
     status: "succeeded" | "partial" | "failed";
     rawPayload: unknown;
     errorMessage?: string | null;
@@ -146,6 +146,7 @@ export interface SearchFallbackClient {
   search(input: {
     clientName: string;
     facebookUrl: string;
+    questionnaireText?: string;
   }): Promise<unknown>;
 }
 
@@ -189,7 +190,11 @@ export interface BrandVisualAnalyzer {
     client: ClientIngestionClient;
     visualAssets: readonly MirroredBrandVisualAsset[];
     textEvidence: readonly {
-      sourceType: "facebook_post" | "facebook_ad" | "manual_input";
+      sourceType:
+        | "facebook_post"
+        | "facebook_ad"
+        | "manual_input"
+        | "google_search";
       sourceId: string;
       text: string;
     }[];
@@ -215,6 +220,7 @@ export interface ClientIngestionHarnessDependencies {
   store: ClientIngestionStore;
   imageMirror: ImageMirror;
   searchFallback?: SearchFallbackClient;
+  brandDiscoverySearch?: SearchFallbackClient;
   visualAnalyzer?: BrandVisualAnalyzer;
   brandMemoryWriter?: BrandMemoryWriter;
   maxPostImages?: number;
@@ -236,131 +242,213 @@ export async function runClientIngestionJob(
   client: ClientIngestionClient,
   {
     apify,
-  store,
-  imageMirror,
-  searchFallback,
-  visualAnalyzer,
-  brandMemoryWriter,
-  maxPostImages = 6,
-  maxAdImages = 6
-}: ClientIngestionHarnessDependencies
+    store,
+    imageMirror,
+    searchFallback,
+    brandDiscoverySearch,
+    visualAnalyzer,
+    brandMemoryWriter,
+    maxPostImages = 6,
+    maxAdImages = 6
+  }: ClientIngestionHarnessDependencies
 ): Promise<ClientIngestionHarnessResult> {
   await setStatus(store, job, client, "validating_source");
 
-  if (!client.facebookUrl.trim()) {
-    await failJob(store, job, client, "Facebook URL is required.");
-    return emptyResult(false);
-  }
-
   const sourceStatus: Record<string, unknown> = {};
+  const hasFacebookUrl = Boolean(client.facebookUrl.trim());
+  const manualInputs = await store.listManualBrandInputs({
+    clientId: client.id,
+    jobId: job.id
+  });
   let posts: readonly NormalizedFacebookPost[] = [];
   let ads: readonly NormalizedFacebookAdLibraryItem[] = [];
   let postSource: SavedBrandSource | null = null;
   let adSource: SavedBrandSource | null = null;
   let facebookSourceErrorDetected = false;
 
-  await enrichFacebookPageDetails({
-    job,
-    client,
-    apify,
-    store,
-    imageMirror,
-    sourceStatus
-  });
+  if (hasFacebookUrl) {
+    await enrichFacebookPageDetails({
+      job,
+      client,
+      apify,
+      store,
+      imageMirror,
+      sourceStatus
+    });
 
-  await setStatus(store, job, client, "scraping_facebook_posts");
-  try {
-    const postsPayload = await apify.scrapeFacebookPosts(client.facebookUrl);
-    const sourceError = getFacebookSourceError(postsPayload);
-    facebookSourceErrorDetected ||= Boolean(sourceError);
-    posts = sourceError ? [] : normalizeFacebookPosts(postsPayload);
-    postSource = await store.saveBrandSource({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: "facebook_posts",
-      sourceUrl: client.facebookUrl,
-      status: sourceError ? "failed" : posts.length ? "succeeded" : "partial",
-      rawPayload: postsPayload,
-      errorMessage: sourceError
-    });
-    sourceStatus.facebook_posts = sourceError
-      ? "failed"
-      : posts.length
-        ? "succeeded"
-        : "partial";
-  } catch (error) {
-    sourceStatus.facebook_posts = "failed";
-    await store.saveBrandSource({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: "facebook_posts",
-      sourceUrl: client.facebookUrl,
-      status: "failed",
-      rawPayload: {},
-      errorMessage: readableError(error)
-    });
-  }
+    await setStatus(store, job, client, "scraping_facebook_posts");
+    try {
+      const postsPayload = await apify.scrapeFacebookPosts(client.facebookUrl);
+      const sourceError = getFacebookSourceError(postsPayload);
+      facebookSourceErrorDetected ||= Boolean(sourceError);
+      posts = sourceError ? [] : normalizeFacebookPosts(postsPayload);
+      postSource = await store.saveBrandSource({
+        clientId: client.id,
+        jobId: job.id,
+        sourceType: "facebook_posts",
+        sourceUrl: client.facebookUrl,
+        status: sourceError ? "failed" : posts.length ? "succeeded" : "partial",
+        rawPayload: postsPayload,
+        errorMessage: sourceError
+      });
+      sourceStatus.facebook_posts = sourceError
+        ? "failed"
+        : posts.length
+          ? "succeeded"
+          : "partial";
+    } catch (error) {
+      sourceStatus.facebook_posts = "failed";
+      await store.saveBrandSource({
+        clientId: client.id,
+        jobId: job.id,
+        sourceType: "facebook_posts",
+        sourceUrl: client.facebookUrl,
+        status: "failed",
+        rawPayload: {},
+        errorMessage: readableError(error)
+      });
+    }
 
-  await setStatus(store, job, client, "scraping_facebook_ads", sourceStatus);
-  try {
-    const adsPayload = await apify.scrapeFacebookAdsLibrary(client.facebookUrl);
-    const sourceError = getFacebookSourceError(adsPayload);
-    facebookSourceErrorDetected ||= Boolean(sourceError);
-    ads = sourceError ? [] : normalizeFacebookAdsLibraryItems(adsPayload);
-    adSource = await store.saveBrandSource({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: "facebook_ads_library",
-      sourceUrl: client.facebookUrl,
-      status: sourceError ? "failed" : ads.length ? "succeeded" : "partial",
-      rawPayload: adsPayload,
-      errorMessage: sourceError
-    });
-    sourceStatus.facebook_ads_library = sourceError
-      ? "failed"
-      : ads.length
-        ? "succeeded"
-        : "partial";
-  } catch (error) {
-    sourceStatus.facebook_ads_library = "failed";
-    await store.saveBrandSource({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: "facebook_ads_library",
-      sourceUrl: client.facebookUrl,
-      status: "failed",
-      rawPayload: {},
-      errorMessage: readableError(error)
-    });
+    await setStatus(store, job, client, "scraping_facebook_ads", sourceStatus);
+    try {
+      const adsPayload = await apify.scrapeFacebookAdsLibrary(client.facebookUrl);
+      const sourceError = getFacebookSourceError(adsPayload);
+      facebookSourceErrorDetected ||= Boolean(sourceError);
+      ads = sourceError ? [] : normalizeFacebookAdsLibraryItems(adsPayload);
+      adSource = await store.saveBrandSource({
+        clientId: client.id,
+        jobId: job.id,
+        sourceType: "facebook_ads_library",
+        sourceUrl: client.facebookUrl,
+        status: sourceError ? "failed" : ads.length ? "succeeded" : "partial",
+        rawPayload: adsPayload,
+        errorMessage: sourceError
+      });
+      sourceStatus.facebook_ads_library = sourceError
+        ? "failed"
+        : ads.length
+          ? "succeeded"
+          : "partial";
+    } catch (error) {
+      sourceStatus.facebook_ads_library = "failed";
+      await store.saveBrandSource({
+        clientId: client.id,
+        jobId: job.id,
+        sourceType: "facebook_ads_library",
+        sourceUrl: client.facebookUrl,
+        status: "failed",
+        rawPayload: {},
+        errorMessage: readableError(error)
+      });
+    }
   }
 
   let usedFallbackSearch = false;
-  if (!posts.length && !ads.length) {
+  const fallbackTextEvidence: {
+    sourceType: "google_search";
+    sourceId: string;
+    text: string;
+  }[] = [];
+  if (hasFacebookUrl && !posts.length && !ads.length) {
     if (facebookSourceErrorDetected) {
       await failJob(store, job, client, FACEBOOK_ACCESS_ERROR, sourceStatus);
       return emptyResult(false);
     }
 
-    if (!searchFallback) {
+    if (searchFallback) {
+      await setStatus(store, job, client, "searching_fallback", sourceStatus);
+      try {
+        const searchPayload = await searchFallback.search({
+          clientName: client.name,
+          facebookUrl: client.facebookUrl
+        });
+        const searchText = readFallbackSearchText(searchPayload);
+        const searchSource = await store.saveBrandSource({
+          clientId: client.id,
+          jobId: job.id,
+          sourceType: "google_search",
+          sourceUrl: client.facebookUrl,
+          status: searchText ? "succeeded" : "partial",
+          rawPayload: searchPayload
+        });
+        usedFallbackSearch = true;
+        sourceStatus.google_search = searchText ? "succeeded" : "partial";
+        if (searchText) {
+          fallbackTextEvidence.push({
+            sourceType: "google_search",
+            sourceId: searchSource.id,
+            text: searchText
+          });
+        }
+      } catch (error) {
+        sourceStatus.google_search = "failed";
+        await store.saveBrandSource({
+          clientId: client.id,
+          jobId: job.id,
+          sourceType: "google_search",
+          sourceUrl: client.facebookUrl,
+          status: "failed",
+          rawPayload: {},
+          errorMessage: readableError(error)
+        });
+      }
+    }
+
+    if (!manualInputs.length && !fallbackTextEvidence.length) {
       await failJob(store, job, client, FACEBOOK_ACCESS_ERROR, sourceStatus);
       return emptyResult(false);
     }
+  } else if (!hasFacebookUrl) {
+    if (brandDiscoverySearch) {
+      await setStatus(store, job, client, "searching_fallback", sourceStatus);
+      try {
+        const searchPayload = await brandDiscoverySearch.search({
+          clientName: client.name,
+          facebookUrl: "",
+          questionnaireText: manualInputs.map((input) => input.text).join("\n\n")
+        });
+        const searchText = readFallbackSearchText(searchPayload);
+        const searchSource = await store.saveBrandSource({
+          clientId: client.id,
+          jobId: job.id,
+          sourceType: "google_search",
+          sourceUrl: null,
+          status: searchText ? "succeeded" : "partial",
+          rawPayload: searchPayload
+        });
+        usedFallbackSearch = true;
+        sourceStatus.google_search = searchText ? "succeeded" : "partial";
+        if (searchText) {
+          fallbackTextEvidence.push({
+            sourceType: "google_search",
+            sourceId: searchSource.id,
+            text: searchText
+          });
+        }
+      } catch (error) {
+        sourceStatus.google_search = "failed";
+        await store.saveBrandSource({
+          clientId: client.id,
+          jobId: job.id,
+          sourceType: "google_search",
+          sourceUrl: null,
+          status: "failed",
+          rawPayload: {},
+          errorMessage: readableError(error)
+        });
+      }
+    }
 
-    await setStatus(store, job, client, "searching_fallback", sourceStatus);
-    const searchPayload = await searchFallback.search({
-      clientName: client.name,
-      facebookUrl: client.facebookUrl
-    });
-    await store.saveBrandSource({
-      clientId: client.id,
-      jobId: job.id,
-      sourceType: "google_search",
-      sourceUrl: client.facebookUrl,
-      status: "succeeded",
-      rawPayload: searchPayload
-    });
-    usedFallbackSearch = true;
-    sourceStatus.google_search = "succeeded";
+    if (!manualInputs.length && !fallbackTextEvidence.length) {
+      await failJob(
+        store,
+        job,
+        client,
+        "Brand discovery could not find usable evidence.",
+        sourceStatus
+      );
+      return emptyResult(false);
+    }
   }
 
   const savedPosts = postSource
@@ -378,46 +466,45 @@ export async function runClientIngestionJob(
       })
     : [];
 
-  await setStatus(store, job, client, "mirroring_images", sourceStatus);
-  let mirroredVisualAssets: readonly MirroredBrandVisualAsset[];
-  try {
-    mirroredVisualAssets = await mirrorVisualAssets({
-      job,
-      client,
-      store,
-      imageMirror,
-      postSource,
-      adSource,
-      posts,
-      ads,
-      maxPostImages,
-      maxAdImages
-    });
-  } catch (error) {
-    await failJob(store, job, client, readableError(error), {
-      ...sourceStatus,
-      visual_assets_mirrored: 0,
-      brand_memory_written: false
-    });
-    return {
-      postsSaved: savedPosts.length,
-      adsSaved: savedAds.length,
-      visualAssetsMirrored: 0,
-      usedFallbackSearch,
-      completed: false
-    };
+  let mirroredVisualAssets: readonly MirroredBrandVisualAsset[] = [];
+  if (hasFacebookUrl) {
+    await setStatus(store, job, client, "mirroring_images", sourceStatus);
+    try {
+      mirroredVisualAssets = await mirrorVisualAssets({
+        job,
+        client,
+        store,
+        imageMirror,
+        postSource,
+        adSource,
+        posts,
+        ads,
+        maxPostImages,
+        maxAdImages
+      });
+    } catch (error) {
+      await failJob(store, job, client, readableError(error), {
+        ...sourceStatus,
+        visual_assets_mirrored: 0,
+        brand_memory_written: false
+      });
+      return {
+        postsSaved: savedPosts.length,
+        adsSaved: savedAds.length,
+        visualAssetsMirrored: 0,
+        usedFallbackSearch,
+        completed: false
+      };
+    }
   }
   const visualAssetsMirrored = mirroredVisualAssets.length;
-  const manualInputs = await store.listManualBrandInputs({
-    clientId: client.id,
-    jobId: job.id
-  });
   const textEvidence = [
     ...manualInputs.map((input) => ({
       sourceType: "manual_input" as const,
       sourceId: input.sourceId,
       text: input.text
     })),
+    ...fallbackTextEvidence,
     ...buildTextEvidence(posts, ads)
   ];
 
@@ -442,6 +529,23 @@ export async function runClientIngestionJob(
           usedFallbackSearch
         }
       });
+      const sourceReviewReason =
+        !hasFacebookUrl
+          ? fallbackTextEvidence.length
+            ? "No Facebook URL was provided. Brand Memory was generated from the onboarding questionnaire and Thailand-focused web discovery evidence."
+            : "No Facebook URL was provided, and Thailand-focused web discovery was unavailable. Brand Memory was generated from the onboarding questionnaire only."
+          : !posts.length && !ads.length
+          ? "Facebook source evidence was unavailable. Brand Memory was generated from questionnaire or grounded-search evidence only."
+          : "";
+      const completedAnalysis = sourceReviewReason
+        ? {
+            ...analysis,
+            needsReview: true,
+            reviewReason: [sourceReviewReason, analysis.reviewReason]
+              .filter(Boolean)
+              .join(" ")
+          }
+        : analysis;
 
       await setStatus(store, job, client, "writing_memory", {
         ...sourceStatus,
@@ -450,15 +554,19 @@ export async function runClientIngestionJob(
       await brandMemoryWriter.write({
         clientId: client.id,
         jobId: job.id,
-        analysis
+        analysis: completedAnalysis
       });
 
-      const finalStatus = analysis.needsReview ? "needs_review" : "ready";
+      const finalStatus = completedAnalysis.needsReview
+        ? "needs_review"
+        : "ready";
       await setStatus(store, job, client, finalStatus, {
         ...sourceStatus,
         visual_assets_mirrored: visualAssetsMirrored,
         brand_memory_written: true,
-        ...(analysis.reviewReason ? { review_reason: analysis.reviewReason } : {})
+        ...(completedAnalysis.reviewReason
+          ? { review_reason: completedAnalysis.reviewReason }
+          : {})
       });
 
       return {
@@ -466,7 +574,7 @@ export async function runClientIngestionJob(
         adsSaved: savedAds.length,
         visualAssetsMirrored,
         usedFallbackSearch,
-        completed: !analysis.needsReview
+        completed: !completedAnalysis.needsReview
       };
     } catch (error) {
       await failJob(store, job, client, readableError(error), {
@@ -723,6 +831,15 @@ function emptyResult(usedFallbackSearch: boolean): ClientIngestionHarnessResult 
     usedFallbackSearch,
     completed: false
   };
+}
+
+function readFallbackSearchText(payload: unknown): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return "";
+  }
+
+  const outputText = (payload as Record<string, unknown>).outputText;
+  return typeof outputText === "string" ? outputText.trim() : "";
 }
 
 function readableError(error: unknown): string {

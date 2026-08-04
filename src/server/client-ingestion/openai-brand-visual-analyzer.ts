@@ -13,6 +13,8 @@ export interface OpenAiBrandVisualAnalyzerOptions {
   endpoint?: string;
   fetchImpl?: FetchLike;
   maxImages?: number;
+  maxAttempts?: number;
+  retryDelayMs?: number;
 }
 
 type ResponseContent =
@@ -35,13 +37,17 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly endpoint: string;
   private readonly fetchImpl: FetchLike;
   private readonly maxImages: number;
+  private readonly maxAttempts: number;
+  private readonly retryDelayMs: number;
 
   constructor({
     apiKey,
     model = DEFAULT_MODEL,
     endpoint = DEFAULT_ENDPOINT,
     fetchImpl = fetch,
-    maxImages = 12
+    maxImages = 12,
+    maxAttempts = 2,
+    retryDelayMs = 250
   }: OpenAiBrandVisualAnalyzerOptions) {
     if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
 
@@ -50,6 +56,8 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl;
     this.maxImages = maxImages;
+    this.maxAttempts = Math.max(1, Math.floor(maxAttempts));
+    this.retryDelayMs = Math.max(0, retryDelayMs);
   }
 
   async analyze(
@@ -64,6 +72,68 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
       throw new Error("No brand evidence is available for analysis.");
     }
 
+    try {
+      return await this.analyzeWithRetry(input, visualAssets);
+    } catch (error) {
+      if (
+        visualAssets.length > 0 &&
+        input.textEvidence.some((evidence) => evidence.text.trim()) &&
+        permitsTextOnlyFallback(error)
+      ) {
+        const analysis = await this.analyzeWithRetry(input, []);
+        const fallbackReason = textOnlyFallbackReason(error);
+
+        return {
+          ...analysis,
+          visualGuidance: {
+            ...analysis.visualGuidance,
+            sourceAssetPaths: []
+          },
+          needsReview: true,
+          reviewReason: [fallbackReason, analysis.reviewReason]
+            .filter(Boolean)
+            .join(" "),
+          rawOutput: {
+            mode: "text_only_fallback",
+            reason: fallbackReason,
+            response: analysis.rawOutput
+          }
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  private async analyzeWithRetry(
+    input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
+    visualAssets: readonly MirroredBrandVisualAsset[]
+  ): Promise<BrandSignalAnalysis> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        return await this.requestAnalysis(input, visualAssets);
+      } catch (error) {
+        lastError = normalizeRequestError(error);
+        if (
+          attempt >= this.maxAttempts ||
+          !isRetryableRequestError(lastError)
+        ) {
+          throw lastError;
+        }
+
+        await wait(this.retryDelayMs * attempt);
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async requestAnalysis(
+    input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
+    visualAssets: readonly MirroredBrandVisualAsset[]
+  ): Promise<BrandSignalAnalysis> {
     const response = await this.fetchImpl(this.endpoint, {
       method: "POST",
       headers: {
@@ -91,7 +161,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI visual analysis failed: ${response.status}`);
+      throw await readOpenAiRequestError(response);
     }
 
     const payload = (await response.json()) as unknown;
@@ -103,6 +173,110 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
       rawOutput: payload
     };
   }
+}
+
+class OpenAiVisualAnalysisRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly retryable: boolean,
+    readonly textOnlyFallbackAllowed: boolean
+  ) {
+    super(message);
+    this.name = "OpenAiVisualAnalysisRequestError";
+  }
+}
+
+async function readOpenAiRequestError(
+  response: Response
+): Promise<OpenAiVisualAnalysisRequestError> {
+  const requestId = response.headers.get("x-request-id")?.trim() || null;
+  const rawBody = await response.text();
+  const detail = parseOpenAiErrorDetail(rawBody);
+  const context = [String(response.status), requestId && `request ${requestId}`]
+    .filter(Boolean)
+    .join(", ");
+  const detailText = [detail.code, detail.message]
+    .filter(Boolean)
+    .join(" — ");
+  const message = detailText
+    ? `OpenAI visual analysis failed (${context}): ${detailText}`
+    : `OpenAI visual analysis failed (${context}).`;
+
+  return new OpenAiVisualAnalysisRequestError(
+    message,
+    response.status,
+    isRetryableStatus(response.status),
+    response.status === 400
+  );
+}
+
+function parseOpenAiErrorDetail(rawBody: string): {
+  code: string;
+  message: string;
+} {
+  try {
+    const payload = JSON.parse(rawBody) as unknown;
+    if (isRecord(payload) && isRecord(payload.error)) {
+      return {
+        code:
+          typeof payload.error.code === "string" ? payload.error.code.trim() : "",
+        message:
+          typeof payload.error.message === "string"
+            ? payload.error.message.trim().slice(0, 1_200)
+            : ""
+      };
+    }
+  } catch {
+    // Fall through to a bounded plain-text detail for non-JSON upstream errors.
+  }
+
+  return {
+    code: "",
+    message: rawBody.replace(/\s+/g, " ").trim().slice(0, 1_200)
+  };
+}
+
+function normalizeRequestError(error: unknown): Error {
+  if (error instanceof OpenAiVisualAnalysisRequestError) return error;
+
+  const detail = error instanceof Error ? error.message : "Unknown network error.";
+  return new OpenAiVisualAnalysisRequestError(
+    `OpenAI visual analysis request failed: ${detail}`,
+    null,
+    true,
+    false
+  );
+}
+
+function isRetryableRequestError(error: unknown): boolean {
+  return (
+    error instanceof OpenAiVisualAnalysisRequestError && error.retryable
+  );
+}
+
+function permitsTextOnlyFallback(error: unknown): boolean {
+  return (
+    error instanceof OpenAiVisualAnalysisRequestError &&
+    error.textOnlyFallbackAllowed
+  );
+}
+
+function isRetryableStatus(status: number): boolean {
+  return [408, 409, 425, 429].includes(status) || status >= 500;
+}
+
+function textOnlyFallbackReason(error: unknown): string {
+  const detail = error instanceof Error ? error.message : "Unknown image error.";
+  return `Visual evidence could not be analyzed automatically (${detail.slice(
+    0,
+    600
+  )}). Brand Memory was generated from text evidence only and must be reviewed.`;
+}
+
+async function wait(delayMs: number): Promise<void> {
+  if (delayMs <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function buildResponseContent(
@@ -147,16 +321,28 @@ function buildPrompt(
         evidence.sourceType === "manual_input" && evidence.text.trim()
     )
     .slice(0, 2);
+  const groundedEvidence = input.textEvidence
+    .filter(
+      (evidence) =>
+        evidence.sourceType === "google_search" && evidence.text.trim()
+    )
+    .slice(0, 1);
   const socialEvidence = selectBalancedBySource(
     input.textEvidence.filter(
       (evidence): evidence is typeof evidence & {
         sourceType: "facebook_post" | "facebook_ad";
       } =>
-        evidence.sourceType !== "manual_input" && Boolean(evidence.text.trim())
+        (evidence.sourceType === "facebook_post" ||
+          evidence.sourceType === "facebook_ad") &&
+        Boolean(evidence.text.trim())
     ),
-    60 - manualEvidence.length
+    60 - manualEvidence.length - groundedEvidence.length
   );
-  const textEvidence = [...manualEvidence, ...socialEvidence];
+  const textEvidence = [
+    ...manualEvidence,
+    ...groundedEvidence,
+    ...socialEvidence
+  ];
 
   return [
     `วิเคราะห์และทำความรู้จักแบรนด์ ${input.client.name} สำหรับใช้สร้างครีเอทีฟโฆษณา`,

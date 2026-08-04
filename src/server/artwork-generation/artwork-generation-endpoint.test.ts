@@ -210,6 +210,52 @@ function visualQualityPassResponse(): Response {
   );
 }
 
+function campaignInputPreflightResponse(ratio = "1:1"): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        brand: {
+          name: "Flora Daily",
+          category: "Flowers / lifestyle",
+          colors: []
+        },
+        primaryProductOrService: "Summer bouquet",
+        objective: "Connect the offer to a clear room mood.",
+        targetAudience: "",
+        singleMainMessage: "Flowers make the room feel softer.",
+        concept: "Lead with room mood.",
+        copy: {
+          headline: "Flowers that make the room feel softer",
+          supportingText: [],
+          cta: "Order a bouquet"
+        },
+        requiredElements: ["Summer bouquet"],
+        forbiddenElements: [],
+        references: [],
+        lockedProductFacts: [],
+        excludedInformation: [],
+        albumSequence: [],
+        userInstructions: [],
+        output: { service: "static", ratio }
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+function standardAgentResponse(init?: RequestInit): Response {
+  const body = JSON.parse(String(init?.body)) as {
+    input?: { content?: { text?: string }[] }[];
+    text?: { format?: { name?: string } };
+  };
+  if (body.text?.format?.name !== "moons_campaign_input_preflight") {
+    return visualQualityPassResponse();
+  }
+  const inputText = body.input?.[0]?.content?.[0]?.text ?? "";
+  const ratio = /"ratio":\s*"([^"]+)"/.exec(inputText)?.[1] ?? "1:1";
+  return campaignInputPreflightResponse(ratio);
+}
+
 function visualQualityReviseResponse(): Response {
   return new Response(
     JSON.stringify({
@@ -782,7 +828,7 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("generates and uploads artwork for each selected hook", async () => {
-    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
         return new Response(
@@ -797,6 +843,9 @@ describe("handleArtworkGenerationRequest", () => {
           }),
           { status: 200 }
         );
+      }
+      if (href.includes("/v1/responses")) {
+        return standardAgentResponse(init);
       }
       throw new Error(`Unexpected fetch: ${href}`);
     });
@@ -847,8 +896,15 @@ describe("handleArtworkGenerationRequest", () => {
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes("/v1/responses")
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(debugLogs).toEqual([
+      expect.objectContaining({
+        kind: "image-prompt-agent",
+        model: "gpt-5.6-terra",
+        runId: "run-1",
+        directionId: "hook-1",
+        stage: "campaign-input-preflight"
+      }),
       expect.objectContaining({
         model: "gpt-image-2",
         runId: "run-1",
@@ -858,7 +914,7 @@ describe("handleArtworkGenerationRequest", () => {
           body: expect.objectContaining({
             model: "gpt-image-2",
             prompt: expect.stringContaining(
-              "GPT IMAGE 2 — STANDARD DIRECT ART DIRECTOR V1"
+              "สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input"
             ),
             size: "1024x1024"
           })
@@ -879,7 +935,7 @@ describe("handleArtworkGenerationRequest", () => {
       })
     ]);
     expect(JSON.stringify(debugLogs)).toContain(
-      "AUTHORITATIVE COMPACT CAMPAIGN INPUT"
+      "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT"
     );
     expect(JSON.stringify(debugLogs)).toContain(
       "Flowers that make the room feel softer"
@@ -924,6 +980,9 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
+      if (href.includes("/v1/responses")) {
+        return standardAgentResponse(init);
+      }
       throw new Error(`Unexpected fetch: ${href}`);
     });
 
@@ -965,7 +1024,7 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse("A cohesive three-image album sequence.");
+        return standardAgentResponse(init);
       }
       if (href.includes("/v1/images/generations")) {
         imageBodies.push(
@@ -1028,7 +1087,7 @@ describe("handleArtworkGenerationRequest", () => {
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes("/v1/responses")
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain("ALBUM MASTER GRID");
@@ -1146,7 +1205,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(imageBodies).toHaveLength(1);
     expect(imageBodies[0]?.size).toBe("2048x2048");
     expect(imageBodies[0]?.prompt).toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
+      "GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.3"
     );
     expect(imageBodies[0]?.prompt).toContain("Album master rules:");
     expect(imageBodies[0]?.prompt).toContain(
@@ -1296,7 +1355,7 @@ describe("handleArtworkGenerationRequest", () => {
   it("generates two selected hooks at a time while preserving their order", async () => {
     let activeGenerations = 0;
     let maximumConcurrentGenerations = 0;
-    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
         return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
@@ -1304,7 +1363,7 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse();
+        return standardAgentResponse(init);
       }
       if (href.includes("/v1/images/generations")) {
         activeGenerations += 1;
@@ -1359,7 +1418,7 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("returns a readable error when OpenAI returns an empty body", async () => {
-    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
         return new Response(
@@ -1368,7 +1427,7 @@ describe("handleArtworkGenerationRequest", () => {
         );
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse();
+        return standardAgentResponse(init);
       }
       return new Response("", { status: 200 });
     });
@@ -1421,7 +1480,7 @@ describe("handleArtworkGenerationRequest", () => {
         });
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse();
+        return standardAgentResponse(init);
       }
       if (href.includes("/v1/images/edits")) {
         editCalls.push({ href, body: init?.body as FormData });
@@ -1468,7 +1527,7 @@ describe("handleArtworkGenerationRequest", () => {
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes("/v1/responses")
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(editCalls).toHaveLength(1);
     const referenceFile = editCalls[0]?.body.get("image[]") as File;
     expect(referenceFile.type).toBe("image/jpeg");
@@ -1744,8 +1803,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect((editCalls[0]?.get("image[]") as File).type).toBe("image/png");
   });
 
-  it("sends agent_image.md and Compact Campaign Input directly to GPT Image 2", async () => {
+  it("preflights Campaign Input with Terra, then sends agent_image.md plus the cleaned input to GPT Image 2", async () => {
     const generationCalls: string[] = [];
+    const preflightCalls: Array<{ model: string; inputText: string }> = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -1764,6 +1824,23 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
+      if (href.includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body)) as {
+          model: string;
+          input?: { content?: { type?: string; text?: string }[] }[];
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === "moons_campaign_input_preflight") {
+          preflightCalls.push({
+            model: body.model,
+            inputText:
+              body.input?.[0]?.content?.find(
+                (item) => item.type === "input_text"
+              )?.text ?? ""
+          });
+        }
+        return standardAgentResponse(init);
+      }
       throw new Error(`Unexpected fetch: ${href}`);
     });
 
@@ -1781,24 +1858,36 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(preflightCalls).toHaveLength(1);
+    expect(preflightCalls[0]?.model).toBe("gpt-5.6-terra");
+    expect(preflightCalls[0]?.inputText).toContain("Campaign Input Preflight");
+    expect(preflightCalls[0]?.inputText).toContain(
+      '"headline": "Flowers that make the room feel softer"'
+    );
+    expect(preflightCalls[0]?.inputText).not.toContain(
+      "สร้างภาพโฆษณาที่สมบูรณ์"
+    );
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain(
-      "สร้างภาพโฆษณาจากข้อมูลและรูปที่แนบมา"
+      "สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input คำสั่งของผู้ใช้ และรูปภาพที่แนบมา"
     );
     expect(generationCalls[0]).toContain(
-      "AUTHORITATIVE COMPACT CAMPAIGN INPUT"
+      "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT"
     );
     expect(generationCalls[0]).toContain(
       '"headline": "Flowers that make the room feel softer"'
     );
+    expect(generationCalls[0]).not.toContain("CAMPAIGN INPUT TO PREFLIGHT");
   });
 
-  it("does not route Standard through a selected intermediary prompt model", async () => {
-    const promptCalls: Array<{
+  it("uses Terra on OpenAI for Standard preflight even when Claude is selected elsewhere", async () => {
+    const openRouterCalls: string[] = [];
+    const preflightCalls: Array<{
       model: string;
       authorization: string | null;
     }> = [];
     const imageAuthorizations: Array<string | null> = [];
+    const visualQcAuthorizations: Array<string | null> = [];
     const fetchMock = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
         const href = String(url);
@@ -1809,19 +1898,21 @@ describe("handleArtworkGenerationRequest", () => {
           );
         }
         if (href === "https://openrouter.ai/api/v1/responses") {
-          const body = JSON.parse(String(init?.body)) as { model: string };
-          promptCalls.push({
-            model: body.model,
-            authorization: new Headers(init?.headers).get("Authorization")
-          });
-          return new Response(
-            JSON.stringify({
-              output_text: JSON.stringify({
-                prompt: "OPENROUTER PROMPT: editorial conversion visual."
-              })
-            }),
-            { status: 200 }
-          );
+          openRouterCalls.push(href);
+          throw new Error("Standard must not use OpenRouter.");
+        }
+        if (href === "https://api.openai.com/v1/responses") {
+          const body = JSON.parse(String(init?.body)) as {
+            model: string;
+            text?: { format?: { name?: string } };
+          };
+          const authorization = new Headers(init?.headers).get("Authorization");
+          if (body.text?.format?.name === "moons_campaign_input_preflight") {
+            preflightCalls.push({ model: body.model, authorization });
+          } else {
+            visualQcAuthorizations.push(authorization);
+          }
+          return standardAgentResponse(init);
         }
         if (href.includes("/v1/images/generations")) {
           imageAuthorizations.push(
@@ -1860,8 +1951,15 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(promptCalls).toEqual([]);
+    expect(openRouterCalls).toEqual([]);
+    expect(preflightCalls).toEqual([
+      {
+        model: "gpt-5.6-terra",
+        authorization: "Bearer openai-image-key"
+      }
+    ]);
     expect(imageAuthorizations).toEqual(["Bearer openai-image-key"]);
+    expect(visualQcAuthorizations).toEqual([]);
   });
 
   it("requires an OpenRouter key only when its prompt model is selected", async () => {
@@ -2134,7 +2232,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editCalls[0]?.get("quality")).toBe("medium");
     const prompt = String(editCalls[0]?.get("prompt"));
     expect(prompt).toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
+      "GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.3"
     );
     expect(prompt).toContain(
       "Create one complete, publication-ready advertising artwork"
@@ -2146,11 +2244,9 @@ describe("handleArtworkGenerationRequest", () => {
       "Explore several substantially different executable approaches"
     );
     expect(prompt).toContain(
-      "Choose a coherent spatial system from the concept rather than from a preset"
+      "Choose a coherent spatial system from the concept and references"
     );
-    expect(prompt).toContain(
-      "information must form coherent"
-    );
+    expect(prompt).toContain("information must form");
     expect(prompt).toContain(
       "Use motivated light with coherent direction"
     );
@@ -2591,7 +2687,7 @@ describe("handleArtworkGenerationRequest", () => {
     ).toBe(false);
   });
 
-  it("runs the set director, archived 01/02 prompts, V6.2, and visual QC for Design System (New)", async () => {
+  it("runs the set director, archived 01/02 prompts, and V6.2 without post-generation visual QC", async () => {
     const responseInputs: string[] = [];
     const generationCalls: string[] = [];
     const fetchMock = vi.fn(
@@ -2660,7 +2756,7 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(responseInputs).toHaveLength(4);
+    expect(responseInputs).toHaveLength(3);
     expect(responseInputs[0]).toContain("# CREATIVE SET DIRECTOR");
     expect(responseInputs[0]).toContain("LOCKED CAMPAIGN INPUT");
     expect(responseInputs[1]).toContain(
@@ -2670,13 +2766,13 @@ describe("handleArtworkGenerationRequest", () => {
     expect(responseInputs[2]).toContain("AUTHORITATIVE RUNTIME INPUT");
     expect(responseInputs[2]).toContain("campaignSetDirection");
     expect(responseInputs[2]).toContain("shotOpportunity");
-    expect(responseInputs[3]).toContain("# VISUAL QUALITY CONTROL");
+    expect(responseInputs.join("\n")).not.toContain("# VISUAL QUALITY CONTROL");
     expect(responseInputs.join("\n")).not.toContain(
       "# CAMPAIGN TRUTH NORMALIZER"
     );
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain(
-      "# GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.2"
+      "GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.3"
     );
     expect(generationCalls[0]).toContain(
       "### Campaign set direction"
@@ -2693,7 +2789,7 @@ describe("handleArtworkGenerationRequest", () => {
     );
   });
 
-  it("applies at most one targeted GPT Image 2 edit when visual QC requests revision", async () => {
+  it("does not run or revise with post-generation visual QC while it is disabled", async () => {
     let visualQcCalls = 0;
     let generationCalls = 0;
     const editCalls: FormData[] = [];
@@ -2776,11 +2872,7 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status, await response.clone().text()).toBe(200);
     expect(generationCalls).toBe(1);
-    expect(visualQcCalls).toBe(1);
-    expect(editCalls).toHaveLength(1);
-    expect(editCalls[0]?.getAll("image[]")).toHaveLength(1);
-    expect(String(editCalls[0]?.get("prompt"))).toContain(
-      "Open the lower quiet zone and correct the product contact shadow"
-    );
+    expect(visualQcCalls).toBe(0);
+    expect(editCalls).toHaveLength(0);
   });
 });

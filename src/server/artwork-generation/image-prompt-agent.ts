@@ -61,11 +61,46 @@ export interface ImagePromptAgentTrace {
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
   mode: ArtworkMode;
-  stage?: "production-brief";
+  stage?: "campaign-input-preflight" | "production-brief";
   status: "succeeded" | "failed";
   inputText: string;
   responsePrompt?: string;
   error?: string;
+}
+
+export interface CampaignInputPreflight {
+  brand: {
+    name: string;
+    category: string;
+    colors: readonly string[];
+  };
+  primaryProductOrService: string;
+  objective: string;
+  targetAudience: string;
+  singleMainMessage: string;
+  concept: string;
+  copy: {
+    headline: string;
+    supportingText: readonly string[];
+    cta: string;
+  };
+  requiredElements: readonly string[];
+  forbiddenElements: readonly string[];
+  references: readonly {
+    image: number;
+    id: string;
+    role: string;
+    use: string;
+    ignore: string;
+  }[];
+  lockedProductFacts: readonly string[];
+  excludedInformation: readonly string[];
+  albumSequence: readonly string[];
+  userInstructions: readonly string[];
+  output: {
+    service: string;
+    ratio: string;
+  };
 }
 
 export type ImagePromptAgentTraceWriter = (
@@ -204,9 +239,97 @@ export async function generateImagePrompt({
 
 export async function buildStandardImagePrompt(
   input: ImagePromptAgentInput,
-  loadAgentImagePrompt: () => Promise<string> = defaultLoadAgentImagePrompt
+  loadAgentImagePrompt: () => Promise<string> = defaultLoadAgentImagePrompt,
+  campaignInput: unknown = buildCompactCampaignInput(input)
 ): Promise<string> {
-  return renderStandardPrompt(await loadAgentImagePrompt(), input);
+  return renderStandardPrompt(await loadAgentImagePrompt(), campaignInput);
+}
+
+export async function preflightCampaignInput({
+  apiKey,
+  fetchImpl,
+  input,
+  writeTrace,
+  loadPrompt = defaultLoadCampaignInputPreflightPrompt
+}: {
+  apiKey: string;
+  fetchImpl: FetchLike;
+  input: ImagePromptAgentInput;
+  writeTrace?: ImagePromptAgentTraceWriter;
+  loadPrompt?: () => Promise<string>;
+}): Promise<CampaignInputPreflight> {
+  const model = DEFAULT_MODEL;
+  const inputText = [
+    (await loadPrompt()).trim(),
+    "",
+    "CAMPAIGN INPUT TO PREFLIGHT",
+    JSON.stringify(buildCompactCampaignInput(input), null, 2)
+  ].join("\n");
+
+  try {
+    const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        store: false,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: inputText }]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "moons_campaign_input_preflight",
+            strict: true,
+            schema: campaignInputPreflightSchema
+          }
+        }
+      })
+    });
+    if (!response.ok) {
+      const detail = await readProviderErrorDetail(response);
+      throw new Error(
+        `OpenAI campaign input preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      );
+    }
+    const payload = await readJsonResponse(
+      response,
+      "OpenAI campaign input preflight"
+    );
+    const parsed = JSON.parse(extractResponseText(payload)) as unknown;
+    const result = parseCampaignInputPreflight(parsed);
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider: "openai",
+      endpoint: "/v1/responses",
+      model,
+      mode: "standard",
+      stage: "campaign-input-preflight",
+      status: "succeeded",
+      inputText,
+      responsePrompt: JSON.stringify(result, null, 2)
+    });
+    return result;
+  } catch (error) {
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider: "openai",
+      endpoint: "/v1/responses",
+      model,
+      mode: "standard",
+      stage: "campaign-input-preflight",
+      status: "failed",
+      inputText,
+      error: readableError(error)
+    });
+    throw error;
+  }
 }
 
 export async function generateProductionBrief({
@@ -343,6 +466,13 @@ function readableError(error: unknown): string {
 
 async function defaultLoadAgentImagePrompt(): Promise<string> {
   return readFile(join(process.cwd(), "agent_prompt", "agent_image.md"), "utf8");
+}
+
+async function defaultLoadCampaignInputPreflightPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_campaign_input_preflight.md"),
+    "utf8"
+  );
 }
 
 async function defaultLoadReferenceLibraryPrompt(): Promise<string> {
@@ -521,6 +651,15 @@ function parseStandardImagePrompt(
   return prompt.trim();
 }
 
+function parseCampaignInputPreflight(
+  parsed: unknown
+): CampaignInputPreflight {
+  if (!isRecord(parsed)) {
+    throw new Error("OpenAI campaign input preflight returned invalid JSON.");
+  }
+  return parsed as unknown as CampaignInputPreflight;
+}
+
 function parseCreativeVisualConcept(
   parsed: unknown,
   providerLabel: string
@@ -555,10 +694,16 @@ function compactAgentText(value: string, maxCharacters: number): string {
   return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
 }
 
-function renderStandardPrompt(
-  source: string,
-  input: ImagePromptAgentInput
-): string {
+function renderStandardPrompt(source: string, campaignInput: unknown): string {
+  return [
+    source.trim(),
+    "",
+    "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT",
+    JSON.stringify(campaignInput, null, 2)
+  ].join("\n");
+}
+
+export function buildCompactCampaignInput(input: ImagePromptAgentInput) {
   const classifiedReferences = input.referenceImages.map((image, index) =>
     buildCompactReference(image.label, index)
   );
@@ -571,7 +716,7 @@ function renderStandardPrompt(
       : classifiedReferences.findIndex((reference) =>
           isStandardStyleReferenceRole(reference.role)
         );
-  const compactInput = {
+  return {
     brand: {
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
@@ -621,13 +766,6 @@ function renderStandardPrompt(
       ? { revisionInstructions: input.textInputs }
       : {})
   };
-
-  return [
-    source.trim(),
-    "",
-    "AUTHORITATIVE COMPACT CAMPAIGN INPUT",
-    JSON.stringify(compactInput, null, 2)
-  ].join("\n");
 }
 
 function isStandardStyleReferenceRole(role: string): boolean {
@@ -954,6 +1092,85 @@ const standardImagePromptSchema = {
     finalPrompt: { type: "string" }
   },
   required: ["finalPrompt"]
+} as const;
+
+const campaignInputPreflightSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    brand: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        name: { type: "string" },
+        category: { type: "string" },
+        colors: { type: "array", items: { type: "string" } }
+      },
+      required: ["name", "category", "colors"]
+    },
+    primaryProductOrService: { type: "string" },
+    objective: { type: "string" },
+    targetAudience: { type: "string" },
+    singleMainMessage: { type: "string" },
+    concept: { type: "string" },
+    copy: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        headline: { type: "string" },
+        supportingText: { type: "array", items: { type: "string" } },
+        cta: { type: "string" }
+      },
+      required: ["headline", "supportingText", "cta"]
+    },
+    requiredElements: { type: "array", items: { type: "string" } },
+    forbiddenElements: { type: "array", items: { type: "string" } },
+    references: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          image: { type: "integer" },
+          id: { type: "string" },
+          role: { type: "string" },
+          use: { type: "string" },
+          ignore: { type: "string" }
+        },
+        required: ["image", "id", "role", "use", "ignore"]
+      }
+    },
+    lockedProductFacts: { type: "array", items: { type: "string" } },
+    excludedInformation: { type: "array", items: { type: "string" } },
+    albumSequence: { type: "array", items: { type: "string" } },
+    userInstructions: { type: "array", items: { type: "string" } },
+    output: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        service: { type: "string" },
+        ratio: { type: "string" }
+      },
+      required: ["service", "ratio"]
+    }
+  },
+  required: [
+    "brand",
+    "primaryProductOrService",
+    "objective",
+    "targetAudience",
+    "singleMainMessage",
+    "concept",
+    "copy",
+    "requiredElements",
+    "forbiddenElements",
+    "references",
+    "lockedProductFacts",
+    "excludedInformation",
+    "albumSequence",
+    "userInstructions",
+    "output"
+  ]
 } as const;
 
 async function readProviderErrorDetail(response: Response): Promise<string> {

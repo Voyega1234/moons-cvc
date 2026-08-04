@@ -49,7 +49,7 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
         initials: initialsFromClientName(trimmedName),
         source: "facebook_ingestion",
         is_active: true,
-        facebook_url: facebookUrl.trim(),
+        facebook_url: facebookUrl.trim() || null,
         ingestion_status: "draft"
       })
       .select("*")

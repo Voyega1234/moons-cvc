@@ -1570,9 +1570,14 @@ export function BriefStage({ state, dispatch }: StageProps) {
     (reference) => inferredReferenceImageRole(reference) !== "logo"
   );
   const fixedMixItems = briefServiceTypes
-    .map((service) => mixItems.find((item) => item.service === service))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const fixedMixReady = fixedMixItems.length === briefServiceTypes.length;
+    .map(
+      (service) =>
+        mixItems.find((item) => item.service === service) ?? {
+          id: `creative-mix-${service}`,
+          service,
+          quantity: 0
+        }
+    );
   const confirmationReferences = [
     ...libraryItemsWithImages(state.brand?.library.refs ?? [], "style"),
     ...selectedImageReferences.filter(
@@ -1582,10 +1587,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
         )
     )
   ];
-  useEffect(() => {
-    if (!fixedMixReady) dispatch({ type: "apply-monthly-quota" });
-  }, [dispatch, fixedMixReady]);
-
   useEffect(() => {
     if (
       state.referenceImages.some(
@@ -1707,6 +1708,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                             dispatch({
                               type: "set-creative-mix-quantity",
                               id: item.id,
+                              service: item.service,
                               quantity: item.quantity - 1
                             })
                           }
@@ -1723,6 +1725,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                             dispatch({
                               type: "set-creative-mix-quantity",
                               id: item.id,
+                              service: item.service,
                               quantity: Number(event.target.value)
                             })
                           }
@@ -1735,6 +1738,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
                             dispatch({
                               type: "set-creative-mix-quantity",
                               id: item.id,
+                              service: item.service,
                               quantity: item.quantity + 1
                             })
                           }

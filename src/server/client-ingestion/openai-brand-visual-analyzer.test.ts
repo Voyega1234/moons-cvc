@@ -180,6 +180,194 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(JSON.stringify(body.text.format.schema)).toContain("Brand Details");
   });
 
+  it("falls back to text evidence and requires review when OpenAI rejects an image request", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              type: "invalid_request_error",
+              code: "invalid_image_url",
+              message: "The image could not be downloaded."
+            }
+          }),
+          {
+            status: 400,
+            headers: { "x-request-id": "req-image-failure" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify(responseAnalysis)
+          }),
+          { status: 200 }
+        )
+      );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      model: "gpt-test",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      retryDelayMs: 0
+    });
+
+    const result = await analyzer.analyze({
+      client: {
+        id: "client-1",
+        name: "Flora Daily",
+        facebookUrl: "https://www.facebook.com/flora"
+      },
+      sourceSummary: {
+        postsSaved: 1,
+        adsSaved: 0,
+        manualInputsSaved: 1,
+        usedFallbackSearch: false
+      },
+      textEvidence: [
+        {
+          sourceType: "manual_input",
+          sourceId: "questionnaire-1",
+          text: "Brand Name: Flora Daily. Website: flora.example.com"
+        }
+      ],
+      visualAssets: [
+        {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: "client-1/job-1/facebook_post/post-1-0.jpg",
+          assetUrl: "https://storage.example.com/signed/post-1-0.jpg",
+          originalUrlHash: "hash-1",
+          sourceId: "source-1",
+          sourceType: "facebook_post",
+          sourceUrl: "https://www.facebook.com/flora/posts/1",
+          sourceItemId: "post-1",
+          captionContext: "Fresh flower arrangement"
+        }
+      ]
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)
+    );
+    const secondBody = JSON.parse(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body)
+    );
+    expect(JSON.stringify(firstBody.input)).toContain("input_image");
+    expect(JSON.stringify(secondBody.input)).not.toContain("input_image");
+    expect(result.needsReview).toBe(true);
+    expect(result.reviewReason).toContain("text evidence only");
+    expect(result.reviewReason).toContain("invalid_image_url");
+    expect(result.visualGuidance.sourceAssetPaths).toEqual([]);
+  });
+
+  it("retries a temporary OpenAI failure before degrading the analysis", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              type: "rate_limit_error",
+              code: "rate_limit_exceeded",
+              message: "Please retry shortly."
+            }
+          }),
+          { status: 429 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify(responseAnalysis)
+          }),
+          { status: 200 }
+        )
+      );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      retryDelayMs: 0
+    });
+
+    const result = await analyzer.analyze({
+      client: {
+        id: "client-1",
+        name: "Flora Daily",
+        facebookUrl: "https://www.facebook.com/flora"
+      },
+      sourceSummary: {
+        postsSaved: 0,
+        adsSaved: 0,
+        manualInputsSaved: 1,
+        usedFallbackSearch: false
+      },
+      textEvidence: [
+        {
+          sourceType: "manual_input",
+          sourceId: "questionnaire-1",
+          text: "Brand Name: Flora Daily"
+        }
+      ],
+      visualAssets: []
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.needsReview).toBe(false);
+  });
+
+  it("includes OpenAI error details and request IDs when recovery is not possible", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              type: "invalid_request_error",
+              code: "invalid_api_key",
+              message: "Incorrect API key."
+            }
+          }),
+          {
+            status: 401,
+            headers: { "x-request-id": "req-unauthorized" }
+          }
+        )
+    );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      retryDelayMs: 0
+    });
+
+    await expect(
+      analyzer.analyze({
+        client: {
+          id: "client-1",
+          name: "Flora Daily",
+          facebookUrl: "https://www.facebook.com/flora"
+        },
+        sourceSummary: {
+          postsSaved: 0,
+          adsSaved: 0,
+          manualInputsSaved: 1,
+          usedFallbackSearch: false
+        },
+        textEvidence: [
+          {
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1",
+            text: "Brand Name: Flora Daily"
+          }
+        ],
+        visualAssets: []
+      })
+    ).rejects.toThrow(
+      "OpenAI visual analysis failed (401, request req-unauthorized): invalid_api_key — Incorrect API key."
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("extracts output text from Responses API output content", () => {
     const text = extractResponseText({
       output: [

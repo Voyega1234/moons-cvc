@@ -63,6 +63,204 @@ function createStore(): ClientIngestionStore & {
 }
 
 describe("runClientIngestionJob", () => {
+  it("uses Thailand-focused brand discovery and skips every Facebook and image service when no Facebook URL is supplied", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPageDetails: vi.fn(),
+      scrapeFacebookPosts: vi.fn(),
+      scrapeFacebookAdsLibrary: vi.fn()
+    };
+    const store = createStore();
+    store.listManualBrandInputs = vi.fn(async () => [
+      {
+        sourceId: "questionnaire-1",
+        sourceUrl: "https://docs.google.com/spreadsheets/d/questionnaire/edit",
+        text: "Brand Name: Siam Bloom. Product: Thai flower delivery."
+      }
+    ]);
+    const imageMirror: ImageMirror = { mirror: vi.fn() };
+    const brandDiscoverySearch = {
+      search: vi.fn(async () => ({
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        outputText:
+          "Siam Bloom is a Thailand-focused flower delivery brand serving Bangkok.",
+        citations: [
+          { title: "Siam Bloom", url: "https://siambloom.example.com" }
+        ]
+      }))
+    };
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(async () => ({
+        brandKitEntries: [],
+        learning: [],
+        products: [],
+        visualGuidance: {
+          mood: [],
+          colorPalette: [],
+          layoutPatterns: [],
+          textOverlay: [],
+          typographyFeel: [],
+          productPersonEnvironment: [],
+          dos: [],
+          donts: [],
+          sourceAssetPaths: []
+        },
+        needsReview: false
+      }))
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      { id: "client-1", name: "Siam Bloom", facebookUrl: "" },
+      {
+        apify,
+        store,
+        imageMirror,
+        brandDiscoverySearch,
+        visualAnalyzer,
+        brandMemoryWriter
+      }
+    );
+
+    expect(apify.scrapeFacebookPageDetails).not.toHaveBeenCalled();
+    expect(apify.scrapeFacebookPosts).not.toHaveBeenCalled();
+    expect(apify.scrapeFacebookAdsLibrary).not.toHaveBeenCalled();
+    expect(imageMirror.mirror).not.toHaveBeenCalled();
+    expect(brandDiscoverySearch.search).toHaveBeenCalledWith({
+      clientName: "Siam Bloom",
+      facebookUrl: "",
+      questionnaireText:
+        "Brand Name: Siam Bloom. Product: Thai flower delivery."
+    });
+    expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visualAssets: [],
+        textEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1"
+          }),
+          expect.objectContaining({
+            sourceType: "google_search",
+            text: expect.stringContaining("Thailand-focused")
+          })
+        ])
+      })
+    );
+    expect(brandMemoryWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analysis: expect.objectContaining({
+          needsReview: true,
+          reviewReason: expect.stringContaining("No Facebook URL was provided")
+        })
+      })
+    );
+    expect(store.sources).toContainEqual(
+      expect.objectContaining({
+        sourceType: "google_search",
+        sourceUrl: null,
+        status: "succeeded"
+      })
+    );
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "needs_review"
+    });
+    expect(result).toEqual({
+      postsSaved: 0,
+      adsSaved: 0,
+      visualAssetsMirrored: 0,
+      usedFallbackSearch: true,
+      completed: false
+    });
+  });
+
+  it("finishes with questionnaire-only Brand Memory when no-Facebook discovery fails", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPageDetails: vi.fn(),
+      scrapeFacebookPosts: vi.fn(),
+      scrapeFacebookAdsLibrary: vi.fn()
+    };
+    const store = createStore();
+    store.listManualBrandInputs = vi.fn(async () => [
+      {
+        sourceId: "questionnaire-1",
+        sourceUrl: "https://docs.google.com/spreadsheets/d/questionnaire/edit",
+        text: "Brand Name: Siam Bloom. Product: Thai flower delivery."
+      }
+    ]);
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(async () => ({
+        brandKitEntries: [],
+        learning: [],
+        products: [],
+        visualGuidance: {
+          mood: [],
+          colorPalette: [],
+          layoutPatterns: [],
+          textOverlay: [],
+          typographyFeel: [],
+          productPersonEnvironment: [],
+          dos: [],
+          donts: [],
+          sourceAssetPaths: []
+        },
+        needsReview: false
+      }))
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      { id: "client-1", name: "Siam Bloom", facebookUrl: "" },
+      {
+        apify,
+        store,
+        imageMirror: { mirror: vi.fn() },
+        brandDiscoverySearch: {
+          search: vi.fn(async () => {
+            throw new Error("Terra web search unavailable");
+          })
+        },
+        visualAnalyzer,
+        brandMemoryWriter
+      }
+    );
+
+    expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visualAssets: [],
+        textEvidence: [
+          expect.objectContaining({
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1"
+          })
+        ]
+      })
+    );
+    expect(brandMemoryWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analysis: expect.objectContaining({
+          needsReview: true,
+          reviewReason: expect.stringContaining("questionnaire only")
+        })
+      })
+    );
+    expect(store.sources).toContainEqual(
+      expect.objectContaining({
+        sourceType: "google_search",
+        sourceUrl: null,
+        status: "failed",
+        errorMessage: "Terra web search unavailable"
+      })
+    );
+    expect(store.clientStatuses.at(-1)).toMatchObject({ status: "needs_review" });
+  });
+
   it("mirrors the page logo and saves the primary category as optional enrichment", async () => {
     const apify: ApifyClient = {
       scrapeFacebookPageDetails: vi.fn(async () => [
@@ -258,6 +456,113 @@ describe("runClientIngestionJob", () => {
       clientId: "client-1",
       status: "failed",
       errorMessage: "Please check Facebook page URL."
+    });
+  });
+
+  it("completes with reviewable Brand Memory from the questionnaire when source providers are unavailable", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => {
+        throw new Error("Posts provider unavailable");
+      }),
+      scrapeFacebookAdsLibrary: vi.fn(async () => {
+        throw new Error("Ads provider unavailable");
+      })
+    };
+    const store = createStore();
+    store.listManualBrandInputs = vi.fn(async () => [
+      {
+        sourceId: "questionnaire-1",
+        sourceUrl: "https://portal.example.com",
+        text: "Brand Name: Client One. Category: Wellness."
+      }
+    ]);
+    const searchFallback = {
+      search: vi.fn(async () => {
+        throw new Error("Gemini grounding search failed: 429");
+      })
+    };
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(async () => ({
+        brandKitEntries: [
+          { title: "Brand Details", description: "Client One เป็นแบรนด์ Wellness" },
+          { title: "Target Audience", description: "Audience: ต้องตรวจสอบ" },
+          { title: "USP", description: "ต้องตรวจสอบ" },
+          { title: "Mood&Tone", description: "น่าเชื่อถือ" }
+        ],
+        learning: [],
+        products: [],
+        visualGuidance: {
+          mood: [],
+          colorPalette: [],
+          layoutPatterns: [],
+          textOverlay: [],
+          typographyFeel: [],
+          productPersonEnvironment: [],
+          dos: [],
+          donts: [],
+          sourceAssetPaths: []
+        },
+        needsReview: false,
+        reviewReason: ""
+      }))
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      {
+        apify,
+        store,
+        imageMirror: { mirror: vi.fn() },
+        searchFallback,
+        visualAnalyzer,
+        brandMemoryWriter
+      }
+    );
+
+    expect(result).toMatchObject({
+      postsSaved: 0,
+      adsSaved: 0,
+      visualAssetsMirrored: 0,
+      completed: false
+    });
+    expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visualAssets: [],
+        textEvidence: [
+          expect.objectContaining({
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1"
+          })
+        ]
+      })
+    );
+    expect(brandMemoryWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analysis: expect.objectContaining({
+          needsReview: true,
+          reviewReason: expect.stringContaining("Facebook source evidence")
+        })
+      })
+    );
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      clientId: "client-1",
+      status: "needs_review"
+    });
+    expect(store.jobStatuses.at(-1)).toMatchObject({
+      sourceStatus: expect.objectContaining({
+        facebook_posts: "failed",
+        facebook_ads_library: "failed",
+        google_search: "failed",
+        brand_memory_written: true
+      })
     });
   });
 

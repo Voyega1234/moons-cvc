@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-07-30
+Last verified: 2026-08-04
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -45,6 +45,7 @@ Async results must continue targeting the run that started the request.
 | Workspace/run persistence transitions | `src/features/workflow/workspace-reducer.ts` |
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
+| Client ingestion and recovery | `src/server/client-ingestion/client-ingestion-harness.ts`, `openai-brand-discovery-search.ts`, `openai-brand-visual-analyzer.ts` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
 | GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
 | Quality check request | `src/features/workflow/use-run-quality-check.ts` |
@@ -137,13 +138,16 @@ Server-side ownership is split by responsibility:
 Keep the endpoint façade stable for API and test imports. Add new behavior to
 the smallest owning module above instead of rebuilding the former monolith.
 
-- `standard` is a direct Image API route:
-  `agent_prompt/agent_image.md + Compact Campaign Input → GPT Image 2`.
-  `buildStandardImagePrompt()` assembles the two parts locally; Standard does
-  not call the Responses API or an OpenRouter/OpenAI prompt-writing model.
-  Selected reference images are attached directly to GPT Image 2. Album
-  service adds only the `ALBUM MASTER GRID` instruction before generating and
-  splitting the master artboard.
+- `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
+  the OpenAI Responses API using
+  `agent_prompt/agent_campaign_input_preflight.md`. Terra organizes product,
+  objective, copy, constraints, product truth, and reference roles; it does
+  not receive `agent_image.md` and does not write a visual route. The final
+  Image API call remains
+  `agent_prompt/agent_image.md + Preflighted Campaign Input + selected image attachments → GPT Image 2`.
+  `buildStandardImagePrompt()` assembles the final text locally. Album service
+  adds only the `ALBUM MASTER GRID` instruction before generating and splitting
+  the master artboard.
 - `design-system` uses the V6.2 Judgment final-art prompt at
   `agent_prompt/versions/2026-07-30-design-system-v6.2-judgment/prompts/03-design-system-v6.2-judgment.md`.
   V6.2 removes fixed visual presets and percentage-based composition rules. It

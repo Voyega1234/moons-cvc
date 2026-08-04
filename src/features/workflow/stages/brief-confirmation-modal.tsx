@@ -13,6 +13,7 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   inferredReferenceImageRole,
+  normalizeUserSelectableArtworkMode,
   type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -136,6 +137,7 @@ export function BriefConfirmationModal({
     "reference"
   );
   const [managingReferences, setManagingReferences] = useState(false);
+  const artworkMode = normalizeUserSelectableArtworkMode(state.artworkMode);
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
   const imageReferences = state.referenceImages.filter(
@@ -161,10 +163,6 @@ export function BriefConfirmationModal({
 
   useEffect(() => {
     if (!open) return;
-    if (state.artworkMode === "reference-library") {
-      dispatch({ type: "set-artwork-mode", mode: "design-system" });
-    }
-
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !uploadPending) onBackRef.current();
     }
@@ -175,7 +173,7 @@ export function BriefConfirmationModal({
       document.removeEventListener("keydown", handleKeyDown);
       window.clearTimeout(focusTimer);
     };
-  }, [dispatch, open, state.artworkMode, uploadPending]);
+  }, [open, uploadPending]);
 
   useEffect(() => {
     if (!open) setManagingReferences(false);
@@ -331,7 +329,7 @@ export function BriefConfirmationModal({
                 <span className="confirm-section-number">4</span>
                 <span>
                   <b>Artwork generation</b>
-                  <small>Final generation mode, concept model, and output size</small>
+                  <small>Final generation mode, visual QC, and output size</small>
                 </span>
               </div>
               <span className="confirm-section-status">GPT Image 2</span>
@@ -342,54 +340,19 @@ export function BriefConfirmationModal({
               aria-label="Artwork settings"
             >
               <ArtworkModeSelector
-                value={state.artworkMode}
+                value={artworkMode}
                 onChange={(mode) =>
                   dispatch({ type: "set-artwork-mode", mode })
                 }
               />
-              {state.artworkMode === "direct-final-artwork" ? (
-                <div className="confirm-generation-setting">
-                  <span className="confirm-generation-label">
-                    Generation route
-                  </span>
-                  <span className="confirm-generation-direct-route">
-                    Hook JSON → GPT Image 2
-                  </span>
-                </div>
-              ) : state.artworkMode === "standard" ? (
-                <div className="confirm-generation-setting">
-                  <span className="confirm-generation-label">
-                    Generation route
-                  </span>
-                  <span className="confirm-generation-direct-route">
-                    agent_image.md + Campaign input → GPT Image 2
-                  </span>
-                </div>
-              ) : (
-                <label className="confirm-generation-setting">
-                  <span className="confirm-generation-label">
-                    Creative concept model
-                  </span>
-                  <select
-                    aria-label="Creative concept model"
-                    value={state.imagePromptModel}
-                    onChange={(event) =>
-                      dispatch({
-                        type: "set-image-prompt-model",
-                        model: event.target
-                          .value as WorkflowState["imagePromptModel"]
-                      })
-                    }
-                  >
-                    <option value="gpt-5.6-terra">
-                      GPT · OpenAI → GPT Image 2
-                    </option>
-                    <option value="anthropic/claude-sonnet-4.6">
-                      Claude · OpenRouter → GPT Image 2
-                    </option>
-                  </select>
-                </label>
-              )}
+              <div className="confirm-generation-setting">
+                <span className="confirm-generation-label">
+                  Generation route
+                </span>
+                <span className="confirm-generation-direct-route">
+                  agent_image.md + Campaign input → GPT Image 2 → Visual QC
+                </span>
+              </div>
               <label className="confirm-generation-setting">
                 <span className="confirm-generation-label">Output size</span>
                 <select
