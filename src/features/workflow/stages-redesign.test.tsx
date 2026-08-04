@@ -1520,17 +1520,14 @@ describe("redesigned workflow stages", () => {
       "Questionnaire Google Sheet URL"
     ) as HTMLInputElement;
     expect(questionnaireField.value).toBe(questionnaireUrl);
-    await user.type(
-      stage.getByLabelText("Facebook URL"),
-      "https://www.facebook.com/centrepointhotels"
-    );
+    expect(stage.getByText(/Leave it blank to use GPT-5.6 Terra/i)).toBeTruthy();
 
     await user.click(stage.getByRole("button", { name: "Add and analyze" }));
 
     await waitFor(() =>
       expect(createDraftClient).toHaveBeenCalledWith({
         name: "Centre Point Group",
-        facebookUrl: "https://www.facebook.com/centrepointhotels",
+        facebookUrl: "",
         questionnaire: {
           text: questionnaire,
           sourceUrl: questionnaireUrl
@@ -1882,6 +1879,48 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.queryByRole("dialog", { name: "Brief materials" })
     ).toBeNull();
+  });
+
+  it("preserves a static-only creative mix when Brief is reopened", async () => {
+    const state = {
+      ...buildCreativeState(),
+      stage: "brief" as const,
+      creativeMix: [
+        {
+          id: "creative-mix-static",
+          service: "single-static" as const,
+          quantity: 10
+        }
+      ],
+      service: "single-static" as const,
+      quantity: 10
+    };
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <BriefStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    await waitFor(() => {
+      expect(
+        (stage.getByRole("spinbutton", {
+          name: "Single quantity"
+        }) as HTMLInputElement).value
+      ).toBe("10");
+    });
+    expect(
+      (stage.getByRole("spinbutton", {
+        name: "Album quantity"
+      }) as HTMLInputElement).value
+    ).toBe("0");
+    expect(
+      (stage.getByRole("spinbutton", {
+        name: "UGC quantity"
+      }) as HTMLInputElement).value
+    ).toBe("0");
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "apply-monthly-quota" });
   });
 
   it("keeps long Signal stack evidence compact until details are requested", async () => {
@@ -2870,6 +2909,10 @@ describe("redesigned workflow stages", () => {
 
     expect(extraSlides).toHaveLength(0);
     expect(storyboardText).toContain("UGC VISUAL REFERENCE");
+    expect(storyboardText).toContain("Following");
+    expect(storyboardText).toContain("For You");
+    expect(storyboardText).toContain("@bonefitcreator");
+    expect(storyboardText).toContain("Original sound · BoneFit");
     expect(storyboardText).toContain("CREATIVE OBJECTIVE");
     expect(storyboardText).toContain("Korea King Colormic 24cm");
     expect(storyboardText).toContain("15–30 วินาที");

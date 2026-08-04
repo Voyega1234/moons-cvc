@@ -136,7 +136,12 @@ export type WorkflowAction =
   | { type: "set-output-size"; size: ArtworkOutputSize }
   | { type: "set-quantity"; quantity: number }
   | { type: "apply-monthly-quota" }
-  | { type: "set-creative-mix-quantity"; id: string; quantity: number }
+  | {
+      type: "set-creative-mix-quantity";
+      id: string;
+      service?: ServiceType;
+      quantity: number;
+    }
   | { type: "set-success-metric"; metric: SuccessMetric }
   | { type: "set-brief"; brief: string }
   | { type: "set-artwork-brief"; brief: string }

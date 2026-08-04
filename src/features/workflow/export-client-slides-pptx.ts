@@ -427,6 +427,7 @@ function addUgcPhoneMockup(
   slide: PptxGenJS.Slide,
   brandName: string,
   brief: UgcVideoBrief,
+  direction: CreativeDirection | undefined,
   referenceImage?: string
 ) {
   slide.addText("UGC VISUAL REFERENCE", {
@@ -456,7 +457,7 @@ function addUgcPhoneMockup(
     w: 2.49,
     h: 4.92,
     rectRadius: 0.17,
-    fill: { color: "E9EAF0" },
+    fill: { color: "20222B" },
     line: { color: "2A2D3D", width: 0.4 }
   });
   if (referenceImage) {
@@ -469,34 +470,156 @@ function addUgcPhoneMockup(
       sizing: { type: "cover", w: 2.43, h: 4.86 },
       altText: `${brandName} UGC visual reference in phone mockup`
     });
-  } else {
-    const referenceText = clampText(brief.referenceDirection, 220);
-    slide.addText("UGC", {
-      x: 1.73,
-      y: 2.0,
-      w: 1.93,
-      h: 0.45,
-      margin: 0,
-      fontFace: SLIDE_FONT_FACE,
-      fontSize: 25,
-      bold: true,
-      color: COLORS.violet,
-      align: "center"
-    });
-    slide.addText(referenceText, {
-      x: 1.72,
-      y: 2.62,
-      w: 1.95,
-      h: 1.72,
-      margin: 0,
-      ...localizedTextStyle(referenceText),
-      fontSize: 11,
-      color: COLORS.muted,
-      align: "center",
-      valign: "middle",
-      fit: "shrink"
-    });
   }
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 1.48,
+    y: 1.2,
+    w: 2.43,
+    h: 0.72,
+    fill: { color: "111219", transparency: referenceImage ? 42 : 0 },
+    line: { color: "111219", transparency: 100 }
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 1.48,
+    y: 4.72,
+    w: 2.43,
+    h: 1.34,
+    fill: { color: "111219", transparency: referenceImage ? 24 : 0 },
+    line: { color: "111219", transparency: 100 }
+  });
+  slide.addText("9:41", {
+    x: 1.63,
+    y: 1.31,
+    w: 0.43,
+    h: 0.13,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 6.8,
+    bold: true,
+    color: "FFFFFF"
+  });
+  slide.addText("●  ⌑", {
+    x: 3.33,
+    y: 1.31,
+    w: 0.42,
+    h: 0.13,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 6.5,
+    color: "FFFFFF",
+    align: "right"
+  });
+  slide.addText("Following     For You", {
+    x: 2.05,
+    y: 1.55,
+    w: 1.3,
+    h: 0.16,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 7,
+    bold: true,
+    color: "FFFFFF",
+    align: "center",
+    fit: "shrink"
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 2.85,
+    y: 1.76,
+    w: 0.28,
+    h: 0.025,
+    fill: { color: "FFFFFF" },
+    line: { color: "FFFFFF", transparency: 100 }
+  });
+  const hook = clampText(direction?.hook, 105);
+  slide.addText(hook, {
+    x: 1.69,
+    y: 2.02,
+    w: 1.82,
+    h: 0.92,
+    margin: 0,
+    ...localizedTextStyle(hook),
+    fontSize: 14.5,
+    bold: true,
+    color: "FFFFFF",
+    align: "center",
+    valign: "middle",
+    fit: "shrink",
+    shadow: {
+      type: "outer",
+      color: "000000",
+      opacity: 0.55,
+      blur: 1.5,
+      angle: 45
+    }
+  });
+  slide.addText("♡\n1.2K\n◯\n86\n↗\nShare", {
+    x: 3.49,
+    y: 3.34,
+    w: 0.3,
+    h: 1.24,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 6.2,
+    bold: true,
+    color: "FFFFFF",
+    align: "center",
+    valign: "bottom",
+    breakLine: false,
+    fit: "shrink"
+  });
+  const creatorHandle = brandName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 18) || "creativecompass";
+  slide.addText(`@${creatorHandle}creator`, {
+    x: 1.64,
+    y: 4.82,
+    w: 1.65,
+    h: 0.16,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 7.2,
+    bold: true,
+    color: "FFFFFF",
+    fit: "shrink"
+  });
+  const caption = clampText(direction?.caption || brief.referenceDirection, 125);
+  slide.addText(caption, {
+    x: 1.64,
+    y: 5.05,
+    w: 1.82,
+    h: 0.37,
+    margin: 0,
+    ...localizedTextStyle(caption),
+    fontSize: 6.8,
+    color: "FFFFFF",
+    valign: "top",
+    fit: "shrink"
+  });
+  slide.addText(`♫ Original sound · ${brandName}`, {
+    x: 1.64,
+    y: 5.49,
+    w: 1.84,
+    h: 0.14,
+    margin: 0,
+    ...localizedTextStyle(brandName),
+    fontSize: 6.2,
+    color: "FFFFFF",
+    fit: "shrink"
+  });
+  slide.addText("Home       Discover        +        Inbox       Profile", {
+    x: 1.58,
+    y: 5.77,
+    w: 2.22,
+    h: 0.12,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 4.8,
+    bold: true,
+    color: "FFFFFF",
+    align: "center",
+    fit: "shrink"
+  });
   slide.addShape(pptx.ShapeType.roundRect, {
     x: 2.17,
     y: 1.12,
@@ -551,7 +674,14 @@ function addUgcClientSlide(
     fill: { color: COLORS.paper },
     line: { color: COLORS.line, width: 1 }
   });
-  addUgcPhoneMockup(pptx, slide, brandName, brief, referenceImage);
+  addUgcPhoneMockup(
+    pptx,
+    slide,
+    brandName,
+    brief,
+    direction,
+    referenceImage
+  );
 
   const displayBrandName = brandName.toUpperCase();
   slide.addText(displayBrandName, {

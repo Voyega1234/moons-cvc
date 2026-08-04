@@ -924,8 +924,8 @@ function BrandSetupSources({
         <legend>Facebook page</legend>
         <p>
           {sourceOptions.length
-            ? "Select the page Creative Compass should analyze. These were found in the client data."
-            : "No Facebook page was found in the client data. Add one manually."}
+            ? "Select a page to analyze, or choose another page and leave it blank to use GPT-5.6 Terra web discovery."
+            : "Facebook is optional. Leave it blank to use GPT-5.6 Terra to find Thailand-focused brand details."}
         </p>
         <div className="client-source-options">
           {sourceOptions.map((option) => (
@@ -975,6 +975,10 @@ function BrandSetupSources({
                 onManualFacebookUrlChange(event.target.value)
               }
             />
+            <small>
+              Optional. Leave it blank to skip Facebook extraction and search
+              Thailand-focused web sources with GPT-5.6 Terra.
+            </small>
           </label>
         ) : null}
       </fieldset>
@@ -1174,7 +1178,7 @@ function AddClientPanel({
       <button className="client-intake-toggle" type="button" onClick={onToggle}>
         <span>{open ? "Close add client" : "Add new client"}</span>
         <small>
-          Requires Facebook and Questionnaire Google Sheet URLs.
+          Requires a Questionnaire Google Sheet URL. Facebook is optional.
         </small>
       </button>
       {open ? (
@@ -1196,6 +1200,10 @@ function AddClientPanel({
               placeholder="https://www.facebook.com/brand.page"
               onChange={(event) => setFacebookUrl(event.target.value)}
             />
+            <small>
+              Optional. Leave it blank to skip Facebook extraction and search
+              Thailand-focused web sources with GPT-5.6 Terra.
+            </small>
           </label>
           <label>
             <span>Category optional</span>
@@ -1250,13 +1258,13 @@ function clientStatusLabel(brand: NonNullable<WorkflowState["brand"]>): string {
     case "queued":
       return "Ingestion queued";
     case "validating_source":
-      return "Validating Facebook URL";
+      return "Validating brand source";
     case "scraping_facebook_posts":
       return "Scraping Facebook posts";
     case "scraping_facebook_ads":
       return "Scraping Ads Library";
     case "searching_fallback":
-      return "Searching fallback sources";
+      return "Searching Thailand web sources";
     case "mirroring_images":
       return "Mirroring source images";
     case "analyzing_visuals":

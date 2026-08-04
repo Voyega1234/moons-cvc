@@ -106,8 +106,8 @@ describe("workflowReducer", () => {
     expect(state.approved).toBe(true);
   });
 
-  it("uses Design System artwork generation by default and keeps other modes available internally", () => {
-    expect(initialWorkflowState.artworkMode).toBe("design-system");
+  it("uses Standard artwork generation by default and keeps other modes available internally", () => {
+    expect(initialWorkflowState.artworkMode).toBe("standard");
     expect(initialWorkflowState.albumFormat).toBe("auto");
     const albumFormatUpdate = workflowReducer(
       {
@@ -254,6 +254,42 @@ describe("workflowReducer", () => {
       { service: "ugc-video", quantity: 2 }
     ]);
     expect(state.quantity).toBe(6);
+  });
+
+  it("adds a previously missing creative mix service at the requested quantity", () => {
+    const staticOnly = {
+      ...initialWorkflowState,
+      creativeMix: [
+        {
+          id: "creative-mix-static",
+          service: "single-static" as const,
+          quantity: 10
+        }
+      ],
+      service: "single-static" as const,
+      quantity: 10
+    };
+
+    const updated = workflowReducer(staticOnly, {
+      type: "set-creative-mix-quantity",
+      id: "creative-mix-album-post",
+      service: "album-post",
+      quantity: 1
+    });
+
+    expect(updated.creativeMix).toEqual([
+      {
+        id: "creative-mix-static",
+        service: "single-static",
+        quantity: 10
+      },
+      {
+        id: "creative-mix-album-post",
+        service: "album-post",
+        quantity: 1
+      }
+    ]);
+    expect(updated.quantity).toBe(11);
   });
 
   it("allows up to 50 deliverables independently for each content type", () => {

@@ -1,4 +1,5 @@
 import {
+  defaultArtworkMode,
   defaultAlbumFormat,
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
@@ -142,7 +143,7 @@ export function createInitialWorkflowState({
     service: "single-static",
     hookIdeaMode: "standard",
     hookGenerationModel: "gpt-5.6-terra",
-    artworkMode: "design-system",
+    artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,
     outputSize: defaultArtworkOutputSize,
@@ -523,20 +524,22 @@ export function workflowReducer(
     }
     case "set-creative-mix-quantity": {
       const current = creativeMixItems(state);
+      const quantity = clamp(
+        action.quantity,
+        QUANTITY_LIMITS.minimum,
+        QUANTITY_LIMITS.maximum
+      );
+      const matchingItem = current.some((item) => item.id === action.id);
+      const creativeMix = matchingItem
+        ? current.map((item) =>
+            item.id === action.id ? { ...item, quantity } : item
+          )
+        : action.service
+          ? [...current, { id: action.id, service: action.service, quantity }]
+          : current;
       return withCreativeMix(
         state,
-        current.map((item) =>
-          item.id === action.id
-            ? {
-                ...item,
-                quantity: clamp(
-                  action.quantity,
-                  QUANTITY_LIMITS.minimum,
-                  QUANTITY_LIMITS.maximum
-                )
-              }
-            : item
-        )
+        creativeMix
       );
     }
     case "set-success-metric":

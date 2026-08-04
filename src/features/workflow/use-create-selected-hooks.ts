@@ -4,7 +4,10 @@ import {
   artworkReferencesFromSelections,
   generateArtworkForSelectedHooks
 } from "../../services/artwork-generation/openai-image-generation";
-import { inferredReferenceImageRole } from "../../domain/creative-run";
+import {
+  inferredReferenceImageRole,
+  normalizeUserSelectableArtworkMode
+} from "../../domain/creative-run";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import {
@@ -96,6 +99,10 @@ export function useCreateSelectedHooks(
           };
         }
         run = applyArtworkContextSelection(run, contextSelection);
+        run = {
+          ...run,
+          artworkMode: normalizeUserSelectableArtworkMode(run.artworkMode)
+        };
 
         return generateArtworkForSelectedHooks({
           run,

@@ -7,6 +7,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
+import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-brand-memory-repository";
 import { createInitialWorkflowState } from "./reducer";
 import { DirectionsStage } from "./stages";
 import { BriefConfirmationModal } from "./stages/brief-confirmation-modal";
@@ -24,11 +26,14 @@ describe("Artwork generation settings", () => {
         now: "2026-07-10T00:00:00.000Z"
       }),
       stage: "directions" as const,
+      artworkMode: "design-system" as const,
       directions: buildDirectionFixtures("BoneFit")
     };
 
     const directionsView = render(
-      <DirectionsStage state={state} dispatch={dispatch} />
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
     );
 
     const hookModel = screen.getByRole("combobox", {
@@ -72,49 +77,21 @@ describe("Artwork generation settings", () => {
       screen.getByRole("button", { name: "Standard" }).getAttribute(
         "aria-pressed"
       )
-    ).toBe("false");
-    expect(
-      screen.getByRole("button", { name: "Design system" }).getAttribute(
-        "aria-pressed"
-      )
     ).toBe("true");
+    expect(screen.queryByRole("button", { name: "Design system" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Design system (new)" }).getAttribute(
-        "aria-pressed"
-      )
-    ).toBe("false");
-    await user.click(
-      screen.getByRole("button", { name: "Design system (new)" })
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "design-system-new"
-    });
-    await user.click(
-      screen.getByRole("button", { name: "Final artwork" })
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "direct-final-artwork"
-    });
+      screen.queryByRole("button", { name: "Design system (new)" })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Final artwork" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Standard" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-artwork-mode",
       mode: "standard"
     });
 
-    const pathSelect = screen.getByRole("combobox", {
-      name: "Creative concept model"
-    }) as HTMLSelectElement;
-    expect(pathSelect.disabled).toBe(false);
-    expect(pathSelect.selectedOptions[0]?.textContent).toBe(
-      "GPT · OpenAI → GPT Image 2"
-    );
-    await user.selectOptions(pathSelect, "anthropic/claude-sonnet-4.6");
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-image-prompt-model",
-      model: "anthropic/claude-sonnet-4.6"
-    });
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
 
     const sizeSelect = screen.getByRole("combobox", {
       name: "Output size"
@@ -147,7 +124,7 @@ describe("Artwork generation settings", () => {
     });
   });
 
-  it("moves a saved non-visible artwork mode to Design System", () => {
+  it("presents a saved non-visible artwork mode as Standard", () => {
     const dispatch = vi.fn();
     const state = {
       ...createInitialWorkflowState({
@@ -174,10 +151,12 @@ describe("Artwork generation settings", () => {
       />
     );
 
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "design-system"
-    });
+    expect(
+      screen.getByRole("button", { name: "Standard" }).getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("true");
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("keeps Standard mode visible and selected when it is saved", () => {
@@ -226,10 +205,15 @@ describe("Artwork generation settings", () => {
         now: "2026-07-10T00:00:00.000Z"
       }),
       stage: "directions" as const,
+      artworkMode: "design-system" as const,
       directions: buildDirectionFixtures("BoneFit")
     };
 
-    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
     const stage = within(view.container);
 
     await user.click(
@@ -251,7 +235,7 @@ describe("Artwork generation settings", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("shows the selectable art direction model in confirmation", () => {
+  it("hides the concept-model control for a saved hidden mode", () => {
     const state = {
       ...createInitialWorkflowState({
         id: "run-1",
@@ -277,14 +261,10 @@ describe("Artwork generation settings", () => {
       />
     );
 
-    const pathSelect = screen.getByRole("combobox", {
-      name: "Creative concept model"
-    }) as HTMLSelectElement;
-    expect(pathSelect.disabled).toBe(false);
-    expect(pathSelect.selectedOptions[0]?.textContent).toBe(
-      "GPT · OpenAI → GPT Image 2"
-    );
-    expect(screen.getByText("Creative concept model")).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Standard" })).toBeTruthy();
   });
 
   it("shows Standard as a direct GPT Image 2 route without a concept-model control", () => {
@@ -314,14 +294,16 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByText("agent_image.md + Campaign input → GPT Image 2")
+      screen.getByText(
+        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+      )
     ).toBeTruthy();
     expect(
       screen.queryByRole("combobox", { name: "Creative concept model" })
     ).toBeNull();
   });
 
-  it("shows the direct GPT Image 2 route without a concept-model control", () => {
+  it("presents a saved Final artwork mode as Standard", () => {
     const state = {
       ...createInitialWorkflowState({
         id: "run-1",
@@ -347,7 +329,11 @@ describe("Artwork generation settings", () => {
       />
     );
 
-    expect(screen.getByText("Hook JSON → GPT Image 2")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+      )
+    ).toBeTruthy();
     expect(
       screen.queryByRole("combobox", { name: "Creative concept model" })
     ).toBeNull();
