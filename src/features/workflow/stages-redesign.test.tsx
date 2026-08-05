@@ -1974,7 +1974,7 @@ describe("redesigned workflow stages", () => {
     expect(disclosure.open).toBe(true);
   });
 
-  it("defaults Hook research to off and lets the user enable it before review", async () => {
+  it("defaults Hook generation to Search and lets the user disable it before review", async () => {
     const user = userEvent.setup();
     const state = buildCreativeState();
     const dispatch = vi.fn();
@@ -1988,23 +1988,23 @@ describe("redesigned workflow stages", () => {
       name: "Hook research mode"
     }) as HTMLSelectElement;
 
-    expect(researchMode.value).toBe("standard");
+    expect(researchMode.value).toBe("fresh-research");
     expect(
       within(researchMode).getByRole("option", {
-        name: "Default (no research)"
+        name: "Search by default (Thailand)"
       })
     ).toBeTruthy();
     expect(
       within(researchMode).getByRole("option", {
-        name: "Use research (Thailand)"
+        name: "No research"
       })
     ).toBeTruthy();
 
-    await user.selectOptions(researchMode, "fresh-research");
+    await user.selectOptions(researchMode, "standard");
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-hook-idea-mode",
-      mode: "fresh-research"
+      mode: "standard"
     });
   });
 
@@ -2244,7 +2244,7 @@ describe("redesigned workflow stages", () => {
       card.textContent?.includes("UGC VIDEO")
     );
     expect(albumCard?.textContent).toContain("Cover hook");
-    expect(albumCard?.textContent).toContain("Inside slides · 3 supporting topics");
+    expect(albumCard?.textContent).toContain("Inside slides");
     expect(albumCard?.textContent).toContain("ปัญหาที่คนมองข้าม");
     expect(albumCard?.querySelector(".angle-album-format-slot")).toBeTruthy();
     const albumDirection = state.directions.find(
@@ -2273,7 +2273,7 @@ describe("redesigned workflow stages", () => {
       format: "four-grid"
     });
     expect(ugcCard?.textContent).toContain("Opening hook");
-    expect(ugcCard?.textContent).toContain("UGC video flow · 3 beats");
+    expect(ugcCard?.textContent).toContain("UGC video flow");
     expect(angleCards[0]?.querySelector(".compass-angle-card-foot")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("82")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("score")).toBeTruthy();
@@ -3168,6 +3168,56 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getAllByRole("button", { name: "Regenerate draft" })
     ).toHaveLength(state.outputs.length);
+    expect(stage.getAllByRole("button", { name: "Download" })).toHaveLength(
+      state.outputs.length
+    );
+  });
+
+  it("downloads artwork from its Create card", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const sourceOutput = base.outputs[0];
+    if (!sourceOutput) {
+      throw new Error("Expected a creative fixture.");
+    }
+    const state = {
+      ...base,
+      outputs: base.outputs.map((output, index) =>
+        index === 0
+          ? {
+              ...output,
+              assetUrl: "https://storage.example.com/create-card.png",
+              assetStoragePath: "run/outputs/create-card.png"
+            }
+          : output
+      )
+    };
+    const firstOutput = state.outputs[0];
+    const blob = new Blob(["image"], { type: "image/png" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, blob: vi.fn().mockResolvedValue(blob) });
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn().mockReturnValue("blob:create-card-download")
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    });
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+
+    await user.click(stage.getAllByRole("button", { name: "Download" })[0]!);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(firstOutput?.assetUrl)
+    );
+    expect(anchorClick).toHaveBeenCalledOnce();
   });
 
   it("lets people select an earlier artwork version as the regenerate source", async () => {

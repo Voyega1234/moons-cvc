@@ -13,14 +13,14 @@ export function buildAlbumMasterInstruction(
     format === "three-horizontal" || format === "three-vertical"
       ? [
           `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
-          `The first supporting area develops the story using ${beats[0] ?? "the opening supporting point"} and ${beats[1] ?? "the mechanism or proof"}.`,
-          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and contains the album's only CTA: the exact text “${hook.cta}”.`
+          `The first supporting area presents ${beats[0] ?? "the first supporting content"}.`,
+          `The final supporting area presents ${beats[1] ?? "the final supporting content"} and contains the album's only CTA: the exact text “${hook.cta}”.`
         ]
       : [
           `The dominant cover area uses the exact headline “${hook.hook}”, the main visual, and immediate brand recognition.`,
-          `The opening supporting area develops ${beats[0] ?? "the opening supporting point"}.`,
-          `The evidence supporting area develops ${beats[1] ?? "the mechanism or proof"}.`,
-          `The closing supporting area uses ${beats[2] ?? "the offer or decision moment"} and contains the album's only CTA: the exact text “${hook.cta}”.`
+          `The first supporting area presents ${beats[0] ?? "the first supporting content"}.`,
+          `The second supporting area presents ${beats[1] ?? "the second supporting content"}.`,
+          `The final supporting area presents ${beats[2] ?? "the final supporting content"} and contains the album's only CTA: the exact text “${hook.cta}”.`
         ];
   return [
     "ALBUM MASTER GRID - highest-priority layout instruction:",
@@ -38,7 +38,7 @@ export function buildAlbumMasterInstruction(
   ].join("\n");
 }
 
-function albumLayoutPrompt(format: AlbumFormat): string {
+export function albumLayoutPrompt(format: AlbumFormat): string {
   switch (format) {
     case "three-vertical":
       return "Use a vertical cover occupying the full left half and two equal supporting panels stacked on the right half.";
@@ -129,6 +129,9 @@ export async function splitAlbumMaster(
         .resize({
           width: region.maxWidth,
           height: region.maxHeight,
+          // Preserve the aspect ratio defined by the selected Album format.
+          // The crop coordinates are deterministic; resizing must not turn a
+          // vertical or horizontal lead panel into a square.
           fit: "inside"
         })
         .png()
@@ -328,110 +331,103 @@ export function albumCropRegions({
   format: AlbumFormat;
   boundaries: AlbumBoundaryDetection;
 }): readonly AlbumCropRegion[] {
-  const vertical = clampBoundary(boundaries.vertical, side / 2, side);
-  const horizontal = clampBoundary(boundaries.horizontal, side / 2, side);
+  // Boundary detection remains available for diagnostics, but crop geometry
+  // must follow the selected Album format exactly. Letting detected artwork
+  // edges move these cuts can create non-square regions and leak part of one
+  // panel into the next.
+  void boundaries;
+  const half = Math.floor(side / 2);
+  const farHalf = side - half;
 
   if (format === "three-vertical") {
-    const rightHorizontal = clampBoundary(
-      boundaries.secondaryHorizontal,
-      side / 2,
-      side
-    );
     return [
-      cropRegion(1, left, top, vertical, side, 1920),
+      cropRegion(1, left, top, half, side, 1920),
       cropRegion(
         2,
-        left + vertical,
+        left + farHalf,
         top,
-        side - vertical,
-        rightHorizontal,
+        half,
+        half,
         960
       ),
       cropRegion(
         3,
-        left + vertical,
-        top + rightHorizontal,
-        side - vertical,
-        side - rightHorizontal,
+        left + farHalf,
+        top + farHalf,
+        half,
+        half,
         960
       )
     ];
   }
   if (format === "three-horizontal") {
-    const bottomVertical = clampBoundary(
-      boundaries.secondaryVertical,
-      side / 2,
-      side
-    );
     return [
-      cropRegion(1, left, top, side, horizontal, 1920),
+      cropRegion(1, left, top, side, half, 1920),
       cropRegion(
         2,
         left,
-        top + horizontal,
-        bottomVertical,
-        side - horizontal,
+        top + farHalf,
+        half,
+        half,
         960
       ),
       cropRegion(
         3,
-        left + bottomVertical,
-        top + horizontal,
-        side - bottomVertical,
-        side - horizontal,
+        left + farHalf,
+        top + farHalf,
+        half,
+        half,
         960
       )
     ];
   }
   if (format === "four-grid") {
+    // A four-grid is a strict 2x2 layout. Adaptive seam detection can mistake
+    // strong artwork edges for panel dividers, producing non-square crops that
+    // contain a strip from a neighbouring panel. Use four equal, non-overlapping
+    // squares so the persisted social assets are always exactly 1:1.
     return [
-      cropRegion(1, left, top, vertical, horizontal, 960),
-      cropRegion(2, left + vertical, top, side - vertical, horizontal, 960),
-      cropRegion(3, left, top + horizontal, vertical, side - horizontal, 960),
+      cropRegion(1, left, top, half, half, 960),
+      cropRegion(2, left + farHalf, top, half, half, 960),
+      cropRegion(3, left, top + farHalf, half, half, 960),
       cropRegion(
         4,
-        left + vertical,
-        top + horizontal,
-        side - vertical,
-        side - horizontal,
+        left + farHalf,
+        top + farHalf,
+        half,
+        half,
         960
       )
     ];
   }
 
-  const firstHorizontal = clampBoundary(
-    boundaries.secondaryHorizontal,
-    side / 3,
-    side
-  );
-  const secondHorizontal = clampBoundary(
-    boundaries.horizontal,
-    side * (2 / 3),
-    side
-  );
+  const rightWidth = Math.floor(side / 3);
+  const rightStart = side - rightWidth;
+  const firstHorizontal = Math.floor(side / 3);
+  const secondHorizontal = Math.floor((side * 2) / 3);
   return [
-    cropRegion(1, left, top, vertical, side, 1920),
+    cropRegion(1, left, top, rightStart, side, 1920),
     cropRegion(
       2,
-      left + vertical,
+      left + rightStart,
       top,
-      side - vertical,
+      rightWidth,
       firstHorizontal,
       960
     ),
     cropRegion(
       3,
-      left + vertical,
+      left + rightStart,
       top + firstHorizontal,
-      side - vertical,
+      rightWidth,
       secondHorizontal - firstHorizontal,
       960
     ),
     cropRegion(
       4,
-      left + vertical,
+      left + rightStart,
       top + secondHorizontal,
-      side - vertical,
+      rightWidth,
       side - secondHorizontal,
       960
     )
@@ -456,15 +452,3 @@ function cropRegion(
     maxHeight: maxEdge
   };
 }
-
-function clampBoundary(
-  value: number | undefined,
-  fallback: number,
-  side: number
-): number {
-  return Math.min(
-    side - 1,
-    Math.max(1, Math.round(value ?? fallback))
-  );
-}
-

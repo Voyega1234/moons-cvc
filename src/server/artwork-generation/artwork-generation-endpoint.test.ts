@@ -8,6 +8,7 @@ import {
   normalizeReferenceImageForOpenAI,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
+import { splitAlbumMaster } from "./album-master";
 
 const requestBody = {
   model: "gpt-image-2",
@@ -128,6 +129,9 @@ function responseForArtworkAgentRequest(init?: RequestInit): Response {
   const body = JSON.parse(String(init?.body)) as {
     text?: { format?: { name?: string } };
   };
+  if (body.text?.format?.name === "moons_album_panel_separation_review") {
+    return albumPanelQcPassResponse();
+  }
   return body.text?.format?.name === "moons_creative_visual_concept"
     ? creativeGraphicDesignerResponse()
     : strategyAgentResponse();
@@ -210,6 +214,35 @@ function visualQualityPassResponse(): Response {
   );
 }
 
+function albumPanelQcPassResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        decision: "pass",
+        affectedPanels: [],
+        issue: "",
+        revisionInstruction: ""
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+function albumPanelQcReviseResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        decision: "revise",
+        affectedPanels: [2],
+        issue: "Panel 2 contains a footer strip from Panel 1 along its top edge.",
+        revisionInstruction:
+          "Remove the foreign top strip from Panel 2 and continue Panel 2's intended background to the boundary."
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function campaignInputPreflightResponse(ratio = "1:1"): Response {
   return new Response(
     JSON.stringify({
@@ -248,6 +281,11 @@ function standardAgentResponse(init?: RequestInit): Response {
     input?: { content?: { text?: string }[] }[];
     text?: { format?: { name?: string } };
   };
+  if (
+    body.text?.format?.name === "moons_album_panel_separation_review"
+  ) {
+    return albumPanelQcPassResponse();
+  }
   if (body.text?.format?.name !== "moons_campaign_input_preflight") {
     return visualQualityPassResponse();
   }
@@ -561,8 +599,8 @@ function syntheticAlbumMaster({
   return pixels;
 }
 
-describe("adaptive album crop detection", () => {
-  it("finds shifted four-vertical seams instead of assuming fixed thirds", () => {
+describe("album boundary detection and deterministic crop geometry", () => {
+  it("detects shifted four-vertical seams for diagnostics", () => {
     const width = 512;
     const height = 512;
     const boundaries = detectAlbumBoundaries({
@@ -592,16 +630,10 @@ describe("adaptive album crop detection", () => {
       format: "four-vertical",
       boundaries
     });
-    expect(regions[0]).toMatchObject({
-      index: 1,
-      width: boundaries.vertical,
-      height
-    });
-    expect(regions[1]?.height).toBe(boundaries.secondaryHorizontal);
-    expect(regions[2]?.height).toBe(
-      boundaries.horizontal! - boundaries.secondaryHorizontal!
-    );
-    expect(regions[3]?.top).toBe(boundaries.horizontal);
+    expect(regions[0]).toMatchObject({ index: 1, width: 342, height });
+    expect(regions[1]).toMatchObject({ index: 2, left: 342, height: 170 });
+    expect(regions[2]).toMatchObject({ index: 3, left: 342, top: 170 });
+    expect(regions[3]).toMatchObject({ index: 4, left: 342, top: 341 });
   });
 
   it.each([
@@ -679,7 +711,7 @@ describe("adaptive album crop detection", () => {
       },
       count: 4
     }
-  ])("cuts $format using its detected boundaries", ({
+  ])("cuts $format into valid deterministic regions", ({
     format,
     boundaries,
     count
@@ -697,6 +729,66 @@ describe("adaptive album crop detection", () => {
       expect(region.width).toBeGreaterThan(0);
       expect(region.height).toBeGreaterThan(0);
     });
+  });
+
+  it("always cuts four-grid into four equal non-overlapping 1:1 panels", () => {
+    const regions = albumCropRegions({
+      left: 12,
+      top: 18,
+      side: 513,
+      format: "four-grid",
+      boundaries: {
+        vertical: 219,
+        horizontal: 301
+      }
+    });
+
+    expect(regions).toMatchObject([
+      { index: 1, left: 12, top: 18, width: 256, height: 256 },
+      { index: 2, left: 269, top: 18, width: 256, height: 256 },
+      { index: 3, left: 12, top: 275, width: 256, height: 256 },
+      { index: 4, left: 269, top: 275, width: 256, height: 256 }
+    ]);
+    regions.forEach((region) => expect(region.width).toBe(region.height));
+  });
+
+  it.each([
+    "three-vertical",
+    "three-horizontal",
+    "four-vertical",
+    "four-grid"
+  ] as const)("preserves the intended panel ratios for %s", async (format) => {
+    const master = await sharp({
+      create: {
+        width: 513,
+        height: 513,
+        channels: 3,
+        background: { r: 232, g: 238, b: 255 }
+      }
+    })
+      .png()
+      .toBuffer();
+
+    const panels = await splitAlbumMaster(master, format);
+    const expectedRatios: Record<typeof format, readonly number[]> = {
+      "three-vertical": [0.5, 1, 1],
+      "three-horizontal": [2, 1, 1],
+      "four-vertical": [2 / 3, 1, 1, 1],
+      "four-grid": [1, 1, 1, 1]
+    };
+
+    expect(panels).toHaveLength(format.startsWith("three-") ? 3 : 4);
+    await Promise.all(
+      panels.map(async (panel, index) => {
+        const metadata = await sharp(panel.bytes).metadata();
+        expect(metadata.width).toBeDefined();
+        expect(metadata.height).toBeDefined();
+        expect(metadata.width! / metadata.height!).toBeCloseTo(
+          expectedRatios[format][index]!,
+          2
+        );
+      })
+    );
   });
 });
 
@@ -1126,6 +1218,123 @@ describe("handleArtworkGenerationRequest", () => {
           output.albumMasterAssetUrl?.includes("hook-1-album-master-v1.png")
       )
     ).toBe(true);
+  });
+
+  it("repairs the Album master with GPT Image 2 when panel QC finds leakage", async () => {
+    const originalMaster = await albumMasterPng();
+    const repairedMaster = await sharp({
+      create: {
+        width: 512,
+        height: 512,
+        channels: 3,
+        background: { r: 214, g: 238, b: 224 }
+      }
+    })
+      .png()
+      .toBuffer();
+    const uploaded: { path: string; body: Buffer }[] = [];
+    const editForms: FormData[] = [];
+    const qcBodies: {
+      input?: { content?: { type?: string }[] }[];
+      text?: { format?: { name?: string } };
+    }[] = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          const body = JSON.parse(String(init?.body)) as {
+            input?: { content?: { type?: string }[] }[];
+            text?: { format?: { name?: string } };
+          };
+          if (
+            body.text?.format?.name ===
+            "moons_album_panel_separation_review"
+          ) {
+            qcBodies.push(body);
+            return albumPanelQcReviseResponse();
+          }
+          return standardAgentResponse(init);
+        }
+        if (href.includes("/v1/images/generations")) {
+          return new Response(
+            JSON.stringify({
+              data: [{ b64_json: originalMaster.toString("base64") }]
+            }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/images/edits")) {
+          editForms.push(init?.body as FormData);
+          return new Response(
+            JSON.stringify({
+              data: [{ b64_json: repairedMaster.toString("base64") }]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+    const { client } = fakeStorage();
+    client.storage.from = () => ({
+      upload: async (path: string, body: Buffer) => {
+        uploaded.push({ path, body });
+        return { error: null };
+      },
+      createSignedUrl: async (path: string) => ({
+        data: { signedUrl: `https://example.com/${path}` },
+        error: null
+      }),
+      download: async () => ({ data: null, error: { message: "Not found" } })
+    });
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          service: "album-post",
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              formatBeats: ["Hook", "Proof", "Offer"]
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(qcBodies).toHaveLength(1);
+    expect(
+      qcBodies[0]?.input?.[0]?.content?.filter(
+        (item) => item.type === "input_image"
+      )
+    ).toHaveLength(3);
+    expect(editForms).toHaveLength(1);
+    expect(editForms[0]?.get("model")).toBe("gpt-image-2");
+    expect(String(editForms[0]?.get("prompt"))).toContain(
+      "Affected panels: 2"
+    );
+    expect(String(editForms[0]?.get("prompt"))).toContain(
+      "horizontal cover occupying the full top half"
+    );
+    expect(uploaded[0]?.body.equals(repairedMaster)).toBe(true);
+    expect(uploaded).toHaveLength(4);
   });
 
   it("uses the selected four-panel master layout in Design System mode", async () => {

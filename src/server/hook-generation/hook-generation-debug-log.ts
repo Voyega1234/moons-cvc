@@ -8,39 +8,6 @@ export interface HookGenerationDebugLog {
   createdAt: string;
   runId: string;
   hookIdeaMode: string;
-  candidateAgent: {
-    provider: "openai" | "openrouter";
-    model: string;
-    promptSource: "agent_prompt/agent_hook.md";
-    batches: readonly {
-      request: {
-        endpoint: "/v1/responses" | "/api/v1/chat/completions";
-        inputText: string;
-        tools: readonly {
-          type: "web_search_preview";
-          user_location: {
-            type: "approximate";
-            country: "TH";
-            timezone: "Asia/Bangkok";
-          };
-        }[];
-        toolChoice?: "required";
-        attachedImages: readonly {
-          id: string;
-          name: string;
-          mediaType: string;
-          role: string;
-          description: string;
-          detail: "high";
-        }[];
-        responseSchema: "moons_hook_candidates";
-      };
-      response: {
-        parsed: unknown;
-        raw: unknown;
-      };
-    }[];
-  };
   hookAgent: {
     provider: "openai" | "openrouter";
     model: string;
@@ -58,6 +25,7 @@ export interface HookGenerationDebugLog {
           };
         }[];
         toolChoice?: "required";
+        reasoningEffort?: "high";
         attachedImages: readonly {
           id: string;
           name: string;
@@ -73,32 +41,6 @@ export interface HookGenerationDebugLog {
         raw: unknown;
       };
     }[];
-  };
-  pastContentAgent?: {
-    provider: "openai";
-    model: string;
-    request: {
-      endpoint: "/v1/responses";
-      inputText: string;
-      responseSchema: "moons_past_content_profile";
-    };
-    response: {
-      parsed: unknown;
-      raw: unknown;
-    };
-  };
-  captionAgent?: {
-    provider: "openai";
-    model: string;
-    request: {
-      endpoint: "/v1/responses";
-      inputText: string;
-      responseSchema: "moons_caption_style";
-    };
-    response: {
-      parsed: unknown;
-      raw: unknown;
-    };
   };
   finalResponse: unknown;
 }

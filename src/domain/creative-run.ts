@@ -78,7 +78,7 @@ export function normalizeFormatBeatsForService(
   beats: readonly string[] | undefined
 ): readonly string[] {
   if (service === "single-static" || service === "resize") return [];
-  return (beats ?? []).map((beat) => beat.trim()).filter(Boolean).slice(0, 3);
+  return (beats ?? []).map((beat) => beat.trim()).filter(Boolean);
 }
 export const artworkModes = [
   "standard",
@@ -131,6 +131,7 @@ export function usesPostGenerationVisualQc(mode: ArtworkMode): boolean {
 }
 export const hookIdeaModes = ["standard", "fresh-research"] as const;
 export type HookIdeaMode = (typeof hookIdeaModes)[number];
+export const defaultHookIdeaMode: HookIdeaMode = "fresh-research";
 export const hookGenerationModels = [
   "gpt-5.6-terra",
   "anthropic/claude-sonnet-4.6"

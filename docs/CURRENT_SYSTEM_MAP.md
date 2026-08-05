@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-08-04
+Last verified: 2026-08-05
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -53,6 +53,17 @@ Async results must continue targeting the run that started the request.
 | Main application composition | `src/app/App.tsx` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
+
+Hook generation uses `agent_prompt/agent_hook.md` as the creative source of
+truth. The runtime endpoint adds campaign evidence, quotas, search availability,
+and JSON transport requirements, but does not prescribe a hook formula or
+narrative framework. New runs default to `fresh-research`, which requires the
+Hook Agent to search with Thailand as its location context; users may explicitly
+switch a run to no-research mode. Album `formatBeats` map one-to-one to the
+non-cover panels
+(two for three-panel formats and three for four-panel formats). UGC and Motion
+may return as many `formatBeats` as their idea needs; the Hook Agent is not
+required to use a three-beat opening/demo/close sequence.
 
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
@@ -126,8 +137,11 @@ Server-side ownership is split by responsibility:
 - `prompt-runtime.ts` loads, compacts, and renders prompt templates;
   `prompt-context.ts` compiles active campaign context and runtime rules.
 - `reference-images.ts` resolves, recovers, and normalizes reference assets.
-- `album-master.ts` builds Album master instructions and performs adaptive
-  panel detection and cropping.
+- `album-master.ts` builds Album master instructions and performs deterministic
+  format-native panel cropping. Album crops are then checked together by the
+  focused prompt at `agent_prompt/agent_album_panel_qc.md`; when visible
+  neighbouring-panel leakage is found, the pipeline permits one targeted GPT
+  Image 2 edit of the master and splits the repaired master again.
 - `artwork-revision.ts` owns revision prompting and image-edit orchestration.
 - `artwork-persistence.ts`, `artwork-paths.ts`, and
   `artwork-generation-types.ts` own storage paths, uploads, signed URLs, and

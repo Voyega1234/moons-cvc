@@ -380,7 +380,7 @@ describe("workspace serializer", () => {
       "reference-library"
     );
     expect(restored?.runsById["album-run"]?.hookIdeaMode).toBe(
-      "standard"
+      "fresh-research"
     );
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"

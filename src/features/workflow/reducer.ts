@@ -3,6 +3,7 @@ import {
   defaultAlbumFormat,
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
+  defaultHookIdeaMode,
   emptyApprovalGate,
   inferredReferenceImageRole,
   normalizeFormatBeatsForService,
@@ -141,7 +142,7 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ],
     service: "single-static",
-    hookIdeaMode: "standard",
+    hookIdeaMode: defaultHookIdeaMode,
     hookGenerationModel: "gpt-5.6-terra",
     artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",

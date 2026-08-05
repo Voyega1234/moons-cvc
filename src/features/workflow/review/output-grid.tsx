@@ -20,6 +20,7 @@ import { Spinner } from "../stages/shared";
 import { groupOutputsForReview, isAlbumOutput, isUgcOutput, outputFormatSortRank, outputNeedsGuidedImprovement, outputSectionTitle, qcContentTypeLabel, resolvedAlbumFormatForDirection, sortAlbumOutputs } from "./output-groups";
 import { AlbumPanelPreview, CreativePreviewModal, UgcTemplatePreview } from "./creative-previews";
 import { CreativeCopyEditModal } from "./creative-copy-edit-modal";
+import { downloadAlbumArchive, downloadOutputAsset } from "./downloads";
 
 function artworkModeLabel(mode: ArtworkMode): string {
   switch (mode) {
@@ -51,6 +52,12 @@ export function OutputGrid({
   );
   const [qaPrompt, setQaPrompt] = useState<string | undefined>();
   const [editOutputId, setEditOutputId] = useState<string | null>(null);
+  const [downloadingOutputId, setDownloadingOutputId] = useState<string | null>(
+    null
+  );
+  const [downloadErrorByOutputId, setDownloadErrorByOutputId] = useState<
+    Record<string, string>
+  >({});
   const previewOutput =
     state.outputs.find((output) => output.id === previewOutputId) ?? null;
   const previewDirection = previewOutput
@@ -103,6 +110,35 @@ export function OutputGrid({
       outputFormatSortRank(leftFormat) - outputFormatSortRank(rightFormat)
   );
 
+  async function downloadDraft(
+    output: CreativeOutput,
+    outputs: readonly CreativeOutput[],
+    albumIndex: number
+  ) {
+    setDownloadingOutputId(output.id);
+    setDownloadErrorByOutputId((current) => ({
+      ...current,
+      [output.id]: ""
+    }));
+    try {
+      if (isAlbumOutput(output)) {
+        await downloadAlbumArchive(sortAlbumOutputs(outputs), albumIndex);
+      } else {
+        await downloadOutputAsset(output, state.outputs.indexOf(output));
+      }
+    } catch (caught) {
+      setDownloadErrorByOutputId((current) => ({
+        ...current,
+        [output.id]:
+          caught instanceof Error
+            ? caught.message
+            : "Could not download artwork."
+      }));
+    } finally {
+      setDownloadingOutputId(null);
+    }
+  }
+
   if (!state.outputs.length) {
     return (
       <div className="empty">
@@ -153,6 +189,10 @@ export function OutputGrid({
                   ? qualityOutput.qaReport
                   : undefined;
                 const qaSuggestion = qaReport?.suggestion;
+                const downloading = downloadingOutputId === output.id;
+                const downloadable = album
+                  ? reviewOutputs.every((candidate) => candidate.assetUrl)
+                  : Boolean(output.assetUrl) && !isUgcOutput(output);
                 return (
                   <article
                     className={`output-card compass-build-review-card ${qaReport && !hasGuidedImprovement ? "ready qa-passed" : ""} ${qaReport && hasGuidedImprovement ? "attn qa-attention" : ""}`}
@@ -271,7 +311,30 @@ export function OutputGrid({
                       </div>
                     ) : null}
                     </div>
+                    {downloadErrorByOutputId[output.id] ? (
+                      <p className="repository-message error">
+                        {downloadErrorByOutputId[output.id]}
+                      </p>
+                    ) : null}
                     <footer className="compass-build-output-foot">
+                      <button
+                        className="btn secondary small"
+                        type="button"
+                        disabled={downloading || !downloadable}
+                        title={
+                          downloadable
+                            ? album
+                              ? "Download all album panels as a ZIP file"
+                              : "Download this creative"
+                            : "No downloadable artwork is available"
+                        }
+                        onClick={() =>
+                          void downloadDraft(output, reviewOutputs, reviewIndex)
+                        }
+                      >
+                        {downloading ? <Spinner /> : null}
+                        {downloading ? "Downloading…" : "Download"}
+                      </button>
                       <button
                         className="btn secondary small"
                         type="button"

@@ -112,7 +112,7 @@ describe("buildHookGenerationHarnessRequest", () => {
     ]);
   });
 
-  it("adds two candidates to every active Creative mix type", () => {
+  it("adds two finished options to every active Creative mix type", () => {
     const request = buildHookGenerationHarnessRequest({
       run: {
         ...run,

@@ -123,7 +123,10 @@ interface DesignSystemFlowAgentDebugLog {
     }[];
     responseFormat: {
       type: "json_schema";
-      name: "moons_creative_set_direction" | "moons_visual_quality_review";
+      name:
+        | "moons_creative_set_direction"
+        | "moons_visual_quality_review"
+        | "moons_album_panel_separation_review";
       strict: true;
     };
   };
@@ -337,7 +340,9 @@ export function buildDesignSystemFlowAgentDebugLog(
         name:
           trace.stage === "set-creative-direction"
             ? "moons_creative_set_direction"
-            : "moons_visual_quality_review",
+            : trace.stage === "album-panel-qc"
+              ? "moons_album_panel_separation_review"
+              : "moons_visual_quality_review",
         strict: true
       }
     },

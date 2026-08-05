@@ -133,10 +133,9 @@ function DirectionArtwork({
   }
 
   if (service === "ugc-video") {
-    const beats =
-      direction.formatBeats?.length === 3
-        ? direction.formatBeats
-        : ["Opening tension", "Demonstration / proof", "Brand-fit close"];
+    const beats = direction.formatBeats?.length
+      ? direction.formatBeats
+      : [direction.hook, direction.visual, direction.cta].filter(Boolean);
 
     return (
       <div className="preflight-ugc-art">
@@ -146,7 +145,7 @@ function DirectionArtwork({
           <small>@brandcreator</small>
         </div>
         <div className="preflight-ugc-flow">
-          <span>UGC IDEA · 3-BEAT FLOW</span>
+          <span>UGC CONTENT FLOW</span>
           <ol>
             {beats.map((beat) => (
               <li key={beat}>{beat}</li>

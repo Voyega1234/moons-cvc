@@ -4470,9 +4470,9 @@ function angleSubheadlineLabel(service: ServiceType): string {
 }
 
 function angleFormatBeatsLabel(service: ServiceType): string {
-  if (service === "album-post") return "Inside slides · 3 supporting topics";
-  if (service === "ugc-video") return "UGC video flow · 3 beats";
-  return "Motion flow · 3 beats";
+  if (service === "album-post") return "Inside slides";
+  if (service === "ugc-video") return "UGC video flow";
+  return "Motion flow";
 }
 
 function angleConceptLabel(service: ServiceType): string {
@@ -4612,7 +4612,6 @@ function HookEditModal({
                     .split("\n")
                     .map((item) => item.trim())
                     .filter(Boolean)
-                    .slice(0, 3)
                 }))
               }
             />
@@ -4632,7 +4631,6 @@ function HookEditModal({
                       .split("\n")
                       .map((item) => item.trim())
                       .filter(Boolean)
-                      .slice(0, 3)
                   }))
                 }
               />

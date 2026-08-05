@@ -46,7 +46,7 @@ describe("buildCreativeMixInstructions", () => {
     } as const;
 
     expect(buildCreativeMixInstructions(state)).toBe(
-      "Creative mix quota: Single static × 2. Generate 4 hook candidates in total. Candidate pool by content type: Single static × 4. Always generate 2 extra candidates for every active content type."
+      "Creative mix quota: Single static × 2. Generate 4 finished hook directions in one pass: the exact requested quantity plus 2 additional finished options for every active content type. Do not create or return an intermediate candidate pool."
     );
   });
 });

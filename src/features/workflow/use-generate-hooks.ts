@@ -9,7 +9,7 @@ import { serviceLabels } from "./config";
 import {
   creativeMixContentTypeQuotas,
   directionServiceAt,
-  EXTRA_HOOK_CANDIDATES_PER_TYPE,
+  EXTRA_HOOK_OPTIONS_PER_TYPE,
   hookGenerationContentTypeQuotas,
   selectedUploadedMaterials,
   totalHookGenerationQuantity,
@@ -27,14 +27,10 @@ export function buildCreativeMixInstructions(
   state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
 ): string {
   const requestedQuotas = creativeMixContentTypeQuotas(state);
-  const generationQuotas = hookGenerationContentTypeQuotas(state);
   const requestedMix = requestedQuotas
     .map((item) => `${serviceLabels[item.service]} × ${item.count}`)
     .join("; ");
-  const candidateMix = generationQuotas
-    .map((item) => `${serviceLabels[item.service]} × ${item.count}`)
-    .join("; ");
-  return `Creative mix quota: ${requestedMix}. Generate ${totalHookGenerationQuantity(state)} hook candidates in total. Candidate pool by content type: ${candidateMix}. Always generate 2 extra candidates for every active content type.`;
+  return `Creative mix quota: ${requestedMix}. Generate ${totalHookGenerationQuantity(state)} finished hook directions in one pass: the exact requested quantity plus 2 additional finished options for every active content type. Do not create or return an intermediate candidate pool.`;
 }
 
 function withCreativeMixInstructions(
@@ -122,7 +118,7 @@ export function useGenerateMoreHooks(
 
       const requestedQuantity = Math.max(
         1,
-        GENERATE_MORE_IDEA_COUNT - EXTRA_HOOK_CANDIDATES_PER_TYPE
+        GENERATE_MORE_IDEA_COUNT - EXTRA_HOOK_OPTIONS_PER_TYPE
       );
       const targetedState: WorkflowState = {
         ...state,

@@ -29,8 +29,8 @@ export function HookIdeaModeSelect({
           })
         }
       >
-        <option value="standard">Default (no research)</option>
-        <option value="fresh-research">Use research (Thailand)</option>
+        <option value="fresh-research">Search by default (Thailand)</option>
+        <option value="standard">No research</option>
       </select>
     </label>
   );

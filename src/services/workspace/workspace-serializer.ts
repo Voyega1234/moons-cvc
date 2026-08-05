@@ -6,11 +6,12 @@ import {
   artworkOutputSizes,
   creativeStages,
   ctaActionTypes,
-  defaultArtworkOutputSize,
   defaultAlbumFormatPreference,
-    emptyApprovalComments,
-    hookGenerationModels,
-    hookIdeaModes,
+  defaultArtworkOutputSize,
+  defaultHookIdeaMode,
+  emptyApprovalComments,
+  hookGenerationModels,
+  hookIdeaModes,
   imagePromptModels,
   normalizeFormatBeatsForService,
   referenceImageRoles,
@@ -130,8 +131,8 @@ function parseRun(value: unknown): WorkflowState | null {
   const stage = parseMember(value.stage, creativeStages);
   const service = parseMember(value.service, serviceTypes);
   const hookIdeaMode =
-    value.hookIdeaMode === undefined || value.hookIdeaMode === "fresh-research"
-      ? "standard"
+    value.hookIdeaMode === undefined
+      ? defaultHookIdeaMode
       : parseMember(value.hookIdeaMode, hookIdeaModes);
   const hookGenerationModel =
     value.hookGenerationModel === undefined

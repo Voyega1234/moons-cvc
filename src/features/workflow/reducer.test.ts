@@ -21,6 +21,15 @@ function passingQaResults(state: WorkflowState) {
 }
 
 describe("workflowReducer", () => {
+  it("defaults new runs to fresh Hook research", () => {
+    expect(
+      createInitialWorkflowState({
+        id: "fresh-research-default",
+        now: "2026-08-05T00:00:00.000Z"
+      }).hookIdeaMode
+    ).toBe("fresh-research");
+  });
+
   it("refreshes the selected brand questionnaire for Hook Agent context", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");
@@ -435,9 +444,9 @@ describe("workflowReducer", () => {
     ]);
   });
 
-  it("preserves +2 candidate types and strips flow beats from Static only", () => {
+  it("preserves unconstrained flow beats and strips them from Static only", () => {
     const template = buildDirectionFixtures("Candidate")[0]!;
-    const beats = ["Beat one", "Beat two", "Beat three"];
+    const beats = ["Beat one", "Beat two", "Beat three", "Beat four"];
     const directions = ([
       "single-static",
       "ugc-video",
@@ -476,12 +485,12 @@ describe("workflowReducer", () => {
     expect(
       generated.directions
         .filter((direction) => direction.service === "ugc-video")
-        .every((direction) => direction.formatBeats?.length === 3)
+        .every((direction) => direction.formatBeats?.length === 4)
     ).toBe(true);
     expect(
       generated.directions
         .filter((direction) => direction.service === "album-post")
-        .every((direction) => direction.formatBeats?.length === 3)
+        .every((direction) => direction.formatBeats?.length === 4)
     ).toBe(true);
   });
 

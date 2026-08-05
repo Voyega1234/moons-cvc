@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import {
+  albumLayoutPrompt,
   buildAlbumMasterInstruction,
   splitAlbumMaster
 } from "./album-master.js";
@@ -63,6 +64,7 @@ import {
 } from "./creative-strategy-enrichment-agent.js";
 import {
   directCreativeSet,
+  reviewAlbumPanelSeparation,
   reviewGeneratedArtwork,
   type CreativeSetDirection
 } from "./design-system-flow-agent.js";
@@ -688,7 +690,27 @@ async function generateOutputForHook({
       writeDebugLog,
       fetchImpl
     });
-    const imageBytes = Buffer.from(image.base64, "base64");
+    let finalMasterImage = image;
+    let imageBytes = Buffer.from(finalMasterImage.base64, "base64");
+    let panels = await splitAlbumMaster(imageBytes, albumFormat);
+    const separationResult = await applyAlbumPanelSeparationQc({
+      input,
+      hook,
+      albumFormat,
+      masterImage: finalMasterImage,
+      panels,
+      apiKey,
+      model,
+      promptModel:
+        promptProvider === "openai" ? promptModel : "gpt-5.6-terra",
+      generationSize,
+      debugLogDirectory,
+      writeDebugLog,
+      fetchImpl
+    });
+    finalMasterImage = separationResult.masterImage;
+    imageBytes = Buffer.from(finalMasterImage.base64, "base64");
+    panels = separationResult.panels;
     const masterOutput = await persistArtworkOutput({
       input,
       hook: masterHook,
@@ -698,12 +720,11 @@ async function generateOutputForHook({
       format,
       model,
       imageBytes,
-      mimeType: image.mimeType,
+      mimeType: finalMasterImage.mimeType,
       storage,
       debugLogDirectory,
       writeDebugLog
     });
-    const panels = await splitAlbumMaster(imageBytes, albumFormat);
     return Promise.all(
       panels.map(async (panel) => ({
         ...(await persistArtworkOutput({
@@ -902,6 +923,112 @@ async function applyPostGenerationVisualQc({
       error
     );
     return image;
+  }
+}
+
+async function applyAlbumPanelSeparationQc({
+  input,
+  hook,
+  albumFormat,
+  masterImage,
+  panels,
+  apiKey,
+  model,
+  promptModel,
+  generationSize,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  albumFormat: AlbumFormat;
+  masterImage: GeneratedImage;
+  panels: Awaited<ReturnType<typeof splitAlbumMaster>>;
+  apiKey: string;
+  model: string;
+  promptModel?: string;
+  generationSize: ArtworkOutputSize;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<{
+  masterImage: GeneratedImage;
+  panels: Awaited<ReturnType<typeof splitAlbumMaster>>;
+}> {
+  try {
+    const review = await reviewAlbumPanelSeparation({
+      apiKey,
+      model: promptModel,
+      fetchImpl,
+      format: albumFormat,
+      panels: panels.map((panel) => ({
+        index: panel.index,
+        bytes: panel.bytes,
+        mimeType: "image/png"
+      })),
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildDesignSystemFlowAgentDebugLog(trace, input.runId, hook.id)
+        );
+      }
+    });
+    if (review.decision === "pass") {
+      return { masterImage, panels };
+    }
+
+    const affectedPanels = review.affectedPanels.join(", ");
+    const revisionPrompt = [
+      "Repair Image 1 only where content leaks across Album panel boundaries.",
+      `Selected Album geometry: ${albumLayoutPrompt(albumFormat)}`,
+      `Affected panels: ${affectedPanels}.`,
+      `Observed leakage: ${review.issue}`,
+      `Required correction: ${review.revisionInstruction}`,
+      "Remove only the foreign strip or neighbouring-panel fragment and reconstruct the intended local background at that edge.",
+      "Keep every panel inside its prescribed boundary. Preserve the exact master dimensions, panel geometry, intended copy, typography, objects, brand assets, colors, lighting, visual style, and all unaffected areas.",
+      "Do not crop, reframe, rewrite, add, remove, or redesign any intended campaign content. Return one corrected complete Album master artwork."
+    ].join("\n\n");
+    const sourceReference: ReferenceImageInput = {
+      bytes: Buffer.from(masterImage.base64, "base64"),
+      mimeType: masterImage.mimeType,
+      label: "Image 1 — Album master requiring boundary repair"
+    };
+    const repairHook = { id: `${hook.id}-album-boundary-repair` };
+    const imageRequestDebug = buildImageRequestDebugBundle({
+      model,
+      runId: input.runId,
+      hook: repairHook,
+      prompt: revisionPrompt,
+      size: generationSize,
+      quality: "medium",
+      references: [sourceReference]
+    });
+    await writeDebugLog(
+      debugLogDirectory,
+      imageRequestDebug.entry,
+      imageRequestDebug.assets
+    );
+    const repairedMaster = await editImage({
+      apiKey,
+      model,
+      prompt: revisionPrompt,
+      size: generationSize,
+      quality: "medium",
+      referenceImages: [sourceReference],
+      fetchImpl
+    });
+    const repairedPanels = await splitAlbumMaster(
+      Buffer.from(repairedMaster.base64, "base64"),
+      albumFormat
+    );
+    return { masterImage: repairedMaster, panels: repairedPanels };
+  } catch (error) {
+    console.warn(
+      `Album Panel QC could not complete for "${hook.id}"; keeping the original master and crops.`,
+      error
+    );
+    return { masterImage, panels };
   }
 }
 

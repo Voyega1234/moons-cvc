@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { AlbumFormat } from "../../domain/creative-run.js";
 import type { ImagePromptProvider } from "./image-prompt-agent.js";
 
 type FetchLike = typeof fetch;
@@ -28,12 +29,19 @@ export interface VisualQualityReview {
   revisionInstruction: string;
 }
 
+export interface AlbumPanelSeparationReview {
+  decision: "pass" | "revise";
+  affectedPanels: readonly number[];
+  issue: string;
+  revisionInstruction: string;
+}
+
 export interface DesignSystemFlowTrace {
   createdAt: string;
   provider: ImagePromptProvider;
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
-  stage: "set-creative-direction" | "visual-qc";
+  stage: "set-creative-direction" | "visual-qc" | "album-panel-qc";
   status: "succeeded" | "failed";
   inputText: string;
   referenceImages: readonly {
@@ -41,7 +49,10 @@ export interface DesignSystemFlowTrace {
     mimeType: string;
     bytes: number;
   }[];
-  response?: CreativeSetDirection | VisualQualityReview;
+  response?:
+    | CreativeSetDirection
+    | VisualQualityReview
+    | AlbumPanelSeparationReview;
   error?: string;
 }
 
@@ -162,6 +173,59 @@ export async function reviewGeneratedArtwork({
   });
 }
 
+export async function reviewAlbumPanelSeparation({
+  apiKey,
+  model,
+  fetchImpl,
+  format,
+  panels,
+  writeTrace,
+  loadPrompt = loadAlbumPanelQcPrompt
+}: {
+  apiKey: string;
+  model?: string;
+  fetchImpl: FetchLike;
+  format: AlbumFormat;
+  panels: readonly {
+    index: number;
+    bytes: Buffer;
+    mimeType: string;
+  }[];
+  writeTrace?: DesignSystemFlowTraceWriter;
+  loadPrompt?: () => Promise<string>;
+}): Promise<AlbumPanelSeparationReview> {
+  const inputText = [
+    (await loadPrompt()).trim(),
+    "",
+    "ACTIVE ALBUM FORMAT",
+    format,
+    "",
+    "ATTACHMENT ORDER",
+    panels
+      .map((panel) => `Image ${panel.index} = Panel ${panel.index}`)
+      .join("\n")
+  ].join("\n");
+
+  return callStructuredAgent({
+    apiKey,
+    model,
+    provider: "openai",
+    fetchImpl,
+    stage: "album-panel-qc",
+    inputText,
+    referenceImages: panels.map((panel) => ({
+      imageUrl: `data:${panel.mimeType};base64,${panel.bytes.toString("base64")}`,
+      label: `Panel ${panel.index}`,
+      mimeType: panel.mimeType,
+      bytes: panel.bytes.length
+    })),
+    schemaName: "moons_album_panel_separation_review",
+    schema: albumPanelSeparationReviewSchema,
+    parse: (value) => parseAlbumPanelSeparationReview(value, panels.length),
+    writeTrace
+  });
+}
+
 async function callStructuredAgent<T>({
   apiKey,
   model,
@@ -260,7 +324,10 @@ async function callStructuredAgent<T>({
       status: "succeeded",
       inputText,
       referenceImages: traceImages,
-      response: parsed as CreativeSetDirection | VisualQualityReview
+      response: parsed as
+        | CreativeSetDirection
+        | VisualQualityReview
+        | AlbumPanelSeparationReview
     });
     return parsed;
   } catch (error) {
@@ -350,6 +417,52 @@ function parseVisualQualityReview(value: unknown): VisualQualityReview {
   };
 }
 
+function parseAlbumPanelSeparationReview(
+  value: unknown,
+  panelCount: number
+): AlbumPanelSeparationReview {
+  if (!isRecord(value)) {
+    throw new Error("Album Panel QC returned invalid JSON.");
+  }
+  const decision = readEnum(value.decision, ["pass", "revise"], "decision");
+  if (
+    !Array.isArray(value.affectedPanels) ||
+    value.affectedPanels.some(
+      (panel) =>
+        !Number.isInteger(panel) ||
+        Number(panel) < 1 ||
+        Number(panel) > panelCount
+    )
+  ) {
+    throw new Error("affectedPanels must contain valid panel numbers.");
+  }
+  const affectedPanels = Array.from(
+    new Set(value.affectedPanels.map((panel) => Number(panel)))
+  ).sort((left, right) => left - right);
+  const issue = typeof value.issue === "string" ? value.issue.trim() : "";
+  const revisionInstruction =
+    typeof value.revisionInstruction === "string"
+      ? value.revisionInstruction.trim()
+      : "";
+  if (
+    decision === "revise" &&
+    (!affectedPanels.length || !issue || !revisionInstruction)
+  ) {
+    throw new Error(
+      "Album Panel QC revision requires affected panels, an issue, and a revisionInstruction."
+    );
+  }
+  if (decision === "pass" && affectedPanels.length) {
+    throw new Error("Album Panel QC pass cannot include affected panels.");
+  }
+  return {
+    decision,
+    affectedPanels,
+    issue,
+    revisionInstruction
+  };
+}
+
 async function loadSetCreativeDirectorPrompt(): Promise<string> {
   return readFile(
     join(
@@ -374,6 +487,13 @@ async function loadVisualQcPrompt(): Promise<string> {
       "prompts",
       "04-visual-qc.md"
     ),
+    "utf8"
+  );
+}
+
+async function loadAlbumPanelQcPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_album_panel_qc.md"),
     "utf8"
   );
 }
@@ -520,6 +640,27 @@ const visualQualityReviewSchema = {
     "aiAppearance",
     "strengths",
     "issues",
+    "revisionInstruction"
+  ]
+} as const;
+
+const albumPanelSeparationReviewSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    decision: { type: "string", enum: ["pass", "revise"] },
+    affectedPanels: {
+      type: "array",
+      items: { type: "integer", minimum: 1, maximum: 4 },
+      uniqueItems: true
+    },
+    issue: { type: "string" },
+    revisionInstruction: { type: "string" }
+  },
+  required: [
+    "decision",
+    "affectedPanels",
+    "issue",
     "revisionInstruction"
   ]
 } as const;

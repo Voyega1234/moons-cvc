@@ -66,7 +66,7 @@ export interface ContentTypeQuota {
   count: number;
 }
 
-export const EXTRA_HOOK_CANDIDATES_PER_TYPE = 2;
+export const EXTRA_HOOK_OPTIONS_PER_TYPE = 2;
 
 export interface WorkflowState {
   id: string;
@@ -338,7 +338,7 @@ export function hookGenerationContentTypeQuotas(
 ): readonly ContentTypeQuota[] {
   return creativeMixContentTypeQuotas(state).map((quota) => ({
     ...quota,
-    count: quota.count + EXTRA_HOOK_CANDIDATES_PER_TYPE
+    count: quota.count + EXTRA_HOOK_OPTIONS_PER_TYPE
   }));
 }
 
