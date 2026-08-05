@@ -238,7 +238,9 @@ describe("workflowReducer", () => {
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ]);
     expect(initialWorkflowState.quantity).toBe(6);
-    expect(initialWorkflowState.brief).toHaveLength(440);
+    expect(initialWorkflowState.brief).toBe(
+      "Push beyond the obvious. Surprise me with fresh, original ideas that only this brand could own. Explore unexpected angles, challenge familiar category patterns, and make every direction meaningfully different."
+    );
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-creative-mix-quantity",
