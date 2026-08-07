@@ -6,7 +6,11 @@ export function directionSubheadline(direction: {
   subheadline?: string;
   concept: string;
 }): string {
-  return normalizeText(direction.subheadline || direction.concept);
+  return normalizeText(
+    direction.subheadline === undefined
+      ? direction.concept
+      : direction.subheadline
+  );
 }
 
 export function isExactSubheadlineHighlight(

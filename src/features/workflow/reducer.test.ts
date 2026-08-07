@@ -557,7 +557,7 @@ describe("workflowReducer", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manually written hook",
-      subheadline: "A supporting line",
+      subheadline: "",
       cta: "See how it works"
     });
 
@@ -568,6 +568,7 @@ describe("workflowReducer", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manually written hook",
+      subheadline: "",
       selected: false
     });
     expect(state.quantity).toBe(initialWorkflowState.quantity);

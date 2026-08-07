@@ -134,7 +134,10 @@ function openAiUgcDirectionResponse(hook: string) {
   );
 }
 
-function openAiAlbumDirectionResponse(formatBeats: readonly string[]) {
+function openAiAlbumDirectionResponse(
+  formatBeats: readonly string[],
+  albumFormat = "four-grid"
+) {
   return new Response(
     JSON.stringify({
       output_text: JSON.stringify({
@@ -149,7 +152,7 @@ function openAiAlbumDirectionResponse(formatBeats: readonly string[]) {
             why: "ใช้พื้นที่หลาย panel เพื่อเล่าโมเมนต์ครอบครัว",
             visual: "ภาพครอบครัวใช้พื้นที่แยกกันอย่างเป็นธรรมชาติ",
             cta: "ดูรายละเอียดห้องพัก",
-            albumFormat: "four-grid",
+            albumFormat,
             formatBeats,
             caption: "ห้องพักที่ให้ทุกคนมีพื้นที่ตามจังหวะของตัวเอง",
             score: 90,
@@ -657,21 +660,11 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(researchBody.tools).toEqual([{ type: "web_search_preview" }]);
   });
 
-  it("routes only the hook writing step through OpenRouter when selected", async () => {
+  it("retries album output when formatBeats does not match the selected layout", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            output_text: JSON.stringify({
-              overallFinding: "Category context is available.",
-              references: [],
-              searchQueriesUsed: ["category context"],
-              limitations: ""
-            })
-          }),
-          { status: 200 }
-        )
+        openAiAlbumDirectionResponse(["Panel 2", "Panel 3"])
       )
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(["Panel 2", "Panel 3", "Panel 4"])
@@ -709,6 +702,42 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: { formatBeats: string[] }[];
     };
     expect(payload.directions[0]?.formatBeats).toHaveLength(3);
+  });
+
+  it("accepts two formatBeats for a three-panel album layout", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        openAiAlbumDirectionResponse(
+          ["Panel 2", "Panel 3"],
+          "three-horizontal"
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("album-panel-count", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          service: "album-post",
+          quantity: 1,
+          contentTypeQuotas: [{ service: "album-post", count: 1 }]
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const payload = (await response.json()) as {
+      directions: { albumFormat: string; formatBeats: string[] }[];
+    };
+    expect(payload.directions[0]).toMatchObject({
+      albumFormat: "three-horizontal",
+      formatBeats: ["Panel 2", "Panel 3"]
+    });
   });
 
   it("routes the direct creative pass through OpenRouter when selected", async () => {

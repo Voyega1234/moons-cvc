@@ -166,7 +166,16 @@ function DirectionArtwork({
       <div className="preflight-static-visual">PRODUCT / KEY VISUAL</div>
       <small>ON-ART COPY</small>
       <b>{direction.hook}</b>
-      <p>{direction.subheadline || direction.concept}</p>
+      {(direction.subheadline === undefined
+        ? direction.concept
+        : direction.subheadline
+      ).trim() ? (
+        <p>
+          {direction.subheadline === undefined
+            ? direction.concept
+            : direction.subheadline}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -57,7 +57,12 @@ source of truth. The runtime endpoint adds only changing campaign evidence,
 Research availability, quotas, format contracts, and JSON transport; it must
 not restate Creative, Brand Voice, Research, Copy, Product Truth, or scoring
 policy. Subheadline emphasis is a separate micro-agent owned by
-`agent_prompt/agent_hook_highlight.md`.
+`agent_prompt/agent_hook_highlight.md`. Generated headlines must communicate
+their central message independently. `subheadline` remains a required string in
+the provider's Structured Output shape but may be `""` when no supporting line
+adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
+in review UI. Missing `subheadline` fields in legacy saved runs still fall back
+to the stored concept.
 
 New runs default to `fresh-research`; users may explicitly switch a run to
 no-research mode. OpenAI generation attaches `web_search_preview` with Thailand
@@ -161,6 +166,13 @@ Server-side ownership is split by responsibility:
 
 Keep the endpoint façade stable for API and test imports. Add new behavior to
 the smallest owning module above instead of rebuilding the former monolith.
+
+On the current `design-system-flow` branch, the active endpoint still contains
+the Album master helpers. Four-grid masters must place both dividers within 2%
+of the center lines. A misaligned master receives one targeted GPT Image 2 edit
+and is checked again before any master or panel asset is persisted; a second
+failure stops Album generation. Slide export places every Album format inside a
+square preview so its native panel ratios are not stretched.
 
 - `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
   the OpenAI Responses API using

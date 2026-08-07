@@ -95,6 +95,25 @@ describe("workflow rules", () => {
     );
   });
 
+  it("allows a manual hook without a subheadline", () => {
+    const run = createInitialWorkflowState({
+      id: "run-manual-hook",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+
+    expect(
+      workflowActionBlockReason(run, {
+        type: "add-manual-direction",
+        service: "single-static",
+        pillar: "Product proof",
+        objective: "Conversion",
+        hook: "ทิชชู่หนึ่งหิ้ว ใช้ได้ทั้งบ้าน",
+        subheadline: "",
+        cta: "เลือกแพ็กที่เหมาะกับบ้าน"
+      })
+    ).toBeNull();
+  });
+
   it("allows drafts to enter and complete Internal QC without automated QA", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

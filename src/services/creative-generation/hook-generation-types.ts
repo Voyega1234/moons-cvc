@@ -78,8 +78,8 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
   }
 
   const subheadline =
-    typeof raw.subheadline === "string" && raw.subheadline.trim()
-      ? raw.subheadline
+    typeof raw.subheadline === "string"
+      ? raw.subheadline.trim()
       : raw.concept;
   const service =
     typeof raw.service === "string" &&

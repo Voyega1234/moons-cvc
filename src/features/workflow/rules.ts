@@ -133,7 +133,7 @@ export function workflowActionBlockReason(
         : "Regenerated hook count does not match the current set.";
     case "add-manual-direction":
       if (!action.hook.trim()) return "Add the hook before saving.";
-      if (!action.pillar.trim() || !action.subheadline.trim() || !action.cta.trim()) {
+      if (!action.pillar.trim() || !action.cta.trim()) {
         return "Complete the manual hook template before saving.";
       }
       return null;

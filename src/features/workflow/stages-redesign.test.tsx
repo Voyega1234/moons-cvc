@@ -2259,10 +2259,7 @@ describe("redesigned workflow stages", () => {
     const manual = within(manualDialog);
     await user.type(manual.getByLabelText("Pillar"), "Product proof");
     await user.type(manual.getByLabelText("Hook"), "A manual proof hook");
-    await user.type(
-      manual.getByLabelText("Sub-headline"),
-      "Show the difference clearly"
-    );
+    expect(manual.getByLabelText("Sub-headline")).toHaveValue("");
     await user.type(manual.getByLabelText("CTA"), "See the proof");
     await user.click(manual.getByRole("button", { name: "Add hook" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -2271,7 +2268,7 @@ describe("redesigned workflow stages", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manual proof hook",
-      subheadline: "Show the difference clearly",
+      subheadline: "",
       cta: "See the proof"
     });
 
@@ -2792,7 +2789,10 @@ describe("redesigned workflow stages", () => {
         object.text?.some((run) => run.text.includes("Make Time to Let Your Space"))
     );
     expect(captionText).toBeDefined();
-    expect(captionText?.options.fontSize).toBeGreaterThanOrEqual(11);
+    expect(captionText?.options.fontSize).toBe(11);
+    expect(captionText?.text?.map((run) => run.text).join("")).toBe(
+      longCaption
+    );
     expect(captionText?.options.x).toBe(9.15);
     expect(captionText?.options.y).toBeCloseTo(1.09);
     expect(captionText?.options.w).toBe(3.38);
@@ -3584,9 +3584,9 @@ describe("redesigned workflow stages", () => {
 
     expect(slides).toHaveLength(1);
     expect(artwork[0]).toEqual([
-      { x: 4.04, y: 0.68, w: 5.62, h: 3.07 },
-      { x: 4.04, y: 3.75, w: 2.81, h: 3.07 },
-      { x: 6.85, y: 3.75, w: 2.81, h: 3.07 }
+      { x: 4.04, y: 0.94, w: 5.62, h: 2.81 },
+      { x: 4.04, y: 3.75, w: 2.81, h: 2.81 },
+      { x: 6.85, y: 3.75, w: 2.81, h: 2.81 }
     ]);
   });
 

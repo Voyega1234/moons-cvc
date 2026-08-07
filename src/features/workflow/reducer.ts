@@ -774,7 +774,7 @@ export function workflowReducer(
       const pillar = action.pillar.trim();
       const objective = action.objective.trim();
       const cta = action.cta.trim();
-      if (!hook || !subheadline || !pillar || !objective || !cta) return state;
+      if (!hook || !pillar || !objective || !cta) return state;
 
       return {
         ...state,
@@ -794,7 +794,7 @@ export function workflowReducer(
             ),
             concept: pillar,
             why: `Created manually for the ${objective.toLowerCase()} objective.`,
-            visual: "Use the hook and sub-headline as the primary copy hierarchy.",
+            visual: "Use the hook as the primary copy hierarchy and the optional sub-headline only when present.",
             cta,
             supportingPoints: [],
             formatBeats: [],
@@ -805,7 +805,7 @@ export function workflowReducer(
                   : state.albumFormat
                 : undefined,
             ctaActionType: "other" as const,
-            caption: [hook, subheadline, cta].join("\n\n"),
+            caption: [hook, subheadline, cta].filter(Boolean).join("\n\n"),
             selected: false,
             exportGroup: null
           }

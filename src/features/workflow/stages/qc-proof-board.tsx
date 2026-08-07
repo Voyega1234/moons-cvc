@@ -170,7 +170,9 @@ function CreativeVisual({
       <span className="static-mark" />
       <div className="static-copy">
         <h3>{direction?.hook ?? "Static creative"}</h3>
-        <p>{direction ? directionSubheadline(direction) : ""}</p>
+        {direction && directionSubheadline(direction) ? (
+          <p>{directionSubheadline(direction)}</p>
+        ) : null}
         <span>Learn more</span>
       </div>
     </div>

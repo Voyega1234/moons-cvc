@@ -927,7 +927,19 @@ async function generateOutputForHook({
       writeDebugLog,
       fetchImpl
     });
-    const imageBytes = Buffer.from(image.base64, "base64");
+    const alignedImage = await ensureFourGridMasterAlignment({
+      input,
+      hook,
+      albumFormat,
+      image,
+      apiKey,
+      model,
+      generationSize,
+      debugLogDirectory,
+      writeDebugLog,
+      fetchImpl
+    });
+    const imageBytes = Buffer.from(alignedImage.base64, "base64");
     const masterOutput = await persistArtworkOutput({
       input,
       hook: masterHook,
@@ -937,7 +949,7 @@ async function generateOutputForHook({
       format,
       model,
       imageBytes,
-      mimeType: image.mimeType,
+      mimeType: alignedImage.mimeType,
       storage,
       debugLogDirectory,
       writeDebugLog
@@ -1134,6 +1146,82 @@ async function applyDesignSystemVisualQc({
   }
 }
 
+async function ensureFourGridMasterAlignment({
+  input,
+  hook,
+  albumFormat,
+  image,
+  apiKey,
+  model,
+  generationSize,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  albumFormat: AlbumFormat;
+  image: GeneratedImage;
+  apiKey: string;
+  model: string;
+  generationSize: ArtworkOutputSize;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<GeneratedImage> {
+  if (albumFormat !== "four-grid") return image;
+
+  const sourceBytes = Buffer.from(image.base64, "base64");
+  const alignment = await inspectFourGridMasterAlignment(sourceBytes);
+  if (alignment.valid) return image;
+
+  const revisionPrompt = [
+    "Repair Image 1's Album grid geometry only.",
+    `The detected vertical divider is at ${alignment.verticalPercent}% and the horizontal divider is at ${alignment.horizontalPercent}%.`,
+    "Move both continuous dividers to the exact 50% center lines so the master contains four equal square panels in a strict two-by-two grid.",
+    "Keep every existing panel in its current quadrant and preserve all intended copy, typography, objects, brand assets, colors, lighting, visual style, and campaign content.",
+    "Do not rewrite, add, remove, swap, crop, or redesign any panel. Return one corrected square Album master artwork."
+  ].join("\n\n");
+  const sourceReference: ReferenceImageInput = {
+    bytes: sourceBytes,
+    mimeType: image.mimeType,
+    label: "Image 1 — Album master with misaligned grid dividers"
+  };
+  const repairHook = { id: `${hook.id}-album-grid-repair` };
+  const imageRequestDebug = buildImageRequestDebugBundle({
+    model,
+    runId: input.runId,
+    hook: repairHook,
+    prompt: revisionPrompt,
+    size: generationSize,
+    quality: "medium",
+    references: [sourceReference]
+  });
+  await writeDebugLog(
+    debugLogDirectory,
+    imageRequestDebug.entry,
+    imageRequestDebug.assets
+  );
+  const repairedImage = await editImage({
+    apiKey,
+    model,
+    prompt: revisionPrompt,
+    size: generationSize,
+    quality: "medium",
+    referenceImages: [sourceReference],
+    fetchImpl
+  });
+  const repairedAlignment = await inspectFourGridMasterAlignment(
+    Buffer.from(repairedImage.base64, "base64")
+  );
+  if (!repairedAlignment.valid) {
+    throw new Error(
+      "Album grid alignment is still invalid after one repair. Regenerate the Album before export."
+    );
+  }
+  return repairedImage;
+}
+
 function buildVisualQcRevisionPrompt(instruction: string): string {
   return [
     "Refine Image 1 as a senior art director and retoucher.",
@@ -1209,6 +1297,50 @@ interface AlbumCropRegion {
   maxHeight: number;
 }
 
+const FOUR_GRID_ALIGNMENT_TOLERANCE = 0.02;
+
+export async function inspectFourGridMasterAlignment(
+  imageBytes: Buffer
+): Promise<{
+  valid: boolean;
+  verticalPercent: number;
+  horizontalPercent: number;
+}> {
+  const metadata = await sharp(imageBytes).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error("Could not read the generated album master dimensions.");
+  }
+
+  const side = Math.min(metadata.width, metadata.height);
+  const left = Math.floor((metadata.width - side) / 2);
+  const top = Math.floor((metadata.height - side) / 2);
+  const analysisSize = 512;
+  const pixels = await sharp(imageBytes)
+    .extract({ left, top, width: side, height: side })
+    .resize(analysisSize, analysisSize, { fit: "fill" })
+    .greyscale()
+    .raw()
+    .toBuffer();
+  const boundaries = detectAlbumBoundaries({
+    pixels,
+    width: analysisSize,
+    height: analysisSize,
+    format: "four-grid"
+  });
+  const expected = analysisSize / 2;
+  const vertical = boundaries.vertical ?? expected;
+  const horizontal = boundaries.horizontal ?? expected;
+  const tolerance = analysisSize * FOUR_GRID_ALIGNMENT_TOLERANCE;
+
+  return {
+    valid:
+      Math.abs(vertical - expected) <= tolerance &&
+      Math.abs(horizontal - expected) <= tolerance,
+    verticalPercent: Number(((vertical / analysisSize) * 100).toFixed(1)),
+    horizontalPercent: Number(((horizontal / analysisSize) * 100).toFixed(1))
+  };
+}
+
 async function splitAlbumMaster(
   imageBytes: Buffer,
   format: AlbumFormat
@@ -1270,7 +1402,7 @@ async function splitAlbumMaster(
         .resize({
           width: region.maxWidth,
           height: region.maxHeight,
-          fit: "inside"
+          fit: format === "four-grid" ? "fill" : "inside"
         })
         .png()
         .toBuffer()
@@ -2282,7 +2414,10 @@ async function buildDirectFinalArtworkPrompt({
   const ideaJson = JSON.stringify(
     {
       Hook: hook.hook.trim(),
-      subheadline: (hook.subheadline || hook.concept).trim(),
+      subheadline: (hook.subheadline === undefined
+        ? hook.concept
+        : hook.subheadline
+      ).trim(),
       "Supporting points (one per line)": (hook.supportingPoints ?? [])
         .map((point) => point.trim())
         .filter(Boolean),

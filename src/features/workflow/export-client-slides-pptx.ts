@@ -162,7 +162,6 @@ function cleanSlideCaption(value: string | undefined): string {
     ?.replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .filter(Boolean)
     .join("\n")
     .trim();
   return clean || "—";
@@ -311,9 +310,6 @@ function addCaptionBlock(
   options: { x: number; y: number; w: number; h: number }
 ) {
   const text = clampSlideCaption(value);
-  const characterCount = Array.from(text).length;
-  const fontSize =
-    characterCount <= 350 ? 14 : characterCount <= 650 ? 12.5 : 11;
   slide.addText("CAPTION", {
     x: options.x,
     y: options.y,
@@ -333,7 +329,7 @@ function addCaptionBlock(
     h: options.h - 0.35,
     margin: 0,
     ...localizedTextStyle(text),
-    fontSize,
+    fontSize: 11,
     color: COLORS.ink,
     breakLine: false,
     valign: "top",
@@ -753,7 +749,16 @@ function addAlbumArtworkPreview(
   format: AlbumFormat,
   box = { x: 0.52, y: 0.68, w: 5.84, h: 6.14 }
 ) {
-  const placements = albumSlidePlacements(box, format);
+  const side = Math.min(box.w, box.h);
+  const placements = albumSlidePlacements(
+    {
+      x: box.x + (box.w - side) / 2,
+      y: box.y + (box.h - side) / 2,
+      w: side,
+      h: side
+    },
+    format
+  );
 
   imageData.slice(0, placements.length).forEach((data, index) => {
     const placement = placements[index];
@@ -951,19 +956,19 @@ function addSinglePageArtworkSlide(
     fit: "shrink",
     breakLine: false
   });
-  addTextBlock(
-    slide,
-    "Sub-headline",
-    direction ? directionSubheadline(direction as CreativeDirection) : undefined,
-    {
+  const subheadline = direction
+    ? directionSubheadline(direction as CreativeDirection)
+    : "";
+  if (subheadline) {
+    addTextBlock(slide, "Sub-headline", subheadline, {
       x: 0.55,
       y: 2.93,
       w: 2.84,
       h: 0.86,
       maxLength: 260,
       fontSize: 11.5
-    }
-  );
+    });
+  }
   addTextBlock(slide, "Creative concept", direction?.concept, {
     x: 0.55,
     y: 4.03,
@@ -1218,34 +1223,36 @@ function addClientSlide(
     valign: "top",
     breakLine: false
   });
-  slide.addText("SUPPORTING LINE", {
-    x: 3.57,
-    y: 3.72,
-    w: 2.58,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 9,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 1
-  });
   const subheadline = clampText(
     direction ? directionSubheadline(direction as CreativeDirection) : undefined,
     300
   );
-  slide.addText(subheadline, {
-    x: 3.57,
-    y: 4.08,
-    w: 2.58,
-    h: 1.46,
-    margin: 0,
-    ...localizedTextStyle(subheadline),
-    fontSize: 13,
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false
-  });
+  if (subheadline) {
+    slide.addText("SUPPORTING LINE", {
+      x: 3.57,
+      y: 3.72,
+      w: 2.58,
+      h: 0.2,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 9,
+      bold: true,
+      color: COLORS.muted,
+      charSpacing: 1
+    });
+    slide.addText(subheadline, {
+      x: 3.57,
+      y: 4.08,
+      w: 2.58,
+      h: 1.46,
+      margin: 0,
+      ...localizedTextStyle(subheadline),
+      fontSize: 13,
+      color: COLORS.ink,
+      valign: "top",
+      breakLine: false
+    });
+  }
 
   slide.addText("CREATIVE DRAFT", {
     x: 6.6,

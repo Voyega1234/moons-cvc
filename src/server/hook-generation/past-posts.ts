@@ -24,6 +24,24 @@ export interface PastPostsClient {
 }
 
 const PAST_POSTS_LIMIT = 20;
+const PAST_POSTS_PROMPT_LIMIT = 6;
+
+export function selectPastPostsForCaption(
+  posts: readonly PastPostExample[]
+): readonly PastPostExample[] {
+  const ads = posts.filter((post) => post.source === "ad_caption");
+  const organic = posts.filter((post) => post.source === "organic_post");
+  const preferred = [...ads.slice(0, 4), ...organic.slice(0, 2)];
+  if (preferred.length >= PAST_POSTS_PROMPT_LIMIT) {
+    return preferred.slice(0, PAST_POSTS_PROMPT_LIMIT);
+  }
+
+  const selected = new Set(preferred);
+  return [
+    ...preferred,
+    ...posts.filter((post) => !selected.has(post))
+  ].slice(0, PAST_POSTS_PROMPT_LIMIT);
+}
 
 export async function fetchPastPostExamples({
   client,

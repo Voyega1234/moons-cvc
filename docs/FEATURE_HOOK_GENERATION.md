@@ -159,8 +159,10 @@ The UI currently persists:
 - `id`
 - `service`
 - `hook`
-- `subheadline` — concise user-facing supporting copy mapped from
-  `copywriting.sub_headline_1`
+- `subheadline` — optional user-facing supporting copy mapped from
+  `copywriting.sub_headline_1`; the Structured Output field remains a required
+  string and uses `""` when the headline already communicates the complete
+  message
 - `concept`
 - `subheadlineHighlight` — exact phrase inside `subheadline` used for bold
   emphasis on screen and in PDF export
@@ -176,9 +178,10 @@ work but are not persisted in `CreativeDirection` yet.
 ## Subheadline highlight pass
 
 After direction generation finishes, the harness sends every generated
-`{ id, subheadline }` to a separate structured-output call. The generation
-prompt no longer selects `subheadlineHighlight`; the dedicated pass is the
-single source of that decision.
+non-empty `{ id, subheadline }` to a separate structured-output call. Directions
+with `subheadline: ""` skip this call and persist an empty highlight. The
+generation prompt no longer selects `subheadlineHighlight`; the dedicated pass
+is the single source of that decision.
 
 The stable Highlight instructions live in:
 

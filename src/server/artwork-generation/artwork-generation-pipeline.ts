@@ -1633,7 +1633,10 @@ async function buildDirectFinalArtworkPrompt({
   const ideaJson = JSON.stringify(
     {
       Hook: hook.hook.trim(),
-      subheadline: (hook.subheadline || hook.concept).trim(),
+      subheadline: (hook.subheadline === undefined
+        ? hook.concept
+        : hook.subheadline
+      ).trim(),
       "Supporting points (one per line)": (hook.supportingPoints ?? [])
         .map((point) => point.trim())
         .filter(Boolean),

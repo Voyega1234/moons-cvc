@@ -25,9 +25,16 @@ import {
 } from "../shared/convert-cake-auth.js";
 import {
   fetchPastPostExamples,
+  selectPastPostsForCaption,
   type PastPostExample,
   type PastPostsClient
 } from "./past-posts.js";
+import {
+  hookGenerationDebugLogDirectory,
+  writeHookGenerationDebugLog,
+  type HookGenerationDebugLog,
+  type HookGenerationDebugLogger
+} from "./hook-generation-debug-log.js";
 
 type FetchLike = typeof fetch;
 
@@ -39,6 +46,8 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENROUTER_HOOK_GENERATION_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
+  HOOK_GENERATION_DEBUG_LOG_DIR?: string;
+  VERCEL_ENV?: string;
 }
 
 export interface HookGenerationHarnessEndpointOptions {
@@ -65,27 +74,6 @@ type ResponseContent =
       image_url: string;
       detail: "high";
     };
-
-interface HookResearchReference {
-  name: string;
-  type:
-    | "provable_moment"
-    | "evidence_backed_behavior"
-    | "cultural_fever"
-    | "platform_buzz"
-    | "category_signal";
-  whyItMatters: string;
-  brandRelevance: string;
-  evidenceSummary: string;
-  evidenceStrength: "strong" | "medium" | "weak";
-}
-
-interface HookResearch {
-  overallFinding: string;
-  references: readonly HookResearchReference[];
-  searchQueriesUsed: readonly string[];
-  limitations: string;
-}
 
 interface GeneratedDirection extends RawDirection {
   id: string;
@@ -211,22 +199,13 @@ export async function handleHookGenerationHarnessRequest({
       auth,
       createPastPostsClient
     });
-    const agentHookPrompt = await loadAgentHookPrompt();
-    const research = await runResearchStep({
-      input,
-      apiKey: openAiApiKey,
-      model: supportModel,
-      fetchImpl
-    });
-    const generationBatches = buildHookGenerationBatches(input);
-    const batchResults = await mapWithConcurrency(
+    const directTraces = await mapWithConcurrency(
       generationBatches,
       HOOK_GENERATION_CONCURRENCY,
       (batch) =>
         withTransientRetry(() =>
           runGenerationStep({
             input: batch,
-            research,
             pastPosts,
             agentHookPrompt,
             apiKey: generationApiKey,
@@ -237,7 +216,7 @@ export async function handleHookGenerationHarnessRequest({
         )
     );
     const directions = makeDirectionIdsUnique(
-      batchResults.flatMap((result) => result.directions)
+      directTraces.flatMap((trace) => trace.output.directions)
     ).slice(0, input.quantity);
     if (
       input.quantity > HOOK_GENERATION_BATCH_SIZE &&
@@ -258,6 +237,22 @@ export async function handleHookGenerationHarnessRequest({
       prompt: subheadlineHighlightPrompt,
       fetchImpl
     });
+    const debugDirectory =
+      env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim() ||
+      hookGenerationDebugLogDirectory(env.VERCEL_ENV);
+    if (debugDirectory) {
+      await writeDebugLog(
+        debugDirectory,
+        buildDirectHookGenerationDebugLog({
+          input,
+          generationBatches,
+          directTraces,
+          generationProvider,
+          generationModel: model,
+          finalDirections: highlightedDirections
+        })
+      );
+    }
 
     return jsonResponse({
       ok: true,
@@ -322,43 +317,14 @@ async function loadPastPostExamples({
       accessToken: auth.accessToken
     });
     return await fetchPastPostExamples({ client, clientId: input.brand.id });
-  } catch {
+  } catch (error) {
+    console.warn("Could not load Hook Agent past-post examples.", error);
     return [];
   }
 }
 
-async function runResearchStep({
-  input,
-  apiKey,
-  model,
-  fetchImpl
-}: {
-  input: HookGenerationHarnessRequest;
-  apiKey: string;
-  model: string;
-  fetchImpl: FetchLike;
-}): Promise<HookResearch> {
-  const payload = await callResponsesApi({
-    apiKey,
-    model,
-    fetchImpl,
-    content: [
-      {
-        type: "input_text",
-        text: buildResearchPrompt(input)
-      }
-    ],
-    schemaName: "moons_hook_research",
-    schema: hookResearchSchema,
-    tools: [{ type: "web_search_preview" }]
-  });
-
-  return parseHookResearch(extractResponseText(payload));
-}
-
 async function runGenerationStep({
   input,
-  research,
   pastPosts,
   agentHookPrompt,
   apiKey,
@@ -367,7 +333,6 @@ async function runGenerationStep({
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
-  research: HookResearch;
   pastPosts: readonly PastPostExample[];
   agentHookPrompt: string;
   apiKey: string;
@@ -411,7 +376,7 @@ async function runGenerationStep({
   let finalInputText = inputText;
   let payload = await requestDirections(finalInputText);
   let result: HookGenerationResult | undefined;
-  let repairedAlbumPanelCount = false;
+  let albumPanelCountRepairAttempts = 0;
   let repairedThaiNaturalness = false;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -419,7 +384,7 @@ async function runGenerationStep({
       result = parseHookGenerationResult(extractResponseText(payload));
     } catch (error) {
       if (
-        repairedAlbumPanelCount ||
+        albumPanelCountRepairAttempts >= 2 ||
         !isAlbumPanelCountContractError(error)
       ) {
         throw error;
@@ -428,7 +393,7 @@ async function runGenerationStep({
         finalInputText,
         readableError(error)
       );
-      repairedAlbumPanelCount = true;
+      albumPanelCountRepairAttempts += 1;
       payload = await requestDirections(finalInputText);
       continue;
     }
@@ -534,21 +499,8 @@ function buildDirectHookGenerationDebugLog({
           }
         }
       }))
-    ],
-    schemaName: "moons_hook_generation",
-    schema: hookGenerationSchema,
-    provider
-  });
-
-  const result = parseHookGenerationResult(extractResponseText(payload));
-  const preference = input.albumFormat ?? defaultAlbumFormatPreference;
-  if (preference === "auto") return result;
-  return {
-    directions: result.directions.map((direction) =>
-      direction.service === "album-post"
-        ? { ...direction, albumFormat: preference }
-        : direction
-    )
+    },
+    finalResponse: { directions: finalDirections }
   };
 }
 
@@ -601,10 +553,18 @@ async function runSubheadlineHighlightBatch({
   prompt: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
-  const items = directions.map((direction) => ({
-    id: direction.id,
-    subheadline: direction.subheadline
-  }));
+  const items = directions
+    .filter((direction) => direction.subheadline.trim().length > 0)
+    .map((direction) => ({
+      id: direction.id,
+      subheadline: direction.subheadline
+    }));
+  if (items.length === 0) {
+    return directions.map((direction) => ({
+      ...direction,
+      subheadlineHighlight: ""
+    }));
+  }
   const payload = await callResponsesApi({
     apiKey,
     model,
@@ -910,6 +870,9 @@ async function callResponsesApi({
             }
           ],
           ...(tools?.length ? { tools } : {}),
+          ...(reasoningEffort
+            ? { reasoning: { effort: reasoningEffort } }
+            : {}),
           text: {
             format: {
               type: "json_schema",
@@ -1007,22 +970,15 @@ function buildDirectHookGenerationPrompt(
           "Research status: disabled. ระบบไม่แนบ Web Search ให้รอบนี้; citations ต้องเป็น []."
         ];
   return [
-    "# THAI PROVABLE MOMENT, BEHAVIOR & CULTURAL FEVER RESEARCH AGENT",
+    agentHookPrompt,
     "",
     "# Runtime contract",
     ...researchInstructions,
     "",
     buildInputBlock(input),
-    ...(pastPostExamples.length
-      ? [
-          "",
-          "# Past content data",
-          ...pastPostExamples.map(
-            (post, index) =>
-              `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
-          )
-        ]
-      : []),
+    "",
+    "# Past content data",
+    buildPastPostsBlock(pastPostExamples),
     "",
     "# Required output mix",
     `คืน ${input.quantity} directions ให้ครบและเรียงตาม quota นี้: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
@@ -1037,130 +993,6 @@ function buildDirectHookGenerationPrompt(
     "- ugc-video: albumFormat = null, ugcBrief ต้องมีข้อมูลครบ และ formatBeats ไม่มีจำนวนบังคับ.",
     "- motion-static: albumFormat = null, ugcBrief = null และ formatBeats ไม่มีจำนวนบังคับ."
   ].join("\n");
-}
-
-function buildGenerationPrompt(
-  input: HookGenerationHarnessRequest,
-  research: HookResearch,
-  pastPosts: readonly PastPostExample[],
-  agentHookPrompt: string
-): string {
-  return [
-    renderAgentHookPrompt(agentHookPrompt, input, research, pastPosts),
-    "",
-    "You are a world-class Creative Strategist and Senior Thai Copywriter for paid social advertising, on the level of a senior creative who deeply understands Thai language, brand voice, audience psychology, and paid-social performance.",
-    "",
-    "สิ่งสำคัญที่สุดคือ HOOK / HEADLINE — มันต้องฟังดูเหมือนแบรนด์นี้พูดเองได้จริง แต่คมกว่า สดกว่า และ performance-ready กว่าเดิม",
-    "",
-    "## CONTENT TYPE CREATIVE RULES",
-    "CONTENT TYPE EXECUTION — แต่ละ format ต้องคิดคนละแบบ ห้ามนำ Static concept เดิมไปเปลี่ยน label:",
-    "- single-static: รักษามาตรฐานเดิม สื่อสาร one sharp idea ในภาพเดียวภายใน ~2 วินาที. Hook เป็น visual headline ที่จบความคิดได้ในภาพเดียว. คืน formatBeats เป็น [] เสมอ.",
-    albumHookInstruction(
-      input.albumFormat ?? defaultAlbumFormatPreference
-    ),
-    "- ugc-video: คิดเป็น creator-led vertical video ที่ฟังเหมือนคนจริงพูด ไม่ใช่ headline บนโปสเตอร์. Hook ต้องเปิดเรื่องได้ใน 1-3 วินาที. formatBeats ต้องมี 3 beat พอดี: opening situation/tension → demonstration/proof → brand-fit action/close.",
-    "  สำหรับ ugc-video ให้สร้าง ugcBrief เพิ่มเติม: product = ชื่อสินค้า/บริการที่มีหลักฐานตรง, duration = ความยาวที่เหมาะสม เช่น 15–30 วินาที, objective = เป้าหมายวิดีโอที่ชัด, moodAndTone = mood/tone 3–5 คำพร้อมคำอธิบายสั้น, productionStyle = วิธีถ่ายและตัดต่อที่ creator ทำตามได้, referenceDirection = ลักษณะ reference visual ที่ควรหา/แนบโดยไม่อ้างชื่อ creator จริง, openingScript = คำพูด+action+ข้อความบนจอสำหรับช่วงเปิด, showcaseScript = คำพูด+action+proof/demo ช่วงกลาง, closingScript = คำพูด+action+CTA ช่วงปิด. แต่ละ script ต้อง production-ready 2–5 ประโยค กระชับ เป็นภาษาคนจริง และห้ามแต่ง claim. สำหรับ service อื่นให้คืนทุก field ใน ugcBrief เป็น string ว่าง.",
-    "- motion-static: คิดเป็น short motion creative. Hook ต้องทำงานกับ movement/reveal. formatBeats ต้องมี 3 beat พอดี: opening frame → motion/reveal → resolved message/CTA.",
-    "- resize: adapt approved work ไป placement ใหม่โดยไม่เสียสารหลัก และคืน formatBeats เป็น [].",
-    "",
-    "FACTUAL GROUNDING: ใช้เฉพาะราคา โปรโมชัน features บริการ สถิติ หรือการรับประกันที่ระบุไว้ใน input เท่านั้น ห้ามแต่งหรือสมมติข้อมูลที่ไม่มีหลักฐานรองรับ",
-    "",
-    ...(input.uploadedMaterials.length
-      ? [
-          "UPLOADED CREATIVE MATERIALS: inspect every attached image. Build ideas that can genuinely use the visible product/client material. Treat a main-object or product image as an available source object, not loose inspiration. Supporting components may shape the execution without becoming the hero. Never claim an object, feature, or detail that is not visible or stated in the input.",
-          ""
-        ]
-      : []),
-    "CONCEPT STRATEGY: ทุก concept ต้องเชื่อมโยงชัดเจน User Brief → Audience Insight → Product Focus → Strategic Angle → Headline โดยเริ่มจาก audience moment/tension/desire/objection ที่จำเพาะ ไม่ใช่เริ่มจาก product feature ตรงๆ ใช้มุมที่หลากหลาย เช่น pain-led, insight-led, desire-led, trust-building, objection-handling, offer-led, contrast, proof-led, before-after — เลือกเฉพาะมุมที่เหมาะกับแบรนด์และ brief จริงๆ",
-    "",
-    "HEADLINE STANDARD: สื่อความคิดเดียวชัดเจน อ่านแล้วเข้าใจทันที ฟังดูเป็นธรรมชาติเมื่ออ่านออกเสียง จำเพาะกับแบรนด์และ audience มีเหตุผลจริงที่ทำให้คนหยุดเลื่อน กระชับแต่ไม่แห้งจนไร้อารมณ์ ปกติยาวประมาณ 6-13 คำภาษาไทย ห้ามใช้ ellipsis, วงเล็บ, ประโยคคำถามเชิงวาทศิลป์ยาวๆ, โครงสร้าง \"เพราะ...จึง...\", การเรียงคำแบบ keyword stacking, สัมผัสเสแสร้ง ห้ามใช้วลีสำเร็จรูปเช่น ตอบโจทย์ทุกความต้องการ / ครบจบในที่เดียว / คุ้มกว่าที่เคย / ดีที่สุดสำหรับคุณ / เพื่อคุณโดยเฉพาะ / ยกระดับประสบการณ์ / ห้ามพลาด / โปรสุดคุ้ม / ราคาโดนใจ / เหนือระดับ / พรีเมียมเหนือใคร",
-    "",
-    "VISUAL DIRECTION: อธิบายเฉพาะ mood, emotional tone, ระดับความ polish, และ information hierarchy ที่ต้องการ (เช่น สะอาด ทันสมัย น่าเชื่อถือ อบอุ่น พรีเมียม) 1-2 ประโยคสั้นๆ ห้ามระบุฉาก, ตัวละคร, มุมกล้อง, พร็อพ, หรือ layout ที่ตายตัว — ทีมสร้างภาพจะกำหนดรายละเอียดที่ execution ต่อจากนี้เอง",
-    "",
-    "Hook ต้อง:",
-    "- เป็นภาษาไทยที่เป็นธรรมชาติ ไม่ใช่ภาษาไทยที่แปลมา",
-    "- brand-native เหมือนแบรนด์นี้พูดเองได้จริง",
-    "- ชัด คม performance-ready แต่ไม่ clickbait",
-    "- ใช้ Brand Memory และ Brief เป็น priority สูงสุด",
-    "- ใช้ research เป็น supporting context เท่านั้น ห้ามฝืนใช้ trend ถ้าไม่เกี่ยว",
-    "- ไม่กล่าว claim ที่ Brand Memory/Products/Brief ไม่รองรับ",
-    "",
-    "Caption ต้อง:",
-    "- เขียนในฐานะที่คุณคือ copywriter ประจำเพจนี้ ไม่ใช่นักเขียนภายนอก",
-    "- วิเคราะห์ตัวอย่างโพสต์/แคปชั่นจริงด้านล่างเป็นชุด ไม่ใช่อ่านแค่โพสต์เดียว: หา pattern ที่เกิดซ้ำของ opening, paragraph length, line breaks, bullets, emoji, hashtag, footer/signature, contact details และวิธีปิดท้ายด้วย CTA",
-    "- เขียน caption ใหม่ด้วย format และจังหวะภาษาที่พบจริงในอดีตของเพจ โดยคง footer/contact ที่เกิดซ้ำในโพสต์ส่วนใหญ่ไว้ในตำแหน่งเดิมและสะกดเหมือนต้นฉบับทุกตัวอักษร",
-    "- ห้ามคัดลอกใจความ campaign เก่า แต่ให้เรียนรู้โครงสร้างการเขียนและองค์ประกอบประจำเพจ",
-    "- ถ้า contact/footer พบเพียงครั้งเดียวหรือหลักฐานไม่ตรงกัน ห้ามเดาและให้ contactLine เป็น string ว่าง",
-    "- นำ supportingPoints ที่เกี่ยวข้องมาร้อยเป็น caption อย่างเป็นธรรมชาติ โดยไม่ยัดทุกข้อถ้าไม่เข้ากับ format ประจำเพจ",
-    "- ถ้าไม่มีตัวอย่างโพสต์เก่า ให้ยึดโทนจาก Brand Memory และ Brief แทน",
-    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' ใน caption แม้ตัวอย่างโพสต์เก่าจะใช้",
-    "",
-    "Supporting points และ business details ต้อง:",
-    "- supportingPoints มี 0-3 ข้อ เป็น facts, proof, service details หรือ offer mechanics ที่สั้นและช่วยให้สร้าง caption/artwork ได้จริง",
-    "- ใช้เฉพาะข้อมูลที่มีหลักฐานตรงจาก Brief, Brand kit, Products, Documents หรือโพสต์จริง ห้ามสร้างราคา โปรโมชัน สถิติ ช่องทางติดต่อ หรือ claim ใหม่",
-    "- contactLine ต้องเป็นบรรทัด contact/footer ที่คัดลอกตรงจากข้อมูลจริงและเกิดซ้ำอย่างสม่ำเสมอ; ถ้าไม่แน่ใจให้คืน string ว่าง",
-    "",
-    "CTA ต้อง:",
-    "- เป็น action + object ที่ชัดและเข้ากับ brand, offer และ conversion route ปกติ 2-7 คำ เช่น 'ดูแพ็กเกจ SEO', 'จองเวลาปรึกษา', 'ขอแผนแคมเปญ'",
-    "- ห้ามใช้ CTA กว้างๆ ที่ไม่บอกว่าจะได้อะไร เช่น 'ดูที่นี่', 'คลิกที่นี่', 'สนใจทัก', 'ดูเพิ่มเติม'",
-    "- เรียนรู้คำและรูปแบบ CTA จากโพสต์จริงของแบรนด์เมื่อมีหลักฐาน แต่ต้องสัมพันธ์กับ direction ใหม่",
-    "- ctaActionType ต้องเป็น website, line, phone, form, inbox, store หรือ other",
-    "- ctaDestination ใส่เฉพาะ URL, เบอร์, LINE ID, inbox หรือปลายทางที่ปรากฏตรงๆ ใน input/โพสต์จริงเท่านั้น ถ้าไม่มีให้คืน string ว่าง",
-    "- ห้ามใช้คำลงท้ายสุภาพ 'ครับ' หรือ 'ค่ะ' และห้ามเขียน CTA เป็นประโยคยาว",
-    "",
-    "Silent internal process (ห้าม output ขั้นตอนนี้ออกมา):",
-    "1. ย่อ brief ให้เหลือ audience insight ที่แข็งแรงที่สุด และ commercial promise ที่ชัดที่สุด",
-    "2. สร้าง candidate hooks อย่างน้อย 12 แบบจากหลาย strategic angle",
-    "3. judge แต่ละ candidate ด้วย brand fit, audience pain clarity, offer clarity, novelty, visualizability, paid-social thumb-stop",
-    `4. เลือก ${input.quantity} hooks ที่ดีที่สุดและหลากหลายที่สุดตาม content-type quota ตัดมุมที่ซ้ำกัน`,
-    "5. ใส่ concept, why, visual, formatBeats, ugcBrief, supportingPoints, CTA fields, contactLine และ caption ให้ครบ แล้วขัดเกลาอีกรอบก่อนตอบ",
-    "",
-    "ตอบทุก field เป็นภาษาไทย ยกเว้นชื่อแบรนด์ ชื่อสินค้า Tagline ชื่อแพลตฟอร์ม และศัพท์เฉพาะ",
-    "",
-    buildInputBlock(input),
-    "",
-    "Research context จาก harness search:",
-    JSON.stringify(research, null, 2),
-    "",
-    buildPastPostsBlock(pastPosts),
-    "",
-    "## Creative Compass output adapter — this overrides only the supplied prompt's final JSON shape",
-    `Return exactly ${input.quantity} directions matching this quota exactly: ${JSON.stringify(contentTypeQuotasForPrompt(input))}. Do not apply a count-plus-three rule. Return directions in the same order as the quota array.`,
-    "Return only the strict directions JSON required by the response schema. Set service to the exact internal service value from the quota. Map recommendation fields as follows: hook = copywriting.headline; subheadline = copywriting.sub_headline_1; concept = concept_idea; why = why_this_concept; visual = creative_direction.main_visual_or_scene; albumFormat = the exact album layout chosen for this idea according to the album rules above (for non-album services return three-horizontal); formatBeats = the exact format-native sequence defined above; ugcBrief = the UGC-only production brief defined above, or all-empty strings for non-UGC services; supportingPoints = only verified useful factual detail bullets; cta = brand-fit action label; ctaActionType = its conversion route; ctaDestination = verified destination or empty string; contactLine = recurring verified contact/footer or empty string; caption = a complete new caption written in the recurring format learned from the real past posts.",
-    "Subheadline rule: subheadline must be one concise Thai sentence that clarifies the hook. It must not be a strategy explanation, concept rationale, or paragraph, and it must not simply repeat the hook.",
-    "Format-beat validation: album-post, ugc-video, and motion-static must return exactly 3 non-empty formatBeats. single-static and resize must return an empty array. Album formatBeats are the three inside-slide supporting topics—not hidden rationale and not generic filler.",
-    "Final copy rule: caption and cta must never contain 'ครับ' or 'ค่ะ'. CTA must be a specific brand-fit action phrase, not a complete sentence and never a vague 'ดูที่นี่' style CTA.",
-    "Do not include content_type, product_service_focus, title, strategic_angle, content_pillar, format_execution, copywriting, creative_direction, tags, or recommendations in the response. The schema's service field is required."
-  ].join("\n");
-}
-
-function renderAgentHookPrompt(
-  template: string,
-  input: HookGenerationHarnessRequest,
-  research: HookResearch,
-  pastPosts: readonly PastPostExample[]
-): string {
-  const productFocus = input.brandLibrary.products.length
-    ? input.brandLibrary.products
-        .map((item) => `${item.title}: ${item.description}`)
-        .join("\n")
-    : "Use the product or service focus stated in the User Brief.";
-  const pastPostText = pastPosts.length
-    ? pastPosts.map((post) => post.text).join("\n\n")
-    : "No past posts are available. Use the Brand kit and Brief for voice.";
-
-  return template
-    .replaceAll("{{ $('Webhook').first().json.body.instructions }}", input.brief)
-    .replaceAll("{{ $('Webhook').first().json.body.productFocus }}", productFocus)
-    .replaceAll(
-      "{{ $('Webhook').first().json.body.contentTypeQuotas ? $('Webhook').first().json.body.contentTypeQuotas.toJsonString() : '[]' }}",
-      JSON.stringify(contentTypeQuotasForPrompt(input))
-    )
-    .replaceAll("{{ $('Facebook page content').item.json.page_content }}", pastPostText)
-    .replaceAll(
-      "{{ $('Message a model').item.json.content.parts[0].text }}",
-      JSON.stringify(research)
-    );
 }
 
 function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
@@ -1181,6 +1013,13 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
 }
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
+  const brief = hookRelevantBrief(input.brief);
+  const roundInstructions = hookRelevantRoundInstructions(
+    input.extraInstructions
+  );
+  const brandContext = input.brandLibrary.brand.filter(
+    isHookRelevantLibraryItem
+  );
   return [
     "## Creative Compass current input",
     `Run ID: ${input.runId}`,
@@ -1195,10 +1034,10 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "Current User Brief — highest priority for explicit campaign requirements:",
     brief,
     "",
-    ...(input.extraInstructions
+    ...(roundInstructions
       ? [
           "Additional direction for this round — HIGH PRIORITY, on top of the brief above:",
-          input.extraInstructions,
+          roundInstructions,
           ""
         ]
       : []),
@@ -1226,23 +1065,23 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
         ]
       : []),
     "Brand kit:",
-    ...input.brandLibrary.brand.map(
-      (item) => `- ${item.title}: ${item.description}`
+    ...brandContext.map(
+      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
     ),
     "",
     "Products / offers / benefits / audience / claim notes:",
     ...input.brandLibrary.products.map(
-      (item) => `- ${item.title}: ${item.description}`
+      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
     ),
     "",
     "Documents:",
     ...input.brandLibrary.docs.map(
-      (item) => `- ${item.title}: ${item.description}`
+      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
     ),
     "",
     "References:",
     ...input.brandLibrary.refs.map(
-      (item) => `- ${item.title}: ${item.description}`
+      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
     ),
     "",
     "Attached file names:",
@@ -1319,57 +1158,6 @@ function contentTypeQuotasForPrompt(input: HookGenerationHarnessRequest) {
 const stringArraySchema = {
   type: "array",
   items: { type: "string" }
-} as const;
-
-const hookResearchSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    overallFinding: { type: "string" },
-    references: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: { type: "string" },
-          type: {
-            type: "string",
-            enum: [
-              "provable_moment",
-              "evidence_backed_behavior",
-              "cultural_fever",
-              "platform_buzz",
-              "category_signal"
-            ]
-          },
-          whyItMatters: { type: "string" },
-          brandRelevance: { type: "string" },
-          evidenceSummary: { type: "string" },
-          evidenceStrength: {
-            type: "string",
-            enum: ["strong", "medium", "weak"]
-          }
-        },
-        required: [
-          "name",
-          "type",
-          "whyItMatters",
-          "brandRelevance",
-          "evidenceSummary",
-          "evidenceStrength"
-        ]
-      }
-    },
-    searchQueriesUsed: stringArraySchema,
-    limitations: { type: "string" }
-  },
-  required: [
-    "overallFinding",
-    "references",
-    "searchQueriesUsed",
-    "limitations"
-  ]
 } as const;
 
 const hookGenerationSchema = {
@@ -1711,49 +1499,6 @@ function readLibraryItems(
   });
 }
 
-function parseHookResearch(text: string): HookResearch {
-  const parsed = JSON.parse(text) as unknown;
-  const value = readRecord(parsed, "research");
-
-  return {
-    overallFinding: readString(value.overallFinding, "overallFinding"),
-    references: readResearchReferences(value.references),
-    searchQueriesUsed: readStringArray(
-      value.searchQueriesUsed,
-      "searchQueriesUsed"
-    ),
-    limitations: readString(value.limitations, "limitations")
-  };
-}
-
-function readResearchReferences(value: unknown): readonly HookResearchReference[] {
-  if (!Array.isArray(value)) throw new Error("references must be an array.");
-
-  return value.map((item, index) => {
-    const record = readRecord(item, `references[${index}]`);
-    return {
-      name: readString(record.name, `references[${index}].name`),
-      type: readResearchType(record.type, `references[${index}].type`),
-      whyItMatters: readString(
-        record.whyItMatters,
-        `references[${index}].whyItMatters`
-      ),
-      brandRelevance: readString(
-        record.brandRelevance,
-        `references[${index}].brandRelevance`
-      ),
-      evidenceSummary: readString(
-        record.evidenceSummary,
-        `references[${index}].evidenceSummary`
-      ),
-      evidenceStrength: readEvidenceStrength(
-        record.evidenceStrength,
-        `references[${index}].evidenceStrength`
-      )
-    };
-  });
-}
-
 function parseHookGenerationResult(text: string): HookGenerationResult {
   const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
   const value = readRecord(parsed, "hookGeneration");
@@ -1791,7 +1536,16 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         direction.caption,
         `directions[${index}].caption`
       );
-      const formatBeats = validateFormatBeats(service, rawFormatBeats, index);
+      const albumFormat = readGeneratedAlbumFormat(
+        direction.albumFormat,
+        `directions[${index}].albumFormat`
+      );
+      const formatBeats = validateFormatBeats(
+        service,
+        rawFormatBeats,
+        index,
+        albumFormat
+      );
       const ugcBrief =
         service === "ugc-video"
           ? readUgcVideoBrief(direction.ugcBrief, `directions[${index}].ugcBrief`, {
@@ -1823,10 +1577,7 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
                 direction.supportingPoints,
                 `directions[${index}].supportingPoints`
               ),
-        albumFormat: readGeneratedAlbumFormat(
-          direction.albumFormat,
-          `directions[${index}].albumFormat`
-        ),
+        albumFormat,
         formatBeats,
         ...(ugcBrief ? { ugcBrief } : {}),
         ctaActionType:
@@ -1887,13 +1638,21 @@ function readGeneratedAlbumFormat(
 function validateFormatBeats(
   service: ServiceType,
   beats: readonly string[],
-  index: number
+  index: number,
+  albumFormat: AlbumFormat
 ): readonly string[] {
   if (service === "single-static" || service === "resize") return [];
   const normalized = beats.map((beat) => beat.trim()).filter(Boolean);
-  if (normalized.length !== 3) {
+  const requiredCount =
+    service === "album-post"
+      ? albumFormat.startsWith("three-")
+        ? 2
+        : 3
+      : 3;
+  if (normalized.length !== requiredCount) {
+    const contract = service === "album-post" ? albumFormat : service;
     throw new Error(
-      `directions[${index}].formatBeats must contain exactly 3 items for ${service}.`
+      `directions[${index}].formatBeats must contain exactly ${requiredCount} items for ${contract}.`
     );
   }
   return normalized;
@@ -2182,34 +1941,6 @@ function readStringArray(value: unknown, field: string): readonly string[] {
     throw new Error(`${field} must be a string array.`);
   }
   return value;
-}
-
-function readResearchType(
-  value: unknown,
-  field: string
-): HookResearchReference["type"] {
-  const valid = [
-    "provable_moment",
-    "evidence_backed_behavior",
-    "cultural_fever",
-    "platform_buzz",
-    "category_signal"
-  ] as const;
-  if (typeof value !== "string" || !valid.includes(value as never)) {
-    throw new Error(`${field} is invalid.`);
-  }
-  return value as HookResearchReference["type"];
-}
-
-function readEvidenceStrength(
-  value: unknown,
-  field: string
-): HookResearchReference["evidenceStrength"] {
-  const valid = ["strong", "medium", "weak"] as const;
-  if (typeof value !== "string" || !valid.includes(value as never)) {
-    throw new Error(`${field} is invalid.`);
-  }
-  return value as HookResearchReference["evidenceStrength"];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

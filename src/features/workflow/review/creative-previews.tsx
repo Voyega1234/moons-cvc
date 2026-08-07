@@ -200,11 +200,13 @@ export function CreativePreviewModal({
             <img src={output.assetUrl} alt={direction?.hook ?? title} />
           ) : (
             <div className="static-preview">
-              <span className="static-mark" />
-              <div className="static-copy">
-                <h3>{direction?.hook}</h3>
-                <p>{direction ? directionSubheadline(direction) : null}</p>
-                <span>Learn more</span>
+                <span className="static-mark" />
+                <div className="static-copy">
+                  <h3>{direction?.hook}</h3>
+                  {direction && directionSubheadline(direction) ? (
+                    <p>{directionSubheadline(direction)}</p>
+                  ) : null}
+                  <span>Learn more</span>
               </div>
             </div>
           )}

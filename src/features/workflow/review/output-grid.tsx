@@ -201,11 +201,9 @@ export function OutputGrid({
                             <span className="static-mark" />
                             <div className="static-copy">
                               <h3>{direction?.hook}</h3>
-                              <p>
-                                {direction
-                                  ? directionSubheadline(direction)
-                                  : null}
-                              </p>
+                              {direction && directionSubheadline(direction) ? (
+                                <p>{directionSubheadline(direction)}</p>
+                              ) : null}
                               <span>Learn more</span>
                             </div>
                           </div>
@@ -606,7 +604,9 @@ function OutputRegenerateModal({
               <span className="static-mark" />
               <div className="static-copy">
                 <h3>{direction?.hook}</h3>
-                <p>{direction ? directionSubheadline(direction) : null}</p>
+                {direction && directionSubheadline(direction) ? (
+                  <p>{directionSubheadline(direction)}</p>
+                ) : null}
                 <span>Learn more</span>
               </div>
             </div>
