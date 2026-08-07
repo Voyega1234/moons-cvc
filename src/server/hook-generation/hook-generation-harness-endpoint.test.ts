@@ -69,6 +69,101 @@ function highlightResponse(id: string, highlights: readonly string[]) {
   );
 }
 
+function openRouterResearchResponse(
+  directions: readonly unknown[],
+  citationUrls: readonly string[] = []
+) {
+  return new Response(
+    JSON.stringify({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: `\`\`\`json\n${JSON.stringify({ directions })}\n\`\`\``,
+            annotations: citationUrls.map((url) => ({
+                type: "url_citation",
+                url_citation: {
+                  url,
+                  title: "Verified source",
+                  content: "Verified product evidence"
+                }
+              }))
+          }
+        }
+      ],
+      usage: {
+        server_tool_use_details: { web_search_requests: 1 }
+      }
+    }),
+    { status: 200 }
+  );
+}
+
+
+function openAiUgcDirectionResponse(hook: string) {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        directions: [
+          {
+            id: "ugc-natural-thai",
+            sourceCandidateId: "candidate-1-14",
+            service: "ugc-video",
+            hook,
+            subheadline: "เลือกจากสิ่งที่ใช้จริงในครัว",
+            concept: "รีวิวการเลือกกระทะจากการใช้งานจริง",
+            why: "เป็นภาษาพูดที่เข้าใจง่าย",
+            visual: "Creator สาธิตสินค้าในครัวจริง",
+            cta: "ทักถามรุ่นกระทะ",
+            albumFormat: "three-horizontal",
+            formatBeats: [
+              "หยิบสินค้าขึ้นมาระหว่างทำอาหาร",
+              "เล่าจากสิ่งที่สังเกตเห็นจริง",
+              "เปลี่ยนมุมกล้องตามการใช้งาน",
+              "จบเมื่อเรื่องเล่าสมบูรณ์"
+            ],
+            caption: `${hook}\n\nเลือกกระทะจากการใช้งานจริง`,
+            score: 90,
+            reasoning: "ภาษาธรรมชาติและเห็นภาพ",
+            citations: []
+          }
+        ]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+function openAiAlbumDirectionResponse(formatBeats: readonly string[]) {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        directions: [
+          {
+            id: "album-panel-count",
+            sourceCandidateId: "direct-01",
+            service: "album-post",
+            hook: "เด็กหลับแล้ว ทริปของผู้ใหญ่ยังไม่ต้องจบ",
+            subheadline: "พื้นที่ที่แยกกันช่วยให้ทุกคนพักได้ตามจังหวะ",
+            concept: "After Bedtime",
+            why: "ใช้พื้นที่หลาย panel เพื่อเล่าโมเมนต์ครอบครัว",
+            visual: "ภาพครอบครัวใช้พื้นที่แยกกันอย่างเป็นธรรมชาติ",
+            cta: "ดูรายละเอียดห้องพัก",
+            albumFormat: "four-grid",
+            formatBeats,
+            caption: "ห้องพักที่ให้ทุกคนมีพื้นที่ตามจังหวะของตัวเอง",
+            score: 90,
+            reasoning: "เหมาะกับครอบครัวและรูปแบบ Album",
+            citations: []
+          }
+        ]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
+
 describe("handleHookGenerationHarnessRequest", () => {
   it("splits high-volume hook quotas into bounded, content-specific batches", () => {
     const batches = buildHookGenerationBatches({
@@ -167,8 +262,8 @@ describe("handleHookGenerationHarnessRequest", () => {
                   cta: "จองที่นั่ง Webinar",
                   caption: "AI SEO ไม่ใช่เรื่องอนาคตสำหรับ B2B แล้ว",
                   score: 91,
-                  reasoning: "brand fit สูงและเห็นภาพง่าย",
-                  citations: ["AI search behavior"]
+                  reasoning: "Brand truth, ownership, parity และเหตุผลผลิตครบ",
+                  citations: []
                 }
               ]
             })
@@ -189,17 +284,72 @@ describe("handleHookGenerationHarnessRequest", () => {
         OPENAI_API_KEY: "test-key",
         OPENAI_HOOK_GENERATION_MODEL: "gpt-test"
       },
-      fetchImpl: fetchMock as unknown as typeof fetch
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      loadAgentHookPrompt: async () =>
+        "# CREATIVE STRATEGIST\nAGENT_HOOK_SEARCH_POLICY_ONLY",
+      loadSubheadlineHighlightPrompt: async () =>
+        "HIGHLIGHT_PROMPT_SOURCE_ONLY",
+      writeDebugLog
     });
 
     expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.directions[0]).toMatchObject({
-      hook: "ลูกค้า B2B หาเราเจอบน AI หรือยัง?",
-      subheadline: "เปลี่ยน visibility กับยอดขายให้ชัดขึ้น",
-      subheadlineHighlight: "visibility กับยอดขาย",
-      why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
-      cta: "จองที่นั่ง Webinar"
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as {
+      tools?: unknown[];
+      tool_choice?: string;
+      reasoning?: { effort?: string };
+      input: unknown;
+      text: {
+        format: {
+          schema: {
+            properties: {
+              directions: {
+                items: {
+                  properties: Record<string, unknown>;
+                  required: string[];
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+    expect(generationBody.tools).toEqual([expect.objectContaining({ type: "web_search_preview" })]);
+    expect(generationBody.tool_choice).toBe("required");
+    expect(generationBody.reasoning).toEqual({ effort: "high" });
+    const openAiDirectionSchema =
+      generationBody.text.format.schema.properties.directions.items;
+    expect(openAiDirectionSchema.required).toEqual(
+      Object.keys(openAiDirectionSchema.properties)
+    );
+    const supportBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { reasoning?: unknown; input?: unknown };
+    expect(supportBody.reasoning).toBeUndefined();
+    expect(JSON.stringify(supportBody.input)).toContain(
+      "HIGHLIGHT_PROMPT_SOURCE_ONLY"
+    );
+    const prompt = JSON.stringify(generationBody.input);
+    expect(prompt).toContain("AGENT_HOOK_SEARCH_POLICY_ONLY");
+    expect(prompt).toContain("# Runtime contract");
+    expect(prompt).toContain("Research status: enabled");
+    expect(prompt).toContain("ปฏิบัติตาม ## Research ใน agent_hook.md");
+    expect(prompt).toContain("# Required output mix");
+    expect(prompt).toContain("# Format");
+    expect(prompt).not.toContain("# Quality gate");
+    expect(prompt).not.toContain("# Copy");
+    expect(prompt).toContain("Onboarding Questionnaire — standing brand context");
+    const debugEntry = writeDebugLog.mock.calls[0]?.[1];
+    expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([
+      expect.objectContaining({ type: "web_search_preview" })
+    ]);
+    expect(
+      debugEntry?.hookAgent.batches[0]?.request.reasoningEffort
+    ).toBe("high");
+    expect(debugEntry?.finalResponse).toMatchObject({
+      directions: [expect.objectContaining({ id: "hook-1" })]
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -304,7 +454,64 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
   });
 
-  it("runs web research in Standard mode", async () => {
+  it("does not apply hidden semantic quality rules after structured output", async () => {
+    const direction = {
+      id: "weak-hook",
+      sourceCandidateId: "direct-01",
+      service: "single-static",
+      hook: "ไอเดียที่ยังไม่ผ่าน",
+      subheadline: "Draft แรกใช้คะแนนผิดสเกล",
+      concept: "Weak draft",
+      why: "Needs an editorial pass",
+      visual: "Simple visual",
+      cta: "ดูรายละเอียด",
+      albumFormat: "three-horizontal",
+      supportingPoints: ["กลิ่นไม่ฉุน ไม่ทำให้ปวดหัว"],
+      caption: "Draft ที่ยังไม่พร้อมใช้",
+      score: 9.4,
+      reasoning: "Scored on a ten-point scale",
+      citations: []
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({ directions: [direction] })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("weak-hook", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleStaticRequestBody)
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await response.json()).toMatchObject({
+      directions: [
+        expect.objectContaining({
+          hook: "ไอเดียที่ยังไม่ผ่าน",
+          supportingPoints: ["กลิ่นไม่ฉุน ไม่ทำให้ปวดหัว"],
+          score: 9.4
+        })
+      ]
+    });
+  });
+
+  it("defaults requests without a Hook idea mode to required Thailand research", async () => {
+    const bodyWithoutMode = { ...singleStaticRequestBody } as Record<
+      string,
+      unknown
+    >;
+    delete bodyWithoutMode.hookIdeaMode;
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -351,7 +558,92 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify({ ...requestBody, hookIdeaMode: "standard" })
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          hookIdeaMode: "standard",
+          quantity: 1,
+          contentTypeQuotas: [{ service: "single-static", count: 1 }],
+          brief:
+            "Launch Questionnaire\nPlease complete the questionnaire below.\nAbout Your Business\nProducts, Customers & Competitors"
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        HOOK_GENERATION_DEBUG_LOG_DIR: "logs/hook-generation",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createPastPostsClient: () => fakePastPostsClient,
+      loadAgentHookPrompt: async () =>
+        "# AGENT HOOK\nSEARCH_POLICY_FROM_AGENT_HOOK\nPAST_CONTENT_POLICY_FROM_AGENT_HOOK\nCOPY_POLICY_FROM_AGENT_HOOK",
+      writeDebugLog
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as {
+      tools?: unknown[];
+      tool_choice?: string;
+      input: unknown;
+      text: { format: { name: string } };
+    };
+    expect(generationBody.tools).toBeUndefined();
+    expect(generationBody.tool_choice).toBeUndefined();
+    expect(generationBody.text.format.name).toBe("moons_hook_generation");
+    const generationPrompt = JSON.stringify(generationBody.input);
+    expect(generationPrompt).toContain("SEARCH_POLICY_FROM_AGENT_HOOK");
+    expect(generationPrompt).toContain("Hook idea mode: standard");
+    expect(generationPrompt).toContain(
+      "ไม่มี Current Campaign Brief แยกจากข้อมูล Onboarding"
+    );
+    expect(generationPrompt).not.toContain("Please complete the questionnaire");
+    expect(generationPrompt).not.toContain("Products, Customers & Competitors");
+    expect(generationPrompt).not.toContain("# Search — required");
+    expect(generationPrompt).not.toContain("STANDARD MODE:");
+    expect(generationPrompt).not.toContain("THAILAND FIRST");
+    expect(generationPrompt).toContain("# Runtime contract");
+    expect(generationPrompt).toContain(
+      "Onboarding Questionnaire — standing brand context"
+    );
+    expect(generationPrompt).toContain(
+      "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B"
+    );
+    expect(generationPrompt).toContain("# Past content data");
+    expect(generationPrompt).toContain("PAST_CONTENT_POLICY_FROM_AGENT_HOOK");
+    expect(generationPrompt).toContain(
+      "Current User Brief — highest priority for explicit campaign requirements"
+    );
+    expect(generationPrompt).toContain(
+      "พูดตรงถึงปัญหาธุรกิจ แล้วเว้นบรรทัดก่อน CTA"
+    );
+    expect(generationPrompt).toContain("COPY_POLICY_FROM_AGENT_HOOK");
+    expect(generationPrompt).not.toContain("# Quality gate");
+    expect(generationPrompt).not.toContain("# Copy");
+    expect(writeDebugLog).toHaveBeenCalledTimes(1);
+    const debugEntry = writeDebugLog.mock.calls[0]?.[1];
+    expect(debugEntry?.hookAgent.batches[0]?.request.inputText).toContain(
+      "# Runtime contract"
+    );
+    expect(debugEntry?.hookAgent.batches[0]?.request.attachedImages).toEqual([
+      expect.objectContaining({ name: "hero-bottle.png", detail: "high" })
+    ]);
+  });
+
+  it("rewrites a final Thai direction when its copy uses ฉัน", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleUgcRequestBody)
       }),
       env: { OPENAI_API_KEY: "test-key" },
       fetchImpl: fetchMock as unknown as typeof fetch
@@ -382,36 +674,65 @@ describe("handleHookGenerationHarnessRequest", () => {
         )
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    directions: [
-                      {
-                        id: "openrouter-hook",
-                        service: "single-static",
-                        hook: "มุมคิดใหม่จาก Claude",
-                        subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
-                        concept: "OpenRouter generation",
-                        why: "Tests provider routing",
-                        visual: "Clean and direct",
-                        albumFormat: "three-horizontal",
-                        cta: "ดูรายละเอียด",
-                        caption: "แคปชั่นจากโมเดลที่เลือก",
-                        score: 88,
-                        reasoning: "Strong fit",
-                        citations: []
-                      }
-                    ]
-                  })
-                }
-              }
-            ]
-          }),
-          { status: 200 }
-        )
+        openAiAlbumDirectionResponse(["Panel 2", "Panel 3", "Panel 4"])
+      )
+      .mockResolvedValueOnce(
+        highlightResponse("album-panel-count", [])
+      );
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          service: "album-post",
+          quantity: 1,
+          contentTypeQuotas: [{ service: "album-post", count: 1 }]
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const retryBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { input: unknown; reasoning?: { effort?: string } };
+    const retryPrompt = JSON.stringify(retryBody.input);
+    expect(retryPrompt).toContain("ALBUM PANEL COUNT CORRECTION");
+    expect(retryPrompt).toContain(
+      "directions[0].formatBeats must contain exactly 3 items for four-grid"
+    );
+    expect(retryBody.reasoning).toEqual({ effort: "high" });
+    const payload = (await response.json()) as {
+      directions: { formatBeats: string[] }[];
+    };
+    expect(payload.directions[0]?.formatBeats).toHaveLength(3);
+  });
+
+  it("routes the direct creative pass through OpenRouter when selected", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        openRouterResearchResponse([
+          {
+            id: "openrouter-hook",
+            sourceCandidateId: "candidate-1",
+            service: "single-static",
+            hook: "มุมคิดใหม่จาก Claude",
+            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+            concept: "OpenRouter generation",
+            why: "Tests provider routing",
+            visual: "Clean and direct",
+            albumFormat: "three-horizontal",
+            cta: "ดูรายละเอียด",
+            caption: "แคปชั่นจากโมเดลที่เลือก",
+            score: 88,
+            reasoning: "Strong fit",
+            citations: []
+          }
+        ])
       )
       .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
 
@@ -419,8 +740,8 @@ describe("handleHookGenerationHarnessRequest", () => {
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
         body: JSON.stringify({
-          ...requestBody,
-          generationModel: "anthropic/claude-sonnet-4.6"
+          ...singleStaticRequestBody,
+          generationModel: "google/gemini-3.6-flash"
         })
       }),
       env: {
@@ -435,7 +756,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "https://api.openai.com/v1/responses",
       "https://openrouter.ai/api/v1/chat/completions",
-      "https://api.openai.com/v1/responses"
+      "https://openrouter.ai/api/v1/chat/completions"
     ]);
     expect(
       new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Authorization")
@@ -455,7 +776,8 @@ describe("handleHookGenerationHarnessRequest", () => {
         type: string;
         json_schema: { name: string; strict: boolean; schema: unknown };
       };
-      provider: { require_parameters: boolean };
+      plugins?: readonly Record<string, unknown>[];
+      provider?: { require_parameters?: boolean };
     };
     expect(generationBody.model).toBe("anthropic/test-hook-model");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
@@ -464,16 +786,48 @@ describe("handleHookGenerationHarnessRequest", () => {
       image_url: { url: "https://example.com/hero-bottle.png" }
     });
     expect(generationBody.response_format).toMatchObject({
-      type: "json_schema",
-      json_schema: {
-        name: "moons_hook_generation",
-        strict: true
-      }
+      type: "json_schema"
+    });
+    expect(generationBody.response_format.json_schema).toMatchObject({
+      name: "moons_hook_generation",
+      strict: true
     });
     expect(
       JSON.stringify(generationBody.response_format.json_schema.schema)
     ).not.toContain("maxItems");
-    expect(generationBody.provider.require_parameters).toBe(true);
+    expect(
+      JSON.stringify(generationBody.response_format.json_schema.schema)
+    ).toContain("sourceCandidateId");
+    const openRouterSchema = JSON.stringify(
+      generationBody.response_format.json_schema.schema
+    );
+    expect(openRouterSchema).not.toContain('"type":["string","null"]');
+    expect(openRouterSchema).not.toContain('"type":["object","null"]');
+    expect(openRouterSchema).toContain('"anyOf"');
+    const directionSchema = generationBody.response_format.json_schema.schema as {
+      properties: {
+        directions: {
+          items: {
+            properties: Record<string, unknown>;
+            required: string[];
+          };
+        };
+      };
+    };
+    expect(directionSchema.properties.directions.items.required).toEqual(
+      Object.keys(directionSchema.properties.directions.items.properties)
+    );
+    expect(generationBody.plugins).toEqual([
+      { id: "web", engine: "native", max_results: 5 }
+    ]);
+    expect(generationBody.provider).toEqual({ require_parameters: true });
+    const payload = (await response.json()) as {
+      directions: { id: string; sourceCandidateId: string }[];
+    };
+    expect(payload.directions[0]).toMatchObject({
+      id: "openrouter-hook",
+      sourceCandidateId: "candidate-1"
+    });
   });
 
   it("surfaces the provider's OpenRouter 400 detail", async () => {
@@ -509,7 +863,8 @@ describe("handleHookGenerationHarnessRequest", () => {
         method: "POST",
         body: JSON.stringify({
           ...requestBody,
-          generationModel: "anthropic/claude-sonnet-4.6"
+          hookIdeaMode: "standard",
+          generationModel: "google/gemini-3.6-flash"
         })
       }),
       env: {
@@ -525,6 +880,11 @@ describe("handleHookGenerationHarnessRequest", () => {
       error:
         "OpenRouter hook harness failed: 400 — Unable to download the selected material image."
     });
+    const openRouterBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { tools?: unknown; tool_choice?: unknown };
+    expect(openRouterBody.tools).toBeUndefined();
+    expect(openRouterBody.tool_choice).toBeUndefined();
   });
 
   it("retries OpenRouter with inline material data when its provider cannot download an image URL", async () => {
@@ -571,36 +931,24 @@ describe("handleHookGenerationHarnessRequest", () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    directions: [
-                      {
-                        id: "openrouter-hook",
-                        service: "single-static",
-                        hook: "มุมคิดใหม่จาก Claude",
-                        subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
-                        concept: "OpenRouter generation",
-                        why: "Tests provider routing",
-                        visual: "Clean and direct",
-                        albumFormat: "three-horizontal",
-                        cta: "ดูรายละเอียด",
-                        caption: "แคปชั่นจากโมเดลที่เลือก",
-                        score: 88,
-                        reasoning: "Strong fit",
-                        citations: []
-                      }
-                    ]
-                  })
-                }
-              }
-            ]
-          }),
-          { status: 200 }
-        )
+        openRouterResearchResponse([
+          {
+            id: "openrouter-hook",
+            sourceCandidateId: "candidate-1",
+            service: "single-static",
+            hook: "มุมคิดใหม่จาก Claude",
+            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+            concept: "OpenRouter generation",
+            why: "Tests provider routing",
+            visual: "Clean and direct",
+            albumFormat: "three-horizontal",
+            cta: "ดูรายละเอียด",
+            caption: "แคปชั่นจากโมเดลที่เลือก",
+            score: 88,
+            reasoning: "Strong fit",
+            citations: []
+          }
+        ])
       )
       .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
 
@@ -608,8 +956,8 @@ describe("handleHookGenerationHarnessRequest", () => {
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
         body: JSON.stringify({
-          ...requestBody,
-          generationModel: "anthropic/claude-sonnet-4.6"
+          ...singleStaticRequestBody,
+          generationModel: "google/gemini-3.6-flash"
         })
       }),
       env: {
@@ -753,8 +1101,9 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(generationBody.input)).toContain(
       "copywriter ประจำเพจนี้"
     );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "หา pattern ที่เกิดซ้ำ"
+    expect(generationPrompt).toContain("# Past content data");
+    expect(generationPrompt).toContain(
+      "Past Content ใช้เรียนรู้ mood, style, language, rhythm, personality"
     );
     expect(JSON.stringify(generationBody.input)).toContain(
       "ห้ามใช้ CTA กว้างๆ"

@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-07-30
+Last verified: 2026-08-06
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -51,6 +51,26 @@ Async results must continue targeting the run that started the request.
 | Main application composition | `src/app/App.tsx` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
+
+Hook generation uses `agent_prompt/agent_hook.md` as the single creative-policy
+source of truth. The runtime endpoint adds only changing campaign evidence,
+Research availability, quotas, format contracts, and JSON transport; it must
+not restate Creative, Brand Voice, Research, Copy, Product Truth, or scoring
+policy. Subheadline emphasis is a separate micro-agent owned by
+`agent_prompt/agent_hook_highlight.md`.
+
+New runs default to `fresh-research`; users may explicitly switch a run to
+no-research mode. OpenAI generation attaches `web_search_preview` with Thailand
+location context. OpenRouter generation uses Chat Completions with the top-level
+`plugins: [{ id: "web" }]` web-search plugin and strict Structured Outputs.
+Creative quality, Product Truth, Citation use, and scoring policy belong to
+`agent_hook.md`; runtime code does not reject consumer-facing wording through
+hidden semantic regexes or self-score thresholds. Runtime validation remains
+limited to transport/schema requirements, requested quotas, Album panel counts,
+and the explicit Thai first-person prohibition. Search audit metadata is written
+to local Hook debug logs. Album `formatBeats` map one-to-one to non-cover panels
+(two for three-panel formats and three for four-panel formats). UGC and Motion
+may return as many `formatBeats` as their idea needs.
 
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
@@ -114,13 +134,44 @@ Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
 
-- `standard` is a direct Image API route:
-  `agent_prompt/agent_image.md + Compact Campaign Input → GPT Image 2`.
-  `buildStandardImagePrompt()` assembles the two parts locally; Standard does
-  not call the Responses API or an OpenRouter/OpenAI prompt-writing model.
-  Selected reference images are attached directly to GPT Image 2. Album
-  service adds only the `ALBUM MASTER GRID` instruction before generating and
-  splitting the master artboard.
+The Hook Agent's `visual` / Visual direction field remains available for idea
+review, export, and learning, but it is excluded from artwork prompt agents,
+reference selection, and the final GPT Image 2 prompt in every artwork mode.
+
+Server-side ownership is split by responsibility:
+
+- `artwork-generation-pipeline.ts` owns request orchestration and the active
+  generation flow.
+- `artwork-request-parser.ts` validates and normalizes generation and revision
+  request bodies.
+- `prompt-runtime.ts` loads, compacts, and renders prompt templates;
+  `prompt-context.ts` compiles active campaign context and runtime rules.
+- `reference-images.ts` resolves, recovers, and normalizes reference assets.
+- `album-master.ts` builds Album master instructions and performs deterministic
+  format-native panel cropping. Album crops are then checked together by the
+  focused prompt at `agent_prompt/agent_album_panel_qc.md`; when visible
+  neighbouring-panel leakage is found, the pipeline permits one targeted GPT
+  Image 2 edit of the master and splits the repaired master again.
+- `artwork-revision.ts` owns revision prompting and image-edit orchestration.
+- `artwork-persistence.ts`, `artwork-paths.ts`, and
+  `artwork-generation-types.ts` own storage paths, uploads, signed URLs, and
+  the storage contract.
+- `artwork-debug-log.ts` owns debug-log schemas, filenames, and artifact
+  writes.
+
+Keep the endpoint façade stable for API and test imports. Add new behavior to
+the smallest owning module above instead of rebuilding the former monolith.
+
+- `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
+  the OpenAI Responses API using
+  `agent_prompt/agent_campaign_input_preflight.md`. Terra organizes product,
+  objective, copy, constraints, product truth, and reference roles; it does
+  not receive `agent_image.md` and does not write a visual route. The final
+  Image API call remains
+  `agent_prompt/agent_image.md + Preflighted Campaign Input + selected image attachments → GPT Image 2`.
+  `buildStandardImagePrompt()` assembles the final text locally. Album service
+  adds only the `ALBUM MASTER GRID` instruction before generating and splitting
+  the master artboard.
 - `design-system` uses the V6.2 Judgment final-art prompt at
   `agent_prompt/versions/2026-07-30-design-system-v6.2-judgment/prompts/03-design-system-v6.2-judgment.md`.
   V6.2 removes fixed visual presets and percentage-based composition rules. It

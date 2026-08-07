@@ -10,14 +10,25 @@ Moons supports two hook generation modes:
    - n8n returns hook directions directly.
 
 2. `harness`
-   - New backend harness mode.
+   - Backend Hook Agent mode.
    - Frontend sends the active run context to `/api/hook-generation-harness`.
    - Backend keeps model/search API keys server-side.
-   - Backend performs three model steps:
-     1. research/search for provable Thai moments, consumer behavior, cultural
-        signals, platform buzz, and category signals;
-     2. generate, judge, and rank the requested hook directions;
-     3. select exact Subheadline highlight spans in one dedicated batch pass.
+   - Backend performs one direct Creative Strategist pass followed by one
+     focused Subheadline-highlight pass.
+   - `standard` does not attach web search and uses only supplied verified
+     context.
+   - `fresh-research` is the default. OpenAI attaches
+     `web_search_preview`; OpenRouter attaches the top-level `web` plugin.
+   - All search instructions live only in `agent_prompt/agent_hook.md`.
+     Runtime code passes `Hook idea mode` as input and configures the search
+     tool, but does not append a second search prompt.
+   - Creative judgment such as consideration logic, content angles, Headline
+     quality, and generic-versus-strong selection criteria also lives in
+     `agent_prompt/agent_hook.md`. Runtime prompt builders retain only changing
+     context, Research availability, schema/quotas, and format-specific
+     transport contracts such as Album panel counts and UGC field presence.
+   - `standard` writes directly from verified current context.
+   - There is no separate research-summary or Creative-Director handoff.
 
 Switch modes with:
 
@@ -37,6 +48,8 @@ Harness mode requires backend-only env:
 ```bash
 OPENAI_API_KEY=<openai-api-key>
 OPENAI_HOOK_GENERATION_MODEL=gpt-5.6-terra
+OPENROUTER_API_KEY=<openrouter-api-key>
+OPENROUTER_HOOK_GENERATION_MODEL=google/gemini-3.6-flash
 SUPABASE_URL=<project-url>
 SUPABASE_ANON_KEY=<anon-key>
 ```
@@ -167,7 +180,16 @@ After direction generation finishes, the harness sends every generated
 prompt no longer selects `subheadlineHighlight`; the dedicated pass is the
 single source of that decision.
 
-The runtime prompt is the stakeholder-supplied prompt beginning with:
+The stable Highlight instructions live in:
+
+- `agent_prompt/agent_hook_highlight.md`
+
+The endpoint appends only the current `{ id, subheadline }` items. The prompt
+selects an exact continuous span, requests
+`{ items: [{ id, highlights: [...] }] }`, and the API enforces the matching
+Runtime JSON Schema.
+
+The prompt begins with:
 
 ```text
 Bold the sentence of this text that you think it's a highlight of this sub-headline
@@ -189,51 +211,41 @@ data where the highlight field is absent uses the deterministic fallback.
 
 ## Prompt source
 
-The harness prompt is adapted from:
+The Hook Agent's stable role and judgment rules live only in:
 
 - `agent_prompt/agent_hook.md`
 - `agent_prompt/agent_seasonal.md`
 
-The n8n placeholders from those files are replaced with the current Compass run
-context:
+It defines the Agent as a Creative Strategist that understands the brand,
+product, audience, and current market; uses Search for current context;
+develops meaningfully distinct, format-native ideas; and does not invent
+brand or product facts.
+
+`buildInputBlock()` appends Hook-relevant changing context:
 
 - user brief
 - selected service
 - selected output quantity
 - Brand Kit
 - Products
-- Documents
-- References
-- Brand Memory working/avoid notes
-- onboarding questionnaire text, explicitly marked as historical onboarding
-  context rather than a current campaign brief
-- attachment file names
+- non-visual factual Documents such as product FAQs
+- uploaded material descriptions and images
+- selected raw Past Content used as brand evidence
 
-The research step keeps the same discipline as `agent_seasonal.md`: it is
-research-only and must not invent hooks, captions, content ideas, source names,
-rankings, statistics, or trend names.
+The model prompt excludes run/model metadata, duplicate quota prose, internal
+brand-analysis source labels, and visual-production items such as Logo rules,
+Brand CI, typography, colour systems, layouts, and art direction. Those visual
+rules belong to Artwork generation. Verified onboarding context is included as
+standing context but cannot override the current Brief. If the Brief itself is
+a raw Launch Questionnaire, runtime replaces it with a short no-current-brief
+notice.
 
-The generation step keeps the same discipline as `agent_hook.md`: the hook is
-the most important output, must be natural Thai, brand-native, and useful for
-paid social.
-
-**`agent_hook.md` was substantially rewritten on 2026-07-10** — new output
-schema (`recommendations[]` with `content_type` quotas across STATIC AD /
-VIDEO AD / ALBUM AD / SHORT VIDEO, plus `audience_insight`, `strategic_angle`,
-`content_pillar`, and a `copywriting` sub-object with `sub_headline_1/2` and
-`bullets[]`), a much longer set of concrete rules, and no more n8n example
-content baked in. Decision (2026-07-10): **adapt, don't adopt wholesale.**
-`buildGenerationPrompt` absorbed the new file's stronger creative-strategy
-language — content locked to single-image (STATIC AD) behavior, factual
-grounding, concept strategy (audience insight → strategic angle → headline),
-the concrete headline avoid-list, and the mood-only visual-direction rule —
-but the request/response schema and `RawDirection`/`CreativeDirection` shape
-were deliberately left unchanged. The new file's `content_type` quota system
-(mixing video/album/short-video recommendations) was **not** adopted: Moons'
-artwork generation only produces static images via `gpt-image-2` (see
-`docs/FEATURE_ARTWORK_GENERATION.md`), so quota'd video/album recommendations
-would have nowhere to go. Revisit this if/when video or album generation gets
-built — until then every hook is generated as if it were a STATIC AD.
+OpenAI requests attach `web_search_preview` and enforce tool use with
+`tool_choice: "required"`; the tool receives an approximate Thailand location.
+OpenRouter requests use Chat Completions with `plugins: [{ id: "web" }]`,
+`provider.require_parameters: true`, and strict JSON Schema output. Search and
+evidence policy remains owned by `agent_prompt/agent_hook.md`; runtime only
+announces whether Research is available for the current request.
 
 ## Caption grounding in real past posts
 

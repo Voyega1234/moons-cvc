@@ -50,7 +50,9 @@ function createStore(): ClientIngestionStore & {
 
 describe("runNextClientIngestionJob", () => {
   it("does nothing when there is no queued job to claim", async () => {
+    const failStalledJobs = vi.fn(async () => 0);
     const queue: ClientIngestionJobQueue = {
+      failStalledJobs,
       claimNextQueuedJob: vi.fn(async () => null)
     };
     const apify: ApifyClient = {
@@ -66,6 +68,7 @@ describe("runNextClientIngestionJob", () => {
     });
 
     expect(result).toEqual({ claimed: false });
+    expect(failStalledJobs).toHaveBeenCalledOnce();
     expect(apify.scrapeFacebookPosts).not.toHaveBeenCalled();
     expect(apify.scrapeFacebookAdsLibrary).not.toHaveBeenCalled();
   });
@@ -180,6 +183,48 @@ describe("runNextClientIngestionJob", () => {
 });
 
 describe("SupabaseClientIngestionJobQueue", () => {
+  it("fails stalled active jobs and unlocks their clients for retry", async () => {
+    const selectStalledJobs = vi.fn(async () => ({
+      data: [{ client_id: "client-1" }],
+      error: null
+    }));
+    const jobLt = vi.fn(() => ({ select: selectStalledJobs }));
+    const jobIn = vi.fn(() => ({ lt: jobLt }));
+    const jobUpdate = vi.fn(() => ({ in: jobIn }));
+    const updateClientStatuses = vi.fn(async () => ({ error: null }));
+    const clientIds = vi.fn(() => ({ in: updateClientStatuses }));
+    const clientUpdate = vi.fn(() => ({ in: clientIds }));
+    const from = vi.fn((table: string) =>
+      table === "brand_analysis_jobs"
+        ? { update: jobUpdate }
+        : { update: clientUpdate }
+    );
+    const schema = vi.fn(() => ({ from }));
+    const supabase = { schema } as unknown as SupabaseClient<Database>;
+
+    const queue = new SupabaseClientIngestionJobQueue(supabase);
+    const failedCount = await queue.failStalledJobs();
+
+    expect(failedCount).toBe(1);
+    expect(jobUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        current_step: "failed",
+        error_message: expect.stringContaining("no progress for 10 minutes")
+      })
+    );
+    expect(jobIn).toHaveBeenCalledWith(
+      "status",
+      expect.arrayContaining(["queued", "analyzing_visuals", "writing_memory"])
+    );
+    expect(jobLt).toHaveBeenCalledWith("updated_at", expect.any(String));
+    expect(clientUpdate).toHaveBeenCalledWith({
+      ingestion_status: "failed",
+      ingestion_error: expect.stringContaining("no progress for 10 minutes")
+    });
+    expect(clientIds).toHaveBeenCalledWith("id", ["client-1"]);
+  });
+
   it("maps the claimed RPC row into a harness job and client", async () => {
     const rpc = vi.fn(async () => ({
       data: [

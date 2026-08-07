@@ -582,6 +582,27 @@ describe("workspace serializer", () => {
     );
   });
 
+  it("migrates the legacy OpenRouter Claude hook model to Gemini", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const parsed = JSON.parse(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { hookGenerationModel?: string }> };
+    };
+    const run = parsed.data.runsById["run-1"];
+    if (!run) throw new Error("Expected serialized run fixture.");
+    run.hookGenerationModel = "anthropic/claude-sonnet-4.6";
+
+    const restored = deserializeWorkspace(JSON.stringify(parsed));
+
+    expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
+      "google/gemini-3.6-flash"
+    );
+  });
+
   it("loads older snapshots without an output size as 1088x1360", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",

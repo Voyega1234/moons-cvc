@@ -136,7 +136,9 @@ function parseRun(value: unknown): WorkflowState | null {
   const hookGenerationModel =
     value.hookGenerationModel === undefined
       ? "gpt-5.6-terra"
-      : parseMember(value.hookGenerationModel, hookGenerationModels);
+      : value.hookGenerationModel === "anthropic/claude-sonnet-4.6"
+        ? "google/gemini-3.6-flash"
+        : parseMember(value.hookGenerationModel, hookGenerationModels);
   const artworkMode =
     value.artworkMode === undefined
       ? "design-system"

@@ -1780,7 +1780,7 @@ describe("redesigned workflow stages", () => {
         name: /Working brief/i
       }) as HTMLTextAreaElement).value
     ).toContain(
-      "Objective: Create Meta performance creatives that make the product benefit instantly clear."
+      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity"
     );
 
     await user.click(stage.getByRole("button", { name: "Use monthly quota" }));

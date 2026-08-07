@@ -13,6 +13,9 @@ export interface OpenAiBrandVisualAnalyzerOptions {
   endpoint?: string;
   fetchImpl?: FetchLike;
   maxImages?: number;
+  maxAttempts?: number;
+  retryDelayMs?: number;
+  requestTimeoutMs?: number;
 }
 
 type ResponseContent =
@@ -28,6 +31,7 @@ type ResponseContent =
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
+const DEFAULT_REQUEST_TIMEOUT_MS = 75_000;
 
 export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly apiKey: string;
@@ -35,13 +39,19 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly endpoint: string;
   private readonly fetchImpl: FetchLike;
   private readonly maxImages: number;
+  private readonly maxAttempts: number;
+  private readonly retryDelayMs: number;
+  private readonly requestTimeoutMs: number;
 
   constructor({
     apiKey,
     model = DEFAULT_MODEL,
     endpoint = DEFAULT_ENDPOINT,
     fetchImpl = fetch,
-    maxImages = 12
+    maxImages = 12,
+    maxAttempts = 2,
+    retryDelayMs = 250,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
   }: OpenAiBrandVisualAnalyzerOptions) {
     if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
 
@@ -50,6 +60,9 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl;
     this.maxImages = maxImages;
+    this.maxAttempts = Math.max(1, Math.floor(maxAttempts));
+    this.retryDelayMs = Math.max(0, retryDelayMs);
+    this.requestTimeoutMs = Math.max(1, requestTimeoutMs);
   }
 
   async analyze(
@@ -64,19 +77,31 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
       throw new Error("No brand evidence is available for analysis.");
     }
 
-    const response = await this.fetchImpl(this.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.model,
-        store: false,
-        input: [
-          {
-            role: "user",
-            content: buildResponseContent(input, visualAssets)
+    try {
+      return await this.analyzeWithRetry(input, visualAssets);
+    } catch (error) {
+      if (
+        visualAssets.length > 0 &&
+        input.textEvidence.some((evidence) => evidence.text.trim()) &&
+        permitsTextOnlyFallback(error)
+      ) {
+        const analysis = await this.analyzeWithRetry(input, []);
+        const fallbackReason = textOnlyFallbackReason(error);
+
+        return {
+          ...analysis,
+          visualGuidance: {
+            ...analysis.visualGuidance,
+            sourceAssetPaths: []
+          },
+          needsReview: true,
+          reviewReason: [fallbackReason, analysis.reviewReason]
+            .filter(Boolean)
+            .join(" "),
+          rawOutput: {
+            mode: "text_only_fallback",
+            reason: fallbackReason,
+            response: analysis.rawOutput
           }
         ],
         text: {
@@ -86,9 +111,88 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
             strict: true,
             schema: brandVisualAnalysisSchema
           }
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  private async analyzeWithRetry(
+    input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
+    visualAssets: readonly MirroredBrandVisualAsset[]
+  ): Promise<BrandSignalAnalysis> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        return await this.requestAnalysis(input, visualAssets);
+      } catch (error) {
+        lastError = normalizeRequestError(error);
+        if (
+          attempt >= this.maxAttempts ||
+          !isRetryableRequestError(lastError)
+        ) {
+          throw lastError;
         }
       })
     });
+
+        await wait(this.retryDelayMs * attempt);
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async requestAnalysis(
+    input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
+    visualAssets: readonly MirroredBrandVisualAsset[]
+  ): Promise<BrandSignalAnalysis> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          store: false,
+          input: [
+            {
+              role: "user",
+              content: buildResponseContent(input, visualAssets)
+            }
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "brand_visual_analysis",
+              strict: true,
+              schema: brandVisualAnalysisSchema
+            }
+          }
+        }),
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new OpenAiVisualAnalysisRequestError(
+          "OpenAI visual analysis timed out.",
+          null,
+          false,
+          visualAssets.length > 0
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       throw new Error(`OpenAI visual analysis failed: ${response.status}`);

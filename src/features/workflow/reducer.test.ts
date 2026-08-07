@@ -189,15 +189,15 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("defaults hook generation to OpenAI and allows OpenRouter Claude", () => {
+  it("defaults hook generation to OpenAI and allows OpenRouter Gemini", () => {
     expect(initialWorkflowState.hookGenerationModel).toBe("gpt-5.6-terra");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-hook-generation-model",
-      model: "anthropic/claude-sonnet-4.6"
+      model: "google/gemini-3.6-flash"
     });
 
-    expect(updated.hookGenerationModel).toBe("anthropic/claude-sonnet-4.6");
+    expect(updated.hookGenerationModel).toBe("google/gemini-3.6-flash");
   });
 
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {
@@ -229,7 +229,9 @@ describe("workflowReducer", () => {
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ]);
     expect(initialWorkflowState.quantity).toBe(6);
-    expect(initialWorkflowState.brief).toHaveLength(440);
+    expect(initialWorkflowState.brief).toBe(
+      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different."
+    );
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-creative-mix-quantity",

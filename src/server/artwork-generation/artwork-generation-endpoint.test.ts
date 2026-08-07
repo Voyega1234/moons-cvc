@@ -2670,7 +2670,10 @@ describe("handleArtworkGenerationRequest", () => {
     expect(responseInputs[2]).toContain("AUTHORITATIVE RUNTIME INPUT");
     expect(responseInputs[2]).toContain("campaignSetDirection");
     expect(responseInputs[2]).toContain("shotOpportunity");
-    expect(responseInputs[3]).toContain("# VISUAL QUALITY CONTROL");
+    expect(responseInputs.join("\n")).not.toContain(
+      requestBody.selectedHooks[0]!.visual
+    );
+    expect(responseInputs.join("\n")).not.toContain("# VISUAL QUALITY CONTROL");
     expect(responseInputs.join("\n")).not.toContain(
       "# CAMPAIGN TRUTH NORMALIZER"
     );
@@ -2688,6 +2691,9 @@ describe("handleArtworkGenerationRequest", () => {
       "### Per-idea shot opportunity"
     );
     expect(generationCalls[0]).toContain("### Creative provocation");
+    expect(generationCalls[0]).not.toContain(
+      requestBody.selectedHooks[0]!.visual
+    );
     expect(generationCalls[0]).not.toContain(
       "LOCKED AUTHORITATIVE CAMPAIGN PACKET"
     );

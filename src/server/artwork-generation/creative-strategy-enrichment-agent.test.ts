@@ -141,6 +141,10 @@ describe("enrichCreativeStrategy", () => {
     expect(promptText).toContain('"id": "brief:0"');
     expect(promptText).toContain('"allowedUses": [');
     expect(promptText).toContain("Warm lifestyle scenes are consistently approved.");
+    expect(promptText).not.toContain(
+      "A bouquet changing the feeling of a lived-in room."
+    );
+    expect(promptText).not.toContain('"visual"');
     expect(traces).toEqual([
       expect.objectContaining({
         model: "gpt-5.6-luna",

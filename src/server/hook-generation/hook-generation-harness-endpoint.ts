@@ -51,6 +51,8 @@ export interface HookGenerationHarnessEndpointOptions {
     accessToken: string;
   }) => PastPostsClient;
   loadAgentHookPrompt?: () => Promise<string>;
+  loadSubheadlineHighlightPrompt?: () => Promise<string>;
+  writeDebugLog?: HookGenerationDebugLogger;
 }
 
 type ResponseContent =
@@ -111,22 +113,50 @@ interface HookGenerationResult {
   directions: readonly GeneratedDirection[];
 }
 
+interface TracedAgentResult<T> {
+  inputText: string;
+  output: T;
+  rawResponse: unknown;
+  researchAudit: ResearchAudit;
+}
+
+interface ResearchAudit {
+  webSearchRequests: number;
+  citationUrls: readonly string[];
+}
+
 const DEFAULT_MODEL = "gpt-5.6-terra";
-const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.6-flash";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
   "https://openrouter.ai/api/v1/chat/completions";
 const HOOK_GENERATION_BATCH_SIZE = 12;
 const HOOK_GENERATION_CONCURRENCY = 3;
+const HOOK_GENERATION_REASONING_EFFORT = "high" as const;
 const SUBHEADLINE_BATCH_SIZE = 24;
+const THAI_WEB_SEARCH_TOOL = {
+  type: "web_search_preview",
+  user_location: {
+    type: "approximate",
+    country: "TH",
+    timezone: "Asia/Bangkok"
+  }
+} as const;
+const OPENROUTER_WEB_PLUGIN = {
+  id: "web",
+  engine: "native",
+  max_results: 5
+} as const;
 
 export async function handleHookGenerationHarnessRequest({
   request,
   env,
   fetchImpl = fetch,
   createPastPostsClient = defaultCreatePastPostsClient,
-  loadAgentHookPrompt = defaultLoadAgentHookPrompt
+  loadAgentHookPrompt = defaultLoadAgentHookPrompt,
+  loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
+  writeDebugLog = writeHookGenerationDebugLog
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -171,6 +201,10 @@ export async function handleHookGenerationHarnessRequest({
           DEFAULT_MODEL;
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
+    const agentHookPrompt = await loadAgentHookPrompt();
+    const subheadlineHighlightPrompt =
+      await loadSubheadlineHighlightPrompt();
+    const generationBatches = buildHookGenerationBatches(input);
     const pastPosts = await loadPastPostExamples({
       input,
       env,
@@ -215,8 +249,13 @@ export async function handleHookGenerationHarnessRequest({
     }
     const highlightedDirections = await runSubheadlineHighlightStep({
       directions,
-      apiKey: openAiApiKey,
-      model: supportModel,
+      apiKey:
+        generationProvider === "openrouter"
+          ? generationApiKey
+          : openAiApiKey,
+      model: generationProvider === "openrouter" ? model : supportModel,
+      provider: generationProvider,
+      prompt: subheadlineHighlightPrompt,
       fetchImpl
     });
 
@@ -231,6 +270,13 @@ export async function handleHookGenerationHarnessRequest({
 
 async function defaultLoadAgentHookPrompt(): Promise<string> {
   return readFile(join(process.cwd(), "agent_prompt", "agent_hook.md"), "utf8");
+}
+
+async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_hook_highlight.md"),
+    "utf8"
+  );
 }
 
 function defaultCreatePastPostsClient({
@@ -328,20 +374,165 @@ async function runGenerationStep({
   model: string;
   provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
-}): Promise<HookGenerationResult> {
-  const payload = await callResponsesApi({
-    apiKey,
-    model,
-    fetchImpl,
-    content: [
-      {
-        type: "input_text",
-        text: buildGenerationPrompt(input, research, pastPosts, agentHookPrompt)
-      },
-      ...input.uploadedMaterials.map((material) => ({
-        type: "input_image" as const,
-        image_url: material.url,
-        detail: "high" as const
+}): Promise<TracedAgentResult<HookGenerationResult>> {
+  const researchEnabled = input.hookIdeaMode === "fresh-research";
+  const openAiResearchEnabled = researchEnabled && provider === "openai";
+  const openRouterResearchEnabled =
+    researchEnabled && provider === "openrouter";
+  const inputText = buildDirectHookGenerationPrompt(
+    input,
+    agentHookPrompt,
+    pastPosts
+  );
+  const requestDirections = (requestInputText: string) =>
+    callResponsesApi({
+      apiKey,
+      model,
+      fetchImpl,
+      content: [
+        { type: "input_text", text: requestInputText },
+        ...input.uploadedMaterials.map((material) => ({
+          type: "input_image" as const,
+          image_url: material.url,
+          detail: "high" as const
+        }))
+      ],
+      schemaName: "moons_hook_generation",
+      schema: hookGenerationSchema,
+      tools: openAiResearchEnabled ? [THAI_WEB_SEARCH_TOOL] : undefined,
+      plugins: openRouterResearchEnabled
+        ? [OPENROUTER_WEB_PLUGIN]
+        : undefined,
+      toolChoice: openAiResearchEnabled ? "required" : undefined,
+      reasoningEffort:
+        provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
+      provider
+    });
+  let finalInputText = inputText;
+  let payload = await requestDirections(finalInputText);
+  let result: HookGenerationResult | undefined;
+  let repairedAlbumPanelCount = false;
+  let repairedThaiNaturalness = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      result = parseHookGenerationResult(extractResponseText(payload));
+    } catch (error) {
+      if (
+        repairedAlbumPanelCount ||
+        !isAlbumPanelCountContractError(error)
+      ) {
+        throw error;
+      }
+      finalInputText = buildAlbumPanelCountRetryPrompt(
+        finalInputText,
+        readableError(error)
+      );
+      repairedAlbumPanelCount = true;
+      payload = await requestDirections(finalInputText);
+      continue;
+    }
+
+    if (
+      !repairedThaiNaturalness &&
+      containsForbiddenThaiFirstPerson(result)
+    ) {
+      finalInputText = buildThaiNaturalnessRetryPrompt(
+        finalInputText,
+        "direction"
+      );
+      repairedThaiNaturalness = true;
+      result = undefined;
+      payload = await requestDirections(finalInputText);
+      continue;
+    }
+
+    break;
+  }
+  if (!result) throw new Error("Hook generation correction did not complete.");
+  assertNoForbiddenThaiFirstPerson(result, "Creative directions");
+  const preference = input.albumFormat ?? defaultAlbumFormatPreference;
+  return {
+    inputText: finalInputText,
+    output: {
+      directions: result.directions.map((direction) =>
+        preference !== "auto" && direction.service === "album-post"
+          ? { ...direction, albumFormat: preference }
+          : direction
+      )
+    },
+    rawResponse: payload,
+    researchAudit: extractResearchAudit(payload)
+  };
+}
+
+function buildDirectHookGenerationDebugLog({
+  input,
+  generationBatches,
+  directTraces,
+  generationProvider,
+  generationModel,
+  finalDirections
+}: {
+  input: HookGenerationHarnessRequest;
+  generationBatches: readonly HookGenerationHarnessRequest[];
+  directTraces: readonly TracedAgentResult<HookGenerationResult>[];
+  generationProvider: "openai" | "openrouter";
+  generationModel: string;
+  finalDirections: readonly GeneratedDirection[];
+}): HookGenerationDebugLog {
+  const endpoint =
+    generationProvider === "openrouter"
+      ? "/api/v1/chat/completions"
+      : "/v1/responses";
+  const researchEnabled = input.hookIdeaMode === "fresh-research";
+  const openAiResearchEnabled =
+    researchEnabled && generationProvider === "openai";
+  const openRouterResearchEnabled =
+    researchEnabled && generationProvider === "openrouter";
+  return {
+    kind: "hook-generation",
+    createdAt: new Date().toISOString(),
+    runId: input.runId,
+    hookIdeaMode: input.hookIdeaMode,
+    hookAgent: {
+      provider: generationProvider,
+      model: generationModel,
+      promptSource: "agent_prompt/agent_hook.md",
+      batches: directTraces.map((trace, index) => ({
+        request: {
+          endpoint,
+          inputText: trace.inputText,
+          tools: openAiResearchEnabled ? [THAI_WEB_SEARCH_TOOL] : [],
+          plugins: openRouterResearchEnabled
+            ? [OPENROUTER_WEB_PLUGIN]
+            : [],
+          ...(openAiResearchEnabled
+            ? { toolChoice: "required" as const }
+            : {}),
+          ...(generationProvider === "openai"
+            ? { reasoningEffort: HOOK_GENERATION_REASONING_EFFORT }
+            : {}),
+          attachedImages: (
+            generationBatches[index]?.uploadedMaterials ?? []
+          ).map((material) => ({
+            id: material.id,
+            name: material.name,
+            mediaType: material.mediaType,
+            role: material.role,
+            description: material.description,
+            detail: "high" as const
+          })),
+          responseSchema: "moons_hook_generation" as const
+        },
+        response: {
+          parsed: trace.output,
+          raw: trace.rawResponse,
+          researchAudit: {
+            webSearchRequests: trace.researchAudit.webSearchRequests,
+            citationUrls: trace.researchAudit.citationUrls
+          }
+        }
       }))
     ],
     schemaName: "moons_hook_generation",
@@ -365,11 +556,15 @@ async function runSubheadlineHighlightStep({
   directions,
   apiKey,
   model,
+  provider,
+  prompt,
   fetchImpl
 }: {
   directions: readonly GeneratedDirection[];
   apiKey: string;
   model: string;
+  provider: "openai" | "openrouter";
+  prompt: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
   const batches = chunk(directions, SUBHEADLINE_BATCH_SIZE);
@@ -382,6 +577,8 @@ async function runSubheadlineHighlightStep({
           directions: batch,
           apiKey,
           model,
+          provider,
+          prompt,
           fetchImpl
         })
       )
@@ -393,11 +590,15 @@ async function runSubheadlineHighlightBatch({
   directions,
   apiKey,
   model,
+  provider,
+  prompt,
   fetchImpl
 }: {
   directions: readonly GeneratedDirection[];
   apiKey: string;
   model: string;
+  provider: "openai" | "openrouter";
+  prompt: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
   const items = directions.map((direction) => ({
@@ -411,11 +612,12 @@ async function runSubheadlineHighlightBatch({
     content: [
       {
         type: "input_text",
-        text: buildSubheadlineHighlightPrompt(items)
+        text: buildSubheadlineHighlightPrompt(prompt, items)
       }
     ],
     schemaName: "neo_subheadline_highlights",
-    schema: subheadlineHighlightSchema
+    schema: subheadlineHighlightSchema,
+    provider
   });
   const highlights = parseSubheadlineHighlights(
     extractResponseText(payload),
@@ -517,26 +719,125 @@ async function withTransientRetry<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
+function containsForbiddenThaiFirstPerson(value: unknown): boolean {
+  return JSON.stringify(value).includes("ฉัน");
+}
+
+function buildThaiNaturalnessRetryPrompt(
+  inputText: string,
+  stage: "candidate" | "direction" | "caption"
+): string {
+  return [
+    inputText,
+    "",
+    "# THAI NATURALNESS CORRECTION — REQUIRED",
+    `คำตอบ ${stage} ก่อนหน้าถูกปฏิเสธเพราะมีคำว่า “ฉัน”.`,
+    "แก้ตามกฎภาษาไทยใน ## Copy ของ agent_hook.md.",
+    "เขียนใหม่ทั้ง JSON โดยรักษา facts, strategic angle, quota, ids และ schema เดิม."
+  ].join("\n");
+}
+
+function isAlbumPanelCountContractError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /^directions\[\d+\]\.formatBeats must contain exactly \d+ items for (?:three|four)-(?:vertical|horizontal|grid)\.$/.test(
+      error.message
+    )
+  );
+}
+
+function buildAlbumPanelCountRetryPrompt(
+  inputText: string,
+  validationError: string
+): string {
+  return [
+    inputText,
+    "",
+    "# ALBUM PANEL COUNT CORRECTION — REQUIRED",
+    `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
+    "เขียนใหม่ทั้ง JSON โดยรักษา Direction, facts, quota, ids และ schema เดิม.",
+    "สำหรับ album-post เท่านั้น: three-vertical และ three-horizontal ต้องมี formatBeats 2 ข้อ; four-vertical และ four-grid ต้องมี formatBeats 3 ข้อ. หนึ่งข้อต่อหนึ่ง supporting panel และไม่นับ cover."
+  ].join("\n");
+}
+
+function extractResearchAudit(payload: unknown): ResearchAudit {
+  let webSearchCallsFound = 0;
+  const citationUrls = new Set<string>();
+
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!isRecord(value)) return;
+
+    if (value.type === "web_search_call") {
+      webSearchCallsFound += 1;
+    }
+    if (value.type === "url_citation") {
+      const directUrl = typeof value.url === "string" ? value.url : undefined;
+      const nestedUrl =
+        isRecord(value.url_citation) &&
+        typeof value.url_citation.url === "string"
+          ? value.url_citation.url
+          : undefined;
+      const url = directUrl ?? nestedUrl;
+      if (url && isHttpUrl(url)) citationUrls.add(url);
+    }
+
+    Object.values(value).forEach(visit);
+  };
+  visit(payload);
+
+  let reportedSearchRequests = 0;
+  if (isRecord(payload) && isRecord(payload.usage)) {
+    const legacyUsage = payload.usage.server_tool_use;
+    const openRouterUsage = payload.usage.server_tool_use_details;
+    const legacyCount =
+      isRecord(legacyUsage) &&
+      typeof legacyUsage.web_search_requests === "number"
+        ? legacyUsage.web_search_requests
+        : 0;
+    const openRouterCount =
+      isRecord(openRouterUsage) &&
+      typeof openRouterUsage.web_search_requests === "number"
+        ? openRouterUsage.web_search_requests
+        : 0;
+    reportedSearchRequests = Math.max(legacyCount, openRouterCount);
+  }
+
+  return {
+    webSearchRequests: Math.max(reportedSearchRequests, webSearchCallsFound),
+    citationUrls: [...citationUrls]
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function assertNoForbiddenThaiFirstPerson(
+  value: unknown,
+  outputName: string
+): void {
+  if (containsForbiddenThaiFirstPerson(value)) {
+    throw new Error(`${outputName} still contains forbidden Thai copy: ฉัน.`);
+  }
+}
+
 function buildSubheadlineHighlightPrompt(
+  prompt: string,
   items: readonly { id: string; subheadline: string }[]
 ): string {
   return [
-    "Bold the sentence of this text that you think it's a highlight of this sub-headline",
-    "Rules:",
-    "- Return JSON only.",
-    "- Use exact text spans from subheadline. Do not rewrite.",
-    "- Prefer only the strongest strategic noun, product/service term, audience pain, proof, or conversion angle.",
-    "- Avoid generic words, filler, conjunctions, and common Thai particles.",
-    "- If the subheadline has no clearly important term, return an empty array.",
+    prompt.trim(),
     "",
-    "Return this exact shape:",
-    "{",
-    '  "items": [',
-    '    { "id": "same id", "highlights": ["one exact continuous clause"] }',
-    "  ]",
-    "}",
-    "",
-    "Items:",
+    "# Runtime input",
     JSON.stringify(items, null, 2)
   ].join("\n");
 }
@@ -549,6 +850,9 @@ async function callResponsesApi({
   schemaName,
   schema,
   tools,
+  plugins,
+  toolChoice,
+  reasoningEffort,
   provider = "openai"
 }: {
   apiKey: string;
@@ -557,7 +861,10 @@ async function callResponsesApi({
   content: readonly ResponseContent[];
   schemaName: string;
   schema: unknown;
-  tools?: readonly { type: string }[];
+  tools?: readonly Record<string, unknown>[];
+  plugins?: readonly Record<string, unknown>[];
+  toolChoice?: "required";
+  reasoningEffort?: "high";
   provider?: "openai" | "openrouter";
 }): Promise<unknown> {
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
@@ -582,16 +889,15 @@ async function callResponsesApi({
               )
             }
           ],
+          ...(plugins?.length ? { plugins } : {}),
+          provider: { require_parameters: true },
           response_format: {
             type: "json_schema",
             json_schema: {
               name: schemaName,
               strict: true,
-              schema
+              schema: openRouterCompatibleSchema(schema)
             }
-          },
-          provider: {
-            require_parameters: true
           }
         }
       : {
@@ -656,27 +962,80 @@ async function callResponsesApi({
   return readJsonResponse(response, `${providerLabel} hook harness`);
 }
 
-function buildResearchPrompt(input: HookGenerationHarnessRequest): string {
+function openRouterCompatibleSchema(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(openRouterCompatibleSchema);
+  }
+  if (!isRecord(value)) return value;
+
+  const normalized = Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      openRouterCompatibleSchema(item)
+    ])
+  ) as Record<string, unknown>;
+  const declaredType = normalized.type;
+  if (!Array.isArray(declaredType) || !declaredType.includes("null")) {
+    return normalized;
+  }
+
+  const nonNullTypes = declaredType.filter((type) => type !== "null");
+  const nonNullSchema = { ...normalized };
+  nonNullSchema.type =
+    nonNullTypes.length === 1 ? nonNullTypes[0] : nonNullTypes;
+  if (Array.isArray(nonNullSchema.enum)) {
+    nonNullSchema.enum = nonNullSchema.enum.filter((item) => item !== null);
+  }
+
+  return {
+    anyOf: [nonNullSchema, { type: "null" }]
+  };
+}
+
+function buildDirectHookGenerationPrompt(
+  input: HookGenerationHarnessRequest,
+  agentHookPrompt: string,
+  pastPosts: readonly PastPostExample[]
+): string {
+  const pastPostExamples = selectPastPostsForCaption(pastPosts);
+  const researchInstructions =
+    input.hookIdeaMode === "fresh-research"
+      ? [
+          "Research status: enabled. ระบบแนบ Web Search ให้รอบนี้; ปฏิบัติตาม ## Research ใน agent_hook.md."
+        ]
+      : [
+          "Research status: disabled. ระบบไม่แนบ Web Search ให้รอบนี้; citations ต้องเป็น []."
+        ];
   return [
     "# THAI PROVABLE MOMENT, BEHAVIOR & CULTURAL FEVER RESEARCH AGENT",
     "",
-    "คุณคือ Thai research source agent สำหรับหา reference ที่พิสูจน์ได้และ brand-safe เพื่อช่วยวาง hook โฆษณา",
-    "ใช้ Google/Web search actively โดยค้นภาษาไทยก่อน ใช้ภาษาอังกฤษเมื่อจำเป็น",
-    "",
-    "ห้ามสร้าง hooks, captions, headlines, content ideas หรือ creative suggestions ในขั้น research นี้",
-    "ห้ามแต่ง trend, statistic, source title, publisher, ranking หรือ percentage",
-    "คัดเฉพาะ reference ที่มีหลักฐานจากแหล่งจริงและปลอดภัยต่อแบรนด์",
-    "",
-    "หาได้เฉพาะ 5 ประเภทนี้:",
-    "1. provable moments: วัน/ฤดูกาล/แคมเปญ/บริบทสาธารณะที่มีวันที่ชัดเจน",
-    "2. evidence-backed consumer behaviors: พฤติกรรมผู้บริโภคที่มี survey/report/news/platform data",
-    "3. cultural fever: กระแสบันเทิงหรือวัฒนธรรมที่ mass และ brand-safe",
-    "4. platform buzz: สิ่งที่ติด ranking/trending บน platform",
-    "5. category signal: สัญญาณจริงใน category ของแบรนด์",
+    "# Runtime contract",
+    ...researchInstructions,
     "",
     buildInputBlock(input),
+    ...(pastPostExamples.length
+      ? [
+          "",
+          "# Past content data",
+          ...pastPostExamples.map(
+            (post, index) =>
+              `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
+          )
+        ]
+      : []),
     "",
-    "Return only JSON ตาม schema. เขียนภาษาไทย ยกเว้น source title, publisher, brand, product, platform, special terms."
+    "# Required output mix",
+    `คืน ${input.quantity} directions ให้ครบและเรียงตาม quota นี้: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
+    "sourceCandidateId ใช้ id ภายในแบบ direct-01, direct-02 และห้ามซ้ำกัน.",
+    "",
+    "# Format",
+    "- single-static และ resize: formatBeats = [], albumFormat = null และ ugcBrief = null.",
+    albumHookInstruction(
+      input.albumFormat ?? defaultAlbumFormatPreference
+    ),
+    "- album-post: ugcBrief = null.",
+    "- ugc-video: albumFormat = null, ugcBrief ต้องมีข้อมูลครบ และ formatBeats ไม่มีจำนวนบังคับ.",
+    "- motion-static: albumFormat = null, ugcBrief = null และ formatBeats ไม่มีจำนวนบังคับ."
   ].join("\n");
 }
 
@@ -833,8 +1192,8 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
     `Album layout preference: ${input.albumFormat ?? defaultAlbumFormatPreference}`,
     "",
-    "User Brief — HIGHEST PRIORITY:",
-    input.brief,
+    "Current User Brief — highest priority for explicit campaign requirements:",
+    brief,
     "",
     ...(input.extraInstructions
       ? [
@@ -895,6 +1254,50 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
         `${index + 1}. ${item.name} | role=${item.role} | usage note=${item.description || "No additional note"}`
     )
   ].join("\n");
+}
+
+function hookRelevantBrief(value: string): string {
+  const trimmed = value.trim();
+  const questionnaireMarkers = [
+    /launch questionnaire/i,
+    /please complete the questionnaire/i,
+    /about your (?:brand|business)/i,
+    /products, customers\s*&\s*competitors/i
+  ];
+  const markerCount = questionnaireMarkers.filter((pattern) =>
+    pattern.test(trimmed)
+  ).length;
+  if (markerCount < 2) return trimmed;
+
+  return "ไม่มี Current Campaign Brief แยกจากข้อมูล Onboarding.";
+}
+
+function hookRelevantRoundInstructions(value: string): string {
+  return value
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Creative mix quota:"))
+    .join("\n")
+    .trim();
+}
+
+function isHookRelevantLibraryItem(item: {
+  title: string;
+  description: string;
+}): boolean {
+  return !/(?:^logo$|visual guidance|brand ci|brand guideline|style guide|identity guideline|art direction|typography|font|colou?r system|graphic system|layout)/i.test(
+    item.title.trim()
+  );
+}
+
+function cleanHookContextText(value: string): string {
+  return value
+    .split("\n")
+    .filter(
+      (line) => !/^source:\s*brand_analysis_jobs\//i.test(line.trim())
+    )
+    .join("\n")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 const servicePromptLabels: Record<ServiceType, string> = {
@@ -1149,12 +1552,11 @@ function albumHookInstruction(
 ): string {
   if (preference === "auto") {
     return [
-      "- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. เลือก albumFormat ให้เหมาะกับแนวคิดของ direction นี้โดยตรง ห้ามสุ่มและห้ามใช้ default เดียวทุกไอเดีย:",
-      "  - three-vertical: ใช้เมื่อมี hero subject/product แนวตั้งหนึ่งจุดที่เด่นมาก และมีสอง supporting moments.",
-      "  - three-horizontal: ใช้เมื่อแนวคิดเด่นที่ panorama, before-after, wide reveal หรือ cover แนวนอน แล้วมีสอง supporting moments.",
-      "  - four-vertical: ใช้เมื่อมี hero แนวตั้งหนึ่งจุด แล้วต้องเล่าต่อด้วย proof/detail/step อีกสามส่วน.",
-      "  - four-grid: ใช้เมื่อเป็น comparison, list, steps หรือข้อมูลสี่ส่วนที่มีน้ำหนักใกล้กัน.",
-      "  Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดี; แต่ละ topicต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic."
+      "- album-post: เลือก albumFormat จาก Runtime options ต่อไปนี้:",
+      "  - three-vertical: vertical cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
+      "  - three-horizontal: horizontal cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
+      "  - four-vertical: vertical cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
+      "  - four-grid: cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel."
     ].join("\n");
   }
   const format = preference;
@@ -1166,10 +1568,8 @@ function albumHookInstruction(
         : format === "four-vertical"
           ? "4 images: vertical cover on the left with three square panels on the right"
           : "4 images: four square panels in a 2 by 2 grid";
-  const beatUse = format.startsWith("three-")
-    ? "The first two supporting topics may share the middle panel; the final topic and CTA close on the last panel."
-    : "Place one supporting topic in each of the three panels after the cover.";
-  return `- album-post: คิดเป็น swipeable story ไม่ใช่ static ad หลายใบ. Selected layout is ${layout}. Cover hook ต้องสร้าง open loop, tension, promise, comparison, list, steps หรือ reveal ที่ทำให้คนอยาก swipe ต่อ โดยยังเข้าใจได้ทันที. subheadline อธิบาย promise ของ cover สั้นๆ. formatBeats ต้องมี 3 supporting topics พอดี; แต่ละ topic ต้องเป็นหัวข้อไทยสั้น ชัด ไม่ซ้ำกัน มีสารหรือ visual moment ของตัวเอง และเรียงเป็น story progression. ${beatUse} ห้ามใช้ CTA หรือประโยค generic เป็น supporting topic.`;
+  const supportingPanelCount = format.startsWith("three-") ? 2 : 3;
+  return `- album-post: Selected layout is ${layout}. formatBeats ต้องมี ${supportingPanelCount} ข้อ หนึ่งข้อต่อ supporting panel.`;
 }
 
 function readHookIdeaMode(value: unknown): HookIdeaMode {
@@ -1355,7 +1755,7 @@ function readResearchReferences(value: unknown): readonly HookResearchReference[
 }
 
 function parseHookGenerationResult(text: string): HookGenerationResult {
-  const parsed = JSON.parse(text) as unknown;
+  const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
   const value = readRecord(parsed, "hookGeneration");
 
   if (!Array.isArray(value.directions)) {
@@ -1382,7 +1782,10 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         `directions[${index}].concept`
       );
       const why = readString(direction.why, `directions[${index}].why`);
-      const visual = readString(direction.visual, `directions[${index}].visual`);
+      const visual = readString(
+        direction.visual,
+        `directions[${index}].visual`
+      );
       const cta = readString(direction.cta, `directions[${index}].cta`);
       const caption = readString(
         direction.caption,
@@ -1460,6 +1863,12 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       };
     })
   };
+}
+
+function unwrapJsonCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  return fenced?.[1]?.trim() ?? trimmed;
 }
 
 function readGeneratedAlbumFormat(
@@ -1545,7 +1954,7 @@ function parseSubheadlineHighlights(
   text: string,
   items: readonly { id: string; subheadline: string }[]
 ): ReadonlyMap<string, string> {
-  const parsed = JSON.parse(text) as unknown;
+  const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
   const value = readRecord(parsed, "subheadlineHighlights");
   if (!Array.isArray(value.items)) {
     throw new Error("highlight items must be an array.");

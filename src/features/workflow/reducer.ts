@@ -78,13 +78,8 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
   return outputs.length > 0 && outputs.every(isOutputFullyApproved);
 }
 
-export const defaultBrief = `Objective: Create Meta performance creatives that make the product benefit instantly clear.
-
-Audience: People who know the problem but have not found a solution they trust.
-
-Message priority: Lead with a recognizable tension, prove the product difference, and end with a low-friction action.
-
-Creative guardrails: Keep the first frame bold, reduce decorative copy, show the product early, and make every execution feel native to its format.`;
+export const defaultBrief =
+  "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
