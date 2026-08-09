@@ -131,13 +131,20 @@ function openRouterResearchResponse(
   directions: readonly unknown[],
   citationUrls: readonly string[] = []
 ) {
+  return openRouterJsonResponse({ directions }, citationUrls);
+}
+
+function openRouterJsonResponse(
+  output: unknown,
+  citationUrls: readonly string[] = []
+) {
   return new Response(
     JSON.stringify({
       choices: [
         {
           message: {
             role: "assistant",
-            content: `\`\`\`json\n${JSON.stringify({ directions })}\n\`\`\``,
+            content: `\`\`\`json\n${JSON.stringify(output)}\n\`\`\``,
             annotations: citationUrls.map((url) => ({
                 type: "url_citation",
                 url_citation: {
@@ -155,6 +162,27 @@ function openRouterResearchResponse(
     }),
     { status: 200 }
   );
+}
+
+function openRouterHookResearchDossierResponse() {
+  return openRouterJsonResponse({
+    brand: "Convert Cake",
+    productFocus: "AI SEO webinar",
+    overallFinding: "Use verified brand and audience evidence.",
+    references: [],
+    strongestReferenceIds: [],
+    researchGaps: [],
+    researchLimitations: "No external claims used by this fixture.",
+    excluded: [],
+    searchQueriesUsed: ["AI SEO Thailand"]
+  });
+}
+
+function openRouterHighlightResponse(
+  id: string,
+  highlights: readonly string[]
+) {
+  return openRouterJsonResponse({ items: [{ id, highlights }] });
 }
 
 
@@ -289,6 +317,24 @@ describe("handleHookGenerationHarnessRequest", () => {
         new Response(
           JSON.stringify({
             output_text: JSON.stringify({
+              brand: "Convert Cake",
+              productFocus: "AI SEO webinar",
+              overallFinding: "ธุรกิจไทยเริ่มให้ความสำคัญกับ AI visibility",
+              references: [],
+              strongestReferenceIds: [],
+              researchGaps: [],
+              researchLimitations: "No strong public source was found.",
+              excluded: [],
+              searchQueriesUsed: ["AI SEO Thailand B2B"]
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
               directions: [
                 {
                   id: "hook-1",
@@ -299,7 +345,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   concept: "เปิดด้วยคำถามที่โยง visibility กับยอดขาย",
                   why: "ชัดเจนกับ pain ของธุรกิจที่เริ่มเห็น search เปลี่ยน",
                   visual: "Founder มอง search result + AI answer บนจอ",
-                  albumFormat: "three-horizontal",
+                  albumFormat: null,
                   cta: "จองที่นั่ง Webinar",
                   caption: "AI SEO ไม่ใช่เรื่องอนาคตสำหรับ B2B แล้ว",
                   score: 91,
@@ -334,7 +380,9 @@ describe("handleHookGenerationHarnessRequest", () => {
       writeDebugLog
     });
 
-    expect(response.status).toBe(200);
+    const responseBody = await response.clone().json();
+    expect(response.status, JSON.stringify(responseBody)).toBe(200);
+    expect(responseBody.directions[0]).not.toHaveProperty("albumFormat");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
@@ -343,8 +391,24 @@ describe("handleHookGenerationHarnessRequest", () => {
       tool_choice?: string;
       reasoning?: { effort?: string };
       input: unknown;
+      text: { format: { name: string } };
+    };
+    expect(researchBody.tools).toEqual([
+      expect.objectContaining({ type: "web_search_preview" })
+    ]);
+    expect(researchBody.tool_choice).toBe("required");
+    expect(researchBody.reasoning).toEqual({ effort: "high" });
+    expect(researchBody.text.format.name).toBe("moons_hook_research");
+
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as {
+      tools?: unknown[];
+      reasoning?: { effort?: string };
+      input: unknown;
       text: {
         format: {
+          name: string;
           schema: {
             properties: {
               directions: {
@@ -358,77 +422,35 @@ describe("handleHookGenerationHarnessRequest", () => {
         };
       };
     };
-    expect(generationBody.tools).toEqual([expect.objectContaining({ type: "web_search_preview" })]);
-    expect(generationBody.tool_choice).toBe("required");
+    expect(generationBody.tools).toBeUndefined();
     expect(generationBody.reasoning).toEqual({ effort: "high" });
-    const openAiDirectionSchema =
+    expect(generationBody.text.format.name).toBe("moons_hook_generation");
+    const directionSchema =
       generationBody.text.format.schema.properties.directions.items;
-    expect(openAiDirectionSchema.required).toEqual(
-      Object.keys(openAiDirectionSchema.properties)
+    expect(directionSchema.required).toEqual(
+      Object.keys(directionSchema.properties)
     );
+    const prompt = JSON.stringify(generationBody.input);
+    expect(prompt).toContain("AGENT_HOOK_SEARCH_POLICY_ONLY");
+    expect(prompt).toContain(
+      "Research status: completed by the dedicated Research Agent"
+    );
+    expect(prompt).toContain("# Required output mix");
+    expect(prompt).toContain("# Format");
+
     const supportBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { reasoning?: unknown; input?: unknown };
     expect(supportBody.reasoning).toBeUndefined();
     expect(JSON.stringify(supportBody.input)).toContain(
       "HIGHLIGHT_PROMPT_SOURCE_ONLY"
     );
-    const prompt = JSON.stringify(generationBody.input);
-    expect(prompt).toContain("AGENT_HOOK_SEARCH_POLICY_ONLY");
-    expect(prompt).toContain("# Runtime contract");
-    expect(prompt).toContain("Research status: enabled");
-    expect(prompt).toContain("ปฏิบัติตาม ## Research ใน agent_hook.md");
-    expect(prompt).toContain("# Required output mix");
-    expect(prompt).toContain("# Format");
-    expect(prompt).not.toContain("# Quality gate");
-    expect(prompt).not.toContain("# Copy");
-    expect(prompt).toContain("Onboarding Questionnaire — standing brand context");
-    const debugEntry = writeDebugLog.mock.calls[0]?.[1];
-    expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([
-      expect.objectContaining({ type: "web_search_preview" })
-    ]);
-    expect(
-      debugEntry?.hookAgent.batches[0]?.request.reasoningEffort
-    ).toBe("high");
-    expect(debugEntry?.finalResponse).toMatchObject({
-      directions: [expect.objectContaining({ id: "hook-1" })]
-    });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    const firstBody = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body)
-    ) as {
-      tools?: unknown[];
-      tool_choice?: string;
-      reasoning?: { effort?: string };
-      input: unknown;
-    };
-    expect(generationBody.tools).toEqual([expect.objectContaining({ type: "web_search_preview" })]);
-    expect(generationBody.tool_choice).toBe("required");
-    expect(generationBody.reasoning).toEqual({ effort: "high" });
-    const supportBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
-    ) as { reasoning?: unknown };
-    expect(supportBody.reasoning).toBeUndefined();
-    const prompt = JSON.stringify(generationBody.input);
-    expect(prompt).toContain("ONE CREATIVE PASS — FINISHED OPTIONS ONLY");
-    expect(prompt).toContain("AGENT_HOOK_SEARCH_POLICY_ONLY");
-    expect(prompt).toContain("Research status: enabled");
-    expect(prompt).toContain("ทำตาม ## Research ใน agent_hook.md");
-    expect(prompt).not.toContain("Research เป็นวัตถุดิบ ไม่ใช่สูตรคอนเทนต์");
-    expect(prompt).toContain("Format เป็นข้อกำหนดการผลิต ไม่ใช่ Creative Framework");
-    expect(prompt).not.toContain("strategic territory");
-    expect(prompt).not.toContain("90–100 ใช้ได้เฉพาะ idea");
-    expect(prompt).toContain("Onboarding Questionnaire — standing brand context");
-    expect(prompt).not.toContain("# Divergent ideation");
-    expect(prompt).not.toContain("Candidate pool");
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
-    expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([
+    expect(debugEntry?.researchAgent.request.tools).toEqual([
       expect.objectContaining({ type: "web_search_preview" })
     ]);
-    expect(
-      debugEntry?.hookAgent.batches[0]?.request.reasoningEffort
-    ).toBe("high");
+    expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([]);
     expect(debugEntry?.finalResponse).toMatchObject({
       directions: [expect.objectContaining({ id: "hook-1" })]
     });
@@ -454,6 +476,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     };
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -474,7 +497,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(await response.json()).toMatchObject({
       directions: [
         expect.objectContaining({
@@ -628,6 +651,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("rewrites a final Thai direction when its copy uses ฉัน", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []));
@@ -641,10 +665,11 @@ describe("handleHookGenerationHarnessRequest", () => {
       fetchImpl: fetchMock as unknown as typeof fetch
     });
 
-    expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const responseBody = await response.clone().json();
+    expect(response.status, JSON.stringify(responseBody)).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const directionRetryBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
     expect(JSON.stringify(directionRetryBody.input)).toContain(
       "THAI NATURALNESS CORRECTION"
@@ -742,6 +767,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("routes the direct creative pass through OpenRouter when selected", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
       .mockResolvedValueOnce(
         openRouterResearchResponse([
           {
@@ -762,7 +788,7 @@ describe("handleHookGenerationHarnessRequest", () => {
           }
         ])
       )
-      .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
+      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -783,13 +809,14 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status).toBe(200);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "https://openrouter.ai/api/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions"
     ]);
     expect(
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
     ).toBe("Bearer openrouter-key");
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body)
+      String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as {
       model: string;
       messages: readonly {
@@ -844,10 +871,14 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(directionSchema.properties.directions.items.required).toEqual(
       Object.keys(directionSchema.properties.directions.items.properties)
     );
-    expect(generationBody.plugins).toEqual([
+    expect(generationBody.plugins).toBeUndefined();
+    expect(generationBody.provider).toEqual({ require_parameters: true });
+    const researchBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { plugins?: unknown };
+    expect(researchBody.plugins).toEqual([
       { id: "web", engine: "native", max_results: 5 }
     ]);
-    expect(generationBody.provider).toEqual({ require_parameters: true });
     const payload = (await response.json()) as {
       directions: { id: string; sourceCandidateId: string }[];
     };
@@ -860,6 +891,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("surfaces the provider's OpenRouter 400 detail", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -907,6 +939,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("retries OpenRouter with inline material data when its provider cannot download an image URL", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -954,7 +987,7 @@ describe("handleHookGenerationHarnessRequest", () => {
           }
         ])
       )
-      .mockResolvedValueOnce(highlightResponse("openrouter-hook", []));
+      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -972,12 +1005,12 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
       "https://example.com/hero-bottle.png"
     );
     const retryBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as {
       messages: readonly {
         content: readonly {
@@ -1002,6 +1035,7 @@ describe("handleHookGenerationHarnessRequest", () => {
           status: 200
         })
       )
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1092,9 +1126,9 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     expect(response.status).toBe(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(JSON.stringify(generationBody.input)).toContain(
@@ -1110,6 +1144,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationPrompt).toContain(
       "Opening ของ Caption ต้องต่อยอด Direction ใหม่"
     );
+    const debugEntry = writeDebugLog.mock.calls[0]?.[1];
     expect(debugEntry).not.toHaveProperty("pastContentAgent");
     expect(debugEntry).not.toHaveProperty("captionAgent");
   });
@@ -1138,6 +1173,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("tells the model about extra instructions and existing hooks to avoid duplicates", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1190,7 +1226,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(payload.directions[0]?.subheadlineHighlight).toBe("");
 
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body)
+      String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("เน้นกลุ่มเจ้าของธุรกิจขนาดเล็กรอบนี้");

@@ -1,5 +1,5 @@
 import { useReducer } from "react";
-import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brands } from "../../data/mock-brands";
@@ -37,6 +37,7 @@ import * as googleDriveMaterials from "../../services/google-drive/google-drive-
 import * as qualityCheckService from "../../services/quality-check/run-quality-check";
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -1705,15 +1706,6 @@ describe("redesigned workflow stages", () => {
     const state = buildCreativeState();
     const dispatch = vi.fn();
     const memoryRepository = new MockBrandMemoryRepository();
-    const uploadedReference = {
-      id: "uploaded-reference",
-      title: "Uploaded reference.png",
-      description: "",
-      assetUrl: "https://assets.example.com/uploaded-reference.png"
-    };
-    const createReferenceImage = vi
-      .spyOn(memoryRepository, "createReferenceImage")
-      .mockResolvedValue(uploadedReference);
     const view = render(
       <BrandMemoryProvider repository={memoryRepository}>
         <BriefStage state={{ ...state, stage: "brief" }} dispatch={dispatch} />
@@ -1807,32 +1799,10 @@ describe("redesigned workflow stages", () => {
       id: firstProduct.id
     });
 
-    const referenceFile = new File(["reference"], "Uploaded reference.png", {
-      type: "image/png"
-    });
-    await user.upload(
-      within(confirmation).getByLabelText("Upload reference in confirmation"),
-      referenceFile
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Upload files" })
     );
-    await waitFor(() =>
-      expect(createReferenceImage).toHaveBeenCalledWith({
-        clientId: state.brand?.id,
-        file: referenceFile
-      })
-    );
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "sync-brand-references",
-      items: [uploadedReference, ...(state.brand?.library.refs ?? [])]
-    });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "toggle-reference-image",
-      item: {
-        id: "library-uploaded-reference",
-        url: uploadedReference.assetUrl,
-        label: uploadedReference.title,
-        role: "style"
-      }
-    });
+    expect(within(confirmation).getByLabelText("Upload images")).toBeTruthy();
     await user.click(
       within(confirmation).getByRole("tab", { name: /Materials/ })
     );
@@ -2044,7 +2014,7 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
     expect(within(confirmation).getByText("Image references")).toBeTruthy();
     expect(
-      within(confirmation).getByLabelText("Upload reference in confirmation")
+      within(confirmation).getByRole("button", { name: "Upload files" })
     ).toBeTruthy();
     expect(
       within(confirmation).getByRole("group", { name: "Artwork settings" })
@@ -2053,9 +2023,9 @@ describe("redesigned workflow stages", () => {
       within(confirmation).getByRole("button", { name: "Design system" })
     ).toBeTruthy();
     expect(
-      within(confirmation).getByRole("combobox", {
-        name: "Creative concept model"
-      })
+      within(confirmation).getByText(
+        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+      )
     ).toBeTruthy();
     expect(
       within(confirmation).getByRole("combobox", { name: "Output size" })
@@ -2177,7 +2147,12 @@ describe("redesigned workflow stages", () => {
     };
     const dispatch = vi.fn();
     const view = render(
-      <DirectionsStage state={{ ...state, stage: "directions" }} dispatch={dispatch} />
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage
+          state={{ ...state, stage: "directions" }}
+          dispatch={dispatch}
+        />
+      </BrandMemoryProvider>
     );
     const stage = within(view.container);
 
@@ -2332,7 +2307,7 @@ describe("redesigned workflow stages", () => {
     const manual = within(manualDialog);
     await user.type(manual.getByLabelText("Pillar"), "Product proof");
     await user.type(manual.getByLabelText("Hook"), "A manual proof hook");
-    expect(manual.getByLabelText("Sub-headline")).toHaveValue("");
+    expect(manual.getByLabelText("Sub-headline")).toHaveProperty("value", "");
     await user.type(manual.getByLabelText("CTA"), "See the proof");
     await user.click(manual.getByRole("button", { name: "Add hook" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -2377,7 +2352,11 @@ describe("redesigned workflow stages", () => {
         (direction) => direction.service === "single-static"
       )
     };
-    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
     const stage = within(view.container);
     const headings = Array.from(
       view.container.querySelectorAll(".compass-angle-group-title h3")
@@ -2557,7 +2536,11 @@ describe("redesigned workflow stages", () => {
       ...base,
       creativeMix: [...base.creativeMix!].reverse()
     };
-    const view = render(<DirectionsStage state={state} dispatch={vi.fn()} />);
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
     const stage = within(view.container);
     const headings = Array.from(
       view.container.querySelectorAll(".compass-angle-group-title h3")
@@ -2680,7 +2663,13 @@ describe("redesigned workflow stages", () => {
 
     const pptx = await buildCreateStageSlidesPptx(
       state,
-      async (url) => `data:image/png;base64,${btoa(url)}`
+      async (url) => `data:image/png;base64,${btoa(url)}`,
+      Object.fromEntries(
+        state.outputs.map((output) => [
+          output.id,
+          `data:image/png;base64,${btoa(output.id)}`
+        ])
+      )
     );
     expect(
       (

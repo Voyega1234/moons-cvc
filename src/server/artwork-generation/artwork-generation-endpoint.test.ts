@@ -229,21 +229,6 @@ function albumPanelQcPassResponse(): Response {
   );
 }
 
-function albumPanelQcReviseResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      output_text: JSON.stringify({
-        decision: "revise",
-        affectedPanels: [2],
-        issue: "Panel 2 contains a footer strip from Panel 1 along its top edge.",
-        revisionInstruction:
-          "Remove the foreign top strip from Panel 2 and continue Panel 2's intended background to the boundary."
-      })
-    }),
-    { status: 200 }
-  );
-}
-
 function campaignInputPreflightResponse(ratio = "1:1"): Response {
   return new Response(
     JSON.stringify({
@@ -1282,6 +1267,9 @@ describe("handleArtworkGenerationRequest", () => {
           status: 200
         });
       }
+      if (href.includes("/v1/responses")) {
+        return standardAgentResponse(init);
+      }
       if (href.includes("/v1/images/generations")) {
         return new Response(
           JSON.stringify({
@@ -1364,12 +1352,15 @@ describe("handleArtworkGenerationRequest", () => {
       horizontal: 280
     });
     const { client, uploads } = fakeStorage();
-    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
         return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
           status: 200
         });
+      }
+      if (href.includes("/v1/responses")) {
+        return standardAgentResponse(init);
       }
       if (
         href.includes("/v1/images/generations") ||

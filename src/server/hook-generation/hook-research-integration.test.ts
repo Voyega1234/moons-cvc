@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleHookGenerationHarnessRequest } from "./hook-generation-harness-endpoint";
+import type { HookGenerationDebugLog } from "./hook-generation-debug-log";
 
 function jsonResponse(output: unknown) {
   return new Response(
@@ -50,6 +51,7 @@ describe("dedicated Hook Research Agent pipeline", () => {
           directions: [
             {
               id: "hook-01",
+              sourceCandidateId: "direct-01",
               service: "single-static",
               hook: "ลูกค้าถาม AI แล้วเจอแบรนด์คุณไหม?",
               subheadline: "",
@@ -72,7 +74,9 @@ describe("dedicated Hook Research Agent pipeline", () => {
           ]
         })
       );
-    const writeDebugLog = vi.fn(async () => undefined);
+    const writeDebugLog = vi.fn(
+      async (_directory: string, _entry: HookGenerationDebugLog) => undefined
+    );
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {

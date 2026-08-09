@@ -783,33 +783,32 @@ function OutputRegenerateModal({
             Close
           </button>
         </div>
-        <div className="output-modal-image">
-          {album ? (
-            <AlbumPanelPreview
-              outputs={outputs}
-              direction={direction}
-              format={resolvedAlbumFormatForDirection(
-                run.albumFormat,
-                direction
-              )}
-            />
-          ) : isUgcOutput(output) ? (
-            <UgcTemplatePreview
-              direction={direction}
-              brandName={run.brand?.name}
-            />
-          ) : output.assetUrl ? (
-            <img src={output.assetUrl} alt={direction?.hook ?? "Creative preview"} />
-          ) : (
-            <div className="static-preview">
-              <span className="static-mark" />
-              <div className="static-copy">
-                <h3>{direction?.hook}</h3>
-                {direction && directionSubheadline(direction) ? (
-                  <p>{directionSubheadline(direction)}</p>
-                ) : null}
-                <span>Learn more</span>
-              </div>
+        <div className="output-regenerate-workspace">
+          <aside className="output-version-rail" aria-label="Artwork versions">
+            <b>Versions</b>
+            <div className="output-version-list">
+              {versions.map((version) => {
+                const selected = version.version === selectedVersion;
+                return (
+                  <button
+                    className={selected ? "selected" : ""}
+                    type="button"
+                    key={`${version.version}-${version.assetUrl}`}
+                    aria-label={`Use version ${version.version} as revision source`}
+                    aria-pressed={selected}
+                    disabled={busy}
+                    onClick={() => setSelectedVersion(version.version)}
+                  >
+                    <img src={version.assetUrl} alt="" />
+                    <span>V{version.version}</span>
+                    {selected ? (
+                      <i aria-hidden="true">
+                        <Check size={13} weight="bold" />
+                      </i>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           </aside>
           <div className="output-regenerate-main">

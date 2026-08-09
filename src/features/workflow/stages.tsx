@@ -968,6 +968,7 @@ function BrandSetupSources({
           <label className="client-source-manual">
             <span>Facebook URL</span>
             <input
+              aria-label="Facebook URL"
               value={manualFacebookUrl}
               disabled={disabled}
               placeholder="https://www.facebook.com/brand.page"
@@ -1195,6 +1196,7 @@ function AddClientPanel({
           <label>
             <span>Facebook URL</span>
             <input
+              aria-label="Facebook URL"
               value={facebookUrl}
               disabled={saving}
               placeholder="https://www.facebook.com/brand.page"

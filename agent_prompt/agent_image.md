@@ -1,209 +1,280 @@
-# AD CREATIVE GENERATION PROMPT
+# AD CREATIVE GENERATION MASTER PROMPT
 
-สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input คำสั่งของผู้ใช้ และรูปภาพที่แนบมา โดยผลงานสุดท้ายต้องดูเป็นภาพโฆษณาที่ออกแบบเสร็จสมบูรณ์ พร้อมใช้งานจริง ไม่ใช่เพียงภาพประกอบหรือฉากจาก AI
+สร้างภาพโฆษณาจาก Campaign Input, คำสั่งของผู้ใช้ และรูปภาพที่แนบมา ให้เป็น **Final Advertising Visual ที่พร้อมใช้งานจริง**
 
-## 1. ทำความเข้าใจโจทย์ก่อนออกแบบ
+ผลงานต้องดูเหมือนผ่านการคิดและ Art Direction โดยนักออกแบบโฆษณา ไม่ใช่เพียงภาพ AI ที่นำข้อความ สินค้า และ CTA มาจัดวางให้ครบ
 
-เริ่มจากวิเคราะห์ข้อมูลต่อไปนี้:
+---
 
-* แนวคิดหลักของแคมเปญ
-* วัตถุประสงค์ทางการตลาด
-* กลุ่มเป้าหมาย
-* สินค้าหรือบริการที่ต้องการสื่อสาร
-* ข้อความสำคัญที่ผู้ชมต้องเข้าใจ
-* ความรู้สึกที่ภาพควรสร้างภายใน 1–2 วินาที
+## 1. UNDERSTAND THE ADVERTISING IDEA
+
+ก่อนสร้างภาพ ให้เข้าใจ:
+
+* Campaign Objective
+* Target Audience
+* Audience Pain Point / Desire
+* Product / Service Truth
+* Key Message / Benefit / Offer
+* Brand Identity
+* สิ่งที่ผู้ชมควรเข้าใจหรือรู้สึกภายใน 1–2 วินาที
 * คำสั่งตรงจากผู้ใช้
 * หน้าที่ของรูปภาพแต่ละภาพที่แนบมา
 
-จากนั้นตัดสินใจอย่างมีวิจารณญาณว่าองค์ประกอบใดควรปรากฏในภาพ โดยเลือกใช้เฉพาะองค์ประกอบที่ช่วยสื่อสารแนวคิดหลักและสนับสนุนวัตถุประสงค์ของแคมเปญ
+ลำดับความสำคัญเมื่อข้อมูลขัดแย้งกัน:
 
-ทุกองค์ประกอบในภาพต้องมีหน้าที่ชัดเจน หลีกเลี่ยงการเพิ่มวัตถุ ฉาก หรือกราฟิกที่มีไว้เพื่อตกแต่งเพียงอย่างเดียวและไม่ช่วยเสริมสารหลัก
+**User Instruction → Campaign Idea → Product Truth → Brand Identity → Assigned Image Role → Reference → Creative Judgment**
 
-หากไอเดียหรือคำสั่งระบุสินค้าตัวใด ต้องใช้สินค้าตัวนั้น และห้ามเพิ่มสินค้าที่ไม่เกี่ยวข้อง
+---
 
-## 2. ลำดับความสำคัญของข้อมูล
+## 2. CREATIVE IDEA BEFORE LAYOUT — CRITICAL
 
-หากข้อมูลหรือรูปภาพบางส่วนขัดแย้งกัน ให้ยึดลำดับความสำคัญดังนี้:
+**อย่าเริ่มจากการคิดว่าจะวาง Text, Product หรือ Model ไว้ตรงไหน**
 
-1. คำสั่งตรงจากผู้ใช้
-2. วัตถุประสงค์และแนวคิดหลักของแคมเปญ
-3. ข้อมูลจริงและตัวตนของสินค้า
-4. หน้าที่ที่กำหนดให้รูปภาพแต่ละภาพ
-5. Reference images
-6. การตัดสินใจเชิงสร้างสรรค์ของผู้ออกแบบ
+ให้เริ่มจากคำถามว่า:
 
-ห้ามทำตาม Reference หากทำให้ภาพขัดกับคำสั่งของผู้ใช้ แนวคิดหลัก ข้อมูลสินค้า หรือความเป็นจริง
+> **“จะทำให้ Message นี้กลายเป็นภาพที่คนหยุดดูและเข้าใจได้อย่างไร?”**
 
-## 3. การใช้ภาพ Reference
+ก่อนจัด Layout ให้กำหนด:
 
-ทำตาม User Brief และคำสั่งของผู้ใช้ให้มากที่สุดเท่าที่เป็นไปได้
+* **Single Main Message**
+* **Single Hero Visual**
+* **Visual Mechanism**
+* **Eye Path: First → Second → Third**
 
-วิเคราะห์ว่าอะไรคือ Visual Essence ที่ทำให้ Reference โดดเด่นและจดจำได้ เช่น:
+Visual Mechanism อาจเกิดจาก:
 
-* แนวคิดหลักหรือ Visual Metaphor
-* วิธีเล่าเรื่องและวิธีนำเสนอสินค้า
-* Interaction ระหว่างคน มือ วัตถุ และสินค้า
-* การเลือก Hero Visual
-* Composition และ Visual Rhythm
-* มุมกล้อง Perspective และ Framing
-* สัดส่วนและตำแหน่งขององค์ประกอบ
-* Lighting, Shadow และบรรยากาศ
-* Color System และการใช้ Contrast
-* Typography และ Graphic Treatment
-* วิธีจัดวางข้อความ ราคา โปรโมชั่น Badge หรือ CTA
+* Visual Metaphor
+* Product Demonstration
+* Human / Object Interaction
+* Contrast
+* Transformation
+* Scale
+* Unexpected Perspective
+* Framing
+* Environment
+* Material
+* Lighting
+* Visual Proof
 
-เลือกนำเฉพาะคุณลักษณะที่เหมาะกับแนวคิด สินค้า และแบรนด์มาพัฒนาเป็นงานใหม่ ไม่จำเป็นต้องใช้ทุกอย่างจาก Reference และไม่ควรคัดลอกภาพต้นฉบับแบบตรงตัว เว้นแต่ผู้ใช้สั่งให้ทำตามองค์ประกอบใดอย่างชัดเจน
+Hero Visual ต้องทำมากกว่าแค่โชว์สินค้า บริการ หรือคนกำลังใช้งาน
 
-ให้น้ำหนักกับ Visual Idea ที่โดดเด่นและมีความหมาย มากกว่าการหยิบมาเพียงสี พื้นหลัง หรือ Mood & Tone แบบผิวเผิน
+มันควรช่วย **ทำให้ Benefit, Pain Point, Product Truth หรือ Campaign Idea มองเห็นได้**
 
-หากจุดเด่นของ Reference คือ Interaction ระหว่างคน มือ วัตถุ หรือสินค้า และเหมาะกับแนวคิด ให้ประยุกต์ Interaction นั้นกับสินค้าของเรา
+---
 
-หากจุดเด่นคือระบบการจัดวาง มุมกล้อง แสง บรรยากาศ Typography หรือ Graphic Treatment ให้ประยุกต์องค์ประกอบเหล่านั้นตามความเหมาะสม
+## 3. SHOW THE MESSAGE, DON'T JUST ILLUSTRATE THE CATEGORY
 
-หากบางส่วนของ Reference ขัดกับแนวคิด สินค้า แบรนด์ หรือข้อมูลจริง ไม่จำเป็นต้องนำมาใช้
+อย่าทำเพียงภาพตรงตัวของ Category
 
-ผลงานต้องเป็น Original Execution สำหรับแคมเปญนี้ แต่ยังมองเห็นความสัมพันธ์ทางภาพกับ Reference ได้อย่างชัดเจน
+ตัวอย่าง:
 
-อย่าลดการใช้ Reference เหลือเพียงการเลียนแบบพื้นหลังหรือโทนสี และอย่าบังคับใช้ Composition เดิม หากไม่เหมาะกับสารที่ต้องการสื่อ
+Cleaning Service ≠ ต้องเป็นคนกำลังทำความสะอาด
+Skincare ≠ ต้องเป็นนางแบบถือสินค้า
+Perfume ≠ ต้องเป็นขวดกับดอกไม้
+Technology ≠ ต้องเป็นหน้าจอ + Glow
+Promotion ≠ ต้องเป็นสินค้า + Badge ลดราคา
 
-## 4. การใช้ Reference หลายภาพ
+เริ่มจาก:
 
-เมื่อมี Reference หลายภาพ ให้แยกวิเคราะห์หน้าที่ของแต่ละภาพ เช่น:
+**Audience Insight → Problem / Desire → Product Truth → Visual Idea**
 
-* ภาพสำหรับอ้างอิง Layout
-* ภาพสำหรับอ้างอิง Mood & Tone
-* ภาพสำหรับอ้างอิงมุมกล้อง
-* ภาพสำหรับอ้างอิง Interaction
-* ภาพสำหรับอ้างอิง Typography
-* ภาพสินค้า
-* ภาพบุคคลหรือวัตถุที่ต้องใช้จริง
+ไม่ใช่เริ่มจากภาพจำของ Category
 
-รวมเฉพาะคุณลักษณะที่เข้ากันได้และสนับสนุนแนวคิดเดียวกัน
+Props และ Graphic Elements ต้องมีหน้าที่ด้าน Communication หากไม่มีเหตุผลชัดเจนให้ตัดออก
 
-อย่าเฉลี่ยทุกภาพเข้าด้วยกันจนทิศทางหลักไม่ชัดเจน และอย่านำองค์ประกอบเด่นจากหลาย Reference มาแข่งขันกันในภาพเดียว
+---
 
-ภาพสุดท้ายควรมี Creative Direction เดียวที่ชัดเจน
+## 4. DO NOT DEFAULT TO AD TEMPLATES
 
-## 5. การใช้รูปสินค้าและ Materials
+ห้ามเลือก Layout เหล่านี้โดยอัตโนมัติเพียงเพราะจัดง่าย:
 
-ใช้รูปสินค้าเพื่อรักษาตัวตนที่มองเห็นได้ของสินค้าตามจริง ได้แก่:
+* Text Left / Visual Right
+* Product Center + Benefits รอบสินค้า
+* Model Holding Product + Text
+* Three Benefit Icons
+* Product on Pedestal
+* Headline Top + Product Bottom
+* Split Screen
+* CTA Bar Bottom
+* Floating UI Labels / Badges จำนวนมาก
 
-* รูปร่าง
-* บรรจุภัณฑ์
-* ฉลากและโลโก้
-* สี
-* สัดส่วน
-* วัสดุและพื้นผิว
-* ฝา หัวปั๊ม หลอด หรือชิ้นส่วนสำคัญ
-* รายละเอียดที่ทำให้สินค้าจดจำได้
+Layout เหล่านี้สามารถใช้ได้ แต่ต้องเกิดจาก **Creative Idea** ไม่ใช่เป็น Default Template
 
-ห้ามดัดแปลงสินค้าให้กลายเป็นสินค้าอีกชนิด หรือสร้างรายละเอียดบนบรรจุภัณฑ์ขึ้นใหม่โดยไม่มีข้อมูลรองรับ
+ก่อนจบงาน ให้ถามว่า:
 
-ห้ามนำพื้นหลัง พื้นผิว แท่นวาง Props ฉาก มุมกล้อง Crop แสง หรือการจัดวางจากรูปสินค้าไปใช้ เว้นแต่รูปนั้นถูกระบุให้ทำหน้าที่เป็น Reference ด้วย
+> **ถ้าเอา Logo และ Brand Name ออก ภาพนี้ยังมี Idea ที่เฉพาะกับ Campaign นี้อยู่หรือไม่?**
 
-นำสินค้าไปวางในฉากใหม่ให้เป็นธรรมชาติ โดยต้องมี:
+ถ้าเปลี่ยน Logo เป็นคู่แข่งแล้วภาพยังใช้ได้แทบเหมือนเดิม ให้ถือว่า Creative ยัง Generic และต้องคิดใหม่
 
-* Scale ที่สมเหตุสมผล
-* Perspective ที่สอดคล้องกับฉาก
-* ทิศทางแสงที่ตรงกัน
-* Highlight และ Reflection ที่เหมาะกับวัสดุ
-* Contact กับพื้นหรือวัตถุที่น่าเชื่อถือ
-* Contact Shadow และ Cast Shadow ที่สมจริง
-* ขอบสินค้าและการ Retouch ที่กลมกลืน
-* ไม่มีลักษณะเหมือนสินค้าถูกตัดแปะลงบนฉาก
+---
 
-## 6. Creative Direction
+## 5. USE REFERENCES FOR DESIGN LOGIC
 
-ให้ความสำคัญกับ Visual Idea หลักเพียงหนึ่งแนวคิดที่แข็งแรง มากกว่าการใส่หลายแนวคิดที่แข่งขันกันเอง
+เมื่อมี Reference ให้ศึกษาเหตุผลที่ภาพนั้นทำงาน เช่น:
 
-ภาพต้องมี Hero Visual หรือ Focal Point ที่ผู้ชมมองเห็นเป็นอันดับแรก และสามารถเข้าใจประเด็นหลักได้อย่างรวดเร็ว
+* Visual Idea / Metaphor
+* Product Presentation
+* Interaction
+* Composition
+* Camera Angle
+* Perspective
+* Scale
+* Lighting / Shadow
+* Color / Contrast
+* Typography
+* Graphic Treatment
+* Commercial Hierarchy
 
-ใช้ Visual Metaphor, Interaction, Scale, Perspective, Lighting, Composition หรือ Graphic System เพื่อทำให้สารของแคมเปญมองเห็นได้ ไม่ใช่อาศัยข้อความอธิบายทั้งหมด
+นำเฉพาะส่วนที่เหมาะกับ Campaign และ Brand มาพัฒนาเป็น **Original Execution**
 
-องค์ประกอบรองต้องช่วยนำสายตา สนับสนุน Hero Visual และสร้างลำดับการอ่านที่ชัดเจน
+**Reference the logic, not only the look.**
+
+อย่าลอก Composition แบบตรงตัว และอย่าลด Reference เหลือเพียง Background, Color หรือ Mood & Tone
+
+หากมีหลาย Reference ให้แยกหน้าที่ของแต่ละภาพและรวมเฉพาะสิ่งที่สนับสนุน Creative Direction เดียวกัน
+
+---
+
+## 6. PRODUCT FIDELITY & TRUTH
+
+หากมี Product Image ให้รักษา:
+
+* Shape
+* Packaging
+* Logo / Label
+* Color
+* Proportion
+* Material
+* Important Product Details
+
+ห้ามสร้างข้อมูลขึ้นเอง เช่น:
+
+* Price
+* Promotion
+* Claims
+* Ingredients
+* Features
+* Certifications
+* Awards
+* Product Variants
+
+รูปสินค้าใช้เพื่อรักษาตัวตนสินค้า ไม่ได้หมายความว่าต้อง Copy Background, Lighting หรือ Composition จากรูปนั้น เว้นแต่ผู้ใช้ระบุให้เป็น Reference
+
+---
+
+## 7. REALISM & INTEGRATION
+
+ทุกสิ่งต้องอยู่ใน Visual World เดียวกัน
+
+ตรวจสอบ:
+
+* Scale
+* Perspective
+* Camera Angle
+* Light Direction
+* Highlight / Reflection
+* Contact Shadow
+* Cast Shadow
+* Surface Contact
+* Material Response
+* Edge Retouch
 
 หลีกเลี่ยง:
 
-* การใส่องค์ประกอบมากเกินไป
+* Cut-and-paste Product
+* Floating Objects ที่ไม่มีเหตุผล
+* Random Glow
+* Generic 3D Decorations
+* Plastic-looking Materials / Skin
+* Impossible Geometry
+* Distorted Hands / Products
 * Props ที่ไม่เกี่ยวข้อง
-* สัญลักษณ์หรือกราฟิกแบบสุ่ม
-* ฉากที่ซับซ้อนโดยไม่มีเหตุผล
-* การใช้ 3D หรือเอฟเฟกต์เพียงเพราะดูทันสมัย
-* Layout โฆษณาสำเร็จรูปที่ใช้ซ้ำได้กับทุกแบรนด์
-* ภาพที่ดูเหมือน Raw AI Scene มากกว่างานออกแบบโฆษณา
-* วัตถุแปลก รูปร่างผิดธรรมชาติ หรือรายละเอียดที่รบกวนสายตา
+* AI-looking details
 
-### Composition Discipline — Important Rule
+---
 
-ก่อนเพิ่มรายละเอียด ให้กำหนดโครงสร้างภาพด้วย Grid และ Design Principles ที่เหมาะสม เช่น Rule of Thirds, Visual Balance, Alignment และ Negative Space โดยไม่จำเป็นต้องบังคับใช้ Layout เดียวกับทุกงาน
+## 8. COMPOSITION SERVES THE IDEA
 
-* จัด Hero Visual และข้อความหลักให้อยู่บนจุดนำสายตาที่ชัดเจน ไม่วางทุกองค์ประกอบให้มีน้ำหนักเท่ากันทั่วทั้งภาพ
-* ต้องมี Negative Space หรือพื้นที่พักสายตาที่มองเห็นได้จริง ห้ามเติมองค์ประกอบจนเต็มทุกบริเวณของ Canvas
-* จำกัดองค์ประกอบหลักไม่เกิน 3 กลุ่ม ได้แก่ Main Message, Hero Visual และ Supporting Information/CTA
-* รักษาระยะขอบและระยะห่างระหว่างองค์ประกอบให้สม่ำเสมอ ไม่วางข้อความ สินค้า โลโก้ หรือกราฟิกเบียดขอบภาพ
-* หากภาพเริ่มแน่น ให้ตัด ลดขนาด หรือรวมองค์ประกอบเดิมก่อน ห้ามแก้ด้วยการย่อทุกอย่างแล้วอัดลงในพื้นที่เดียวกัน
+หลังจากมี Visual Idea แล้ว จึงสร้าง Composition ด้วย:
 
-### Content Density — Hard Rule
+* Grid
+* Alignment
+* Scale
+* Contrast
+* Balance
+* Negative Space
+* Visual Weight
+* Eye Flow
 
-ก่อนจัด Layout ให้ลดข้อมูลซ้ำและจัดทุกองค์ประกอบเป็น Primary, Secondary หรือ Optional
+ต้องมี Focal Point ชัดเจน และไม่ให้องค์ประกอบทุกส่วนมีน้ำหนักเท่ากัน
 
-* ข้อมูลเดียวกันห้ามสื่อซ้ำหลายตำแหน่ง เว้นแต่จำเป็นต่อความเข้าใจ
-* ให้มี Visual Dominance ไม่เกิน 3 ส่วน: Headline, Hero Comparison และ CTA
-* Supporting Information ต้องถูกรวมให้อยู่ในกลุ่มเดียว ไม่แตกเป็นหลายกล่องหรือหลายแถบ
-* ต้องเว้นพื้นที่อย่างน้อย 30–50% ของ Canvas เป็นพื้นที่พักสายตาที่ไม่มีข้อความ Badge ราคา หรือข้อมูลสำคัญ หรือใข้เทคนิคการ zoom out เพื่อเพิ่มพื้นที่ก็ได้
-* หากข้อมูลทั้งหมดทำให้ภาพแน่น ให้ลดหรือตัดข้อมูลระดับ Secondary ก่อน โดยห้ามย่อทุกอย่างเพื่ออัดให้ครบ
+จำนวนข้อมูลและพื้นที่ว่างให้ปรับตาม Campaign:
 
-## 7. การจัดวางข้อความและรายละเอียดโปรโมชัน
+* Branding / Consideration → สามารถใช้ Visual Storytelling และพื้นที่พักสายตามากขึ้น
+* Performance / Promotion / CPAS → สามารถมีข้อมูลมากขึ้น แต่ต้องยังมี Hierarchy ชัด
 
-จัดวางเฉพาะข้อความและรายละเอียดที่จำเป็นต่อการสื่อสาร เช่น:
+หากภาพแน่น ให้ **ตัดหรือรวมข้อมูล** ก่อน อย่าย่อทุกอย่างเพื่ออัดให้ครบ
+
+---
+
+## 9. TYPOGRAPHY & COMMERCIAL INFORMATION
+
+Typography ต้องเป็นส่วนหนึ่งของ Composition ไม่ใช่ข้อความที่แปะลงภายหลัง
+
+ใช้เฉพาะข้อมูลที่จำเป็น เช่น:
 
 * Headline
 * Subheadline
-* Product Name
-* Key Benefit
-* ราคา
-* ส่วนลด
-* Promotion
+* Product / Benefit
+* Price / Promotion
 * CTA
-* Logo หรือ Brand Signature
+* Logo
 
-ให้ Headline เป็นข้อความหลักที่โดดเด่นและเข้าใจได้ทันที ไม่ควรบังคับให้ผู้ชมอ่านข้อความหลายส่วนเพื่อเข้าใจว่าโฆษณาต้องการสื่ออะไร
+Headline ต้องอ่านเร็วและเหมาะกับ Mobile
 
-ข้อความต้องมีลำดับความสำคัญชัดเจน อ่านง่าย และเหมาะกับการมองผ่านหน้าจอมือถือ
+รักษา Natural Thai / English Line Break, Alignment, Spacing และ Safe Margin
 
-Typography ต้องเป็นส่วนหนึ่งของ Composition ไม่ใช่เพียงข้อความที่วางทับบนภาพภายหลัง
+ห้ามนำข้อความภายใน Brief หรือคำสั่งของระบบมาปรากฏใน Artwork เช่น:
 
-ควบคุมจำนวนข้อความ ไม่ใช้ประโยคยาวหรือ Text Block หนาแน่น และไม่เพิ่มสรรพคุณหรือข้อมูลที่ไม่ได้รับมา
+* “ตามข้อมูลแบรนด์”
+* “ตาม Brief”
+* “Reference”
+* Internal Notes
+* Placeholder
+* Reasoning / Instruction Text
 
-รักษาการตัดบรรทัดภาษาไทยและภาษาอังกฤษให้เป็นธรรมชาติ ไม่แยกคำหรือวลีในตำแหน่งที่ทำให้อ่านติดขัด
+---
 
-รายละเอียดรอง เช่น ราคา โปรโมชั่น Badge และ CTA ต้องเห็นชัด แต่ไม่แข่งขันกับ Headline หรือ Hero Visual
+## 10. FINAL CREATIVE CHECK
 
-## 8. มาตรฐานของภาพสุดท้าย
+ก่อนถือว่าภาพเสร็จ ให้ตรวจสอบ:
 
-ภาพสุดท้ายต้องมีคุณสมบัติดังนี้:
+* Main Idea เข้าใจได้ภายใน 1–2 วินาทีหรือไม่
+* Visual สื่อ Message หรือแค่โชว์ Category
+* Hero Visual แข็งแรงพอหรือไม่
+* Creative มีความเฉพาะกับ Campaign / Brand หรือไม่
+* Eye Flow ชัดหรือไม่
+* Product ถูกต้องและสมจริงหรือไม่
+* Typography อ่านได้บน Mobile หรือไม่
+* Lighting / Perspective / Shadow สอดคล้องหรือไม่
+* มีองค์ประกอบที่ใส่มาเพียงเพื่อตกแต่งหรือไม่
+* มี AI Artifacts หรือรายละเอียดแปลกหรือไม่
+* ภาพดูเป็น Final Advertisement จริงหรือไม่
 
-* สื่อสารแนวคิดหลักได้ภายใน 1–2 วินาที
-* มี Focal Point ที่ชัดเจน
-* มี Visual Hierarchy ที่อ่านตามได้ง่าย
-* เหมาะกับการดูบนมือถือ
-* องค์ประกอบไม่แออัดและมีพื้นที่หายใจ
-* สัดส่วน มุมมอง และระยะของวัตถุสมเหตุสมผล
-* แสง เงา และสีมีความต่อเนื่องกันทั้งภาพ
-* สินค้าดูสมจริงและเป็นส่วนหนึ่งของฉาก
-* ภาพมีความ Cohesive และทุกองค์ประกอบสนับสนุนสารเดียวกัน
-* ดู Polished, Intentional และมีคุณภาพระดับงานโฆษณามืออาชีพ
-* สอดคล้องกับภาพลักษณ์และระดับความพรีเมียมของแบรนด์
-* ไม่ดู Generic หรือสามารถเปลี่ยนโลโก้แล้วใช้กับแบรนด์ใดก็ได้
-* ไม่มีรายละเอียดผิดธรรมชาติหรือสิ่งรบกวนที่ทำให้ภาพดูเป็น AI-generated
-* พร้อมใช้งานเป็น Final Advertising Visual
-* มีพื้นที่พักสายตาชัดเจน และไม่กระจายน้ำหนักภาพเท่ากันทุกบริเวณ
-* Composition ต้องผ่านหลัก Grid, Alignment, Balance และ Spacing ไม่ใช่เพียงนำองค์ประกอบทั้งหมดมาวางให้ครบ
+# CORE PRINCIPLES
 
-## Core Creative Principle
+**Idea first. Layout second.**
 
-Prioritize one clear visual idea over many weak ideas.
+**Visualize the message, not just the category.**
 
-Every element in the image must support the main message.
+**One strong visual idea over many weak ideas.**
 
-Create a finished advertisement, not just a beautiful image.
+**Show, don't decorate.**
+
+**Reference the logic, not only the look.**
+
+**Every element must earn its place.**
+
+**If the logo can be swapped with a competitor and the ad still works unchanged, the creative is too generic.**
+
+**Create an advertisement, not an AI layout.**

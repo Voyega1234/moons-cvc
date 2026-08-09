@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   albumLayoutPrompt,
   buildAlbumMasterInstruction,
+  inspectFourGridMasterAlignment,
   splitAlbumMaster
 } from "./album-master.js";
 import {
@@ -688,7 +689,19 @@ async function generateOutputForHook({
       writeDebugLog,
       fetchImpl
     });
-    let finalMasterImage = image;
+    const alignedImage = await ensureFourGridMasterAlignment({
+      input,
+      hook,
+      albumFormat,
+      image,
+      apiKey,
+      model,
+      generationSize,
+      debugLogDirectory,
+      writeDebugLog,
+      fetchImpl
+    });
+    let finalMasterImage = alignedImage;
     let imageBytes = Buffer.from(finalMasterImage.base64, "base64");
     let panels = await splitAlbumMaster(imageBytes, albumFormat);
     const separationResult = await applyAlbumPanelSeparationQc({
@@ -1039,6 +1052,82 @@ function buildVisualQcRevisionPrompt(instruction: string): string {
     "Correct the issue across the whole composition so hierarchy, spacing, lighting, shadow, perspective, depth, materials, edges, and asset integration remain coherent.",
     "Do not add new facts, offers, claims, products, decorative modules, or a different campaign idea. Return one finished publication-ready artwork."
   ].join("\n\n");
+}
+
+async function ensureFourGridMasterAlignment({
+  input,
+  hook,
+  albumFormat,
+  image,
+  apiKey,
+  model,
+  generationSize,
+  debugLogDirectory,
+  writeDebugLog,
+  fetchImpl
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  albumFormat: AlbumFormat;
+  image: GeneratedImage;
+  apiKey: string;
+  model: string;
+  generationSize: ArtworkOutputSize;
+  debugLogDirectory?: string;
+  writeDebugLog: ArtworkGenerationDebugLogger;
+  fetchImpl: FetchLike;
+}): Promise<GeneratedImage> {
+  if (albumFormat !== "four-grid") return image;
+
+  const sourceBytes = Buffer.from(image.base64, "base64");
+  const alignment = await inspectFourGridMasterAlignment(sourceBytes);
+  if (alignment.valid) return image;
+
+  const revisionPrompt = [
+    "Repair Image 1's Album grid geometry only.",
+    `The detected vertical divider is at ${alignment.verticalPercent}% and the horizontal divider is at ${alignment.horizontalPercent}%.`,
+    "Move both continuous dividers to the exact 50% center lines so the master contains four equal square panels in a strict two-by-two grid.",
+    "Keep every existing panel in its current quadrant and preserve all intended copy, typography, objects, brand assets, colors, lighting, visual style, and campaign content.",
+    "Do not rewrite, add, remove, swap, crop, or redesign any panel. Return one corrected square Album master artwork."
+  ].join("\n\n");
+  const sourceReference: ReferenceImageInput = {
+    bytes: sourceBytes,
+    mimeType: image.mimeType,
+    label: "Image 1 — Album master with misaligned grid dividers"
+  };
+  const repairHook = { id: `${hook.id}-album-grid-repair` };
+  const imageRequestDebug = buildImageRequestDebugBundle({
+    model,
+    runId: input.runId,
+    hook: repairHook,
+    prompt: revisionPrompt,
+    size: generationSize,
+    quality: "medium",
+    references: [sourceReference]
+  });
+  await writeDebugLog(
+    debugLogDirectory,
+    imageRequestDebug.entry,
+    imageRequestDebug.assets
+  );
+  const repairedImage = await editImage({
+    apiKey,
+    model,
+    prompt: revisionPrompt,
+    size: generationSize,
+    quality: "medium",
+    referenceImages: [sourceReference],
+    fetchImpl
+  });
+  const repairedAlignment = await inspectFourGridMasterAlignment(
+    Buffer.from(repairedImage.base64, "base64")
+  );
+  if (!repairedAlignment.valid) {
+    throw new Error(
+      "Album grid alignment is still invalid after one repair. Regenerate the Album before export."
+    );
+  }
+  return repairedImage;
 }
 
 async function resolveCreativeStrategy({

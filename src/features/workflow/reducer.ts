@@ -137,7 +137,7 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ],
     service: "single-static",
-    hookIdeaMode: "fresh-research",
+    hookIdeaMode: defaultHookIdeaMode,
     hookGenerationModel: "gpt-5.6-terra",
     artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",

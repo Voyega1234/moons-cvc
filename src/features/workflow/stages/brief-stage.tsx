@@ -180,6 +180,7 @@ export function BrandLogoCard({
           className="file-input"
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          aria-label={logoItem ? "Replace logo" : "Upload logo"}
           disabled={uploading}
           onChange={(event) => void handleUpload(event)}
         />
@@ -981,6 +982,11 @@ export function CreativeMaterialsEditor({
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   multiple
+                  aria-label={
+                    assetKind === "material"
+                      ? "Upload Materials"
+                      : "Upload images"
+                  }
                   disabled={uploadPending}
                   onChange={handleUpload}
                 />
@@ -2545,6 +2551,7 @@ function InlineUploadForm({
           className="file-input"
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          aria-label={actionLabel}
           disabled={uploading}
           onChange={(event) => void handleUpload(event)}
         />

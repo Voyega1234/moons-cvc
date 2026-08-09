@@ -6,7 +6,6 @@ import {
   albumFormats,
   ctaActionTypes,
   defaultAlbumFormatPreference,
-  defaultHookIdeaMode,
   hookGenerationModels,
   serviceTypes,
   type AlbumFormat,
@@ -24,11 +23,6 @@ import {
   resolveConvertCakeAuthorization,
   type ConvertCakeAuthorization
 } from "../shared/convert-cake-auth.js";
-import {
-  writeHookGenerationDebugLog,
-  type HookGenerationDebugLog,
-  type HookGenerationDebugLogger
-} from "./hook-generation-debug-log.js";
 import {
   fetchPastPostExamples,
   selectPastPostsForCaption,
@@ -57,7 +51,6 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_HOOK_SUPPORT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_HOOK_GENERATION_MODEL?: string;
-  HOOK_GENERATION_DEBUG_LOG_DIR?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
   HOOK_GENERATION_DEBUG_LOG_DIR?: string;
@@ -102,7 +95,7 @@ interface GeneratedDirection extends RawDirection {
   cta: string;
   supportingPoints: readonly string[];
   formatBeats: readonly string[];
-  albumFormat: AlbumFormat;
+  albumFormat?: AlbumFormat;
   ugcBrief?: UgcVideoBrief;
   ctaActionType: CtaActionType;
   ctaDestination: string;
@@ -232,7 +225,7 @@ export async function handleHookGenerationHarnessRequest({
       HOOK_GENERATION_CONCURRENCY,
       (batch) =>
         withTransientRetry(() =>
-          runDirectHookGenerationStep({
+          runGenerationStep({
             input: batch,
             pastPosts,
             agentHookPrompt,
@@ -247,7 +240,14 @@ export async function handleHookGenerationHarnessRequest({
     const directions = makeDirectionIdsUnique(
       directTraces.flatMap((trace) => trace.output.directions)
     ).slice(0, input.quantity);
-    validateGeneratedDirectionQuotas(directions, input);
+    if (
+      input.quantity > HOOK_GENERATION_BATCH_SIZE &&
+      directions.length < input.quantity
+    ) {
+      throw new Error(
+        `Hook generation returned ${directions.length} of ${input.quantity} requested ideas. Please retry the run.`
+      );
+    }
     const highlightedDirections = await runSubheadlineHighlightStep({
       directions,
       apiKey:
@@ -269,21 +269,6 @@ export async function handleHookGenerationHarnessRequest({
           input,
           generationBatches,
           researchTrace,
-          directTraces,
-          generationProvider,
-          generationModel: model,
-          finalDirections: highlightedDirections
-        })
-      );
-    }
-
-    const debugLogDirectory = env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim();
-    if (debugLogDirectory) {
-      await writeDebugLog(
-        debugLogDirectory,
-        buildDirectHookGenerationDebugLog({
-          input,
-          generationBatches,
           directTraces,
           generationProvider,
           generationModel: model,
@@ -1102,11 +1087,12 @@ function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
   }
 
   return [
-    ...adCaptions.slice(0, 4),
-    ...organicPosts.slice(0, 2),
-    ...adCaptions.slice(4),
-    ...organicPosts.slice(2)
-  ].slice(0, 6);
+    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (วิเคราะห์ร่วมกันเพื่อหา format และรายละเอียดที่เกิดซ้ำ ห้ามคัดลอกใจความ campaign):",
+    ...pastPosts.map(
+      (post, index) =>
+        `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
+    )
+  ].join("\n");
 }
 
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
@@ -1646,7 +1632,8 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
       );
       const albumFormat = readGeneratedAlbumFormat(
         direction.albumFormat,
-        `directions[${index}].albumFormat`
+        `directions[${index}].albumFormat`,
+        service
       );
       const formatBeats = validateFormatBeats(
         service,
@@ -1666,12 +1653,15 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
               formatBeats
             })
           : undefined;
+      const id = readString(direction.id, `directions[${index}].id`);
+      const sourceCandidateId =
+        typeof direction.sourceCandidateId === "string" &&
+        direction.sourceCandidateId.trim()
+          ? direction.sourceCandidateId.trim()
+          : id;
       return {
-        id: readString(direction.id, `directions[${index}].id`),
-        sourceCandidateId: readString(
-          direction.sourceCandidateId,
-          `directions[${index}].sourceCandidateId`
-        ),
+        id,
+        sourceCandidateId,
         service,
         hook,
         subheadline: readString(
@@ -1736,8 +1726,10 @@ function unwrapJsonCodeFence(text: string): string {
 
 function readGeneratedAlbumFormat(
   value: unknown,
-  field: string
-): AlbumFormat {
+  field: string,
+  service: ServiceType
+): AlbumFormat | undefined {
+  if (service !== "album-post") return undefined;
   if (
     typeof value !== "string" ||
     !albumFormats.includes(value as AlbumFormat)
@@ -1751,20 +1743,18 @@ function validateFormatBeats(
   service: ServiceType,
   beats: readonly string[],
   index: number,
-  albumFormat: AlbumFormat
+  albumFormat: AlbumFormat | undefined
 ): readonly string[] {
   if (service === "single-static" || service === "resize") return [];
   const normalized = beats.map((beat) => beat.trim()).filter(Boolean);
-  const requiredCount =
-    service === "album-post"
-      ? albumFormat.startsWith("three-")
-        ? 2
-        : 3
-      : 3;
+  if (service !== "album-post") return normalized;
+  if (!albumFormat) {
+    throw new Error(`directions[${index}].albumFormat is invalid.`);
+  }
+  const requiredCount = albumFormat.startsWith("three-") ? 2 : 3;
   if (normalized.length !== requiredCount) {
-    const contract = service === "album-post" ? albumFormat : service;
     throw new Error(
-      `directions[${index}].formatBeats must contain exactly ${requiredCount} items for ${contract}.`
+      `directions[${index}].formatBeats must contain exactly ${requiredCount} items for ${albumFormat}.`
     );
   }
   return normalized;

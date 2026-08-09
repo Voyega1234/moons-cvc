@@ -68,6 +68,50 @@ interface AlbumCropRegion {
   maxHeight: number;
 }
 
+const FOUR_GRID_ALIGNMENT_TOLERANCE = 0.02;
+
+export async function inspectFourGridMasterAlignment(
+  imageBytes: Buffer
+): Promise<{
+  valid: boolean;
+  verticalPercent: number;
+  horizontalPercent: number;
+}> {
+  const metadata = await sharp(imageBytes).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error("Could not read the generated album master dimensions.");
+  }
+
+  const side = Math.min(metadata.width, metadata.height);
+  const left = Math.floor((metadata.width - side) / 2);
+  const top = Math.floor((metadata.height - side) / 2);
+  const analysisSize = 512;
+  const pixels = await sharp(imageBytes)
+    .extract({ left, top, width: side, height: side })
+    .resize(analysisSize, analysisSize, { fit: "fill" })
+    .greyscale()
+    .raw()
+    .toBuffer();
+  const boundaries = detectAlbumBoundaries({
+    pixels,
+    width: analysisSize,
+    height: analysisSize,
+    format: "four-grid"
+  });
+  const expected = analysisSize / 2;
+  const vertical = boundaries.vertical ?? expected;
+  const horizontal = boundaries.horizontal ?? expected;
+  const tolerance = analysisSize * FOUR_GRID_ALIGNMENT_TOLERANCE;
+
+  return {
+    valid:
+      Math.abs(vertical - expected) <= tolerance &&
+      Math.abs(horizontal - expected) <= tolerance,
+    verticalPercent: Number(((vertical / analysisSize) * 100).toFixed(1)),
+    horizontalPercent: Number(((horizontal / analysisSize) * 100).toFixed(1))
+  };
+}
+
 export async function splitAlbumMaster(
   imageBytes: Buffer,
   format: AlbumFormat

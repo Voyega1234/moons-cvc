@@ -93,11 +93,14 @@ export type ArtworkMode = (typeof artworkModes)[number];
 // their persisted-data and API compatibility. Add a mode back to this list to
 // expose it in every artwork-mode selector again.
 export const userSelectableArtworkModes = [
-  "standard"
+  "standard",
+  "design-system",
+  "design-system-new",
+  "direct-final-artwork"
 ] as const satisfies readonly ArtworkMode[];
 export type UserSelectableArtworkMode =
   (typeof userSelectableArtworkModes)[number];
-export const defaultArtworkMode: UserSelectableArtworkMode = "standard";
+export const defaultArtworkMode: UserSelectableArtworkMode = "design-system";
 
 export function isUserSelectableArtworkMode(
   mode: ArtworkMode

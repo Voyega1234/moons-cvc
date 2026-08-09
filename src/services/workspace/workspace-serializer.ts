@@ -8,7 +8,6 @@ import {
   ctaActionTypes,
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
-  defaultHookIdeaMode,
   emptyApprovalComments,
   hookGenerationModels,
   hookIdeaModes,

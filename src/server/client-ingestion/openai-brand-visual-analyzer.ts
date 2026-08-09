@@ -103,14 +103,6 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
             reason: fallbackReason,
             response: analysis.rawOutput
           }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "brand_visual_analysis",
-            strict: true,
-            schema: brandVisualAnalysisSchema
-          }
         };
       }
 
@@ -135,8 +127,6 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
         ) {
           throw lastError;
         }
-      })
-    });
 
         await wait(this.retryDelayMs * attempt);
       }

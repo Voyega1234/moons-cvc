@@ -74,15 +74,14 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Standard" }).getAttribute(
+      screen.getByRole("button", { name: "Design system" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");
-    expect(screen.queryByRole("button", { name: "Design system" })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Design system (new)" })
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Final artwork" })).toBeNull();
+      screen.getByRole("button", { name: "Design system (new)" })
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Final artwork" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Standard" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-artwork-mode",
@@ -124,7 +123,7 @@ describe("Artwork generation settings", () => {
     });
   });
 
-  it("presents a saved non-visible artwork mode as Standard", () => {
+  it("presents a saved non-visible artwork mode as Design system", () => {
     const dispatch = vi.fn();
     const state = {
       ...createInitialWorkflowState({
@@ -152,7 +151,7 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Standard" }).getAttribute(
+      screen.getByRole("button", { name: "Design system" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");

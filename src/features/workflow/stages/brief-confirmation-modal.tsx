@@ -13,7 +13,6 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   inferredReferenceImageRole,
-  normalizeUserSelectableArtworkMode,
   type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -137,7 +136,7 @@ export function BriefConfirmationModal({
     "reference"
   );
   const [managingReferences, setManagingReferences] = useState(false);
-  const artworkMode = normalizeUserSelectableArtworkMode(state.artworkMode);
+  const artworkMode = state.artworkMode;
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
   const imageReferences = state.referenceImages.filter(

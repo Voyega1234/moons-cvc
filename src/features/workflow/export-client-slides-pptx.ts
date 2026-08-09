@@ -1618,13 +1618,12 @@ async function buildClientSlidesPptx(
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
     let albumMasterData: string | undefined;
-    if (isUgcOutput(item.output) && ugcReference) {
-      if (ugcReferenceData === undefined) {
-        try {
-          ugcReferenceData = await resolveImage(ugcReference.url);
-        } catch {
-          ugcReferenceData = null;
-        }
+    if (isUgcOutput(item.output)) {
+      const previewImage = ugcPreviewImages[item.output.id];
+      if (!previewImage) {
+        throw new Error(
+          `The UGC preview for creative ${index + 1} was not captured from Create. Keep the page open and retry.`
+        );
       }
       imageData = [previewImage];
     } else if (!isUgcOutput(item.output)) {
