@@ -611,7 +611,10 @@ describe("generateImagePrompt", () => {
       "Invent all message-bearing visual content and the background from the approved idea"
     );
     expect(promptText).toContain('"headline": "Flowers that make the room feel softer"');
-    expect(promptText).toContain('"visualDirection": "Photographic editorial bouquet scene with tactile grain."');
+    expect(promptText).not.toContain('"visualDirection"');
+    expect(promptText).not.toContain(
+      "Photographic editorial bouquet scene with tactile grain."
+    );
     expect(promptText).toContain('"role": "official logo — exact"');
     expect(promptText).toContain(
       '"role": "approved past work — infer brand visual DNA only; do not copy its content"'

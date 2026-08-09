@@ -115,8 +115,15 @@ describe("workflowReducer", () => {
     expect(state.approved).toBe(true);
   });
 
-  it("uses Standard artwork generation by default and keeps other modes available internally", () => {
-    expect(initialWorkflowState.artworkMode).toBe("standard");
+  it("uses Design System artwork generation by default and keeps other modes available internally", () => {
+    expect(initialWorkflowState.hookIdeaMode).toBe("fresh-research");
+    expect(
+      workflowReducer(initialWorkflowState, {
+        type: "set-hook-idea-mode",
+        mode: "standard"
+      }).hookIdeaMode
+    ).toBe("fresh-research");
+    expect(initialWorkflowState.artworkMode).toBe("design-system");
     expect(initialWorkflowState.albumFormat).toBe("auto");
     const albumFormatUpdate = workflowReducer(
       {
@@ -198,15 +205,15 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("defaults hook generation to OpenAI and allows OpenRouter Claude", () => {
+  it("defaults hook generation to OpenAI and allows OpenRouter Gemini", () => {
     expect(initialWorkflowState.hookGenerationModel).toBe("gpt-5.6-terra");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-hook-generation-model",
-      model: "anthropic/claude-sonnet-4.6"
+      model: "google/gemini-3.6-flash"
     });
 
-    expect(updated.hookGenerationModel).toBe("anthropic/claude-sonnet-4.6");
+    expect(updated.hookGenerationModel).toBe("google/gemini-3.6-flash");
   });
 
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {
@@ -239,7 +246,7 @@ describe("workflowReducer", () => {
     ]);
     expect(initialWorkflowState.quantity).toBe(6);
     expect(initialWorkflowState.brief).toBe(
-      "Push beyond the obvious. Surprise me with fresh, original ideas that only this brand could own. Explore unexpected angles, challenge familiar category patterns, and make every direction meaningfully different."
+      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different."
     );
 
     const updated = workflowReducer(initialWorkflowState, {
@@ -602,7 +609,7 @@ describe("workflowReducer", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manually written hook",
-      subheadline: "A supporting line",
+      subheadline: "",
       cta: "See how it works"
     });
 
@@ -613,6 +620,7 @@ describe("workflowReducer", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manually written hook",
+      subheadline: "",
       selected: false
     });
     expect(state.quantity).toBe(initialWorkflowState.quantity);

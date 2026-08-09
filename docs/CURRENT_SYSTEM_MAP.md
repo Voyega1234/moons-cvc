@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-08-05
+Last verified: 2026-08-06
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -54,16 +54,38 @@ Async results must continue targeting the run that started the request.
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
 
-Hook generation uses `agent_prompt/agent_hook.md` as the creative source of
-truth. The runtime endpoint adds campaign evidence, quotas, search availability,
-and JSON transport requirements, but does not prescribe a hook formula or
-narrative framework. New runs default to `fresh-research`, which requires the
-Hook Agent to search with Thailand as its location context; users may explicitly
-switch a run to no-research mode. Album `formatBeats` map one-to-one to the
-non-cover panels
+Hook generation uses `agent_prompt/agent_hook.md` as the single creative-policy
+source of truth. The runtime endpoint adds only changing campaign evidence,
+Research availability, quotas, format contracts, and JSON transport; it must
+not restate Creative, Brand Voice, Research, Copy, Product Truth, or scoring
+policy. Subheadline emphasis is a separate micro-agent owned by
+`agent_prompt/agent_hook_highlight.md`. Generated headlines must communicate
+their central message independently. `subheadline` remains a required string in
+the provider's Structured Output shape but may be `""` when no supporting line
+adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
+in review UI. Missing `subheadline` fields in legacy saved runs still fall back
+to the stored concept.
+
+Hook generation always uses `fresh-research`. Legacy workspaces and requests
+that still contain the former hidden `standard` value are migrated at the
+workspace and server boundaries because the UI has no no-research selector.
+Before creative generation, the dedicated Research Agent at
+`agent_prompt/agent_hook_research.md` searches Product Truth, Thai audience
+behavior, category/competitor context, provable moments, cultural/platform
+signals, and consumer language once per request. It returns a structured
+dossier with direct source URLs, which is shared by every Hook batch. OpenAI
+Research attaches `web_search_preview` with Thailand location context;
+OpenRouter Research uses Chat Completions with the top-level
+`plugins: [{ id: "web" }]` plugin. The Hook Agent receives the dossier without
+a search tool so research and creative judgment remain separate.
+Creative quality, Product Truth, Citation use, and scoring policy belong to
+`agent_hook.md`; runtime code does not reject consumer-facing wording through
+hidden semantic regexes or self-score thresholds. Runtime validation remains
+limited to transport/schema requirements, requested quotas, Album panel counts,
+and the explicit Thai first-person prohibition. Search audit metadata is written
+to local Hook debug logs. Album `formatBeats` map one-to-one to non-cover panels
 (two for three-panel formats and three for four-panel formats). UGC and Motion
-may return as many `formatBeats` as their idea needs; the Hook Agent is not
-required to use a three-beat opening/demo/close sequence.
+may return as many `formatBeats` as their idea needs.
 
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
@@ -128,6 +150,10 @@ Artwork requests are built in
 the thin façade at
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
 
+The Hook Agent's `visual` / Visual direction field remains available for idea
+review, export, and learning, but it is excluded from artwork prompt agents,
+reference selection, and the final GPT Image 2 prompt in every artwork mode.
+
 Server-side ownership is split by responsibility:
 
 - `artwork-generation-pipeline.ts` owns request orchestration and the active
@@ -151,6 +177,13 @@ Server-side ownership is split by responsibility:
 
 Keep the endpoint façade stable for API and test imports. Add new behavior to
 the smallest owning module above instead of rebuilding the former monolith.
+
+On the current `design-system-flow` branch, the active endpoint still contains
+the Album master helpers. Four-grid masters must place both dividers within 2%
+of the center lines. A misaligned master receives one targeted GPT Image 2 edit
+and is checked again before any master or panel asset is persisted; a second
+failure stops Album generation. Slide export places every Album format inside a
+square preview so its native panel ratios are not stretched.
 
 - `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
   the OpenAI Responses API using

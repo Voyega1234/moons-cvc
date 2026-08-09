@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  directionSubheadline,
   isExactSubheadlineHighlight,
   resolveSubheadlineHighlight,
   suggestSubheadlineHighlight
 } from "./subheadline-highlight";
 
 describe("subheadline emphasis", () => {
+  it("preserves an intentionally omitted subheadline", () => {
+    expect(
+      directionSubheadline({ subheadline: "", concept: "Internal concept" })
+    ).toBe("");
+  });
+
+  it("uses the concept only for legacy data with no subheadline field", () => {
+    expect(directionSubheadline({ concept: "Legacy concept" })).toBe(
+      "Legacy concept"
+    );
+  });
+
   it("keeps an exact model-selected phrase", () => {
     const subheadline = "Turn search demand into qualified B2B leads";
 

@@ -14,6 +14,7 @@ export interface ClaimedClientIngestionJob {
 }
 
 export interface ClientIngestionJobQueue {
+  failStalledJobs?(): Promise<number>;
   claimNextQueuedJob(): Promise<ClaimedClientIngestionJob | null>;
 }
 
@@ -38,6 +39,7 @@ export async function runNextClientIngestionJob({
   store,
   ...harnessDependencies
 }: ClientIngestionRunnerDependencies): Promise<ClientIngestionRunnerResult> {
+  await queue.failStalledJobs?.();
   const claimed = await queue.claimNextQueuedJob();
 
   if (!claimed) {
@@ -91,6 +93,43 @@ export class SupabaseClientIngestionJobQueue
 {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
+  async failStalledJobs(): Promise<number> {
+    const cutoff = new Date(Date.now() - STALLED_JOB_THRESHOLD_MS).toISOString();
+    const errorMessage =
+      "Brand setup stopped after making no progress for 10 minutes. Please retry.";
+    const completedAt = new Date().toISOString();
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("brand_analysis_jobs")
+      .update({
+        status: "failed",
+        current_step: "failed",
+        error_message: errorMessage,
+        completed_at: completedAt
+      })
+      .in("status", ACTIVE_JOB_STATUSES)
+      .lt("updated_at", cutoff)
+      .select("client_id");
+
+    if (error) throw error;
+
+    const clientIds = [...new Set((data ?? []).map((job) => job.client_id))];
+    if (!clientIds.length) return 0;
+
+    const { error: clientError } = await this.client
+      .schema("moons")
+      .from("clients")
+      .update({
+        ingestion_status: "failed",
+        ingestion_error: errorMessage
+      })
+      .in("id", clientIds)
+      .in("ingestion_status", ACTIVE_JOB_STATUSES);
+
+    if (clientError) throw clientError;
+    return clientIds.length;
+  }
+
   async claimNextQueuedJob(): Promise<ClaimedClientIngestionJob | null> {
     const { data, error } = await this.client
       .schema("moons")
@@ -114,3 +153,16 @@ export class SupabaseClientIngestionJobQueue
     };
   }
 }
+
+const STALLED_JOB_THRESHOLD_MS = 10 * 60 * 1_000;
+const ACTIVE_JOB_STATUSES = [
+  "queued",
+  "validating_source",
+  "scraping_facebook_posts",
+  "scraping_facebook_ads",
+  "searching_fallback",
+  "mirroring_images",
+  "analyzing_visuals",
+  "analyzing_brand",
+  "writing_memory"
+] as const;

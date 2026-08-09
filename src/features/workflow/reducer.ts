@@ -81,7 +81,7 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
 }
 
 export const defaultBrief =
-  "Push beyond the obvious. Surprise me with fresh, original ideas that only this brand could own. Explore unexpected angles, challenge familiar category patterns, and make every direction meaningfully different.";
+  "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
@@ -137,7 +137,7 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ],
     service: "single-static",
-    hookIdeaMode: defaultHookIdeaMode,
+    hookIdeaMode: "fresh-research",
     hookGenerationModel: "gpt-5.6-terra",
     artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",
@@ -476,7 +476,7 @@ export function workflowReducer(
         }
       ]);
     case "set-hook-idea-mode":
-      return { ...state, hookIdeaMode: action.mode };
+      return { ...state, hookIdeaMode: "fresh-research" };
     case "set-hook-generation-model":
       return { ...state, hookGenerationModel: action.model };
     case "set-artwork-mode":
@@ -778,7 +778,7 @@ export function workflowReducer(
       const pillar = action.pillar.trim();
       const objective = action.objective.trim();
       const cta = action.cta.trim();
-      if (!hook || !subheadline || !pillar || !objective || !cta) return state;
+      if (!hook || !pillar || !objective || !cta) return state;
 
       return {
         ...state,
@@ -798,7 +798,7 @@ export function workflowReducer(
             ),
             concept: pillar,
             why: `Created manually for the ${objective.toLowerCase()} objective.`,
-            visual: "Use the hook and sub-headline as the primary copy hierarchy.",
+            visual: "Use the hook as the primary copy hierarchy and the optional sub-headline only when present.",
             cta,
             supportingPoints: [],
             formatBeats: [],
@@ -809,7 +809,7 @@ export function workflowReducer(
                   : state.albumFormat
                 : undefined,
             ctaActionType: "other" as const,
-            caption: [hook, subheadline, cta].join("\n\n"),
+            caption: [hook, subheadline, cta].filter(Boolean).join("\n\n"),
             selected: false,
             exportGroup: null
           }

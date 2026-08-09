@@ -41,10 +41,10 @@ describe("Artwork generation settings", () => {
     }) as HTMLSelectElement;
     expect(hookModel.value).toBe("gpt-5.6-terra");
     expect(hookModel.selectedOptions[0]?.textContent).toBe("GPT · OpenAI");
-    await user.selectOptions(hookModel, "anthropic/claude-sonnet-4.6");
+    await user.selectOptions(hookModel, "google/gemini-3.6-flash");
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-hook-generation-model",
-      model: "anthropic/claude-sonnet-4.6"
+      model: "google/gemini-3.6-flash"
     });
     expect(
       screen.queryByRole("button", { name: "Reference library" })

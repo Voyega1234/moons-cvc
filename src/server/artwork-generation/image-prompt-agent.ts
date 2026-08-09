@@ -1008,7 +1008,6 @@ function buildReferenceLibraryRuntimeInputBlock(
     approved: {
       headline: input.hook.hook,
       concept: input.hook.concept,
-      visualDirection: input.hook.visual,
       ...(input.hook.supportingPoints?.length
         ? { supportingDetails: input.hook.supportingPoints }
         : {}),

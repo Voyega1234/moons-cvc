@@ -15,6 +15,7 @@ export interface OpenAiBrandVisualAnalyzerOptions {
   maxImages?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
+  requestTimeoutMs?: number;
 }
 
 type ResponseContent =
@@ -30,6 +31,7 @@ type ResponseContent =
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
+const DEFAULT_REQUEST_TIMEOUT_MS = 75_000;
 
 export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly apiKey: string;
@@ -39,6 +41,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly maxImages: number;
   private readonly maxAttempts: number;
   private readonly retryDelayMs: number;
+  private readonly requestTimeoutMs: number;
 
   constructor({
     apiKey,
@@ -47,7 +50,8 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     fetchImpl = fetch,
     maxImages = 12,
     maxAttempts = 2,
-    retryDelayMs = 250
+    retryDelayMs = 250,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
   }: OpenAiBrandVisualAnalyzerOptions) {
     if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
 
@@ -58,6 +62,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     this.maxImages = maxImages;
     this.maxAttempts = Math.max(1, Math.floor(maxAttempts));
     this.retryDelayMs = Math.max(0, retryDelayMs);
+    this.requestTimeoutMs = Math.max(1, requestTimeoutMs);
   }
 
   async analyze(
@@ -98,6 +103,14 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
             reason: fallbackReason,
             response: analysis.rawOutput
           }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "brand_visual_analysis",
+            strict: true,
+            schema: brandVisualAnalysisSchema
+          }
         };
       }
 
@@ -122,6 +135,8 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
         ) {
           throw lastError;
         }
+      })
+    });
 
         await wait(this.retryDelayMs * attempt);
       }
@@ -134,31 +149,50 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     input: Parameters<BrandVisualAnalyzer["analyze"]>[0],
     visualAssets: readonly MirroredBrandVisualAsset[]
   ): Promise<BrandSignalAnalysis> {
-    const response = await this.fetchImpl(this.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.model,
-        store: false,
-        input: [
-          {
-            role: "user",
-            content: buildResponseContent(input, visualAssets)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          store: false,
+          input: [
+            {
+              role: "user",
+              content: buildResponseContent(input, visualAssets)
+            }
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "brand_visual_analysis",
+              strict: true,
+              schema: brandVisualAnalysisSchema
+            }
           }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "brand_visual_analysis",
-            strict: true,
-            schema: brandVisualAnalysisSchema
-          }
-        }
-      })
-    });
+        }),
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new OpenAiVisualAnalysisRequestError(
+          "OpenAI visual analysis timed out.",
+          null,
+          false,
+          visualAssets.length > 0
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       throw await readOpenAiRequestError(response);

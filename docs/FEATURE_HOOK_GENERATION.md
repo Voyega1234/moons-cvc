@@ -10,40 +10,25 @@ Moons supports two hook generation modes:
    - n8n returns hook directions directly.
 
 2. `harness`
-   - New backend harness mode.
+   - Backend Hook Agent mode.
    - Frontend sends the active run context to `/api/hook-generation-harness`.
    - Backend keeps model/search API keys server-side.
-   - Backend performs three steps when no past content exists, or five when it
-     does:
-     1. a Past Content Profiler extracts style signals, abstract creative
-        patterns, and reusable factual details while discarding old Hooks,
-        Concepts, campaign angles, and wording;
-     2. the GPT-5.6 Candidate Agent searches, then creates a lightweight pool
-        of three candidates per requested direction (at least four per content
-        type, capped at 36 per batch);
-     3. a separate Creative Director compares the complete pool, rejects
-        generic or repetitive candidates, and expands only the winners into
-        full directions;
-     4. when past posts exist, a Caption Stylist rewrites only the locked
-        direction's `caption` and verified recurring `contactLine`;
-     5. a support-model pass selects exact Subheadline highlight spans.
-   - `standard` is the default and does not attach web search. It uses only the
-     supplied Brief and verified brand, product, document, past-content, and
-     material context.
-   - `fresh-research` attaches web search to every Candidate generation batch.
-     The OpenAI request enforces this with `tool_choice: "required"`.
+   - Backend performs one direct Creative Strategist pass followed by one
+     focused Subheadline-highlight pass.
+   - `standard` does not attach web search and uses only supplied verified
+     context.
+   - `fresh-research` is the default. OpenAI attaches
+     `web_search_preview`; OpenRouter attaches the top-level `web` plugin.
    - All search instructions live only in `agent_prompt/agent_hook.md`.
      Runtime code passes `Hook idea mode` as input and configures the search
      tool, but does not append a second search prompt.
    - Creative judgment such as consideration logic, content angles, Headline
      quality, and generic-versus-strong selection criteria also lives in
-     `agent_prompt/agent_hook.md`. Runtime prompt builders retain stage
-     orchestration, schema/quotas, factual context, validation-related rules,
-     and format-specific execution instructions such as Album and UGC.
+     `agent_prompt/agent_hook.md`. Runtime prompt builders retain only changing
+     context, Research availability, schema/quotas, and format-specific
+     transport contracts such as Album panel counts and UGC field presence.
    - `standard` writes directly from verified current context.
-   - `fresh-research` tells the same Candidate Agent to run multiple focused
-     searches before ideation. There is no separate research-summary handoff;
-     researched candidates go directly to the Creative Director.
+   - There is no separate research-summary or Creative-Director handoff.
 
 Switch modes with:
 
@@ -63,6 +48,8 @@ Harness mode requires backend-only env:
 ```bash
 OPENAI_API_KEY=<openai-api-key>
 OPENAI_HOOK_GENERATION_MODEL=gpt-5.6-terra
+OPENROUTER_API_KEY=<openrouter-api-key>
+OPENROUTER_HOOK_GENERATION_MODEL=google/gemini-3.6-flash
 SUPABASE_URL=<project-url>
 SUPABASE_ANON_KEY=<anon-key>
 ```
@@ -173,8 +160,10 @@ The UI currently persists:
 - `id`
 - `service`
 - `hook`
-- `subheadline` — concise user-facing supporting copy mapped from
-  `copywriting.sub_headline_1`
+- `subheadline` — optional user-facing supporting copy mapped from
+  `copywriting.sub_headline_1`; the Structured Output field remains a required
+  string and uses `""` when the headline already communicates the complete
+  message
 - `concept`
 - `subheadlineHighlight` — exact phrase inside `subheadline` used for bold
   emphasis on screen and in PDF export
@@ -191,11 +180,21 @@ backend for traceability/future UI work but are not persisted in
 ## Subheadline highlight pass
 
 After direction generation finishes, the harness sends every generated
-`{ id, subheadline }` to a separate structured-output call. The generation
-prompt no longer selects `subheadlineHighlight`; the dedicated pass is the
-single source of that decision.
+non-empty `{ id, subheadline }` to a separate structured-output call. Directions
+with `subheadline: ""` skip this call and persist an empty highlight. The
+generation prompt no longer selects `subheadlineHighlight`; the dedicated pass
+is the single source of that decision.
 
-The runtime prompt is the stakeholder-supplied prompt beginning with:
+The stable Highlight instructions live in:
+
+- `agent_prompt/agent_hook_highlight.md`
+
+The endpoint appends only the current `{ id, subheadline }` items. The prompt
+selects an exact continuous span, requests
+`{ items: [{ id, highlights: [...] }] }`, and the API enforces the matching
+Runtime JSON Schema.
+
+The prompt begins with:
 
 ```text
 Bold the sentence of this text that you think it's a highlight of this sub-headline
@@ -217,7 +216,7 @@ data where the highlight field is absent uses the deterministic fallback.
 
 ## Prompt source
 
-The Hook Agent's stable role and judgment rules live in:
+The Hook Agent's stable role and judgment rules live only in:
 
 - `agent_prompt/agent_hook.md`
 
@@ -226,38 +225,31 @@ product, audience, and current market; uses Search for current context;
 develops meaningfully distinct, format-native ideas; and does not invent
 brand or product facts.
 
-`buildInputBlock()` appends only Hook-relevant changing context:
+`buildInputBlock()` appends Hook-relevant changing context:
 
 - user brief
-- idea mode, service, and content-type quotas
-- additional round direction after removing runtime-owned quota prose
-- existing Hooks for Generate more
-- Brand Memory working/avoid notes
-- non-visual Brand strategy and voice context
+- selected service
+- selected output quantity
+- Brand Kit
 - Products
 - non-visual factual Documents such as product FAQs
 - uploaded material descriptions and images
-- Past Content Profile style signals and reusable factual details
+- selected raw Past Content used as brand evidence
 
-The model prompt excludes raw onboarding questionnaire context, run/model
-metadata, duplicate quantity prose, attachment/reference filenames, internal
+The model prompt excludes run/model metadata, duplicate quota prose, internal
 brand-analysis source labels, and visual-production items such as Logo rules,
 Brand CI, typography, colour systems, layouts, and art direction. Those visual
-rules belong to Artwork generation. If the current Brief itself contains a raw
-Launch Questionnaire, runtime replaces it with a short no-current-campaign-
-brief notice and relies on the verified Brand/Product context instead. Product
-filtering remains controlled by the Product truth selection flow.
+rules belong to Artwork generation. Verified onboarding context is included as
+standing context but cannot override the current Brief. If the Brief itself is
+a raw Launch Questionnaire, runtime replaces it with a short no-current-brief
+notice.
 
-The OpenAI request gives the Candidate Agent `web_search_preview` directly and
-enforces at least one search with `tool_choice: "required"`. The tool receives
-an approximate Thailand location (`country: "TH"`, timezone
-`Asia/Bangkok`). Unless the Brief names another market, the prompt requires
-Thai-language queries and Thailand-specific sources first; US/global consumer
-behavior cannot substitute for Thai audience context. Search may add audience
-insight or market context, but Brief, Brand Memory, Brand Kit, and verified
-Product data remain higher-priority. Any direction influenced by external
-research names the actual source in `citations`; directions based only on
-campaign input return an empty citation list.
+OpenAI requests attach `web_search_preview` and enforce tool use with
+`tool_choice: "required"`; the tool receives an approximate Thailand location.
+OpenRouter requests use Chat Completions with `plugins: [{ id: "web" }]`,
+`provider.require_parameters: true`, and strict JSON Schema output. Search and
+evidence policy remains owned by `agent_prompt/agent_hook.md`; runtime only
+announces whether Research is available for the current request.
 
 ## Caption grounding in real past posts
 

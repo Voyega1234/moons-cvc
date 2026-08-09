@@ -9,7 +9,6 @@ export interface CreativeSetIdea {
   directionId: string;
   headline: string;
   concept: string;
-  visualDirection: string;
 }
 
 export interface CreativeSetDirection {

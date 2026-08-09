@@ -262,6 +262,75 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(result.visualGuidance.sourceAssetPaths).toEqual([]);
   });
 
+  it("bounds a stalled image request and falls back to text evidence", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        async (
+          _input: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("Aborted", "AbortError"));
+            });
+          })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify(responseAnalysis)
+          }),
+          { status: 200 }
+        )
+      );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      requestTimeoutMs: 5,
+      retryDelayMs: 0
+    });
+
+    const result = await analyzer.analyze({
+      client: {
+        id: "client-1",
+        name: "Flora Daily",
+        facebookUrl: "https://www.facebook.com/flora"
+      },
+      sourceSummary: {
+        postsSaved: 1,
+        adsSaved: 0,
+        manualInputsSaved: 1,
+        usedFallbackSearch: false
+      },
+      textEvidence: [
+        {
+          sourceType: "manual_input",
+          sourceId: "questionnaire-1",
+          text: "Brand Name: Flora Daily"
+        }
+      ],
+      visualAssets: [
+        {
+          assetBucket: "brand-source-assets",
+          assetStoragePath: "client-1/job-1/facebook_post/post-1-0.jpg",
+          assetUrl: "https://storage.example.com/signed/post-1-0.jpg",
+          originalUrlHash: "hash-1",
+          sourceId: "source-1",
+          sourceType: "facebook_post",
+          sourceUrl: "https://www.facebook.com/flora/posts/1",
+          sourceItemId: "post-1",
+          captionContext: "Fresh flower arrangement"
+        }
+      ]
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.needsReview).toBe(true);
+    expect(result.reviewReason).toContain("timed out");
+    expect(result.visualGuidance.sourceAssetPaths).toEqual([]);
+  });
+
   it("retries a temporary OpenAI failure before degrading the analysis", async () => {
     const fetchMock = vi
       .fn()

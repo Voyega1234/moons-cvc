@@ -60,8 +60,8 @@ export function HookGenerationModelSelect({
         }
       >
         <option value="gpt-5.6-terra">GPT · OpenAI</option>
-        <option value="anthropic/claude-sonnet-4.6">
-          Claude · OpenRouter
+        <option value="google/gemini-3.6-flash">
+          OpenRouter
         </option>
       </select>
     </label>

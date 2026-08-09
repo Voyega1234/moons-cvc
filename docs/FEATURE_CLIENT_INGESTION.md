@@ -388,6 +388,15 @@ not make work outlive that function limit; a single analysis that takes longer
 than 300 seconds can still be terminated and will need manual recovery or a
 future resumable queue consumer.
 
+The OpenAI visual-analysis request has its own 75-second deadline so the worker
+can persist a terminal state before the serverless function is terminated. If
+an image-backed request reaches that deadline and text evidence is available,
+the analyzer retries once without images and marks the resulting Brand Memory
+for review. A text-only timeout becomes a normal failed ingestion with a
+readable error. Before claiming queued work, each worker cycle also marks active
+jobs with no database progress for 10 minutes as failed and unlocks their
+clients for an explicit retry.
+
 The manual recovery serverless wrapper lives at:
 
 ```text

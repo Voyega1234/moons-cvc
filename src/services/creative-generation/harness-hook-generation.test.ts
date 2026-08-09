@@ -306,6 +306,38 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
+  it("preserves an intentionally empty generated subheadline", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          directions: [
+            {
+              id: "direction-1",
+              service: "single-static",
+              hook: "ทิชชู่หนึ่งหิ้ว ใช้ได้ทั้งบ้าน",
+              subheadline: "",
+              concept: "สื่อสาร pack truth และ practical benefit ในบรรทัดเดียว",
+              why: "The headline already carries the complete message.",
+              visual: "One pack serving several rooms.",
+              formatBeats: [],
+              cta: "เลือกแพ็กที่เหมาะกับบ้าน",
+              caption: "หนึ่งหิ้วพร้อมใช้ในทุกห้อง",
+              score: 90
+            }
+          ]
+        })
+      )
+    );
+
+    const [direction] = await generateDirectionsWithHarness({ run });
+
+    expect(direction?.subheadline).toBe("");
+    expect(direction?.subheadlineHighlight).toBe("");
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
   it("preserves the production-ready UGC brief returned by hook generation", async () => {
     const originalFetch = globalThis.fetch;
     vi.stubGlobal(

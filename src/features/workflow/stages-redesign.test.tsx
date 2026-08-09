@@ -1777,7 +1777,7 @@ describe("redesigned workflow stages", () => {
         name: /Working brief/i
       }) as HTMLTextAreaElement).value
     ).toContain(
-      "Push beyond the obvious. Surprise me with fresh, original ideas that only this brand could own."
+      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity"
     );
 
     await user.click(stage.getByRole("button", { name: "Use monthly quota" }));
@@ -2332,10 +2332,7 @@ describe("redesigned workflow stages", () => {
     const manual = within(manualDialog);
     await user.type(manual.getByLabelText("Pillar"), "Product proof");
     await user.type(manual.getByLabelText("Hook"), "A manual proof hook");
-    await user.type(
-      manual.getByLabelText("Sub-headline"),
-      "Show the difference clearly"
-    );
+    expect(manual.getByLabelText("Sub-headline")).toHaveValue("");
     await user.type(manual.getByLabelText("CTA"), "See the proof");
     await user.click(manual.getByRole("button", { name: "Add hook" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -2344,7 +2341,7 @@ describe("redesigned workflow stages", () => {
       pillar: "Product proof",
       objective: "Conversion",
       hook: "A manual proof hook",
-      subheadline: "Show the difference clearly",
+      subheadline: "",
       cta: "See the proof"
     });
 
@@ -2867,10 +2864,10 @@ describe("redesigned workflow stages", () => {
         object.text?.some((run) => run.text.includes("Make Time to Let Your Space"))
     );
     expect(captionText).toBeDefined();
-    expect(captionText?.options.fontSize).toBe(10);
-    expect(captionText?.options.lineSpacing).toBe(15);
-    expect(captionText?.options.paraSpaceAfter).toBe(4);
-    expect(captionText?.text?.[0]?.text).toContain("\n\n");
+    expect(captionText?.options.fontSize).toBe(11);
+    expect(captionText?.text?.map((run) => run.text).join("")).toBe(
+      longCaption
+    );
     expect(captionText?.options.x).toBe(9.15);
     expect(captionText?.options.y).toBeCloseTo(1.09);
     expect(captionText?.options.w).toBe(3.38);
@@ -3771,10 +3768,56 @@ describe("redesigned workflow stages", () => {
 
     expect(slides).toHaveLength(1);
     expect(artwork[0]).toEqual([
-      { x: 4.04, y: 0.68, w: 5.62, h: 3.07 },
-      { x: 4.04, y: 3.75, w: 2.81, h: 3.07 },
-      { x: 6.85, y: 3.75, w: 2.81, h: 3.07 }
+      { x: 4.04, y: 0.94, w: 5.62, h: 2.81 },
+      { x: 4.04, y: 3.75, w: 2.81, h: 2.81 },
+      { x: 6.85, y: 3.75, w: 2.81, h: 2.81 }
     ]);
+  });
+
+  it("exports the saved Album master exactly as shown in Create", async () => {
+    const base = buildCreativeState();
+    const source = base.outputs[0];
+    if (!source) throw new Error("Expected a creative output fixture.");
+    const masterUrl = "https://example.com/album-master.png";
+    const albumState = {
+      ...base,
+      albumFormat: "three-vertical" as const,
+      outputs: [1, 2, 3].map((panel) => ({
+        ...source,
+        id: `${source.directionId}-album-${panel}-v1`,
+        format: "Album post",
+        assetUrl: `https://example.com/album-${panel}.png`,
+        albumMasterAssetUrl: masterUrl,
+        albumMasterAssetStoragePath: "brand/run/outputs/album-master.png"
+      }))
+    };
+    const imageData =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
+    const resolveImage = vi.fn().mockResolvedValue(imageData);
+
+    const pptx = await buildCreateStageSlidesPptx(albumState, resolveImage);
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            options: { x: number; y: number; w: number; h: number };
+          }>;
+        }>;
+      }
+    )._slides;
+    const artwork = slides[0]?._slideObjects
+      .filter((object) => object._type === "image")
+      .map(({ options }) => ({
+        x: Number(options.x.toFixed(3)),
+        y: Number(options.y.toFixed(3)),
+        w: Number(options.w.toFixed(3)),
+        h: Number(options.h.toFixed(3))
+      }));
+
+    expect(resolveImage).toHaveBeenCalledTimes(1);
+    expect(resolveImage).toHaveBeenCalledWith(masterUrl);
+    expect(artwork).toEqual([{ x: 4.04, y: 0.94, w: 5.62, h: 5.62 }]);
   });
 
   it("groups an album into one Client card and applies decisions to every image", async () => {

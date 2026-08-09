@@ -5,6 +5,7 @@ import {
   buildActiveHumanPresenceRules,
   detectAlbumBoundaries,
   handleArtworkGenerationRequest,
+  inspectFourGridMasterAlignment,
   normalizeReferenceImageForOpenAI,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
@@ -344,6 +345,28 @@ async function albumMasterPng(): Promise<Buffer> {
     .toBuffer();
 }
 
+async function fourGridMasterPng({
+  vertical,
+  horizontal
+}: {
+  vertical: number;
+  horizontal: number;
+}): Promise<Buffer> {
+  const width = 512;
+  const height = 512;
+  return sharp(syntheticAlbumMaster({
+    width,
+    height,
+    format: "four-grid",
+    vertical,
+    horizontal
+  }), {
+    raw: { width, height, channels: 1 }
+  })
+    .png()
+    .toBuffer();
+}
+
 function fakeStorage(): {
   client: ArtworkStorageClient;
   uploads: { bucket: string; path: string }[];
@@ -599,8 +622,29 @@ function syntheticAlbumMaster({
   return pixels;
 }
 
-describe("album boundary detection and deterministic crop geometry", () => {
-  it("detects shifted four-vertical seams for diagnostics", () => {
+describe("adaptive album crop detection", () => {
+  it("rejects a four-grid master whose divider drifts beyond two percent", async () => {
+    const shifted = await fourGridMasterPng({
+      vertical: 256,
+      horizontal: 280
+    });
+    const centered = await fourGridMasterPng({
+      vertical: 256,
+      horizontal: 256
+    });
+
+    await expect(inspectFourGridMasterAlignment(shifted)).resolves.toMatchObject({
+      valid: false,
+      horizontalPercent: expect.any(Number)
+    });
+    await expect(inspectFourGridMasterAlignment(centered)).resolves.toMatchObject({
+      valid: true,
+      verticalPercent: expect.any(Number),
+      horizontalPercent: expect.any(Number)
+    });
+  });
+
+  it("finds shifted four-vertical seams instead of assuming fixed thirds", () => {
     const width = 512;
     const height = 512;
     const boundaries = detectAlbumBoundaries({
@@ -1220,67 +1264,43 @@ describe("handleArtworkGenerationRequest", () => {
     ).toBe(true);
   });
 
-  it("repairs the Album master with GPT Image 2 when panel QC finds leakage", async () => {
-    const originalMaster = await albumMasterPng();
-    const repairedMaster = await sharp({
-      create: {
-        width: 512,
-        height: 512,
-        channels: 3,
-        background: { r: 214, g: 238, b: 224 }
-      }
-    })
-      .png()
-      .toBuffer();
+  it("repairs a shifted four-grid master before saving its panels", async () => {
+    const shiftedMaster = await fourGridMasterPng({
+      vertical: 256,
+      horizontal: 280
+    });
+    const repairedMaster = await fourGridMasterPng({
+      vertical: 256,
+      horizontal: 256
+    });
+    const editPrompts: string[] = [];
     const uploaded: { path: string; body: Buffer }[] = [];
-    const editForms: FormData[] = [];
-    const qcBodies: {
-      input?: { content?: { type?: string }[] }[];
-      text?: { format?: { name?: string } };
-    }[] = [];
-    const fetchMock = vi.fn(
-      async (url: string | URL | Request, init?: RequestInit) => {
-        const href = String(url);
-        if (href.includes("/auth/v1/user")) {
-          return new Response(
-            JSON.stringify({ email: "team@convertcake.com" }),
-            { status: 200 }
-          );
-        }
-        if (href.includes("/v1/responses")) {
-          const body = JSON.parse(String(init?.body)) as {
-            input?: { content?: { type?: string }[] }[];
-            text?: { format?: { name?: string } };
-          };
-          if (
-            body.text?.format?.name ===
-            "moons_album_panel_separation_review"
-          ) {
-            qcBodies.push(body);
-            return albumPanelQcReviseResponse();
-          }
-          return standardAgentResponse(init);
-        }
-        if (href.includes("/v1/images/generations")) {
-          return new Response(
-            JSON.stringify({
-              data: [{ b64_json: originalMaster.toString("base64") }]
-            }),
-            { status: 200 }
-          );
-        }
-        if (href.includes("/v1/images/edits")) {
-          editForms.push(init?.body as FormData);
-          return new Response(
-            JSON.stringify({
-              data: [{ b64_json: repairedMaster.toString("base64") }]
-            }),
-            { status: 200 }
-          );
-        }
-        throw new Error(`Unexpected fetch: ${href}`);
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
       }
-    );
+      if (href.includes("/v1/images/generations")) {
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: shiftedMaster.toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/images/edits")) {
+        editPrompts.push(String((init?.body as FormData).get("prompt")));
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: repairedMaster.toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
     const { client } = fakeStorage();
     client.storage.from = () => ({
       upload: async (path: string, body: Buffer) => {
@@ -1301,9 +1321,11 @@ describe("handleArtworkGenerationRequest", () => {
         body: JSON.stringify({
           ...requestBody,
           service: "album-post",
+          albumFormat: "four-grid",
           selectedHooks: [
             {
               ...requestBody.selectedHooks[0],
+              albumFormat: "four-grid",
               formatBeats: ["Hook", "Proof", "Offer"]
             }
           ]
@@ -1319,22 +1341,83 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(qcBodies).toHaveLength(1);
-    expect(
-      qcBodies[0]?.input?.[0]?.content?.filter(
-        (item) => item.type === "input_image"
-      )
-    ).toHaveLength(3);
-    expect(editForms).toHaveLength(1);
-    expect(editForms[0]?.get("model")).toBe("gpt-image-2");
-    expect(String(editForms[0]?.get("prompt"))).toContain(
-      "Affected panels: 2"
+    expect(editPrompts).toHaveLength(1);
+    expect(editPrompts[0]).toContain("exact 50% center lines");
+    expect(uploaded.map(({ path }) => path)).toEqual([
+      "flora/run-1/outputs/hook-1-album-master-v1.png",
+      "flora/run-1/outputs/hook-1-album-1-v1.png",
+      "flora/run-1/outputs/hook-1-album-2-v1.png",
+      "flora/run-1/outputs/hook-1-album-3-v1.png",
+      "flora/run-1/outputs/hook-1-album-4-v1.png"
+    ]);
+    await Promise.all(
+      uploaded.slice(1).map(async ({ body }) => {
+        const metadata = await sharp(body).metadata();
+        expect(metadata).toMatchObject({ width: 960, height: 960 });
+      })
     );
-    expect(String(editForms[0]?.get("prompt"))).toContain(
-      "horizontal cover occupying the full top half"
-    );
-    expect(uploaded[0]?.body.equals(repairedMaster)).toBe(true);
-    expect(uploaded).toHaveLength(4);
+  });
+
+  it("does not save a four-grid master when its one repair is still misaligned", async () => {
+    const shiftedMaster = await fourGridMasterPng({
+      vertical: 256,
+      horizontal: 280
+    });
+    const { client, uploads } = fakeStorage();
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
+      }
+      if (
+        href.includes("/v1/images/generations") ||
+        href.includes("/v1/images/edits")
+      ) {
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: shiftedMaster.toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          service: "album-post",
+          albumFormat: "four-grid",
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              albumFormat: "four-grid",
+              formatBeats: ["Hook", "Proof", "Offer"]
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error:
+        "Album grid alignment is still invalid after one repair. Regenerate the Album before export."
+    });
+    expect(uploads).toHaveLength(0);
   });
 
   it("uses the selected four-panel master layout in Design System mode", async () => {
@@ -2975,6 +3058,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(responseInputs[2]).toContain("AUTHORITATIVE RUNTIME INPUT");
     expect(responseInputs[2]).toContain("campaignSetDirection");
     expect(responseInputs[2]).toContain("shotOpportunity");
+    expect(responseInputs.join("\n")).not.toContain(
+      requestBody.selectedHooks[0]!.visual
+    );
     expect(responseInputs.join("\n")).not.toContain("# VISUAL QUALITY CONTROL");
     expect(responseInputs.join("\n")).not.toContain(
       "# CAMPAIGN TRUTH NORMALIZER"
@@ -2993,6 +3079,9 @@ describe("handleArtworkGenerationRequest", () => {
       "### Per-idea shot opportunity"
     );
     expect(generationCalls[0]).toContain("### Creative provocation");
+    expect(generationCalls[0]).not.toContain(
+      requestBody.selectedHooks[0]!.visual
+    );
     expect(generationCalls[0]).not.toContain(
       "LOCKED AUTHORITATIVE CAMPAIGN PACKET"
     );

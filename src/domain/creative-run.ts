@@ -134,7 +134,7 @@ export type HookIdeaMode = (typeof hookIdeaModes)[number];
 export const defaultHookIdeaMode: HookIdeaMode = "fresh-research";
 export const hookGenerationModels = [
   "gpt-5.6-terra",
-  "anthropic/claude-sonnet-4.6"
+  "google/gemini-3.6-flash"
 ] as const;
 export type HookGenerationModel = (typeof hookGenerationModels)[number];
 export const imagePromptModels = [

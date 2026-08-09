@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { fetchPastPostExamples, type PastPostsClient } from "./past-posts";
+import {
+  fetchPastPostExamples,
+  selectPastPostsForCaption,
+  type PastPostsClient
+} from "./past-posts";
 
 function fakeClient(rows: {
   social: Record<string, unknown>[];
@@ -89,5 +93,45 @@ describe("fetchPastPostExamples", () => {
     await expect(
       fetchPastPostExamples({ client, clientId: "flora" })
     ).rejects.toThrow("boom");
+  });
+});
+
+describe("selectPastPostsForCaption", () => {
+  it("selects a compact mix led by ad captions", () => {
+    const posts = [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        source: "organic_post" as const,
+        text: `Organic ${index + 1}`
+      })),
+      ...Array.from({ length: 6 }, (_, index) => ({
+        source: "ad_caption" as const,
+        text: `Ad ${index + 1}`
+      }))
+    ];
+
+    expect(selectPastPostsForCaption(posts)).toEqual([
+      { source: "ad_caption", text: "Ad 1" },
+      { source: "ad_caption", text: "Ad 2" },
+      { source: "ad_caption", text: "Ad 3" },
+      { source: "ad_caption", text: "Ad 4" },
+      { source: "organic_post", text: "Organic 1" },
+      { source: "organic_post", text: "Organic 2" }
+    ]);
+  });
+
+  it("fills the sample from whichever source is available", () => {
+    const posts = Array.from({ length: 8 }, (_, index) => ({
+      source: "organic_post" as const,
+      text: `Organic ${index + 1}`
+    }));
+
+    expect(selectPastPostsForCaption(posts).map((post) => post.text)).toEqual([
+      "Organic 1",
+      "Organic 2",
+      "Organic 3",
+      "Organic 4",
+      "Organic 5",
+      "Organic 6"
+    ]);
   });
 });

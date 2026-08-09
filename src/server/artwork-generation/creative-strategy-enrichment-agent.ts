@@ -364,7 +364,18 @@ function buildInputText(
         },
         service: input.service,
         brief: input.brief,
-        approvedDirection: input.hook,
+        approvedDirection: {
+          hook: input.hook.hook,
+          concept: input.hook.concept,
+          why: input.hook.why,
+          cta: input.hook.cta,
+          supportingPoints: input.hook.supportingPoints ?? [],
+          formatBeats: input.hook.formatBeats ?? [],
+          ctaActionType: input.hook.ctaActionType ?? "",
+          ctaDestination: input.hook.ctaDestination ?? "",
+          contactLine: input.hook.contactLine ?? "",
+          caption: input.hook.caption
+        },
         ...(input.setDirection
           ? { campaignSetDirection: input.setDirection }
           : {}),

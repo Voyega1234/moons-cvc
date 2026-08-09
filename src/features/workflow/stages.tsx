@@ -4259,15 +4259,17 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               </span>
               <h3>{direction.hook}</h3>
             </div>
-            <div className="compass-angle-copy-block">
-              <span className="compass-angle-card-kicker">
-                {angleSubheadlineLabel(group.service)}
-              </span>
-              <AngleSubheadline
-                text={directionSubheadline(direction)}
-                highlight={direction.subheadlineHighlight}
-              />
-            </div>
+            {directionSubheadline(direction) ? (
+              <div className="compass-angle-copy-block">
+                <span className="compass-angle-card-kicker">
+                  {angleSubheadlineLabel(group.service)}
+                </span>
+                <AngleSubheadline
+                  text={directionSubheadline(direction)}
+                  highlight={direction.subheadlineHighlight}
+                />
+              </div>
+            ) : null}
             {group.service !== "single-static" &&
             group.service !== "resize" &&
             direction.formatBeats?.length ? (
@@ -4756,7 +4758,7 @@ function ManualHookModal({
   const [subheadline, setSubheadline] = useState("");
   const [cta, setCta] = useState("");
   const complete = Boolean(
-    pillar.trim() && hook.trim() && subheadline.trim() && cta.trim()
+    pillar.trim() && hook.trim() && cta.trim()
   );
 
   return (
@@ -4819,11 +4821,12 @@ function ManualHookModal({
             />
           </label>
           <label className="compass-manual-hook-field full">
-            <span>Sub-headline</span>
+            <span>Sub-headline (optional)</span>
             <textarea
+              aria-label="Sub-headline"
               rows={3}
               value={subheadline}
-              placeholder="Add the supporting message."
+              placeholder="Add only when it contributes something the hook does not already say."
               onChange={(event) => setSubheadline(event.target.value)}
             />
           </label>
@@ -5373,7 +5376,9 @@ export function ClientStage({
                     <span className="static-mark" />
                     <div className="static-copy">
                       <h3>{direction?.hook}</h3>
-                      <p>{direction ? directionSubheadline(direction) : ""}</p>
+                      {direction && directionSubheadline(direction) ? (
+                        <p>{directionSubheadline(direction)}</p>
+                      ) : null}
                       <span>Learn more</span>
                     </div>
                   </div>

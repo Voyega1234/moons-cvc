@@ -134,7 +134,6 @@ export function selectArtworkReferencePatterns(
     input.brief,
     input.hook.hook,
     input.hook.concept,
-    input.hook.visual,
     input.strategy?.commercialStyle,
     input.strategy?.sellingMechanism,
     input.strategy?.preferredMode,

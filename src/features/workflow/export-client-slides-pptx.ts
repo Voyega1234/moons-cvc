@@ -311,7 +311,7 @@ function addCaptionBlock(
     h: options.h - 0.35,
     margin: 0,
     ...localizedTextStyle(text),
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.ink,
     breakLine: false,
     valign: "top",
@@ -672,7 +672,16 @@ function addAlbumArtworkPreview(
   format: AlbumFormat,
   box = { x: 0.52, y: 0.68, w: 5.84, h: 6.14 }
 ) {
-  const placements = albumSlidePlacements(box, format);
+  const side = Math.min(box.w, box.h);
+  const placements = albumSlidePlacements(
+    {
+      x: box.x + (box.w - side) / 2,
+      y: box.y + (box.h - side) / 2,
+      w: side,
+      h: side
+    },
+    format
+  );
 
   imageData.slice(0, placements.length).forEach((data, index) => {
     const placement = placements[index];
@@ -758,10 +767,12 @@ function addSinglePageArtworkSlide(
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
-  imageData: readonly string[]
+  imageData: readonly string[],
+  albumMasterData?: string
 ) {
   const { output, direction } = item;
-  const albumLayout = isAlbumOutput(output) && imageData.length > 1;
+  const albumLayout =
+    isAlbumOutput(output) && (Boolean(albumMasterData) || imageData.length > 1);
   const artworkPanel = albumLayout
     ? { x: 3.85, y: 0.45, w: 6, h: 6.6 }
     : { x: 3.85, y: 0.45, w: 4.72, h: 6.6 };
@@ -796,13 +807,23 @@ function addSinglePageArtworkSlide(
     line: { color: COLORS.line, width: 1 }
   });
   if (albumLayout) {
-    addAlbumArtworkPreview(
-      slide,
-      imageData,
-      brandName,
-      albumFormat,
-      artworkBox
-    );
+    if (albumMasterData) {
+      addArtworkPreview(
+        slide,
+        albumMasterData,
+        "2048x2048",
+        `${brandName} album master grid`,
+        artworkBox
+      );
+    } else {
+      addAlbumArtworkPreview(
+        slide,
+        imageData,
+        brandName,
+        albumFormat,
+        artworkBox
+      );
+    }
   } else if (imageData[0]) {
     addArtworkPreview(
       slide,
@@ -870,19 +891,19 @@ function addSinglePageArtworkSlide(
     fit: "shrink",
     breakLine: false
   });
-  addTextBlock(
-    slide,
-    "Sub-headline",
-    direction ? directionSubheadline(direction as CreativeDirection) : undefined,
-    {
+  const subheadline = direction
+    ? directionSubheadline(direction as CreativeDirection)
+    : "";
+  if (subheadline) {
+    addTextBlock(slide, "Sub-headline", subheadline, {
       x: 0.55,
       y: 2.93,
       w: 2.84,
       h: 0.86,
       maxLength: 260,
       fontSize: 11.5
-    }
-  );
+    });
+  }
   addTextBlock(slide, "Creative concept", direction?.concept, {
     x: 0.55,
     y: 4.03,
@@ -961,7 +982,8 @@ function addClientSlide(
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
-  imageData: readonly string[] = []
+  imageData: readonly string[] = [],
+  albumMasterData?: string
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
@@ -986,7 +1008,8 @@ function addClientSlide(
     totalSlides,
     outputSize,
     albumFormat,
-    imageData
+    imageData,
+    albumMasterData
   );
   return;
 
@@ -1137,34 +1160,36 @@ function addClientSlide(
     valign: "top",
     breakLine: false
   });
-  slide.addText("SUPPORTING LINE", {
-    x: 3.57,
-    y: 3.72,
-    w: 2.58,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 9,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 1
-  });
   const subheadline = clampText(
     direction ? directionSubheadline(direction as CreativeDirection) : undefined,
     300
   );
-  slide.addText(subheadline, {
-    x: 3.57,
-    y: 4.08,
-    w: 2.58,
-    h: 1.46,
-    margin: 0,
-    ...localizedTextStyle(subheadline),
-    fontSize: 13,
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false
-  });
+  if (subheadline) {
+    slide.addText("SUPPORTING LINE", {
+      x: 3.57,
+      y: 3.72,
+      w: 2.58,
+      h: 0.2,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 9,
+      bold: true,
+      color: COLORS.muted,
+      charSpacing: 1
+    });
+    slide.addText(subheadline, {
+      x: 3.57,
+      y: 4.08,
+      w: 2.58,
+      h: 1.46,
+      margin: 0,
+      ...localizedTextStyle(subheadline),
+      fontSize: 13,
+      color: COLORS.ink,
+      valign: "top",
+      breakLine: false
+    });
+  }
 
   slide.addText("CREATIVE DRAFT", {
     x: 6.6,
@@ -1592,25 +1617,35 @@ async function buildClientSlidesPptx(
 
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
-    if (isUgcOutput(item.output)) {
-      const previewImage = ugcPreviewImages[item.output.id];
-      if (!previewImage) {
-        throw new Error(
-          `The UGC preview for creative ${index + 1} was not captured from Create. Keep the page open and retry.`
-        );
+    let albumMasterData: string | undefined;
+    if (isUgcOutput(item.output) && ugcReference) {
+      if (ugcReferenceData === undefined) {
+        try {
+          ugcReferenceData = await resolveImage(ugcReference.url);
+        } catch {
+          ugcReferenceData = null;
+        }
       }
       imageData = [previewImage];
     } else if (!isUgcOutput(item.output)) {
-      imageData = await Promise.all(
-        item.outputs.map((output, panelIndex) => {
-          if (!output.assetUrl) {
-            throw new Error(
-              `Creative asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
-            );
-          }
-          return resolveImage(output.assetUrl);
-        })
-      );
+      const albumMasterUrl = isAlbumOutput(item.output)
+        ? item.outputs.find((output) => output.albumMasterAssetUrl)
+            ?.albumMasterAssetUrl
+        : undefined;
+      if (albumMasterUrl) {
+        albumMasterData = await resolveImage(albumMasterUrl);
+      } else {
+        imageData = await Promise.all(
+          item.outputs.map((output, panelIndex) => {
+            if (!output.assetUrl) {
+              throw new Error(
+                `Creative asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
+              );
+            }
+            return resolveImage(output.assetUrl);
+          })
+        );
+      }
     }
     const albumFormat = resolveAlbumFormat(
       state.albumFormat,
@@ -1624,7 +1659,8 @@ async function buildClientSlidesPptx(
       totalSlides,
       state.outputSize,
       albumFormat,
-      imageData
+      imageData,
+      albumMasterData
     );
     slideNumber += 1;
   }

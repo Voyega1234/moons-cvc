@@ -414,8 +414,7 @@ async function prepareDesignSystemNewFlow({
     ideas: input.selectedHooks.map((hook) => ({
       directionId: hook.id,
       headline: hook.hook,
-      concept: hook.concept,
-      visualDirection: hook.visual
+      concept: hook.concept
     })),
     referenceImages: references.slice(0, 16).map((reference) => ({
       imageUrl: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
@@ -456,7 +455,6 @@ function buildLockedCampaignInput(
       subheadline: hook.subheadline,
       concept: hook.concept,
       reason: hook.why,
-      visualDirection: hook.visual,
       supportingPoints: hook.supportingPoints ?? [],
       cta: hook.cta,
       formatBeats: hook.formatBeats ?? []
@@ -1313,7 +1311,6 @@ function compactReferenceRole(label: string | undefined): string {
 //         1_500
 //       ),
 //       "{{IDEA_RATIONALE}}": compactPromptText(hook.why, 1_000),
-//       "{{VISUAL_DIRECTION}}": compactPromptText(hook.visual, 1_000),
 //       "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
 //         .slice(0, 5)
 //         .map((requirement) => `* ${compactPromptText(requirement, 500)}`)
@@ -1636,7 +1633,10 @@ async function buildDirectFinalArtworkPrompt({
   const ideaJson = JSON.stringify(
     {
       Hook: hook.hook.trim(),
-      subheadline: (hook.subheadline || hook.concept).trim(),
+      subheadline: (hook.subheadline === undefined
+        ? hook.concept
+        : hook.subheadline
+      ).trim(),
       "Supporting points (one per line)": (hook.supportingPoints ?? [])
         .map((point) => point.trim())
         .filter(Boolean),
