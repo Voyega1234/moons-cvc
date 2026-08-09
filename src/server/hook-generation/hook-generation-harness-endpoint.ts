@@ -35,6 +35,13 @@ import {
   type HookGenerationDebugLog,
   type HookGenerationDebugLogger
 } from "./hook-generation-debug-log.js";
+import {
+  buildHookResearchPrompt,
+  hookResearchDossierBlock,
+  hookResearchSchema,
+  parseHookResearchDossier,
+  type HookResearchDossier
+} from "./hook-research-agent.js";
 
 type FetchLike = typeof fetch;
 
@@ -60,6 +67,7 @@ export interface HookGenerationHarnessEndpointOptions {
     accessToken: string;
   }) => PastPostsClient;
   loadAgentHookPrompt?: () => Promise<string>;
+  loadHookResearchPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
   writeDebugLog?: HookGenerationDebugLogger;
 }
@@ -143,6 +151,7 @@ export async function handleHookGenerationHarnessRequest({
   fetchImpl = fetch,
   createPastPostsClient = defaultCreatePastPostsClient,
   loadAgentHookPrompt = defaultLoadAgentHookPrompt,
+  loadHookResearchPrompt = defaultLoadHookResearchPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
   writeDebugLog = writeHookGenerationDebugLog
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
@@ -190,6 +199,7 @@ export async function handleHookGenerationHarnessRequest({
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const agentHookPrompt = await loadAgentHookPrompt();
+    const hookResearchPrompt = await loadHookResearchPrompt();
     const subheadlineHighlightPrompt =
       await loadSubheadlineHighlightPrompt();
     const generationBatches = buildHookGenerationBatches(input);
@@ -199,6 +209,16 @@ export async function handleHookGenerationHarnessRequest({
       auth,
       createPastPostsClient
     });
+    const researchTrace = await withTransientRetry(() =>
+      runHookResearchStep({
+        input,
+        policyPrompt: hookResearchPrompt,
+        apiKey: generationApiKey,
+        model,
+        provider: generationProvider,
+        fetchImpl
+      })
+    );
     const directTraces = await mapWithConcurrency(
       generationBatches,
       HOOK_GENERATION_CONCURRENCY,
@@ -208,6 +228,7 @@ export async function handleHookGenerationHarnessRequest({
             input: batch,
             pastPosts,
             agentHookPrompt,
+            researchDossier: researchTrace.output,
             apiKey: generationApiKey,
             model,
             provider: generationProvider,
@@ -246,6 +267,7 @@ export async function handleHookGenerationHarnessRequest({
         buildDirectHookGenerationDebugLog({
           input,
           generationBatches,
+          researchTrace,
           directTraces,
           generationProvider,
           generationModel: model,
@@ -265,6 +287,13 @@ export async function handleHookGenerationHarnessRequest({
 
 async function defaultLoadAgentHookPrompt(): Promise<string> {
   return readFile(join(process.cwd(), "agent_prompt", "agent_hook.md"), "utf8");
+}
+
+async function defaultLoadHookResearchPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_hook_research.md"),
+    "utf8"
+  );
 }
 
 async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
@@ -327,6 +356,7 @@ async function runGenerationStep({
   input,
   pastPosts,
   agentHookPrompt,
+  researchDossier,
   apiKey,
   model,
   provider,
@@ -335,19 +365,17 @@ async function runGenerationStep({
   input: HookGenerationHarnessRequest;
   pastPosts: readonly PastPostExample[];
   agentHookPrompt: string;
+  researchDossier: HookResearchDossier;
   apiKey: string;
   model: string;
   provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookGenerationResult>> {
-  const researchEnabled = input.hookIdeaMode === "fresh-research";
-  const openAiResearchEnabled = researchEnabled && provider === "openai";
-  const openRouterResearchEnabled =
-    researchEnabled && provider === "openrouter";
   const inputText = buildDirectHookGenerationPrompt(
     input,
     agentHookPrompt,
-    pastPosts
+    pastPosts,
+    researchDossier
   );
   const requestDirections = (requestInputText: string) =>
     callResponsesApi({
@@ -364,11 +392,6 @@ async function runGenerationStep({
       ],
       schemaName: "moons_hook_generation",
       schema: hookGenerationSchema,
-      tools: openAiResearchEnabled ? [THAI_WEB_SEARCH_TOOL] : undefined,
-      plugins: openRouterResearchEnabled
-        ? [OPENROUTER_WEB_PLUGIN]
-        : undefined,
-      toolChoice: openAiResearchEnabled ? "required" : undefined,
       reasoningEffort:
         provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
       provider
@@ -431,9 +454,48 @@ async function runGenerationStep({
   };
 }
 
+async function runHookResearchStep({
+  input,
+  policyPrompt,
+  apiKey,
+  model,
+  provider,
+  fetchImpl
+}: {
+  input: HookGenerationHarnessRequest;
+  policyPrompt: string;
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  fetchImpl: FetchLike;
+}): Promise<TracedAgentResult<HookResearchDossier>> {
+  const inputText = buildHookResearchPrompt(policyPrompt, buildInputBlock(input));
+  const payload = await callResponsesApi({
+    apiKey,
+    model,
+    fetchImpl,
+    content: [{ type: "input_text", text: inputText }],
+    schemaName: "moons_hook_research",
+    schema: hookResearchSchema,
+    tools: provider === "openai" ? [THAI_WEB_SEARCH_TOOL] : undefined,
+    plugins: provider === "openrouter" ? [OPENROUTER_WEB_PLUGIN] : undefined,
+    toolChoice: provider === "openai" ? "required" : undefined,
+    reasoningEffort:
+      provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
+    provider
+  });
+  return {
+    inputText,
+    output: parseHookResearchDossier(extractResponseText(payload)),
+    rawResponse: payload,
+    researchAudit: extractResearchAudit(payload)
+  };
+}
+
 function buildDirectHookGenerationDebugLog({
   input,
   generationBatches,
+  researchTrace,
   directTraces,
   generationProvider,
   generationModel,
@@ -441,6 +503,7 @@ function buildDirectHookGenerationDebugLog({
 }: {
   input: HookGenerationHarnessRequest;
   generationBatches: readonly HookGenerationHarnessRequest[];
+  researchTrace: TracedAgentResult<HookResearchDossier>;
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
   generationProvider: "openai" | "openrouter";
   generationModel: string;
@@ -450,16 +513,35 @@ function buildDirectHookGenerationDebugLog({
     generationProvider === "openrouter"
       ? "/api/v1/chat/completions"
       : "/v1/responses";
-  const researchEnabled = input.hookIdeaMode === "fresh-research";
-  const openAiResearchEnabled =
-    researchEnabled && generationProvider === "openai";
-  const openRouterResearchEnabled =
-    researchEnabled && generationProvider === "openrouter";
   return {
     kind: "hook-generation",
     createdAt: new Date().toISOString(),
     runId: input.runId,
     hookIdeaMode: input.hookIdeaMode,
+    researchAgent: {
+      provider: generationProvider,
+      model: generationModel,
+      promptSource: "agent_prompt/agent_hook_research.md",
+      request: {
+        endpoint,
+        inputText: researchTrace.inputText,
+        tools: generationProvider === "openai" ? [THAI_WEB_SEARCH_TOOL] : [],
+        plugins:
+          generationProvider === "openrouter" ? [OPENROUTER_WEB_PLUGIN] : [],
+        ...(generationProvider === "openai"
+          ? {
+              toolChoice: "required" as const,
+              reasoningEffort: HOOK_GENERATION_REASONING_EFFORT
+            }
+          : {}),
+        responseSchema: "moons_hook_research" as const
+      },
+      response: {
+        parsed: researchTrace.output,
+        raw: researchTrace.rawResponse,
+        researchAudit: researchTrace.researchAudit
+      }
+    },
     hookAgent: {
       provider: generationProvider,
       model: generationModel,
@@ -468,13 +550,8 @@ function buildDirectHookGenerationDebugLog({
         request: {
           endpoint,
           inputText: trace.inputText,
-          tools: openAiResearchEnabled ? [THAI_WEB_SEARCH_TOOL] : [],
-          plugins: openRouterResearchEnabled
-            ? [OPENROUTER_WEB_PLUGIN]
-            : [],
-          ...(openAiResearchEnabled
-            ? { toolChoice: "required" as const }
-            : {}),
+          tools: [],
+          plugins: [],
           ...(generationProvider === "openai"
             ? { reasoningEffort: HOOK_GENERATION_REASONING_EFFORT }
             : {}),
@@ -870,6 +947,7 @@ async function callResponsesApi({
             }
           ],
           ...(tools?.length ? { tools } : {}),
+          ...(toolChoice ? { tool_choice: toolChoice } : {}),
           ...(reasoningEffort
             ? { reasoning: { effort: reasoningEffort } }
             : {}),
@@ -958,24 +1036,19 @@ function openRouterCompatibleSchema(value: unknown): unknown {
 function buildDirectHookGenerationPrompt(
   input: HookGenerationHarnessRequest,
   agentHookPrompt: string,
-  pastPosts: readonly PastPostExample[]
+  pastPosts: readonly PastPostExample[],
+  researchDossier: HookResearchDossier
 ): string {
   const pastPostExamples = selectPastPostsForCaption(pastPosts);
-  const researchInstructions =
-    input.hookIdeaMode === "fresh-research"
-      ? [
-          "Research status: enabled. ระบบแนบ Web Search ให้รอบนี้; ปฏิบัติตาม ## Research ใน agent_hook.md."
-        ]
-      : [
-          "Research status: disabled. ระบบไม่แนบ Web Search ให้รอบนี้; citations ต้องเป็น []."
-        ];
   return [
     agentHookPrompt,
     "",
     "# Runtime contract",
-    ...researchInstructions,
+    "Research status: completed by the dedicated Research Agent. Hook Agent must not perform additional research.",
     "",
     buildInputBlock(input),
+    "",
+    hookResearchDossierBlock(researchDossier),
     "",
     "# Past content data",
     buildPastPostsBlock(pastPostExamples),
@@ -1361,8 +1434,13 @@ function albumHookInstruction(
 }
 
 function readHookIdeaMode(value: unknown): HookIdeaMode {
-  if (value === undefined) return "standard";
-  if (value === "standard" || value === "fresh-research") return value;
+  if (
+    value === undefined ||
+    value === "standard" ||
+    value === "fresh-research"
+  ) {
+    return "fresh-research";
+  }
   throw new Error("hookIdeaMode is invalid.");
 }
 

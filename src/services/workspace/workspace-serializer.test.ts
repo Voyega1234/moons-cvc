@@ -12,6 +12,48 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("defaults legacy runs without Hook idea mode to fresh research", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "legacy-hook-mode",
+      now: "2026-08-07T00:00:00.000Z"
+    });
+    const snapshot = JSON.parse(
+      serializeWorkspace(workspace, "2026-08-07T00:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { hookIdeaMode?: string }> };
+    };
+    const legacyRun = snapshot.data.runsById["legacy-hook-mode"];
+    if (!legacyRun) throw new Error("Serialized legacy run is missing.");
+    delete legacyRun.hookIdeaMode;
+
+    const restored = deserializeWorkspace(JSON.stringify(snapshot));
+
+    expect(restored?.runsById["legacy-hook-mode"]?.hookIdeaMode).toBe(
+      "fresh-research"
+    );
+  });
+
+  it("migrates saved no-research runs when the UI has no mode selector", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "saved-standard-hook-mode",
+      now: "2026-08-07T00:00:00.000Z"
+    });
+    const snapshot = JSON.parse(
+      serializeWorkspace(workspace, "2026-08-07T00:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { hookIdeaMode?: string }> };
+    };
+    const savedRun = snapshot.data.runsById["saved-standard-hook-mode"];
+    if (!savedRun) throw new Error("Serialized saved run is missing.");
+    savedRun.hookIdeaMode = "standard";
+
+    const restored = deserializeWorkspace(JSON.stringify(snapshot));
+
+    expect(restored?.runsById["saved-standard-hook-mode"]?.hookIdeaMode).toBe(
+      "fresh-research"
+    );
+  });
+
   it("preserves the My Work workspace view", () => {
     const workspace = workspaceReducer(
       createInitialWorkspaceState({
@@ -318,7 +360,7 @@ describe("workspace serializer", () => {
       "reference-library"
     );
     expect(restored?.runsById["album-run"]?.hookIdeaMode).toBe(
-      "standard"
+      "fresh-research"
     );
     expect(restored?.runsById["album-run"]?.imagePromptModel).toBe(
       "anthropic/claude-sonnet-4.6"

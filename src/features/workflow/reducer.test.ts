@@ -107,6 +107,13 @@ describe("workflowReducer", () => {
   });
 
   it("uses Design System artwork generation by default and keeps other modes available internally", () => {
+    expect(initialWorkflowState.hookIdeaMode).toBe("fresh-research");
+    expect(
+      workflowReducer(initialWorkflowState, {
+        type: "set-hook-idea-mode",
+        mode: "standard"
+      }).hookIdeaMode
+    ).toBe("fresh-research");
     expect(initialWorkflowState.artworkMode).toBe("design-system");
     expect(initialWorkflowState.albumFormat).toBe("auto");
     const albumFormatUpdate = workflowReducer(

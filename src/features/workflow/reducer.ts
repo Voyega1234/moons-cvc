@@ -135,7 +135,7 @@ export function createInitialWorkflowState({
       { id: "creative-mix-3", service: "ugc-video", quantity: 2 }
     ],
     service: "single-static",
-    hookIdeaMode: "standard",
+    hookIdeaMode: "fresh-research",
     hookGenerationModel: "gpt-5.6-terra",
     artworkMode: "design-system",
     imagePromptModel: "gpt-5.6-terra",
@@ -474,7 +474,7 @@ export function workflowReducer(
         }
       ]);
     case "set-hook-idea-mode":
-      return { ...state, hookIdeaMode: action.mode };
+      return { ...state, hookIdeaMode: "fresh-research" };
     case "set-hook-generation-model":
       return { ...state, hookGenerationModel: action.model };
     case "set-artwork-mode":

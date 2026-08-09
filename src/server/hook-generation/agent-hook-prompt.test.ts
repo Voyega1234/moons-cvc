@@ -33,17 +33,20 @@ describe("agent_hook creative quality contract", () => {
   });
 
   it("requires direct evidence for researched claims", async () => {
-    const prompt = await readFile(
+    const hookPrompt = await readFile(
       join(process.cwd(), "agent_prompt", "agent_hook.md"),
       "utf8"
     );
-
-    expect(prompt).toContain("ต้องใช้ Web Search ก่อนสร้างคำตอบทุกครั้ง");
-    expect(prompt).toContain(
-      "ทุก External Fact หรือ Claim ที่นำมาใช้ต้องมี Citation"
+    const researchPrompt = await readFile(
+      join(process.cwd(), "agent_prompt", "agent_hook_research.md"),
+      "utf8"
     );
-    expect(prompt).toContain(
-      "ห้ามใช้หน้าแรกของเว็บไซต์แทนหน้าหลักฐานเฉพาะเรื่อง"
+
+    expect(researchPrompt).toContain("ใช้ Web Search หลาย Query");
+    expect(researchPrompt).toContain("ทุก Reference ต้องมาจากหน้าหลักฐานจริง");
+    expect(researchPrompt).toContain("ต้องมี `sourceUrl`");
+    expect(hookPrompt).toContain(
+      "ทุก External Fact หรือ Claim ที่นำจาก Dossier มาใช้ต้องมี Citation"
     );
   });
 
@@ -76,7 +79,7 @@ describe("agent_hook creative quality contract", () => {
       "ทำให้คนเข้าใจในหนึ่งจังหวะว่า “กำลังพูดเรื่องอะไร”"
     );
     expect(prompt).toContain(
-      "ชุดคำตอบต้องมาจากอย่างน้อย 3 ทางเข้าที่เกี่ยวข้องจริง"
+      "ไม่มีรูปประโยค โทน หรือระดับการขายแบบ Default ที่ต้องใช้กับทุกงาน"
     );
     expect(prompt).toContain(
       "อนุญาตให้ Hook เปิดตรงด้วยชื่อหรือประเภทสินค้า"
@@ -91,15 +94,25 @@ describe("agent_hook creative quality contract", () => {
     expect(prompt).toContain(
       "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น string ว่าง"
     );
+    expect(prompt).toContain("อย่ากำหนดจำนวนคำถาม");
     expect(prompt).toContain(
-      "Hook ที่เป็นคำถามต้องไม่เกินหนึ่งในสามของชุดโดยปัดขึ้น"
+      "คำลงท้าย และจังหวะประโยคไม่ได้วนซ้ำเพียงเพราะเป็นทางเขียนที่ง่าย"
     );
     expect(prompt).toContain(
-      "Opening mechanism หรือ causal logic เดิมใช้ได้ไม่เกิน 2 Directions"
+      "การซ้ำทำได้เมื่อเป็น Brand Device หรือ Campaign Device ที่ตั้งใจ"
+    );
+    expect(prompt).toContain(
+      "หากตัดส่วนเปิดของแต่ละ Hook แล้วเหลือคำตอบหรือคำปิดแบบเดียวกัน"
     );
     expect(prompt).toContain("ทำ Headline-only test ก่อนส่งทุก Direction");
     expect(prompt).toContain(
       "ห้ามใช้ Subheadline เป็นคำเฉลย"
+    );
+    expect(prompt).toContain(
+      "ไม่ได้แปลว่าต้องใส่ชื่อแบรนด์ ชื่อหมวดบริการ"
+    );
+    expect(prompt).toContain(
+      "อย่าใช้คำเรียกหมวดสินค้า/บริการเป็นคำปิดสำเร็จรูป"
     );
     expect(prompt).toContain(
       "หากเปลี่ยนชื่อแบรนด์แล้วคู่แข่งใช้ได้ทันที ให้คะแนนไม่เกิน 79"
@@ -120,6 +133,25 @@ describe("agent_hook creative quality contract", () => {
     );
     expect(prompt).toContain(
       "กฎ Copy และ Product truth ของงานปัจจุบันมี Priority เหนือ Corpus นี้เสมอ"
+    );
+  });
+
+  it("uses research to fill real creative and product gaps", async () => {
+    const researchPrompt = await readFile(
+      join(process.cwd(), "agent_prompt", "agent_hook_research.md"),
+      "utf8"
+    );
+    const hookPrompt = await readFile(
+      join(process.cwd(), "agent_prompt", "agent_hook.md"),
+      "utf8"
+    );
+
+    expect(researchPrompt).toContain(
+      "ระบุว่าข้อมูลส่วนใดขาดหรือควรมีหลักฐานเพิ่ม"
+    );
+    expect(researchPrompt).toContain("Consumer language");
+    expect(hookPrompt).toContain(
+      "อนุญาตให้ตีความและเชื่อมโยงอย่างสร้างสรรค์จากข้อเท็จจริงที่มี"
     );
   });
 

@@ -8,6 +8,39 @@ export interface HookGenerationDebugLog {
   createdAt: string;
   runId: string;
   hookIdeaMode: string;
+  researchAgent: {
+    provider: "openai" | "openrouter";
+    model: string;
+    promptSource: "agent_prompt/agent_hook_research.md";
+    request: {
+      endpoint: "/v1/responses" | "/api/v1/chat/completions";
+      inputText: string;
+      tools: readonly {
+        type: "web_search_preview";
+        user_location: {
+          type: "approximate";
+          country: "TH";
+          timezone: "Asia/Bangkok";
+        };
+      }[];
+      plugins: readonly {
+        id: "web";
+        engine: "native";
+        max_results: number;
+      }[];
+      toolChoice?: "required";
+      reasoningEffort?: "high";
+      responseSchema: "moons_hook_research";
+    };
+    response: {
+      parsed: unknown;
+      raw: unknown;
+      researchAudit: {
+        webSearchRequests: number;
+        citationUrls: readonly string[];
+      };
+    };
+  };
   hookAgent: {
     provider: "openai" | "openrouter";
     model: string;

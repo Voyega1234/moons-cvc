@@ -844,10 +844,12 @@ function addSinglePageArtworkSlide(
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
-  imageData: readonly string[]
+  imageData: readonly string[],
+  albumMasterData?: string
 ) {
   const { output, direction } = item;
-  const albumLayout = isAlbumOutput(output) && imageData.length > 1;
+  const albumLayout =
+    isAlbumOutput(output) && (Boolean(albumMasterData) || imageData.length > 1);
   const artworkPanel = albumLayout
     ? { x: 3.85, y: 0.45, w: 6, h: 6.6 }
     : { x: 3.85, y: 0.45, w: 4.72, h: 6.6 };
@@ -882,13 +884,23 @@ function addSinglePageArtworkSlide(
     line: { color: COLORS.line, width: 1 }
   });
   if (albumLayout) {
-    addAlbumArtworkPreview(
-      slide,
-      imageData,
-      brandName,
-      albumFormat,
-      artworkBox
-    );
+    if (albumMasterData) {
+      addArtworkPreview(
+        slide,
+        albumMasterData,
+        "2048x2048",
+        `${brandName} album master grid`,
+        artworkBox
+      );
+    } else {
+      addAlbumArtworkPreview(
+        slide,
+        imageData,
+        brandName,
+        albumFormat,
+        artworkBox
+      );
+    }
   } else if (imageData[0]) {
     addArtworkPreview(
       slide,
@@ -1047,7 +1059,8 @@ function addClientSlide(
   totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
-  imageData: readonly string[] = []
+  imageData: readonly string[] = [],
+  albumMasterData?: string
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
@@ -1072,7 +1085,8 @@ function addClientSlide(
     totalSlides,
     outputSize,
     albumFormat,
-    imageData
+    imageData,
+    albumMasterData
   );
   return;
 
@@ -1677,6 +1691,7 @@ async function buildClientSlidesPptx(
 
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
+    let albumMasterData: string | undefined;
     if (isUgcOutput(item.output) && ugcReference) {
       if (ugcReferenceData === undefined) {
         try {
@@ -1687,16 +1702,24 @@ async function buildClientSlidesPptx(
       }
       imageData = ugcReferenceData ? [ugcReferenceData] : [];
     } else if (!isUgcOutput(item.output)) {
-      imageData = await Promise.all(
-        item.outputs.map((output, panelIndex) => {
-          if (!output.assetUrl) {
-            throw new Error(
-              `Creative asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
-            );
-          }
-          return resolveImage(output.assetUrl);
-        })
-      );
+      const albumMasterUrl = isAlbumOutput(item.output)
+        ? item.outputs.find((output) => output.albumMasterAssetUrl)
+            ?.albumMasterAssetUrl
+        : undefined;
+      if (albumMasterUrl) {
+        albumMasterData = await resolveImage(albumMasterUrl);
+      } else {
+        imageData = await Promise.all(
+          item.outputs.map((output, panelIndex) => {
+            if (!output.assetUrl) {
+              throw new Error(
+                `Creative asset ${index + 1}${item.outputs.length > 1 ? ` panel ${panelIndex + 1}` : ""} does not have an artwork file yet.`
+              );
+            }
+            return resolveImage(output.assetUrl);
+          })
+        );
+      }
     }
     const albumFormat = resolveAlbumFormat(
       state.albumFormat,
@@ -1710,7 +1733,8 @@ async function buildClientSlidesPptx(
       totalSlides,
       state.outputSize,
       albumFormat,
-      imageData
+      imageData,
+      albumMasterData
     );
     slideNumber += 1;
   }

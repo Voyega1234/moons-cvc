@@ -129,10 +129,11 @@ function parseRun(value: unknown): WorkflowState | null {
   const updatedAt = parseString(value.updatedAt);
   const stage = parseMember(value.stage, creativeStages);
   const service = parseMember(value.service, serviceTypes);
-  const hookIdeaMode =
-    value.hookIdeaMode === undefined || value.hookIdeaMode === "fresh-research"
-      ? "standard"
+  const storedHookIdeaMode =
+    value.hookIdeaMode === undefined
+      ? "fresh-research"
       : parseMember(value.hookIdeaMode, hookIdeaModes);
+  const hookIdeaMode = storedHookIdeaMode ? "fresh-research" : null;
   const hookGenerationModel =
     value.hookGenerationModel === undefined
       ? "gpt-5.6-terra"

@@ -69,6 +69,25 @@ function highlightResponse(id: string, highlights: readonly string[]) {
   );
 }
 
+function validHookResearchResponse() {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        brand: "Convert Cake",
+        productFocus: "AI SEO webinar",
+        overallFinding: "Use verified brand and audience evidence.",
+        references: [],
+        strongestReferenceIds: [],
+        researchGaps: [],
+        researchLimitations: "No external claims used by this fixture.",
+        excluded: [],
+        searchQueriesUsed: ["AI SEO Thailand"]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function openRouterResearchResponse(
   directions: readonly unknown[],
   citationUrls: readonly string[] = []
@@ -296,8 +315,8 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const generationBody = JSON.parse(
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
       tools?: unknown[];
@@ -510,42 +529,32 @@ describe("handleHookGenerationHarnessRequest", () => {
   });
 
   it("defaults requests without a Hook idea mode to required Thailand research", async () => {
-    const bodyWithoutMode = { ...singleStaticRequestBody } as Record<
-      string,
-      unknown
-    >;
+    const bodyWithoutMode = {
+      ...requestBody,
+      quantity: 1,
+      contentTypeQuotas: [{ service: "single-static", count: 1 }]
+    } as Record<string, unknown>;
     delete bodyWithoutMode.hookIdeaMode;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            output_text: JSON.stringify({
-              overallFinding: "A current category signal is relevant.",
-              references: [],
-              searchQueriesUsed: ["current category signal"],
-              limitations: "Use as supporting context only."
-            })
-          }),
-          { status: 200 }
-        )
-      )
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
             output_text: JSON.stringify({
               directions: [
                 {
-                  id: "hook-standard",
+                  id: "hook-fresh-research",
                   service: "single-static",
-                  hook: "เริ่มจากปัญหาที่ลูกค้าเจอจริง",
-                  subheadline: "ใช้ข้อมูลแบรนด์และบรีฟโดยไม่ค้นเว็บ",
-                  concept: "Standard brand-led idea",
-                  why: "Uses supplied context only",
+                  hook: "เริ่มจากปัญหาที่ลูกค้าเจอจริงในวันนี้",
+                  subheadline: "ใช้ Search เพื่อเติมบริบทที่ตรวจสอบได้",
+                  concept: "Fresh researched brand-led idea",
+                  why: "Uses supplied context and current research",
                   visual: "Clean and direct",
                   albumFormat: "three-horizontal",
+                  formatBeats: [],
                   cta: "ดูรายละเอียด",
-                  caption: "เริ่มจากข้อมูลที่แบรนด์ยืนยันแล้ว",
+                  caption: "เริ่มจากข้อมูลแบรนด์และบริบทปัจจุบัน",
                   score: 85,
                   reasoning: "Strong brand fit",
                   citations: []
@@ -556,84 +565,106 @@ describe("handleHookGenerationHarnessRequest", () => {
           { status: 200 }
         )
       )
-      .mockResolvedValueOnce(highlightResponse("hook-standard", []));
+      .mockResolvedValueOnce(highlightResponse("hook-fresh-research", []));
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        headers: { authorization: "Bearer user-token" },
-        body: JSON.stringify({
-          ...requestBody,
-          hookIdeaMode: "standard",
-          quantity: 1,
-          contentTypeQuotas: [{ service: "single-static", count: 1 }],
-          brief:
-            "Launch Questionnaire\nPlease complete the questionnaire below.\nAbout Your Business\nProducts, Customers & Competitors"
-        })
+        body: JSON.stringify(bodyWithoutMode)
       }),
-      env: {
-        OPENAI_API_KEY: "test-key",
-        HOOK_GENERATION_DEBUG_LOG_DIR: "logs/hook-generation",
-        SUPABASE_URL: "https://supabase.example.com",
-        SUPABASE_ANON_KEY: "anon-key"
-      },
+      env: { OPENAI_API_KEY: "test-key" },
       fetchImpl: fetchMock as unknown as typeof fetch,
-      createPastPostsClient: () => fakePastPostsClient,
       loadAgentHookPrompt: async () =>
-        "# AGENT HOOK\nSEARCH_POLICY_FROM_AGENT_HOOK\nPAST_CONTENT_POLICY_FROM_AGENT_HOOK\nCOPY_POLICY_FROM_AGENT_HOOK",
-      writeDebugLog
+        "# AGENT HOOK\nSEARCH_POLICY_FROM_AGENT_HOOK"
     });
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+    const researchBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
       tools?: unknown[];
       tool_choice?: string;
       input: unknown;
       text: { format: { name: string } };
     };
+    expect(researchBody.tools).toEqual([
+      expect.objectContaining({ type: "web_search_preview" })
+    ]);
+    expect(researchBody.tool_choice).toBe("required");
+    expect(researchBody.text.format.name).toBe("moons_hook_research");
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { tools?: unknown[]; input: unknown; text: { format: { name: string } } };
     expect(generationBody.tools).toBeUndefined();
-    expect(generationBody.tool_choice).toBeUndefined();
     expect(generationBody.text.format.name).toBe("moons_hook_generation");
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("SEARCH_POLICY_FROM_AGENT_HOOK");
-    expect(generationPrompt).toContain("Hook idea mode: standard");
-    expect(generationPrompt).toContain(
-      "ไม่มี Current Campaign Brief แยกจากข้อมูล Onboarding"
-    );
-    expect(generationPrompt).not.toContain("Please complete the questionnaire");
-    expect(generationPrompt).not.toContain("Products, Customers & Competitors");
-    expect(generationPrompt).not.toContain("# Search — required");
-    expect(generationPrompt).not.toContain("STANDARD MODE:");
-    expect(generationPrompt).not.toContain("THAILAND FIRST");
+    expect(generationPrompt).toContain("Research status: completed");
     expect(generationPrompt).toContain("# Runtime contract");
-    expect(generationPrompt).toContain(
-      "Onboarding Questionnaire — standing brand context"
-    );
-    expect(generationPrompt).toContain(
-      "ข้อมูลตอน Onboarding: ลูกค้าหลักเป็นเจ้าของธุรกิจ B2B"
-    );
-    expect(generationPrompt).toContain("# Past content data");
-    expect(generationPrompt).toContain("PAST_CONTENT_POLICY_FROM_AGENT_HOOK");
-    expect(generationPrompt).toContain(
-      "Current User Brief — highest priority for explicit campaign requirements"
-    );
-    expect(generationPrompt).toContain(
-      "พูดตรงถึงปัญหาธุรกิจ แล้วเว้นบรรทัดก่อน CTA"
-    );
-    expect(generationPrompt).toContain("COPY_POLICY_FROM_AGENT_HOOK");
-    expect(generationPrompt).not.toContain("# Quality gate");
-    expect(generationPrompt).not.toContain("# Copy");
-    expect(writeDebugLog).toHaveBeenCalledTimes(1);
-    const debugEntry = writeDebugLog.mock.calls[0]?.[1];
-    expect(debugEntry?.hookAgent.batches[0]?.request.inputText).toContain(
-      "# Runtime contract"
-    );
-    expect(debugEntry?.hookAgent.batches[0]?.request.attachedImages).toEqual([
-      expect.objectContaining({ name: "hero-bottle.png", detail: "high" })
+  });
+
+  it("migrates a hidden legacy standard mode to required Thailand research", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              directions: [
+                {
+                  id: "hook-migrated-research",
+                  service: "single-static",
+                  hook: "เริ่มจากสิ่งที่ผู้ชมสนใจจริง",
+                  subheadline: "",
+                  concept: "Legacy mode migrated to researched generation",
+                  why: "The UI no longer exposes a no-research choice",
+                  visual: "Clean and direct",
+                  albumFormat: "three-horizontal",
+                  formatBeats: [],
+                  cta: "ดูรายละเอียด",
+                  caption: "ใช้ข้อมูลแบรนด์ร่วมกับบริบทที่ค้นเพิ่ม",
+                  score: 85,
+                  reasoning: "Research is required",
+                  citations: []
+                }
+              ]
+            })
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(highlightResponse("hook-migrated-research", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...requestBody,
+          hookIdeaMode: "standard",
+          quantity: 1,
+          contentTypeQuotas: [{ service: "single-static", count: 1 }]
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      loadAgentHookPrompt: async () => "# AGENT HOOK"
+    });
+
+    expect(response.status).toBe(200);
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { tools?: unknown[]; tool_choice?: string; input: unknown };
+    expect(generationBody.tools).toEqual([
+      expect.objectContaining({ type: "web_search_preview" })
     ]);
+    expect(generationBody.tool_choice).toBe("required");
+    const hookBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { tools?: unknown[]; input: unknown };
+    expect(hookBody.tools).toBeUndefined();
+    expect(JSON.stringify(hookBody.input)).toContain("Research status: completed");
   });
 
   it("rewrites a final Thai direction when its copy uses ฉัน", async () => {
@@ -663,6 +694,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("retries album output when formatBeats does not match the selected layout", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(["Panel 2", "Panel 3"])
       )
@@ -688,9 +720,9 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const retryBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown; reasoning?: { effort?: string } };
     const retryPrompt = JSON.stringify(retryBody.input);
     expect(retryPrompt).toContain("ALBUM PANEL COUNT CORRECTION");
@@ -707,6 +739,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("accepts two formatBeats for a three-panel album layout", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(
           ["Panel 2", "Panel 3"],
@@ -730,7 +763,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const payload = (await response.json()) as {
       directions: { albumFormat: string; formatBeats: string[] }[];
     };
@@ -865,19 +898,6 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            output_text: JSON.stringify({
-              overallFinding: "No strong signal.",
-              references: [],
-              searchQueriesUsed: [],
-              limitations: ""
-            })
-          }),
-          { status: 200 }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
             error: {
               code: 400,
               message: "Unable to download the selected material image."
@@ -911,7 +931,10 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
     const openRouterBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
-    ) as { tools?: unknown; tool_choice?: unknown };
+    ) as { plugins?: unknown; tools?: unknown; tool_choice?: unknown };
+    expect(openRouterBody.plugins).toEqual([
+      { id: "web", engine: "native", max_results: 5 }
+    ]);
     expect(openRouterBody.tools).toBeUndefined();
     expect(openRouterBody.tool_choice).toBeUndefined();
   });
@@ -1124,21 +1147,19 @@ describe("handleHookGenerationHarnessRequest", () => {
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
+    const generationPrompt = JSON.stringify(generationBody.input);
     expect(JSON.stringify(generationBody.input)).toContain(
       "จองด่วน! Workshop AI SEO รอบนี้ที่นั่งจำกัด"
     );
     expect(JSON.stringify(generationBody.input)).toContain(
-      "copywriter ประจำเพจนี้"
+      "เรียนรู้ Style Fingerprint จากหลายโพสต์ร่วมกัน"
     );
     expect(generationPrompt).toContain("# Past content data");
     expect(generationPrompt).toContain(
-      "Past Content ใช้เรียนรู้ mood, style, language, rhythm, personality"
+      "Paid Ad เรียนรู้จากแคปชั่นโฆษณา"
     );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "ห้ามใช้ CTA กว้างๆ"
-    );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "contactLine = recurring verified contact/footer"
+    expect(generationPrompt).toContain(
+      "Opening ของ Caption ต้องต่อยอด Direction ใหม่"
     );
   });
 

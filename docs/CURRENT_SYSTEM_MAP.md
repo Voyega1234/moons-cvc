@@ -64,10 +64,18 @@ adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
 in review UI. Missing `subheadline` fields in legacy saved runs still fall back
 to the stored concept.
 
-New runs default to `fresh-research`; users may explicitly switch a run to
-no-research mode. OpenAI generation attaches `web_search_preview` with Thailand
-location context. OpenRouter generation uses Chat Completions with the top-level
-`plugins: [{ id: "web" }]` web-search plugin and strict Structured Outputs.
+Hook generation always uses `fresh-research`. Legacy workspaces and requests
+that still contain the former hidden `standard` value are migrated at the
+workspace and server boundaries because the UI has no no-research selector.
+Before creative generation, the dedicated Research Agent at
+`agent_prompt/agent_hook_research.md` searches Product Truth, Thai audience
+behavior, category/competitor context, provable moments, cultural/platform
+signals, and consumer language once per request. It returns a structured
+dossier with direct source URLs, which is shared by every Hook batch. OpenAI
+Research attaches `web_search_preview` with Thailand location context;
+OpenRouter Research uses Chat Completions with the top-level
+`plugins: [{ id: "web" }]` plugin. The Hook Agent receives the dossier without
+a search tool so research and creative judgment remain separate.
 Creative quality, Product Truth, Citation use, and scoring policy belong to
 `agent_hook.md`; runtime code does not reject consumer-facing wording through
 hidden semantic regexes or self-score thresholds. Runtime validation remains
