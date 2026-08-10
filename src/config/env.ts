@@ -6,6 +6,7 @@ export interface PublicEnv {
   brandAssetsBucket: string;
   hookGenerationMode: "n8n" | "harness";
   hookGenerationWebhookUrl: string;
+  hookGenerationNewEndpoint: string;
   hookGenerationHarnessEndpoint: string;
   artworkGenerationMode: "openai" | "n8n";
   artworkGenerationEndpoint: string | null;
@@ -44,6 +45,9 @@ export const env: PublicEnv = {
   hookGenerationWebhookUrl:
     import.meta.env.VITE_N8N_HOOK_WEBHOOK_URL ||
     "https://n8n.srv934175.hstgr.cloud/webhook/moons-creative-ideas",
+  hookGenerationNewEndpoint:
+    import.meta.env.VITE_N8N_COMPASS_NEW_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/n8n-compass-new`,
   hookGenerationHarnessEndpoint:
     import.meta.env.VITE_HOOK_GENERATION_HARNESS_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/hook-generation-harness`,

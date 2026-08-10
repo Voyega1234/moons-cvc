@@ -147,6 +147,7 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     const body = JSON.parse(String((requestInit as RequestInit).body)) as {
       model: string;
       store: boolean;
+      reasoning: { effort: string };
       input: { content: unknown[] }[];
       text: {
         format: { type: string; strict: boolean; schema?: unknown };
@@ -155,6 +156,7 @@ describe("OpenAiBrandVisualAnalyzer", () => {
 
     expect(body.model).toBe("gpt-test");
     expect(body.store).toBe(false);
+    expect(body.reasoning).toEqual({ effort: "low" });
     expect(body.text.format).toMatchObject({
       type: "json_schema",
       strict: true
@@ -178,6 +180,85 @@ describe("OpenAiBrandVisualAnalyzer", () => {
       "ใช้รูปแบบ description ให้เหมาะกับข้อมูลของแต่ละหัวข้อ"
     );
     expect(JSON.stringify(body.text.format.schema)).toContain("Brand Details");
+  });
+
+  it("bounds and deduplicates large social and image evidence payloads", async () => {
+    const fetchMock = vi.fn(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        _init?: Parameters<typeof fetch>[1]
+      ) =>
+        new Response(
+          JSON.stringify({ output_text: JSON.stringify(responseAnalysis) }),
+          { status: 200 }
+        )
+    );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+    const repeatedText = "ข้อเสนอเดิมที่ถูกเก็บซ้ำจากหลายโฆษณา";
+    const socialEvidence = [
+      ...Array.from({ length: 20 }, (_, index) => ({
+        sourceType: "facebook_post" as const,
+        sourceId: `post-${index}`,
+        text: index < 5 ? repeatedText : `โพสต์ที่ไม่ซ้ำ ${index} ${"ก".repeat(900)}`
+      })),
+      ...Array.from({ length: 20 }, (_, index) => ({
+        sourceType: "facebook_ad" as const,
+        sourceId: `ad-${index}`,
+        text: `โฆษณาที่ไม่ซ้ำ ${index}`
+      }))
+    ];
+    const visualAssets = Array.from({ length: 12 }, (_, index) => ({
+      assetBucket: "brand-source-assets",
+      assetStoragePath: `client-1/job-1/facebook_post/post-${index}.jpg`,
+      assetUrl: `https://storage.example.com/signed/post-${index}.jpg`,
+      originalUrlHash: `hash-${index}`,
+      sourceId: `source-${index}`,
+      sourceType: (index % 2 === 0 ? "facebook_post" : "facebook_ad") as
+        | "facebook_post"
+        | "facebook_ad",
+      sourceUrl: `https://www.facebook.com/flora/posts/${index}`,
+      sourceItemId: `item-${index}`,
+      captionContext: `Caption ${index}`
+    }));
+
+    await analyzer.analyze({
+      client: {
+        id: "client-1",
+        name: "Flora Daily",
+        facebookUrl: "https://www.facebook.com/flora"
+      },
+      sourceSummary: {
+        postsSaved: 20,
+        adsSaved: 20,
+        manualInputsSaved: 0,
+        usedFallbackSearch: false
+      },
+      textEvidence: socialEvidence,
+      visualAssets
+    });
+
+    const body = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)
+    ) as {
+      input: {
+        content: { type: string; text?: string; detail?: string }[];
+      }[];
+    };
+    const content = body.input[0]?.content ?? [];
+    const prompt = content[0]?.text ?? "";
+
+    expect(content.filter((item) => item.type === "input_image")).toHaveLength(8);
+    expect(
+      content
+        .filter((item) => item.type === "input_image")
+        .every((item) => item.detail === "low")
+    ).toBe(true);
+    expect(prompt.match(new RegExp(repeatedText, "g"))).toHaveLength(1);
+    expect(prompt.match(/\[facebook_(?:post|ad):/g)).toHaveLength(24);
+    expect(prompt).not.toContain("ก".repeat(701));
   });
 
   it("falls back to text evidence and requires review when OpenAI rejects an image request", async () => {

@@ -39,6 +39,20 @@ describe("dedicated Hook Research Agent pipeline", () => {
               confidenceScore: 90
             }
           ],
+          insightCards: [
+            {
+              id: "insight-01",
+              evidenceIds: ["ref-01"],
+              evidence: "ผู้ใช้เริ่มใช้ AI เพื่อค้นหาข้อมูลธุรกิจ",
+              tension: "ลูกค้าเปลี่ยนวิธีค้นหา แต่หลายแบรนด์ยังวัด visibility แบบเดิม",
+              beliefChallenged: "ติดอันดับ Search เดิมแล้วลูกค้าจะหาแบรนด์เจอในทุกช่องทาง",
+              humanConsequence: "เจ้าของธุรกิจอาจไม่เห็นช่วงที่ลูกค้าถาม AI แล้วเจอคู่แข่งแทน",
+              brandConnection: "เชื่อมกับ Webinar ที่ช่วยตรวจและวางแผน AI visibility",
+              freshnessReason: "เปลี่ยนจากการพูดเรื่อง SEO ทั่วไปเป็นช่องว่างการมองเห็นในคำตอบ AI",
+              confidenceScore: 88
+            }
+          ],
+          strongestInsightIds: ["insight-01"],
           strongestReferenceIds: ["ref-01"],
           researchGaps: [],
           researchLimitations: "",
@@ -97,7 +111,6 @@ describe("dedicated Hook Research Agent pipeline", () => {
           brief: "โปรโมต AI SEO webinar สำหรับธุรกิจไทย",
           onboardingQuestionnaire: "",
           extraInstructions: "",
-          existingHooks: [],
           attachments: [],
           uploadedMaterials: [],
           brandMemory: { working: [], avoid: [] },
@@ -133,6 +146,12 @@ describe("dedicated Hook Research Agent pipeline", () => {
     expect(hookBody.tools).toBeUndefined();
     expect(hookBody.text.format.name).toBe("moons_hook_generation");
     expect(JSON.stringify(hookBody.input)).toContain(sourceUrl);
+    expect(JSON.stringify(hookBody.input)).toContain(
+      "ลูกค้าเปลี่ยนวิธีค้นหา แต่หลายแบรนด์ยังวัด visibility แบบเดิม"
+    );
+    expect(JSON.stringify(hookBody.input)).toContain(
+      "Start creative reasoning from the insightCards"
+    );
     expect(JSON.stringify(hookBody.input)).toContain(
       "Dedicated Research Agent dossier"
     );

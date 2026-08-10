@@ -29,6 +29,20 @@ const dossier = {
       confidenceScore: 94
     }
   ],
+  insightCards: [
+    {
+      id: "insight-01",
+      evidenceIds: ["ref-01"],
+      evidence: "บริการใช้ระบบแห้งตามหน้า Product ทางการ",
+      tension: "ลูกค้ากังวลเรื่องเวลารอ ทั้งที่กระบวนการไม่ใช่การซักแบบเปียก",
+      beliefChallenged: "การทำความสะอาดที่นอนต้องทำให้ที่นอนเปียกและรอแห้งเสมอ",
+      humanConsequence: "ความเข้าใจผิดเรื่องเวลารออาจทำให้ลูกค้าเลื่อนการตัดสินใจ",
+      brandConnection: "อธิบายระบบแห้งของบริการด้วย Product truth ที่ตรวจสอบได้",
+      freshnessReason: "เปลี่ยนจากการขายความสะอาดทั่วไปไปแก้ความกังวลเรื่องการใช้งานต่อ",
+      confidenceScore: 90
+    }
+  ],
+  strongestInsightIds: ["insight-01"],
   strongestReferenceIds: ["ref-01"],
   researchGaps: [],
   researchLimitations: "",
@@ -56,6 +70,8 @@ describe("Hook Research Agent contract", () => {
 
     expect(block).toContain("Dedicated Research Agent dossier");
     expect(block).toContain("https://example.com/mattress-cleaning");
+    expect(block).toContain("ลูกค้ากังวลเรื่องเวลารอ");
+    expect(block).toContain("Start creative reasoning from the insightCards");
     expect(block).toContain("must copy its sourceUrl into citations");
   });
 
@@ -68,5 +84,29 @@ describe("Hook Research Agent contract", () => {
         })
       )
     ).toThrow("sourceUrl must be a valid HTTP URL");
+  });
+
+  it("rejects insight cards that cite unknown evidence ids", () => {
+    expect(() =>
+      parseHookResearchDossier(
+        JSON.stringify({
+          ...dossier,
+          insightCards: [
+            { ...dossier.insightCards[0], evidenceIds: ["missing-ref"] }
+          ]
+        })
+      )
+    ).toThrow("references unknown evidence id: missing-ref");
+  });
+
+  it("rejects insight cards without supporting evidence", () => {
+    expect(() =>
+      parseHookResearchDossier(
+        JSON.stringify({
+          ...dossier,
+          insightCards: [{ ...dossier.insightCards[0], evidenceIds: [] }]
+        })
+      )
+    ).toThrow("must include evidenceIds");
   });
 });

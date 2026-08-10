@@ -3,7 +3,10 @@ import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { env } from "../../config/env";
 import type { ServiceType } from "../../domain/creative-run";
 import { generateDirectionsWithHarness } from "../../services/creative-generation/harness-hook-generation";
-import { generateDirectionsFromWebhook } from "../../services/creative-generation/n8n-hook-generation";
+import {
+  generateDirectionsFromNewCompassWebhook,
+  generateDirectionsFromWebhook
+} from "../../services/creative-generation/n8n-hook-generation";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import { serviceLabels } from "./config";
 import {
@@ -44,6 +47,32 @@ function withCreativeMixInstructions(
 
 const GENERATE_MORE_IDEA_COUNT = 3;
 
+function generateDirectionsForState(
+  state: WorkflowState,
+  extraInstructions: string
+) {
+  const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
+  const webhookInput = {
+    brand: state.brand,
+    hookIdeaMode: state.hookIdeaMode,
+    albumFormat: state.albumFormat,
+    service: contentTypeQuotas[0]?.service ?? state.service,
+    quantity: totalHookGenerationQuantity(state),
+    contentTypeQuotas,
+    brief: state.brief,
+    uploadedMaterials: selectedUploadedMaterials(state),
+    extraInstructions
+  };
+
+  if (state.hookGenerationModel === "n8n-compass-new") {
+    return generateDirectionsFromNewCompassWebhook(webhookInput);
+  }
+  if (env.hookGenerationMode === "harness") {
+    return generateDirectionsWithHarness({ run: state, extraInstructions });
+  }
+  return generateDirectionsFromWebhook(webhookInput);
+}
+
 export function useGenerateHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
@@ -56,21 +85,8 @@ export function useGenerateHooks(
       buildSuccessMetricInstructions(state.successMetric)
     );
 
-    const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
     const generation = Promise.resolve().then(() =>
-      env.hookGenerationMode === "harness"
-        ? generateDirectionsWithHarness({ run: state, extraInstructions })
-        : generateDirectionsFromWebhook({
-            brand: state.brand,
-            hookIdeaMode: state.hookIdeaMode,
-            albumFormat: state.albumFormat,
-            service: contentTypeQuotas[0]?.service ?? state.service,
-            quantity: totalHookGenerationQuantity(state),
-            contentTypeQuotas,
-            brief: state.brief,
-            uploadedMaterials: selectedUploadedMaterials(state),
-            extraInstructions
-          })
+      generateDirectionsForState(state, extraInstructions)
     );
 
     void generation
@@ -111,11 +127,6 @@ export function useGenerateMoreHooks(
       setLoadingService(service);
       setError(null);
 
-      const existingHooks = state.directions.map((direction) => ({
-        hook: direction.hook,
-        concept: direction.concept
-      }));
-
       const requestedQuantity = Math.max(
         1,
         GENERATE_MORE_IDEA_COUNT - EXTRA_HOOK_OPTIONS_PER_TYPE
@@ -148,25 +159,10 @@ export function useGenerateMoreHooks(
             : [])
         ].join("\n")
       );
-      const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
-      const generation =
-        env.hookGenerationMode === "harness"
-          ? generateDirectionsWithHarness({
-              run: targetedState,
-              extraInstructions: combinedInstructions
-            })
-          : generateDirectionsFromWebhook({
-              brand: targetedState.brand,
-              hookIdeaMode: targetedState.hookIdeaMode,
-              albumFormat: targetedState.albumFormat,
-              service,
-              quantity: totalHookGenerationQuantity(targetedState),
-              contentTypeQuotas,
-              brief: targetedState.brief,
-              uploadedMaterials: selectedUploadedMaterials(targetedState),
-              extraInstructions: combinedInstructions,
-              existingHooks
-            });
+      const generation = generateDirectionsForState(
+        targetedState,
+        combinedInstructions
+      );
 
       void generation
         .then((directions) => {
@@ -242,30 +238,10 @@ export function useRegenerateHook(
         "Apply the feedback to the hook and supporting copy. Return the replacement as the first direction."
       ].join("\n"));
 
-      const existingHooks = state.directions.map((item) => ({
-        hook: item.hook,
-        concept: item.concept
-      }));
-      const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
-
-      const generation =
-        env.hookGenerationMode === "harness"
-          ? generateDirectionsWithHarness({
-              run: targetedState,
-              extraInstructions
-            })
-          : generateDirectionsFromWebhook({
-              brand: targetedState.brand,
-              hookIdeaMode: targetedState.hookIdeaMode,
-              albumFormat: targetedState.albumFormat,
-              service,
-              quantity: totalHookGenerationQuantity(targetedState),
-              contentTypeQuotas,
-              brief: targetedState.brief,
-              uploadedMaterials: selectedUploadedMaterials(targetedState),
-              extraInstructions,
-              existingHooks
-            });
+      const generation = generateDirectionsForState(
+        targetedState,
+        extraInstructions
+      );
 
       try {
         const directions = await generation;
@@ -366,29 +342,10 @@ export function useRegenerateAllHooks(
             "For each hook, keep its strategic idea, audience tension, product truth, and CTA intent.",
             `Return at least ${originals.length} replacements in the same numbered order.`
           ].join("\n"));
-          const existingHooks = state.directions.map((direction) => ({
-            hook: direction.hook,
-            concept: direction.concept
-          }));
-          const contentTypeQuotas = hookGenerationContentTypeQuotas(targetedState);
-          const generated =
-            env.hookGenerationMode === "harness"
-              ? await generateDirectionsWithHarness({
-                  run: targetedState,
-                  extraInstructions
-                })
-              : await generateDirectionsFromWebhook({
-                  brand: targetedState.brand,
-                  hookIdeaMode: targetedState.hookIdeaMode,
-                  albumFormat: targetedState.albumFormat,
-                  service,
-                  quantity: totalHookGenerationQuantity(targetedState),
-                  contentTypeQuotas,
-                  brief: targetedState.brief,
-                  uploadedMaterials: selectedUploadedMaterials(targetedState),
-                  extraInstructions,
-                  existingHooks
-                });
+          const generated = await generateDirectionsForState(
+            targetedState,
+            extraInstructions
+          );
 
           if (generated.length < originals.length) {
             throw new Error(

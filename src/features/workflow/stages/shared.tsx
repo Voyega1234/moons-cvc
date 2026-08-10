@@ -63,6 +63,7 @@ export function HookGenerationModelSelect({
         <option value="google/gemini-3.6-flash">
           OpenRouter
         </option>
+        <option value="n8n-compass-new">n8n · Compass New</option>
       </select>
     </label>
   );

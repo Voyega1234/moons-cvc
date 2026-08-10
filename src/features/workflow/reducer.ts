@@ -138,7 +138,7 @@ export function createInitialWorkflowState({
     ],
     service: "single-static",
     hookIdeaMode: defaultHookIdeaMode,
-    hookGenerationModel: "gpt-5.6-terra",
+    hookGenerationModel: "google/gemini-3.6-flash",
     artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,

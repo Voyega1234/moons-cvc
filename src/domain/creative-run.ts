@@ -137,7 +137,8 @@ export type HookIdeaMode = (typeof hookIdeaModes)[number];
 export const defaultHookIdeaMode: HookIdeaMode = "fresh-research";
 export const hookGenerationModels = [
   "gpt-5.6-terra",
-  "google/gemini-3.6-flash"
+  "google/gemini-3.6-flash",
+  "n8n-compass-new"
 ] as const;
 export type HookGenerationModel = (typeof hookGenerationModels)[number];
 export const imagePromptModels = [

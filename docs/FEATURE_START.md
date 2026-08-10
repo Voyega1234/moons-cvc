@@ -82,6 +82,11 @@ fields are Client ID, Status, Service Status, and Client Portal URL. For a
 sheet-backed client, the section shows the values that were extracted from its
 mapping row. Questionnaire content is imported from the Google Sheet URL in the
 setup form when the operator submits it.
+The questionnaire extractor prefers `{{field_key}}` placeholders, but also
+supports a conservative list of known Thai and English questionnaire headings
+for legacy sheets. A supported heading may keep its answer in cells to the
+right, in the following rows, or inline with other legacy heading-answer pairs
+inside one compact cell. Unknown headings are ignored rather than guessed.
 
 Overview rows follow the same selectability rule and use `.brief-row.disabled`
 when a sheet-only client appears there.

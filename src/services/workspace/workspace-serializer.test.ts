@@ -667,7 +667,7 @@ describe("workspace serializer", () => {
     );
   });
 
-  it("loads older snapshots without a hook generation model as OpenAI GPT", () => {
+  it("loads older snapshots without a hook generation model as OpenRouter Gemini", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -682,7 +682,7 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "gpt-5.6-terra"
+      "google/gemini-3.6-flash"
     );
   });
 

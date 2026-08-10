@@ -39,12 +39,20 @@ describe("Artwork generation settings", () => {
     const hookModel = screen.getByRole("combobox", {
       name: "Hook generation model"
     }) as HTMLSelectElement;
-    expect(hookModel.value).toBe("gpt-5.6-terra");
-    expect(hookModel.selectedOptions[0]?.textContent).toBe("GPT · OpenAI");
-    await user.selectOptions(hookModel, "google/gemini-3.6-flash");
+    expect(hookModel.value).toBe("google/gemini-3.6-flash");
+    expect(hookModel.selectedOptions[0]?.textContent).toBe("OpenRouter");
+    expect(
+      within(hookModel).getByRole("option", { name: "n8n · Compass New" })
+    ).toBeTruthy();
+    await user.selectOptions(hookModel, "gpt-5.6-terra");
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-hook-generation-model",
-      model: "google/gemini-3.6-flash"
+      model: "gpt-5.6-terra"
+    });
+    await user.selectOptions(hookModel, "n8n-compass-new");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-hook-generation-model",
+      model: "n8n-compass-new"
     });
     expect(
       screen.queryByRole("button", { name: "Reference library" })

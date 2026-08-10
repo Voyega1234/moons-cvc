@@ -99,8 +99,11 @@ type HookGenerationHarnessRequest = {
 };
 ```
 
-The request intentionally includes Brand Kit, Products, Documents, References,
-and learning so the hook agent can use the same context visible in the UI.
+The service request retains the full run shape, but prompt compilation sends
+only Questionnaire, Brand name, Brand system, and User brief to Research. The
+Hook Agent receives those same four blocks plus the completed Research dossier.
+Brand Memory, Products, Documents, References, Past Posts, attachments, and
+uploaded images are intentionally excluded from Hook generation.
 
 ## Generate more (implemented 2026-07-10)
 
@@ -225,24 +228,17 @@ product, audience, and current market; uses Search for current context;
 develops meaningfully distinct, format-native ideas; and does not invent
 brand or product facts.
 
-`buildInputBlock()` appends Hook-relevant changing context:
+`buildInputBlock()` appends exactly four changing business-context blocks:
 
-- user brief
-- selected service
-- selected output quantity
-- Brand Kit
-- Products
-- non-visual factual Documents such as product FAQs
-- uploaded material descriptions and images
-- selected raw Past Content used as brand evidence
+- Questionnaire
+- Brand name
+- Brand system (`brandLibrary.brand`)
+- User brief, including round-specific instructions
 
-The model prompt excludes run/model metadata, duplicate quota prose, internal
-brand-analysis source labels, and visual-production items such as Logo rules,
-Brand CI, typography, colour systems, layouts, and art direction. Those visual
-rules belong to Artwork generation. Verified onboarding context is included as
-standing context but cannot override the current Brief. If the Brief itself is
-a raw Launch Questionnaire, runtime replaces it with a short no-current-brief
-notice.
+The completed Research dossier is appended afterward. Quota, format, and JSON
+transport instructions remain separate runtime contract data. If the Brief
+itself is a raw Launch Questionnaire, runtime replaces it with a short
+no-current-brief notice.
 
 OpenAI requests attach `web_search_preview` and enforce tool use with
 `tool_choice: "required"`; the tool receives an approximate Thailand location.

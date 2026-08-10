@@ -34,6 +34,76 @@ export type Database = {
           created_at?: string;
         }
       >;
+      ai_usage_events: TableDefinition<
+        {
+          id: string;
+          owner_user_id: string;
+          client_id: string | null;
+          workspace_run_id: string | null;
+          request_group_id: string;
+          sequence_no: number;
+          operation: string;
+          stage: string;
+          modality: "text" | "image";
+          provider: string;
+          model: string;
+          endpoint: string;
+          provider_request_id: string | null;
+          http_status: number;
+          status: "succeeded" | "failed";
+          duration_ms: number;
+          input_tokens: number;
+          cached_input_tokens: number;
+          cache_write_tokens: number;
+          output_tokens: number;
+          reasoning_tokens: number;
+          input_text_tokens: number;
+          input_image_tokens: number;
+          output_image_tokens: number;
+          total_tokens: number;
+          web_search_requests: number;
+          image_count: number;
+          image_size: string | null;
+          image_quality: string | null;
+          provider_reported_cost_usd: number | null;
+          raw_usage: Json;
+          created_at: string;
+        },
+        {
+          id?: string;
+          owner_user_id: string;
+          client_id?: string | null;
+          workspace_run_id?: string | null;
+          request_group_id: string;
+          sequence_no: number;
+          operation: string;
+          stage: string;
+          modality: "text" | "image";
+          provider: string;
+          model: string;
+          endpoint: string;
+          provider_request_id?: string | null;
+          http_status: number;
+          status: "succeeded" | "failed";
+          duration_ms: number;
+          input_tokens?: number;
+          cached_input_tokens?: number;
+          cache_write_tokens?: number;
+          output_tokens?: number;
+          reasoning_tokens?: number;
+          input_text_tokens?: number;
+          input_image_tokens?: number;
+          output_image_tokens?: number;
+          total_tokens?: number;
+          web_search_requests?: number;
+          image_count?: number;
+          image_size?: string | null;
+          image_quality?: string | null;
+          provider_reported_cost_usd?: number | null;
+          raw_usage?: Json;
+          created_at?: string;
+        }
+      >;
       brand_learning: TableDefinition<
         {
           id: string;

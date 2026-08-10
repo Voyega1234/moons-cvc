@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { generateDirectionsFromWebhook } from "../../services/creative-generation/n8n-hook-generation";
+import {
+  generateDirectionsFromNewCompassWebhook,
+  generateDirectionsFromWebhook
+} from "../../services/creative-generation/n8n-hook-generation";
 import { createInitialWorkflowState } from "./reducer";
 import { buildDirectionFixtures } from "./test-fixtures";
 import {
@@ -10,7 +13,8 @@ import {
 } from "./use-generate-hooks";
 
 vi.mock("../../services/creative-generation/n8n-hook-generation", () => ({
-  generateDirectionsFromWebhook: vi.fn()
+  generateDirectionsFromWebhook: vi.fn(),
+  generateDirectionsFromNewCompassWebhook: vi.fn()
 }));
 
 vi.mock("../../config/env", () => ({
@@ -52,6 +56,40 @@ describe("buildCreativeMixInstructions", () => {
 });
 
 describe("useGenerateMoreHooks", () => {
+  it("routes the new n8n mode to Compass New instead of the legacy webhook", async () => {
+    const state = {
+      ...createInitialWorkflowState({
+        id: "n8n-compass-new-run",
+        now: "2026-08-10T00:00:00.000Z"
+      }),
+      hookGenerationModel: "n8n-compass-new" as const,
+      directions: buildDirectionFixtures("Existing")
+    };
+    const generatedDirection = {
+      ...state.directions[0]!,
+      id: "n8n-new-direction"
+    };
+    vi.mocked(generateDirectionsFromNewCompassWebhook).mockResolvedValue([
+      generatedDirection
+    ]);
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useGenerateMoreHooks(state, dispatch));
+
+    act(() => result.current.generateMore("single-static"));
+
+    await waitFor(() =>
+      expect(generateDirectionsFromNewCompassWebhook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: "single-static"
+        })
+      )
+    );
+    expect(
+      vi.mocked(generateDirectionsFromNewCompassWebhook).mock.calls[0]?.[0]
+    ).not.toHaveProperty("existingHooks");
+    expect(generateDirectionsFromWebhook).not.toHaveBeenCalled();
+  });
+
   it("requests and appends ideas only for the selected content type", async () => {
     const state = {
       ...createInitialWorkflowState({

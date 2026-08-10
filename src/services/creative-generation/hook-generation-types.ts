@@ -25,7 +25,6 @@ export interface HookGenerationInput {
   contentTypeQuotas?: readonly { service: ServiceType; count: number }[];
   brief: string;
   extraInstructions?: string;
-  existingHooks?: readonly { hook: string; concept: string }[];
   uploadedMaterials?: readonly Pick<
     UploadedCreativeMaterial,
     "id" | "name" | "mediaType" | "role" | "description" | "url"

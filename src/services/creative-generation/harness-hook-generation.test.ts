@@ -165,7 +165,7 @@ describe("buildHookGenerationHarnessRequest", () => {
     ]);
   });
 
-  it("maps existing directions and extra instructions for a generate-more request", () => {
+  it("does not send existing directions with a generate-more request", () => {
     const runWithDirections: WorkflowState = {
       ...run,
       directions: [
@@ -190,15 +190,13 @@ describe("buildHookGenerationHarnessRequest", () => {
     expect(request.extraInstructions).toBe(
       "Focus more on small business owners this round."
     );
-    expect(request.existingHooks).toEqual([
-      { hook: "เรียนรู้ AI SEO ใน 1 วัน", concept: "Workshop urgency" }
-    ]);
+    expect(request).not.toHaveProperty("existingHooks");
   });
 
   it("defaults extraInstructions to an empty string when omitted", () => {
     const request = buildHookGenerationHarnessRequest({ run });
     expect(request.extraInstructions).toBe("");
-    expect(request.existingHooks).toEqual([]);
+    expect(request).not.toHaveProperty("existingHooks");
   });
 
   it("uses an empty onboarding questionnaire when the brand has none", () => {

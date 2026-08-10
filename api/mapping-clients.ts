@@ -1,7 +1,7 @@
 import { handleMappingClientsRequest } from "../src/server/google-sheets/mapping-clients-endpoint.js";
 
 export const config = {
-  maxDuration: 30
+  maxDuration: 60
 };
 
 type VercelRequest = {
@@ -37,6 +37,9 @@ export default async function handler(
         process.env.GOOGLE_WORKSPACE_LOCAL_USER,
       MAPPING_CLIENTS_GOOGLE_SHEET_URL:
         process.env.MAPPING_CLIENTS_GOOGLE_SHEET_URL,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OPENAI_QUESTIONNAIRE_QC_MODEL:
+        process.env.OPENAI_QUESTIONNAIRE_QC_MODEL,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     },

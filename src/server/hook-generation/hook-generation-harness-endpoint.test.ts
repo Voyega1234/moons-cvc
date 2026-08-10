@@ -5,11 +5,11 @@ import {
 } from "./hook-generation-harness-endpoint";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation";
 import type { HookGenerationDebugLog } from "./hook-generation-debug-log";
-import type { PastPostsClient } from "./past-posts";
 
 const requestBody = {
   runId: "run-1",
   hookIdeaMode: "fresh-research",
+  generationModel: "gpt-5.6-terra" as const,
   albumFormat: "auto" as const,
   brand: {
     id: "convert-cake",
@@ -116,6 +116,8 @@ function validHookResearchResponse() {
         productFocus: "AI SEO webinar",
         overallFinding: "Use verified brand and audience evidence.",
         references: [],
+        insightCards: [],
+        strongestInsightIds: [],
         strongestReferenceIds: [],
         researchGaps: [],
         researchLimitations: "No external claims used by this fixture.",
@@ -162,20 +164,6 @@ function openRouterJsonResponse(
     }),
     { status: 200 }
   );
-}
-
-function openRouterHookResearchDossierResponse() {
-  return openRouterJsonResponse({
-    brand: "Convert Cake",
-    productFocus: "AI SEO webinar",
-    overallFinding: "Use verified brand and audience evidence.",
-    references: [],
-    strongestReferenceIds: [],
-    researchGaps: [],
-    researchLimitations: "No external claims used by this fixture.",
-    excluded: [],
-    searchQueriesUsed: ["AI SEO Thailand"]
-  });
 }
 
 function openRouterHighlightResponse(
@@ -264,7 +252,6 @@ describe("handleHookGenerationHarnessRequest", () => {
       })),
       hookIdeaMode: "fresh-research",
       extraInstructions: "",
-      existingHooks: [],
       quantity: 104,
       contentTypeQuotas: [
         { service: "single-static", count: 52 },
@@ -321,6 +308,8 @@ describe("handleHookGenerationHarnessRequest", () => {
               productFocus: "AI SEO webinar",
               overallFinding: "ธุรกิจไทยเริ่มให้ความสำคัญกับ AI visibility",
               references: [],
+              insightCards: [],
+              strongestInsightIds: [],
               strongestReferenceIds: [],
               researchGaps: [],
               researchLimitations: "No strong public source was found.",
@@ -764,17 +753,21 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
-  it("routes the direct creative pass through OpenRouter when selected", async () => {
+  it("defaults the direct creative pass to OpenRouter when no model is selected", async () => {
+    const {
+      generationModel: _generationModel,
+      ...requestWithoutGenerationModel
+    } = singleStaticRequestBody;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         openRouterResearchResponse([
           {
             id: "openrouter-hook",
             sourceCandidateId: "candidate-1",
             service: "single-static",
-            hook: "มุมคิดใหม่จาก Claude",
+            hook: "มุมคิดใหม่จาก OpenRouter",
             subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
             concept: "OpenRouter generation",
             why: "Tests provider routing",
@@ -793,10 +786,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify({
-          ...singleStaticRequestBody,
-          generationModel: "google/gemini-3.6-flash"
-        })
+        body: JSON.stringify(requestWithoutGenerationModel)
       }),
       env: {
         OPENAI_API_KEY: "openai-key",
@@ -808,13 +798,13 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-      "https://openrouter.ai/api/v1/chat/completions",
+      "https://api.openai.com/v1/responses",
       "https://openrouter.ai/api/v1/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions"
     ]);
     expect(
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
-    ).toBe("Bearer openrouter-key");
+    ).toBe("Bearer openai-key");
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as {
@@ -823,7 +813,6 @@ describe("handleHookGenerationHarnessRequest", () => {
         content: readonly {
           type: string;
           text?: string;
-          image_url?: { url: string };
         }[];
       }[];
       response_format: {
@@ -835,10 +824,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     };
     expect(generationBody.model).toBe("anthropic/test-hook-model");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
-    expect(generationBody.messages[0]?.content[1]).toEqual({
-      type: "image_url",
-      image_url: { url: "https://example.com/hero-bottle.png" }
-    });
+    expect(generationBody.messages[0]?.content).toHaveLength(1);
     expect(generationBody.response_format).toMatchObject({
       type: "json_schema"
     });
@@ -875,10 +861,12 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationBody.provider).toEqual({ require_parameters: true });
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
-    ) as { plugins?: unknown };
-    expect(researchBody.plugins).toEqual([
-      { id: "web", engine: "native", max_results: 5 }
+    ) as { model: string; tools?: unknown[]; tool_choice?: string };
+    expect(researchBody.model).toBe("gpt-5.6-terra");
+    expect(researchBody.tools).toEqual([
+      expect.objectContaining({ type: "web_search_preview" })
     ]);
+    expect(researchBody.tool_choice).toBe("required");
     const payload = (await response.json()) as {
       directions: { id: string; sourceCandidateId: string }[];
     };
@@ -891,7 +879,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("surfaces the provider's OpenRouter 400 detail", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
+      .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -927,114 +915,19 @@ describe("handleHookGenerationHarnessRequest", () => {
         "OpenRouter hook harness failed: 400 — Unable to download the selected material image."
     });
     const openRouterBody = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body)
+      String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as { plugins?: unknown; tools?: unknown; tool_choice?: unknown };
-    expect(openRouterBody.plugins).toEqual([
-      { id: "web", engine: "native", max_results: 5 }
-    ]);
+    expect(openRouterBody.plugins).toBeUndefined();
     expect(openRouterBody.tools).toBeUndefined();
     expect(openRouterBody.tool_choice).toBeUndefined();
   });
 
-  it("retries OpenRouter with inline material data when its provider cannot download an image URL", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(openRouterHookResearchDossierResponse())
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            error: {
-              code: 400,
-              message: "Provider returned error",
-              metadata: {
-                raw: JSON.stringify({
-                  type: "error",
-                  error: {
-                    type: "invalid_request_error",
-                    message:
-                      "Unable to download the file. Please verify the URL and try again."
-                  }
-                })
-              }
-            }
-          }),
-          { status: 400 }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(new Uint8Array([137, 80, 78, 71]), {
-          status: 200,
-          headers: { "content-type": "image/png" }
-        })
-      )
-      .mockResolvedValueOnce(
-        openRouterResearchResponse([
-          {
-            id: "openrouter-hook",
-            sourceCandidateId: "candidate-1",
-            service: "single-static",
-            hook: "มุมคิดใหม่จาก Claude",
-            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
-            concept: "OpenRouter generation",
-            why: "Tests provider routing",
-            visual: "Clean and direct",
-            albumFormat: "three-horizontal",
-            cta: "ดูรายละเอียด",
-            caption: "แคปชั่นจากโมเดลที่เลือก",
-            score: 88,
-            reasoning: "Strong fit",
-            citations: []
-          }
-        ])
-      )
-      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
-
-    const response = await handleHookGenerationHarnessRequest({
-      request: new Request("https://moons.local/api/hook-generation-harness", {
-        method: "POST",
-        body: JSON.stringify({
-          ...singleStaticRequestBody,
-          generationModel: "google/gemini-3.6-flash"
-        })
-      }),
-      env: {
-        OPENAI_API_KEY: "openai-key",
-        OPENROUTER_API_KEY: "openrouter-key"
-      },
-      fetchImpl: fetchMock as unknown as typeof fetch
-    });
-
-    expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
-    expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
-      "https://example.com/hero-bottle.png"
-    );
-    const retryBody = JSON.parse(
-      String(fetchMock.mock.calls[3]?.[1]?.body)
-    ) as {
-      messages: readonly {
-        content: readonly {
-          type: string;
-          image_url?: { url: string };
-        }[];
-      }[];
-    };
-    expect(retryBody.messages[0]?.content[1]?.image_url?.url).toBe(
-      "data:image/png;base64,iVBORw=="
-    );
-  });
-
-  it("passes raw past posts directly into the single creative pass", async () => {
+  it("sends only questionnaire, brand name, brand system, brief, and research context", async () => {
     const writeDebugLog = vi.fn(
       async (_directory: string, _entry: HookGenerationDebugLog) => undefined
     );
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ email: "team@convertcake.com" }), {
-          status: 200
-        })
-      )
       .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(
         new Response(
@@ -1068,82 +961,42 @@ describe("handleHookGenerationHarnessRequest", () => {
         highlightResponse("hook-1", ["visibility กับยอดขาย"])
       );
 
-    const fakePastPostsClient: PastPostsClient = {
-      schema() {
-        return {
-          from(table: string) {
-            return {
-              select() {
-                return {
-                  eq() {
-                    return {
-                      order() {
-                        return {
-                          async limit() {
-                            if (table === "brand_social_posts") {
-                              return {
-                                data: [
-                                  {
-                                    text: "จองด่วน! Workshop AI SEO รอบนี้ที่นั่งจำกัด 🔥\nLINE: @convertcake"
-                                  },
-                                  {
-                                    text: "เริ่มวางแผนการตลาดจากข้อมูลที่วัดผลได้\nLINE: @convertcake"
-                                  }
-                                ],
-                                error: null
-                              };
-                            }
-                            return { data: [], error: null };
-                          }
-                        };
-                      }
-                    };
-                  }
-                };
-              }
-            };
-          }
-        };
-      }
-    };
-
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        headers: { authorization: "Bearer user-token" },
         body: JSON.stringify(singleStaticRequestBody)
       }),
       env: {
         OPENAI_API_KEY: "test-key",
-        HOOK_GENERATION_DEBUG_LOG_DIR: "logs/hook-generation",
-        SUPABASE_URL: "https://supabase.example.com",
-        SUPABASE_ANON_KEY: "anon-key"
+        HOOK_GENERATION_DEBUG_LOG_DIR: "logs/hook-generation"
       },
       fetchImpl: fetchMock as unknown as typeof fetch,
-      createPastPostsClient: () => fakePastPostsClient,
       writeDebugLog
     });
 
     expect(response.status).toBe(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "จองด่วน! Workshop AI SEO รอบนี้ที่นั่งจำกัด"
-    );
-    expect(JSON.stringify(generationBody.input)).toContain(
-      "เรียนรู้ Style Fingerprint จากหลายโพสต์ร่วมกัน"
-    );
-    expect(generationPrompt).toContain("# Past content data");
-    expect(generationPrompt).toContain(
-      "Paid Ad เรียนรู้จากแคปชั่นโฆษณา"
-    );
-    expect(generationPrompt).toContain(
-      "Opening ของ Caption ต้องต่อยอด Direction ใหม่"
-    );
+    expect(generationPrompt).toContain("# Questionnaire");
+    expect(generationPrompt).toContain("ข้อมูลตอน Onboarding");
+    expect(generationPrompt).toContain("# Brand name");
+    expect(generationPrompt).toContain("Convert Cake");
+    expect(generationPrompt).toContain("# Brand system");
+    expect(generationPrompt).toContain("Positioning");
+    expect(generationPrompt).toContain("# User brief");
+    expect(generationPrompt).toContain("ต้องการ creative เพื่อชวน B2B");
+    expect(generationPrompt).toContain("# Dedicated Research Agent dossier");
+    expect(generationPrompt).not.toContain("Brand Memory — What's working:");
+    expect(generationPrompt).not.toContain("Products / offers / benefits");
+    expect(generationPrompt).not.toContain("Documents:");
+    expect(generationPrompt).not.toContain("# Past posts");
+    expect(generationPrompt).not.toContain("# Past content data");
+    expect(generationPrompt).not.toContain("launch-questionnaire.pdf");
+    expect(generationPrompt).not.toContain("hero-bottle.png");
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
     expect(debugEntry).not.toHaveProperty("pastContentAgent");
     expect(debugEntry).not.toHaveProperty("captionAgent");
@@ -1170,7 +1023,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
-  it("tells the model about extra instructions and existing hooks to avoid duplicates", async () => {
+  it("passes extra instructions but ignores legacy existing hook history", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
@@ -1230,7 +1083,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("เน้นกลุ่มเจ้าของธุรกิจขนาดเล็กรอบนี้");
-    expect(generationPrompt).toContain("ลูกค้า B2B หาเราเจอบน AI หรือยัง?");
-    expect(generationPrompt).toContain("DO NOT repeat");
+    expect(generationPrompt).not.toContain("ลูกค้า B2B หาเราเจอบน AI หรือยัง?");
+    expect(generationPrompt).not.toContain("DO NOT repeat");
   });
 });

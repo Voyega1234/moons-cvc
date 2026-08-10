@@ -44,11 +44,25 @@ export interface HookResearchReference {
   confidenceScore: number;
 }
 
+export interface HookResearchInsightCard {
+  id: string;
+  evidenceIds: string[];
+  evidence: string;
+  tension: string;
+  beliefChallenged: string;
+  humanConsequence: string;
+  brandConnection: string;
+  freshnessReason: string;
+  confidenceScore: number;
+}
+
 export interface HookResearchDossier {
   brand: string;
   productFocus: string;
   overallFinding: string;
   references: HookResearchReference[];
+  insightCards: HookResearchInsightCard[];
+  strongestInsightIds: string[];
   strongestReferenceIds: string[];
   researchGaps: string[];
   researchLimitations: string;
@@ -117,6 +131,36 @@ export const hookResearchSchema = {
         ]
       }
     },
+    insightCards: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          evidenceIds: { ...stringArraySchema, minItems: 1 },
+          evidence: { type: "string" },
+          tension: { type: "string" },
+          beliefChallenged: { type: "string" },
+          humanConsequence: { type: "string" },
+          brandConnection: { type: "string" },
+          freshnessReason: { type: "string" },
+          confidenceScore: { type: "number" }
+        },
+        required: [
+          "id",
+          "evidenceIds",
+          "evidence",
+          "tension",
+          "beliefChallenged",
+          "humanConsequence",
+          "brandConnection",
+          "freshnessReason",
+          "confidenceScore"
+        ]
+      }
+    },
+    strongestInsightIds: stringArraySchema,
     strongestReferenceIds: stringArraySchema,
     researchGaps: stringArraySchema,
     researchLimitations: { type: "string" },
@@ -139,6 +183,8 @@ export const hookResearchSchema = {
     "productFocus",
     "overallFinding",
     "references",
+    "insightCards",
+    "strongestInsightIds",
     "strongestReferenceIds",
     "researchGaps",
     "researchLimitations",
@@ -164,13 +210,40 @@ export function buildHookResearchPrompt(
 
 export function parseHookResearchDossier(text: string): HookResearchDossier {
   const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
-  if (!isRecord(parsed) || !Array.isArray(parsed.references)) {
-    throw new Error("Hook Research Agent must return a references array.");
+  if (
+    !isRecord(parsed) ||
+    !Array.isArray(parsed.references) ||
+    !Array.isArray(parsed.insightCards)
+  ) {
+    throw new Error(
+      "Hook Research Agent must return references and insightCards arrays."
+    );
   }
+  const referenceIds = new Set<string>();
   for (const [index, item] of parsed.references.entries()) {
     if (!isRecord(item) || !isHttpUrl(item.sourceUrl)) {
       throw new Error(
         `Hook Research Agent references[${index}].sourceUrl must be a valid HTTP URL.`
+      );
+    }
+    if (typeof item.id === "string") referenceIds.add(item.id);
+  }
+  for (const [index, item] of parsed.insightCards.entries()) {
+    if (
+      !isRecord(item) ||
+      !Array.isArray(item.evidenceIds) ||
+      item.evidenceIds.length === 0
+    ) {
+      throw new Error(
+        `Hook Research Agent insightCards[${index}] must include evidenceIds.`
+      );
+    }
+    const missingEvidenceId = item.evidenceIds.find(
+      (id) => typeof id !== "string" || !referenceIds.has(id)
+    );
+    if (missingEvidenceId !== undefined) {
+      throw new Error(
+        `Hook Research Agent insightCards[${index}] references unknown evidence id: ${String(missingEvidenceId)}.`
       );
     }
   }
@@ -188,7 +261,8 @@ export function hookResearchDossierBlock(
 ): string {
   return [
     "# Dedicated Research Agent dossier",
-    "Research has already been completed. Use only relevant evidence; do not force every reference into a Direction.",
+    "Research has already been completed. Start creative reasoning from the insightCards, especially their tension, beliefChallenged, and humanConsequence fields.",
+    "Use references as proof for each card's evidence. Do not turn an unsupported inference into a factual claim, and do not force every card or reference into a Direction.",
     "Any external fact or claim taken from this dossier must copy its sourceUrl into citations. Do not cite a URL that does not directly support the wording used.",
     JSON.stringify(dossier, null, 2)
   ].join("\n");

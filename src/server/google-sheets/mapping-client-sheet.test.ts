@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  extractQuestionnaireFields,
   isPublishedGoogleSheetUrl,
   parseGoogleSheetUrl,
   readMappingClientsFromGoogleSheet,
@@ -241,6 +242,200 @@ describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
     expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
       headers: { Authorization: "Bearer google-provider-token" }
     });
+  });
+});
+
+describe("extractQuestionnaireFields", () => {
+  it("extracts supported headings when placeholders are missing", () => {
+    expect(
+      extractQuestionnaireFields([
+        ["1. ชื่อแบรนด์ (ภาษาอังกฤษ):", "", "Moon Hotel"],
+        ["กลุ่มลูกค้าเป้าหมาย", "นักท่องเที่ยวไทยวัยทำงาน"],
+        ["USP", "อยู่ติดรถไฟฟ้า", "เช็กอินได้ตลอด 24 ชั่วโมง"]
+      ])
+    ).toEqual([
+      {
+        key: "brand_name_en",
+        label: "Brand name EN",
+        value: "Moon Hotel"
+      },
+      {
+        key: "products_target_customer",
+        label: "Products target customer",
+        value: "นักท่องเที่ยวไทยวัยทำงาน"
+      },
+      {
+        key: "products_unique_selling_points",
+        label: "Products unique selling points",
+        value: "อยู่ติดรถไฟฟ้า\n\nเช็กอินได้ตลอด 24 ชั่วโมง"
+      }
+    ]);
+  });
+
+  it("reads answers below a supported heading until the next known heading", () => {
+    expect(
+      extractQuestionnaireFields([
+        ["ข้อจำกัดด้านครีเอทีฟ"],
+        ["", "ไม่ใช้ภาพแอลกอฮอล์"],
+        ["", "ไม่ใช้โทนสีแดง"],
+        ["โจทย์การตลาด"],
+        ["เพิ่มยอดจองตรงจากเว็บไซต์"]
+      ])
+    ).toEqual([
+      {
+        key: "creative_restrictions",
+        label: "Creative restrictions",
+        value: "ไม่ใช้ภาพแอลกอฮอล์\n\nไม่ใช้โทนสีแดง"
+      },
+      {
+        key: "marketing_challenge",
+        label: "Marketing challenge",
+        value: "เพิ่มยอดจองตรงจากเว็บไซต์"
+      }
+    ]);
+  });
+
+  it("keeps placeholder extraction as the first priority in mixed sheets", () => {
+    expect(
+      extractQuestionnaireFields([
+        [
+          "Target audience",
+          "คำอธิบายหัวข้อ",
+          "{{products_target_customer}}",
+          "เจ้าของธุรกิจ SME"
+        ],
+        ["หัวข้อที่ระบบไม่รู้จัก", "ต้องไม่ถูกนำเข้า"]
+      ])
+    ).toEqual([
+      {
+        key: "products_target_customer",
+        label: "Products target customer",
+        value: "เจ้าของธุรกิจ SME"
+      }
+    ]);
+  });
+
+  it("extracts legacy headings and answers embedded in one long cell", () => {
+    expect(
+      extractQuestionnaireFields([
+        [
+          "About your brand Brand Name in Thai ชล อโรมาทีค " +
+            "Brand Name in English CHOL Aromatique " +
+            "Pronunciation ชล อโรมาทีค " +
+            "Brand Descripton แบรนด์อโรมาเธอราพีจากไทย"
+        ]
+      ])
+    ).toEqual([
+      {
+        key: "brand_name_th",
+        label: "Brand name TH",
+        value: "ชล อโรมาทีค"
+      },
+      {
+        key: "brand_name_en",
+        label: "Brand name EN",
+        value: "CHOL Aromatique"
+      },
+      {
+        key: "brand_name_pronunciation",
+        label: "Brand name pronunciation",
+        value: "ชล อโรมาทีค"
+      },
+      {
+        key: "brand_description",
+        label: "Brand description",
+        value: "แบรนด์อโรมาเธอราพีจากไทย"
+      }
+    ]);
+  });
+
+  it("removes legacy prompt annotations and arrows from embedded answers", () => {
+    expect(
+      extractQuestionnaireFields([
+        [
+          "Session 1: Business Information " +
+            "Brand Name in Thai (ชื่อแบรนด์ภาษาไทย) → บีแอล คลินิก " +
+            "Brand Name in English (ชื่อแบรนด์ภาษาอังกฤษ) → BL Clinic " +
+            "Pronunciation (การออกเสียง เช่น คอน-เวิด-เค้ก) → บี-แอล-คลิ-นิก " +
+            "Brand Descripton (เล่าเกี่ยวกับแบรนด์สั้นๆ) → คลินิกเสริมความงาม"
+        ]
+      ])
+    ).toEqual([
+      {
+        key: "brand_name_th",
+        label: "Brand name TH",
+        value: "บีแอล คลินิก"
+      },
+      {
+        key: "brand_name_en",
+        label: "Brand name EN",
+        value: "BL Clinic"
+      },
+      {
+        key: "brand_name_pronunciation",
+        label: "Brand name pronunciation",
+        value: "บี-แอล-คลิ-นิก"
+      },
+      {
+        key: "brand_description",
+        label: "Brand description",
+        value: "คลินิกเสริมความงาม"
+      }
+    ]);
+  });
+
+  it("uses legacy company headings to delimit a compact brand-info cell", () => {
+    expect(
+      extractQuestionnaireFields([
+        [
+          "Brand info. Brand Tempur Company Name Jaspal & Sons Co., Ltd. " +
+            "Company Address Bangna-Trad Road"
+        ]
+      ])
+    ).toEqual([
+      {
+        key: "brand_name_en",
+        label: "Brand name EN",
+        value: "Tempur"
+      },
+      {
+        key: "company_name",
+        label: "Company name",
+        value: "Jaspal & Sons Co., Ltd."
+      },
+      {
+        key: "company_address",
+        label: "Company address",
+        value: "Bangna-Trad Road"
+      }
+    ]);
+  });
+
+  it("extracts legacy social-channel headings from one compact cell", () => {
+    expect(
+      extractQuestionnaireFields([
+        [
+          "Social Media Facebook: https://facebook.com/moon " +
+            "Instagram: https://instagram.com/moon TikTok: https://tiktok.com/@moon"
+        ]
+      ])
+    ).toEqual([
+      {
+        key: "brand_media_channel_facebook",
+        label: "Brand media channel facebook",
+        value: "https://facebook.com/moon"
+      },
+      {
+        key: "brand_media_channel_instagram",
+        label: "Brand media channel instagram",
+        value: "https://instagram.com/moon"
+      },
+      {
+        key: "brand_media_channel_tiktok",
+        label: "Brand media channel tiktok",
+        value: "https://tiktok.com/@moon"
+      }
+    ]);
   });
 });
 

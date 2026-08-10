@@ -46,6 +46,8 @@ Async results must continue targeting the run that started the request.
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
 | Client ingestion and recovery | `src/server/client-ingestion/client-ingestion-harness.ts`, `openai-brand-discovery-search.ts`, `openai-brand-visual-analyzer.ts` |
+| Google Sheet questionnaire extraction | `src/server/google-sheets/mapping-client-sheet.ts`, `questionnaire-extraction-qc-agent.ts` |
+| AI token/image usage ledger | `src/server/shared/ai-usage-recorder.ts`, `moons.ai_usage_events` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
 | GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
 | Quality check request | `src/features/workflow/use-run-quality-check.ts` |
@@ -73,11 +75,28 @@ Before creative generation, the dedicated Research Agent at
 `agent_prompt/agent_hook_research.md` searches Product Truth, Thai audience
 behavior, category/competitor context, provable moments, cultural/platform
 signals, and consumer language once per request. It returns a structured
-dossier with direct source URLs, which is shared by every Hook batch. OpenAI
-Research attaches `web_search_preview` with Thailand location context;
-OpenRouter Research uses Chat Completions with the top-level
-`plugins: [{ id: "web" }]` plugin. The Hook Agent receives the dossier without
-a search tool so research and creative judgment remain separate.
+dossier with direct source URLs plus evidence-backed `insightCards`. Each card
+must connect Evidence, Tension, Belief challenged, Human consequence, and Brand
+connection, and its `evidenceIds` must resolve to references in the same
+dossier. The dossier is shared by every Hook batch, which is instructed to use
+the cards as its primary strategic starting points and the references as proof.
+The Research Agent always uses OpenAI with `web_search_preview` and Thailand
+location context, even when the Hook Agent is routed through OpenRouter. The
+Hook Agent receives the dossier without a search tool so research and creative
+judgment remain separate. New runs, legacy workspaces without a saved Hook
+model, and Hook API requests without an explicit model default to
+`google/gemini-3.6-flash` through OpenRouter. The OpenAI Hook model remains
+user-selectable.
+The business context sent to both Research and Hook is intentionally limited to
+Questionnaire, Brand name, Brand system, and User brief; the Hook Agent then
+also receives the Research dossier. Brand Memory, Products, Documents,
+References, Past Posts, attachment names, and uploaded images are not included
+in Hook generation. Runtime quota, format, and JSON transport instructions are
+still appended so the workflow contract remains enforceable.
+Hook requests intentionally do not send the run's existing Hook history to
+either the direct Hook Agent or either n8n route. A targeted regeneration still
+includes only the specific original Hook and concept inside its explicit rewrite
+instructions so the Agent knows which item it is replacing.
 Creative quality, Product Truth, Citation use, and scoring policy belong to
 `agent_hook.md`; runtime code does not reject consumer-facing wording through
 hidden semantic regexes or self-score thresholds. Runtime validation remains
@@ -87,8 +106,34 @@ to local Hook debug logs. Album `formatBeats` map one-to-one to non-cover panels
 (two for three-panel formats and three for four-panel formats). UGC and Motion
 may return as many `formatBeats` as their idea needs.
 
+Hook generation also exposes the user-selectable `n8n · Compass New` route.
+That selection sends the existing n8n Hook payload through the authenticated
+`/api/n8n-compass-new` proxy, owned by
+`src/server/hook-generation/n8n-compass-new-endpoint.ts`, which forwards one
+POST request to the configured `N8N_COMPASS_NEW_WEBHOOK_URL`. GPT and
+OpenRouter selections continue to follow the existing global harness/legacy
+n8n environment switch.
+
 Do not infer workflow behavior from the HTML prototype. The prototype is a
 visual reference and contains mock behavior.
+
+Direct OpenAI/OpenRouter requests inside Hook generation and Artwork
+generation are wrapped by `ai-usage-recorder.ts`. Each provider attempt,
+including HTTP failures, retries, and transport failures, creates an
+`ai_usage_events` row tied to the authenticated user, client, and workspace run.
+The ledger stores token counters, cache/reasoning/search counters, image token
+breakdowns, image size/quality/count, provider-reported cost when available,
+and the raw provider `usage` object. It never stores prompts, image bytes, or
+the generated response. Usage persistence is non-blocking for the creative
+workflow: a ledger write failure is logged but does not discard a successful
+generation.
+
+Questionnaire imports from the read-only `1. Questionnaire` tab use a
+deterministic heading/placeholder extraction first, followed by one grounded
+GPT Luna QC request. Luna may reassign or omit fields, but every returned value
+is rebuilt server-side from verbatim substrings found in the original Sheet
+cells. Ungrounded evidence, duplicate keys, an unavailable QC provider, or an
+empty reviewed result stops the import instead of persisting unchecked data.
 
 ## Current UI ownership
 

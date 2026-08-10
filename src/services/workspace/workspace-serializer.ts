@@ -136,7 +136,7 @@ function parseRun(value: unknown): WorkflowState | null {
   const hookIdeaMode = storedHookIdeaMode ? "fresh-research" : null;
   const hookGenerationModel =
     value.hookGenerationModel === undefined
-      ? "gpt-5.6-terra"
+      ? "google/gemini-3.6-flash"
       : value.hookGenerationModel === "anthropic/claude-sonnet-4.6"
         ? "google/gemini-3.6-flash"
         : parseMember(value.hookGenerationModel, hookGenerationModels);

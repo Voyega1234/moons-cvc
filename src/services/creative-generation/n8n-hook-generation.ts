@@ -1,5 +1,6 @@
 import type { CreativeDirection } from "../../domain/creative-run";
 import { env } from "../../config/env";
+import { getSupabaseClient } from "../../lib/supabase/client";
 import {
   normalizeCreativeDirections,
   type HookGenerationInput,
@@ -10,9 +11,39 @@ import { buildOnboardingQuestionnaireHookContext } from "./onboarding-questionna
 export async function generateDirectionsFromWebhook(
   input: HookGenerationInput
 ): Promise<readonly CreativeDirection[]> {
-  const response = await fetch(env.hookGenerationWebhookUrl, {
+  return requestDirectionsFromWebhook(input, env.hookGenerationWebhookUrl);
+}
+
+export async function generateDirectionsFromNewCompassWebhook(
+  input: HookGenerationInput
+): Promise<readonly CreativeDirection[]> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  try {
+    const { data } = await getSupabaseClient().auth.getSession();
+    if (data.session?.access_token) {
+      headers.Authorization = `Bearer ${data.session.access_token}`;
+    }
+  } catch {
+    // The proxy will return Unauthorized when auth is required.
+  }
+
+  return requestDirectionsFromWebhook(
+    input,
+    env.hookGenerationNewEndpoint,
+    headers
+  );
+}
+
+async function requestDirectionsFromWebhook(
+  input: HookGenerationInput,
+  endpoint: string,
+  headers: Record<string, string> = { "Content-Type": "application/json" }
+): Promise<readonly CreativeDirection[]> {
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       brand: input.brand
         ? {
@@ -33,8 +64,7 @@ export async function generateDirectionsFromWebhook(
         onboardingQuestionnaire: buildOnboardingQuestionnaireHookContext(
           input.brand?.onboardingQuestionnaire
         ),
-        extraInstructions: input.extraInstructions?.trim() ?? "",
-        existingHooks: input.existingHooks ?? []
+        extraInstructions: input.extraInstructions?.trim() ?? ""
       },
       uploadedMaterials: input.uploadedMaterials ?? []
     })

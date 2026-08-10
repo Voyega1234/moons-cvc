@@ -53,6 +53,7 @@ import type {
   ArtworkGenerationResponse
 } from "../../services/artwork-generation/openai-image-generation.js";
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { createAiUsageTrackingFetch } from "../shared/ai-usage-recorder.js";
 import {
   buildStandardImagePrompt,
   generateImagePrompt,
@@ -191,6 +192,19 @@ export async function handleArtworkGenerationRequest({
     const revisionInput = isArtworkRevisionRequest(requestBody)
       ? parseRevisionRequestBody(requestBody)
       : null;
+    const input = revisionInput ? null : parseRequestBody(requestBody);
+    const providerFetchImpl = createAiUsageTrackingFetch({
+      fetchImpl,
+      context: {
+        supabaseUrl,
+        supabaseAnonKey,
+        accessToken: auth.accessToken,
+        ownerUserId: auth.userId,
+        clientId: revisionInput?.clientId ?? input?.brand?.id ?? null,
+        workspaceRunId: revisionInput?.runId ?? input?.runId ?? "unknown",
+        operation: "artwork-generation"
+      }
+    });
     const storage = createStorageClient({
       supabaseUrl,
       supabaseAnonKey,
@@ -208,12 +222,12 @@ export async function handleArtworkGenerationRequest({
         writeDebugLog,
         storage,
         supabaseUrl,
-        fetchImpl
+        fetchImpl: providerFetchImpl
       });
       return jsonResponse({ ok: true, outputs: [output] });
     }
 
-    const input = parseRequestBody(requestBody);
+    if (!input) throw new Error("Invalid artwork generation request.");
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const promptProvider: ImagePromptProvider =
       input.artworkMode !== "standard" &&
@@ -254,7 +268,7 @@ export async function handleArtworkGenerationRequest({
       writeDebugLog,
       storage,
       supabaseUrl,
-      fetchImpl
+      fetchImpl: providerFetchImpl
     });
 
     if (isSelectedHookLearningCaptureEnabled(env.CREATIVE_LEARNING_CAPTURE_ENABLED)) {

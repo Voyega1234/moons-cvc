@@ -270,6 +270,28 @@ Statuses:
 Use `idempotency_key` to prevent duplicate completions from creating duplicate
 outputs.
 
+### `moons.ai_usage_events`
+
+Append-only AI usage ledger for direct Hook and Artwork provider calls. One row
+represents one actual OpenAI/OpenRouter HTTP attempt, so retries are visible and
+can be priced rather than hidden inside a successful user action.
+
+Rows include:
+
+- authenticated `owner_user_id`, `client_id`, and `workspace_run_id`
+- a per-endpoint `request_group_id` and monotonic `sequence_no`
+- operation, structured-output stage, text/image modality, provider, model,
+  endpoint, provider request ID, HTTP result, and duration
+- input, cached input, cache-write, output, reasoning, text-image token, and
+  output-image token counters
+- web-search request count and image count/size/quality
+- provider-reported USD cost when supplied and the complete provider `usage`
+  object for future pricing rules
+
+Prompts, response copy, base64 image data, and reference assets must never be
+written to this table. Pricing is intentionally calculated downstream from the
+immutable usage facts because model and tool rates can change over time.
+
 ### `moons.creative_directions`
 
 Stores generated hooks and ranking:

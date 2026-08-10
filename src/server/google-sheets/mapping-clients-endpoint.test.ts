@@ -47,6 +47,9 @@ describe("handleMappingClientsRequest", () => {
 
   it('reads the Client Portal "1. Questionnaire" tab on demand', async () => {
     const createSheetsAccessToken = vi.fn(async () => "sheets-token");
+    const reviewQuestionnaireExtraction = vi.fn(
+      async ({ extractedFields }) => extractedFields
+    );
     const fetchImpl = vi.fn<typeof fetch>(async (input) =>
       String(input).includes("?fields=")
         ? jsonResponse({
@@ -75,10 +78,12 @@ describe("handleMappingClientsRequest", () => {
       ),
       env: {
         ...baseEnv,
-        GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com"
+        GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com",
+        OPENAI_API_KEY: "openai-key"
       },
       fetchImpl,
-      createSheetsAccessToken
+      createSheetsAccessToken,
+      reviewQuestionnaireExtraction
     });
 
     expect(response.status).toBe(200);
@@ -102,6 +107,19 @@ describe("handleMappingClientsRequest", () => {
       }
     });
     expect(createSheetsAccessToken).not.toHaveBeenCalled();
+    expect(reviewQuestionnaireExtraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "openai-key",
+        model: undefined,
+        extractedFields: [
+          {
+            key: "products_target_customer",
+            label: "Products target customer",
+            value: "Urban professionals"
+          }
+        ]
+      })
+    );
     expect(fetchImpl).toHaveBeenCalledWith(
       expect.stringContaining("sheets.googleapis.com/v4/spreadsheets"),
       expect.objectContaining({

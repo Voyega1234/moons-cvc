@@ -26,12 +26,15 @@ type ResponseContent =
   | {
       type: "input_image";
       image_url: string;
-      detail: "auto";
+      detail: "low";
     };
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_REQUEST_TIMEOUT_MS = 75_000;
+const DEFAULT_MAX_IMAGES = 8;
+const MAX_SOCIAL_EVIDENCE_ITEMS = 24;
+const MAX_EVIDENCE_CHARACTERS = 700;
 
 export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly apiKey: string;
@@ -48,7 +51,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     model = DEFAULT_MODEL,
     endpoint = DEFAULT_ENDPOINT,
     fetchImpl = fetch,
-    maxImages = 12,
+    maxImages = DEFAULT_MAX_IMAGES,
     maxAttempts = 2,
     retryDelayMs = 250,
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
@@ -159,6 +162,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
               content: buildResponseContent(input, visualAssets)
             }
           ],
+          reasoning: { effort: "low" },
           text: {
             format: {
               type: "json_schema",
@@ -328,7 +332,7 @@ function buildResponseContent(
     content.push({
       type: "input_image",
       image_url: asset.assetUrl ?? "",
-      detail: "auto"
+      detail: "low"
     });
   }
 
@@ -352,15 +356,17 @@ function buildPrompt(
     )
     .slice(0, 1);
   const socialEvidence = selectBalancedBySource(
-    input.textEvidence.filter(
-      (evidence): evidence is typeof evidence & {
-        sourceType: "facebook_post" | "facebook_ad";
-      } =>
-        (evidence.sourceType === "facebook_post" ||
-          evidence.sourceType === "facebook_ad") &&
-        Boolean(evidence.text.trim())
+    deduplicateEvidence(
+      input.textEvidence.filter(
+        (evidence): evidence is typeof evidence & {
+          sourceType: "facebook_post" | "facebook_ad";
+        } =>
+          (evidence.sourceType === "facebook_post" ||
+            evidence.sourceType === "facebook_ad") &&
+          Boolean(evidence.text.trim())
+      )
     ),
-    60 - manualEvidence.length - groundedEvidence.length
+    MAX_SOCIAL_EVIDENCE_ITEMS
   );
   const textEvidence = [
     ...manualEvidence,
@@ -412,12 +418,25 @@ function buildPrompt(
     "Text evidence:",
     ...textEvidence.map(
       (evidence) =>
-        `- [${evidence.sourceType}:${evidence.sourceId}] ${evidence.text.slice(0, 1200)}`
+        `- [${evidence.sourceType}:${evidence.sourceId}] ${evidence.text.slice(0, MAX_EVIDENCE_CHARACTERS)}`
     ),
     "",
     "Available source asset paths:",
     ...visualAssets.map((asset) => `- ${asset.assetStoragePath}`)
   ].join("\n");
+}
+
+function deduplicateEvidence<T extends { text: string }>(
+  items: readonly T[]
+): T[] {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const fingerprint = item.text.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!fingerprint || seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
 }
 
 export function selectBalancedBySource<

@@ -19,6 +19,15 @@ export interface MappingSheetResult {
   extraction: MappingSheetExtraction;
 }
 
+export interface QuestionnaireExtractionReviewInput {
+  rows: readonly (readonly string[])[];
+  extractedFields: readonly QuestionnaireExtractedField[];
+}
+
+export type QuestionnaireExtractionReviewer = (
+  input: QuestionnaireExtractionReviewInput
+) => Promise<readonly QuestionnaireExtractedField[]>;
+
 export async function readMappingClientsFromGoogleSheet({
   sheetUrl,
   accessToken,
@@ -187,11 +196,13 @@ function parseCsvRows(value: string): string[][] {
 export async function readOnboardingQuestionnaireFromGoogleSheet({
   sheetUrl,
   accessToken,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  reviewExtraction
 }: {
   sheetUrl: string;
   accessToken: string;
   fetchImpl?: typeof fetch;
+  reviewExtraction?: QuestionnaireExtractionReviewer;
 }): Promise<OnboardingQuestionnaireSource | null> {
   const source = parseGoogleSheetUrl(sheetUrl);
   const metadata = await googleJson(
@@ -216,10 +227,13 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
     fetchImpl
   );
   const rows = readRows(valuesPayload);
-  const extractedFields = extractQuestionnaireFields(rows);
+  const deterministicFields = extractQuestionnaireFields(rows);
+  const extractedFields = reviewExtraction
+    ? await reviewExtraction({ rows, extractedFields: deterministicFields })
+    : deterministicFields;
   if (!extractedFields.length) {
     throw new Error(
-      `No questionnaire fields were found in "${QUESTIONNAIRE_SHEET_TITLE}". Expected placeholders such as {{brand_name_en}} in the first column.`
+      `No questionnaire fields were found in "${QUESTIONNAIRE_SHEET_TITLE}". Expected placeholders such as {{brand_name_en}} or a supported questionnaire heading.`
     );
   }
   const text = questionnaireFieldsToText(extractedFields);
@@ -240,50 +254,295 @@ const EMPTY_ANSWER_PATTERNS = [
   /^e\.g\.\s/i,
   /^please fill out\b/i
 ] as const;
+const QUESTIONNAIRE_HEADING_ALIASES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  brand_name_th: [
+    "ชื่อแบรนด์ภาษาไทย",
+    "ชื่อแบรนด์ (ภาษาไทย)",
+    "Brand Name in Thai",
+    "Brand Name in Thai (ชื่อแบรนด์ภาษาไทย)"
+  ],
+  brand_name_en: [
+    "ชื่อแบรนด์ภาษาอังกฤษ",
+    "ชื่อแบรนด์ (ภาษาอังกฤษ)",
+    "Brand Name in English",
+    "Brand Name in English (ชื่อแบรนด์ภาษาอังกฤษ)",
+    "Brand info. Brand"
+  ],
+  brand_name_pronunciation: [
+    "คำอ่านชื่อแบรนด์",
+    "การออกเสียงชื่อแบรนด์",
+    "Pronunciation",
+    "Pronunciation (การออกเสียง เช่น คอน-เวิด-เค้ก)"
+  ],
+  brand_description: [
+    "รายละเอียดแบรนด์",
+    "แบรนด์ของคุณทำอะไร",
+    "Brand Description",
+    "Brand Descripton",
+    "Brand Descripton (เล่าเกี่ยวกับแบรนด์สั้นๆ)"
+  ],
+  company_name: ["Company Name"],
+  company_address: ["Company Address"],
+  brand_media_channel_website: ["Website"],
+  brand_media_channel_facebook: ["Facebook"],
+  brand_media_channel_instagram: ["Instagram"],
+  brand_media_channel_tiktok: ["TikTok"],
+  brand_media_channel_line: ["Line"],
+  brand_media_channel_shopee: ["Shopee"],
+  brand_media_channel_lazada: ["Lazada"],
+  brand_media_channel_youtube: ["YouTube"],
+  marketing_challenge: ["โจทย์การตลาด", "ความท้าทายด้านการตลาด"],
+  marketing_obstacle: ["อุปสรรคด้านการตลาด", "ปัญหาด้านการตลาด"],
+  marketing_past_efforts: [
+    "สิ่งที่เคยทำด้านการตลาด",
+    "การตลาดที่ผ่านมา"
+  ],
+  marketing_additional_context: [
+    "ข้อมูลการตลาดเพิ่มเติม",
+    "บริบทการตลาดเพิ่มเติม"
+  ],
+  products_services_and_pricing: [
+    "สินค้า บริการ และราคา",
+    "สินค้าและบริการพร้อมราคา"
+  ],
+  products_growth_priority: [
+    "สินค้าหรือบริการที่ต้องการผลักดัน",
+    "สิ่งที่ต้องการผลักดัน"
+  ],
+  products_customer_pain_points: [
+    "ปัญหาของลูกค้า",
+    "Pain point ของลูกค้า",
+    "Customer pain points"
+  ],
+  products_target_customer: [
+    "กลุ่มลูกค้าเป้าหมาย",
+    "ลูกค้าเป้าหมาย",
+    "Target audience",
+    "Target customer"
+  ],
+  products_unique_selling_points: [
+    "จุดขายของสินค้าและบริการ",
+    "จุดเด่นของสินค้าและบริการ",
+    "USP",
+    "Unique selling point"
+  ],
+  products_main_competitors: ["คู่แข่งหลัก", "Main competitors"],
+  creative_references: [
+    "ตัวอย่างงานที่ชอบ",
+    "Creative references",
+    "Reference งานครีเอทีฟ"
+  ],
+  creative_restrictions: [
+    "ข้อจำกัดด้านครีเอทีฟ",
+    "สิ่งที่ไม่ควรทำในงานครีเอทีฟ",
+    "Creative restrictions"
+  ],
+  billing_method_messenger: []
+};
+const QUESTIONNAIRE_HEADING_TO_KEY = new Map(
+  Object.entries(QUESTIONNAIRE_HEADING_ALIASES).flatMap(([key, aliases]) =>
+    [key, questionnaireFieldLabel(key), ...aliases].map(
+      (heading) => [normalizeQuestionnaireHeading(heading), key] as const
+    )
+  )
+);
+const QUESTIONNAIRE_ANSWER_LOOKAHEAD_ROWS = 5;
 
 export function extractQuestionnaireFields(
   rows: readonly (readonly string[])[]
 ): readonly QuestionnaireExtractedField[] {
   const extracted: QuestionnaireExtractedField[] = [];
 
-  for (const row of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] ?? [];
     const placeholderIndex = row.findIndex((cell) =>
       QUESTIONNAIRE_FIELD_PATTERN.test(cell.trim())
     );
-    if (placeholderIndex < 0) continue;
-
-    const key = row[placeholderIndex]
-      ?.trim()
-      .match(QUESTIONNAIRE_FIELD_PATTERN)?.[1];
+    const headingMatch =
+      placeholderIndex < 0 ? findQuestionnaireHeading(row) : null;
+    const fieldIndex =
+      placeholderIndex >= 0 ? placeholderIndex : headingMatch?.index ?? -1;
+    const key =
+      placeholderIndex >= 0
+        ? row[placeholderIndex]
+            ?.trim()
+            .match(QUESTIONNAIRE_FIELD_PATTERN)?.[1]
+        : headingMatch?.key;
     if (!key) continue;
 
-    const candidates = row
-      .slice(placeholderIndex + 1)
-      .map((cell) => cell.trim())
-      .filter(Boolean);
-    const checkboxValue = candidates.find((value) =>
-      /^(true|false)$/i.test(value)
+    let candidates = questionnaireAnswerValues(
+      key,
+      row.slice(fieldIndex + 1)
     );
-    const values = checkboxValue
-      ? [checkboxValue.toLowerCase() === "true" ? "Yes" : "No"]
-      : candidates
-          .filter(
-            (value) =>
-              !EMPTY_ANSWER_PATTERNS.some((pattern) => pattern.test(value))
-          )
-          .map((value) => stripQuestionnaireInputPrefix(key, value))
-          .filter(Boolean);
-    const uniqueValues = [...new Set(values)];
-    if (!uniqueValues.length) continue;
+    if (!candidates.length && headingMatch) {
+      candidates = questionnaireAnswersBelow(rows, rowIndex, key);
+    }
+    if (!candidates.length) continue;
 
     extracted.push({
       key,
       label: questionnaireFieldLabel(key),
-      value: uniqueValues.join("\n\n")
+      value: [...new Set(candidates)].join("\n\n")
     });
   }
 
+  for (const row of rows) {
+    for (const cell of row) {
+      for (const field of questionnaireFieldsFromEmbeddedText(cell)) {
+        if (
+          !extracted.some(
+            (existing) =>
+              existing.key === field.key && existing.value === field.value
+          )
+        ) {
+          extracted.push(field);
+        }
+      }
+    }
+  }
+
   return extracted;
+}
+
+function questionnaireFieldsFromEmbeddedText(
+  value: string
+): QuestionnaireExtractedField[] {
+  const source = value.normalize("NFKC").replace(/\s+/g, " ").trim();
+  if (!source) return [];
+
+  const normalizedSource = source.toLocaleLowerCase("th-TH");
+  const candidates = Object.entries(QUESTIONNAIRE_HEADING_ALIASES).flatMap(
+    ([key, aliases]) =>
+      [questionnaireFieldLabel(key), ...aliases].flatMap((heading) => {
+        const normalizedHeading = heading
+          .normalize("NFKC")
+          .toLocaleLowerCase("th-TH");
+        const matches: { start: number; end: number; key: string }[] = [];
+        let start = normalizedSource.indexOf(normalizedHeading);
+        while (start >= 0) {
+          const end = start + normalizedHeading.length;
+          if (
+            isEmbeddedHeadingBoundary(normalizedSource[start - 1]) &&
+            isEmbeddedHeadingBoundary(normalizedSource[end])
+          ) {
+            matches.push({ start, end, key });
+          }
+          start = normalizedSource.indexOf(normalizedHeading, start + 1);
+        }
+        return matches;
+      })
+  );
+  candidates.sort(
+    (left, right) =>
+      left.start - right.start || right.end - right.start - (left.end - left.start)
+  );
+
+  const matches: typeof candidates = [];
+  for (const candidate of candidates) {
+    const previous = matches.at(-1);
+    if (previous && candidate.start < previous.end) continue;
+    matches.push(candidate);
+  }
+  if (!matches.length || (matches.length === 1 && matches[0]!.start > 80)) {
+    return [];
+  }
+
+  return matches.flatMap((match, index) => {
+    const nextStart = matches[index + 1]?.start ?? source.length;
+    const answer = cleanEmbeddedQuestionnaireAnswer(
+      source.slice(match.end, nextStart)
+    );
+    if (!answer) return [];
+    return [
+      {
+        key: match.key,
+        label: questionnaireFieldLabel(match.key),
+        value: answer
+      }
+    ];
+  });
+}
+
+function isEmbeddedHeadingBoundary(value: string | undefined): boolean {
+  return value === undefined || /[\s·•():：→\-]/.test(value);
+}
+
+function cleanEmbeddedQuestionnaireAnswer(value: string): string {
+  return value
+    .trim()
+    .replace(/^\([^)]*\)\s*/, "")
+    .replace(/^(?:→|:|：|-)\s*/, "")
+    .replace(/^[·•]\s*/, "")
+    .trim();
+}
+
+function questionnaireAnswerValues(
+  key: string,
+  cells: readonly string[]
+): string[] {
+  const candidates = cells.map((cell) => cell.trim()).filter(Boolean);
+  const checkboxValue = candidates.find((value) =>
+    /^(true|false)$/i.test(value)
+  );
+  return checkboxValue
+    ? [checkboxValue.toLowerCase() === "true" ? "Yes" : "No"]
+    : candidates
+        .filter(
+          (value) =>
+            !EMPTY_ANSWER_PATTERNS.some((pattern) => pattern.test(value))
+        )
+        .map((value) => stripQuestionnaireInputPrefix(key, value))
+        .filter(Boolean);
+}
+
+function questionnaireAnswersBelow(
+  rows: readonly (readonly string[])[],
+  headingRowIndex: number,
+  key: string
+): string[] {
+  const answerCells: string[] = [];
+  const endIndex = Math.min(
+    rows.length,
+    headingRowIndex + QUESTIONNAIRE_ANSWER_LOOKAHEAD_ROWS + 1
+  );
+  for (let rowIndex = headingRowIndex + 1; rowIndex < endIndex; rowIndex += 1) {
+    const row = rows[rowIndex] ?? [];
+    if (hasQuestionnaireFieldMarker(row)) break;
+    answerCells.push(...row);
+  }
+  return questionnaireAnswerValues(key, answerCells);
+}
+
+function hasQuestionnaireFieldMarker(row: readonly string[]): boolean {
+  return (
+    row.some((cell) => QUESTIONNAIRE_FIELD_PATTERN.test(cell.trim())) ||
+    findQuestionnaireHeading(row) !== null
+  );
+}
+
+function findQuestionnaireHeading(
+  row: readonly string[]
+): { index: number; key: string } | null {
+  for (let index = 0; index < row.length; index += 1) {
+    const key = QUESTIONNAIRE_HEADING_TO_KEY.get(
+      normalizeQuestionnaireHeading(row[index] ?? "")
+    );
+    if (key) return { index, key };
+  }
+  return null;
+}
+
+function normalizeQuestionnaireHeading(value: string): string {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("th-TH")
+    .replace(/^[0-9๐-๙]+\s*[.)\-:]\s*/, "")
+    .replace(/[?*：:]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function questionnaireFieldsToText(
@@ -304,7 +563,7 @@ function questionnaireFieldsToText(
     .slice(0, ONBOARDING_QUESTIONNAIRE_MAX_LENGTH);
 }
 
-function questionnaireFieldLabel(key: string): string {
+export function questionnaireFieldLabel(key: string): string {
   const abbreviations: Record<string, string> = {
     th: "TH",
     en: "EN",
@@ -315,6 +574,10 @@ function questionnaireFieldLabel(key: string): string {
     .map((word) => abbreviations[word] ?? word)
     .join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function questionnaireKnownFieldKeys(): readonly string[] {
+  return Object.keys(QUESTIONNAIRE_HEADING_ALIASES);
 }
 
 function stripQuestionnaireInputPrefix(key: string, value: string): string {

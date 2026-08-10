@@ -8,6 +8,7 @@ import {
   readMappingClientsFromGoogleSheet,
   readOnboardingQuestionnaireFromGoogleSheet
 } from "./mapping-client-sheet.js";
+import { reviewQuestionnaireExtractionWithLuna } from "./questionnaire-extraction-qc-agent.js";
 
 export interface MappingClientsEndpointEnv
   extends GoogleWorkspaceAuthEnv {
@@ -15,6 +16,8 @@ export interface MappingClientsEndpointEnv
   SUPABASE_ANON_KEY?: string;
   MAPPING_CLIENTS_GOOGLE_SHEET_URL?: string;
   GOOGLE_WORKSPACE_LOCAL_USER?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_QUESTIONNAIRE_QC_MODEL?: string;
 }
 
 export interface MappingClientsEndpointOptions {
@@ -23,6 +26,7 @@ export interface MappingClientsEndpointOptions {
   oidcToken?: string;
   fetchImpl?: typeof fetch;
   createSheetsAccessToken?: typeof createGoogleSheetsAccessToken;
+  reviewQuestionnaireExtraction?: typeof reviewQuestionnaireExtractionWithLuna;
 }
 
 export async function handleMappingClientsRequest({
@@ -30,7 +34,8 @@ export async function handleMappingClientsRequest({
   env,
   oidcToken,
   fetchImpl = fetch,
-  createSheetsAccessToken = createGoogleSheetsAccessToken
+  createSheetsAccessToken = createGoogleSheetsAccessToken,
+  reviewQuestionnaireExtraction = reviewQuestionnaireExtractionWithLuna
 }: MappingClientsEndpointOptions): Promise<Response> {
   if (request.method !== "GET") {
     return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
@@ -58,10 +63,22 @@ export async function handleMappingClientsRequest({
           403
         );
       }
+      const openAiApiKey = required(
+        env.OPENAI_API_KEY,
+        "OPENAI_API_KEY for questionnaire QC"
+      );
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
         accessToken: googleAccessToken,
-        fetchImpl
+        fetchImpl,
+        reviewExtraction: ({ rows, extractedFields }) =>
+          reviewQuestionnaireExtraction({
+            rows,
+            extractedFields,
+            apiKey: openAiApiKey,
+            model: env.OPENAI_QUESTIONNAIRE_QC_MODEL,
+            fetchImpl
+          })
       });
       return jsonResponse({ ok: true, questionnaire });
     }

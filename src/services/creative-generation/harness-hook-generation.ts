@@ -40,7 +40,6 @@ export interface HookGenerationHarnessRequest {
   brief: string;
   onboardingQuestionnaire: string;
   extraInstructions: string;
-  existingHooks: readonly { hook: string; concept: string }[];
   attachments: readonly string[];
   uploadedMaterials: readonly Pick<
     UploadedCreativeMaterial,
@@ -146,10 +145,6 @@ export function buildHookGenerationHarnessRequest({
       brand?.onboardingQuestionnaire
     ),
     extraInstructions: extraInstructions?.trim() ?? "",
-    existingHooks: run.directions.map((direction) => ({
-      hook: direction.hook,
-      concept: direction.concept
-    })),
     attachments: run.attachments,
     uploadedMaterials: selectedUploadedMaterials(run).map(
       ({ id, name, mediaType, role, description, url }) => ({

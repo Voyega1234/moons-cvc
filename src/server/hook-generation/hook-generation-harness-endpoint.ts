@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -16,19 +15,12 @@ import {
   type ServiceType,
   type UgcVideoBrief
 } from "../../domain/creative-run.js";
-import type { Database } from "../../lib/supabase/database.types.js";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
 import type { RawDirection } from "../../services/creative-generation/hook-generation-types.js";
 import {
-  resolveConvertCakeAuthorization,
-  type ConvertCakeAuthorization
+  resolveConvertCakeAuthorization
 } from "../shared/convert-cake-auth.js";
-import {
-  fetchPastPostExamples,
-  selectPastPostsForCaption,
-  type PastPostExample,
-  type PastPostsClient
-} from "./past-posts.js";
+import { createAiUsageTrackingFetch } from "../shared/ai-usage-recorder.js";
 import {
   hookGenerationDebugLogDirectory,
   writeHookGenerationDebugLog,
@@ -61,11 +53,6 @@ export interface HookGenerationHarnessEndpointOptions {
   request: Request;
   env: HookGenerationHarnessEndpointEnv;
   fetchImpl?: FetchLike;
-  createPastPostsClient?: (options: {
-    supabaseUrl: string;
-    supabaseAnonKey: string;
-    accessToken: string;
-  }) => PastPostsClient;
   loadAgentHookPrompt?: () => Promise<string>;
   loadHookResearchPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
@@ -122,7 +109,8 @@ interface ResearchAudit {
   citationUrls: readonly string[];
 }
 
-const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_HOOK_MODEL = "google/gemini-3.6-flash";
+const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
 const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.6-flash";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -140,17 +128,10 @@ const THAI_WEB_SEARCH_TOOL = {
     timezone: "Asia/Bangkok"
   }
 } as const;
-const OPENROUTER_WEB_PLUGIN = {
-  id: "web",
-  engine: "native",
-  max_results: 5
-} as const;
-
 export async function handleHookGenerationHarnessRequest({
   request,
   env,
   fetchImpl = fetch,
-  createPastPostsClient = defaultCreatePastPostsClient,
   loadAgentHookPrompt = defaultLoadAgentHookPrompt,
   loadHookResearchPrompt = defaultLoadHookResearchPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
@@ -175,6 +156,18 @@ export async function handleHookGenerationHarnessRequest({
     }
 
     const input = parseRequestBody(await request.json());
+    const providerFetchImpl = createAiUsageTrackingFetch({
+      fetchImpl,
+      context: {
+        supabaseUrl: env.SUPABASE_URL,
+        supabaseAnonKey: env.SUPABASE_ANON_KEY,
+        accessToken: auth.accessToken,
+        ownerUserId: auth.userId,
+        clientId: input.brand?.id ?? null,
+        workspaceRunId: input.runId,
+        operation: "hook-generation"
+      }
+    });
     const generationProvider =
       input.generationModel === DEFAULT_OPENROUTER_MODEL
         ? "openrouter"
@@ -196,28 +189,23 @@ export async function handleHookGenerationHarnessRequest({
           DEFAULT_OPENROUTER_MODEL
         : env.OPENAI_HOOK_GENERATION_MODEL?.trim() ||
           input.generationModel ||
-          DEFAULT_MODEL;
+          DEFAULT_OPENAI_MODEL;
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
+    const researchModel =
+      env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
     const agentHookPrompt = await loadAgentHookPrompt();
     const hookResearchPrompt = await loadHookResearchPrompt();
     const subheadlineHighlightPrompt =
       await loadSubheadlineHighlightPrompt();
     const generationBatches = buildHookGenerationBatches(input);
-    const pastPosts = await loadPastPostExamples({
-      input,
-      env,
-      auth,
-      createPastPostsClient
-    });
     const researchTrace = await withTransientRetry(() =>
       runHookResearchStep({
         input,
         policyPrompt: hookResearchPrompt,
-        apiKey: generationApiKey,
-        model,
-        provider: generationProvider,
-        fetchImpl
+        apiKey: openAiApiKey,
+        model: researchModel,
+        fetchImpl: providerFetchImpl
       })
     );
     const directTraces = await mapWithConcurrency(
@@ -227,13 +215,12 @@ export async function handleHookGenerationHarnessRequest({
         withTransientRetry(() =>
           runGenerationStep({
             input: batch,
-            pastPosts,
             agentHookPrompt,
             researchDossier: researchTrace.output,
             apiKey: generationApiKey,
             model,
             provider: generationProvider,
-            fetchImpl
+            fetchImpl: providerFetchImpl
           })
         )
     );
@@ -257,7 +244,7 @@ export async function handleHookGenerationHarnessRequest({
       model: generationProvider === "openrouter" ? model : supportModel,
       provider: generationProvider,
       prompt: subheadlineHighlightPrompt,
-      fetchImpl
+      fetchImpl: providerFetchImpl
     });
     const debugDirectory =
       env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim() ||
@@ -267,9 +254,9 @@ export async function handleHookGenerationHarnessRequest({
         debugDirectory,
         buildDirectHookGenerationDebugLog({
           input,
-          generationBatches,
           researchTrace,
           directTraces,
+          researchModel,
           generationProvider,
           generationModel: model,
           finalDirections: highlightedDirections
@@ -301,58 +288,8 @@ async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
   );
 }
 
-function defaultCreatePastPostsClient({
-  supabaseUrl,
-  supabaseAnonKey,
-  accessToken
-}: {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-  accessToken: string;
-}): PastPostsClient {
-  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } }
-  }) as unknown as PastPostsClient;
-}
-
-async function loadPastPostExamples({
-  input,
-  env,
-  auth,
-  createPastPostsClient
-}: {
-  input: HookGenerationHarnessRequest;
-  env: HookGenerationHarnessEndpointEnv;
-  auth: ConvertCakeAuthorization;
-  createPastPostsClient: (options: {
-    supabaseUrl: string;
-    supabaseAnonKey: string;
-    accessToken: string;
-  }) => PastPostsClient;
-}): Promise<readonly PastPostExample[]> {
-  const supabaseUrl = env.SUPABASE_URL?.trim();
-  const supabaseAnonKey = env.SUPABASE_ANON_KEY?.trim();
-  if (!input.brand || !supabaseUrl || !supabaseAnonKey || !auth.accessToken) {
-    return [];
-  }
-
-  try {
-    const client = createPastPostsClient({
-      supabaseUrl,
-      supabaseAnonKey,
-      accessToken: auth.accessToken
-    });
-    return await fetchPastPostExamples({ client, clientId: input.brand.id });
-  } catch (error) {
-    console.warn("Could not load Hook Agent past-post examples.", error);
-    return [];
-  }
-}
-
 async function runGenerationStep({
   input,
-  pastPosts,
   agentHookPrompt,
   researchDossier,
   apiKey,
@@ -361,7 +298,6 @@ async function runGenerationStep({
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
-  pastPosts: readonly PastPostExample[];
   agentHookPrompt: string;
   researchDossier: HookResearchDossier;
   apiKey: string;
@@ -372,7 +308,6 @@ async function runGenerationStep({
   const inputText = buildDirectHookGenerationPrompt(
     input,
     agentHookPrompt,
-    pastPosts,
     researchDossier
   );
   const requestDirections = (requestInputText: string) =>
@@ -380,14 +315,7 @@ async function runGenerationStep({
       apiKey,
       model,
       fetchImpl,
-      content: [
-        { type: "input_text", text: requestInputText },
-        ...input.uploadedMaterials.map((material) => ({
-          type: "input_image" as const,
-          image_url: material.url,
-          detail: "high" as const
-        }))
-      ],
+      content: [{ type: "input_text", text: requestInputText }],
       schemaName: "moons_hook_generation",
       schema: hookGenerationSchema,
       reasoningEffort:
@@ -457,14 +385,12 @@ async function runHookResearchStep({
   policyPrompt,
   apiKey,
   model,
-  provider,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
   policyPrompt: string;
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookResearchDossier>> {
   const inputText = buildHookResearchPrompt(policyPrompt, buildInputBlock(input));
@@ -475,12 +401,10 @@ async function runHookResearchStep({
     content: [{ type: "input_text", text: inputText }],
     schemaName: "moons_hook_research",
     schema: hookResearchSchema,
-    tools: provider === "openai" ? [THAI_WEB_SEARCH_TOOL] : undefined,
-    plugins: provider === "openrouter" ? [OPENROUTER_WEB_PLUGIN] : undefined,
-    toolChoice: provider === "openai" ? "required" : undefined,
-    reasoningEffort:
-      provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
-    provider
+    tools: [THAI_WEB_SEARCH_TOOL],
+    toolChoice: "required",
+    reasoningEffort: HOOK_GENERATION_REASONING_EFFORT,
+    provider: "openai"
   });
   return {
     inputText,
@@ -492,17 +416,17 @@ async function runHookResearchStep({
 
 function buildDirectHookGenerationDebugLog({
   input,
-  generationBatches,
   researchTrace,
   directTraces,
+  researchModel,
   generationProvider,
   generationModel,
   finalDirections
 }: {
   input: HookGenerationHarnessRequest;
-  generationBatches: readonly HookGenerationHarnessRequest[];
   researchTrace: TracedAgentResult<HookResearchDossier>;
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
+  researchModel: string;
   generationProvider: "openai" | "openrouter";
   generationModel: string;
   finalDirections: readonly GeneratedDirection[];
@@ -517,21 +441,16 @@ function buildDirectHookGenerationDebugLog({
     runId: input.runId,
     hookIdeaMode: input.hookIdeaMode,
     researchAgent: {
-      provider: generationProvider,
-      model: generationModel,
+      provider: "openai",
+      model: researchModel,
       promptSource: "agent_prompt/agent_hook_research.md",
       request: {
-        endpoint,
+        endpoint: "/v1/responses",
         inputText: researchTrace.inputText,
-        tools: generationProvider === "openai" ? [THAI_WEB_SEARCH_TOOL] : [],
-        plugins:
-          generationProvider === "openrouter" ? [OPENROUTER_WEB_PLUGIN] : [],
-        ...(generationProvider === "openai"
-          ? {
-              toolChoice: "required" as const,
-              reasoningEffort: HOOK_GENERATION_REASONING_EFFORT
-            }
-          : {}),
+        tools: [THAI_WEB_SEARCH_TOOL],
+        plugins: [],
+        toolChoice: "required" as const,
+        reasoningEffort: HOOK_GENERATION_REASONING_EFFORT,
         responseSchema: "moons_hook_research" as const
       },
       response: {
@@ -544,7 +463,7 @@ function buildDirectHookGenerationDebugLog({
       provider: generationProvider,
       model: generationModel,
       promptSource: "agent_prompt/agent_hook.md",
-      batches: directTraces.map((trace, index) => ({
+      batches: directTraces.map((trace) => ({
         request: {
           endpoint,
           inputText: trace.inputText,
@@ -553,16 +472,7 @@ function buildDirectHookGenerationDebugLog({
           ...(generationProvider === "openai"
             ? { reasoningEffort: HOOK_GENERATION_REASONING_EFFORT }
             : {}),
-          attachedImages: (
-            generationBatches[index]?.uploadedMaterials ?? []
-          ).map((material) => ({
-            id: material.id,
-            name: material.name,
-            mediaType: material.mediaType,
-            role: material.role,
-            description: material.description,
-            detail: "high" as const
-          })),
+          attachedImages: [],
           responseSchema: "moons_hook_generation" as const
         },
         response: {
@@ -1034,10 +944,8 @@ function openRouterCompatibleSchema(value: unknown): unknown {
 function buildDirectHookGenerationPrompt(
   input: HookGenerationHarnessRequest,
   agentHookPrompt: string,
-  pastPosts: readonly PastPostExample[],
   researchDossier: HookResearchDossier
 ): string {
-  const pastPostExamples = selectPastPostsForCaption(pastPosts);
   return [
     agentHookPrompt,
     "",
@@ -1045,23 +953,8 @@ function buildDirectHookGenerationPrompt(
     "Research status: completed by the dedicated Research Agent. Hook Agent must not perform additional research.",
     "",
     buildInputBlock(input),
-    ...(pastPostExamples.length
-      ? [
-          "",
-          "# Past posts — direct brand evidence",
-          "ใช้โพสต์เหล่านี้เพื่อเข้าใจ mood, style, language, rhythm, personality, CTA behavior และรายละเอียดที่แบรนด์เคยสื่อสาร โดยให้ Current Brief มีลำดับสูงสุด.",
-          "ห้ามนำ Hook, slogan, joke, campaign angle, narrative structure, content format หรือ creative execution จากโพสต์เก่ามาทำซ้ำ. Past posts ไม่ใช่ตัวอย่างที่ต้องทำตาม.",
-          ...pastPostExamples.map(
-            (post, index) =>
-              `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
-          )
-        ]
-      : []),
     "",
     hookResearchDossierBlock(researchDossier),
-    "",
-    "# Past content data",
-    buildPastPostsBlock(pastPostExamples),
     "",
     "# Required output mix",
     `คืน ${input.quantity} directions ให้ครบและเรียงตาม quota นี้: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
@@ -1078,107 +971,27 @@ function buildDirectHookGenerationPrompt(
   ].join("\n");
 }
 
-function buildPastPostsBlock(pastPosts: readonly PastPostExample[]): string {
-  if (pastPosts.length === 0) {
-    return [
-      "ตัวอย่างโพสต์เก่าของเพจนี้:",
-      "ไม่มีข้อมูลโพสต์เก่าของเพจนี้ในระบบ ให้เขียน caption ตามโทนของ Brand Memory และ Brief แทน"
-    ].join("\n");
-  }
-
-  return [
-    "ตัวอย่าง caption จริงจากโพสต์และโฆษณาเก่าของเพจนี้ (วิเคราะห์ร่วมกันเพื่อหา format และรายละเอียดที่เกิดซ้ำ ห้ามคัดลอกใจความ campaign):",
-    ...pastPosts.map(
-      (post, index) =>
-        `${index + 1}. [${post.source === "organic_post" ? "โพสต์ organic" : "แคปชั่นโฆษณา"}] ${post.text}`
-    )
-  ].join("\n");
-}
-
 function buildInputBlock(input: HookGenerationHarnessRequest): string {
   const brief = hookRelevantBrief(input.brief);
   const roundInstructions = hookRelevantRoundInstructions(
     input.extraInstructions
   );
-  const brandContext = input.brandLibrary.brand.filter(
-    isHookRelevantLibraryItem
+  const brandSystem = input.brandLibrary.brand.map(
+    (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
   );
   return [
-    "## Creative Compass current input",
-    `Hook idea mode: ${input.hookIdeaMode}`,
-    `Brand: ${input.brand?.name ?? "Unknown"}`,
-    `Category: ${input.brand?.category ?? "Unknown"}`,
-    `Service: ${input.service}`,
-    `Content-type quotas: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
-    `Album layout preference: ${input.albumFormat ?? defaultAlbumFormatPreference}`,
+    "# Questionnaire",
+    input.onboardingQuestionnaire || "No questionnaire context supplied.",
     "",
-    "Current User Brief — highest priority for explicit campaign requirements:",
+    "# Brand name",
+    input.brand?.name ?? "Unknown",
+    "",
+    "# Brand system",
+    ...(brandSystem.length ? brandSystem : ["No brand system supplied."]),
+    "",
+    "# User brief",
     brief,
-    "",
-    ...(roundInstructions
-      ? [
-          "Additional direction for this round — HIGH PRIORITY, on top of the brief above:",
-          roundInstructions,
-          ""
-        ]
-      : []),
-    ...(input.existingHooks.length
-      ? [
-          "Hooks already generated and shown to the user in this run — DO NOT repeat these hooks, concepts, or angles. Every new idea must be meaningfully different (new audience moment, new angle, new proof point, new visual metaphor — not just reworded):",
-          ...input.existingHooks.map(
-            (item, index) => `${index + 1}. Hook: ${item.hook} — Concept: ${item.concept}`
-          ),
-          ""
-        ]
-      : []),
-    "Brand Memory — What's working:",
-    ...input.brandMemory.working.map(
-      (item) => `- ${cleanHookContextText(item)}`
-    ),
-    "",
-    "Brand Memory — What to avoid:",
-    ...input.brandMemory.avoid.map(
-      (item) => `- ${cleanHookContextText(item)}`
-    ),
-    "",
-    ...(brandContext.length
-      ? [
-          "Brand context — strategy and voice only:",
-          ...brandContext.map(
-            (item) =>
-              `- ${item.title}: ${cleanHookContextText(item.description)}`
-          ),
-          ""
-        ]
-      : []),
-    "Brand kit:",
-    ...brandContext.map(
-      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
-    ),
-    "",
-    "Products / offers / benefits / audience / claim notes:",
-    ...input.brandLibrary.products.map(
-      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
-    ),
-    "",
-    "Documents:",
-    ...input.brandLibrary.docs.map(
-      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
-    ),
-    "",
-    "References:",
-    ...input.brandLibrary.refs.map(
-      (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
-    ),
-    "",
-    "Attached file names:",
-    ...input.attachments.map((item) => `- ${item}`),
-    "",
-    "Uploaded creative image materials (the images follow this text in the same order):",
-    ...input.uploadedMaterials.map(
-      (item, index) =>
-        `${index + 1}. ${item.name} | role=${item.role} | usage note=${item.description || "No additional note"}`
-    )
+    ...(roundInstructions ? ["", roundInstructions] : [])
   ].join("\n");
 }
 
@@ -1204,15 +1017,6 @@ function hookRelevantRoundInstructions(value: string): string {
     .filter((line) => !line.trim().startsWith("Creative mix quota:"))
     .join("\n")
     .trim();
-}
-
-function isHookRelevantLibraryItem(item: {
-  title: string;
-  description: string;
-}): boolean {
-  return !/(?:^logo$|visual guidance|brand ci|brand guideline|style guide|identity guideline|art direction|typography|font|colou?r system|graphic system|layout)/i.test(
-    item.title.trim()
-  );
 }
 
 function cleanHookContextText(value: string): string {
@@ -1394,7 +1198,6 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       typeof value.extraInstructions === "string"
         ? value.extraInstructions
         : "",
-    existingHooks: readExistingHooks(value.existingHooks),
     attachments,
     uploadedMaterials,
     brandMemory: {
@@ -1461,7 +1264,7 @@ function readHookIdeaMode(value: unknown): HookIdeaMode {
 }
 
 function readHookGenerationModel(value: unknown): HookGenerationModel {
-  if (value === undefined) return DEFAULT_MODEL;
+  if (value === undefined) return DEFAULT_HOOK_MODEL;
   if (
     typeof value === "string" &&
     hookGenerationModels.includes(value as HookGenerationModel)
@@ -1511,23 +1314,6 @@ function readUploadedMaterials(
       url
     };
   });
-}
-
-function readExistingHooks(
-  value: unknown
-): HookGenerationHarnessRequest["existingHooks"] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter(isRecord)
-    .filter(
-      (item) =>
-        typeof item.hook === "string" && typeof item.concept === "string"
-    )
-    .map((item) => ({
-      hook: item.hook as string,
-      concept: item.concept as string
-    }));
 }
 
 function readContentTypeQuotas(

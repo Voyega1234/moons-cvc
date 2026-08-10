@@ -205,15 +205,17 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("defaults hook generation to OpenAI and allows OpenRouter Gemini", () => {
-    expect(initialWorkflowState.hookGenerationModel).toBe("gpt-5.6-terra");
+  it("defaults hook generation to OpenRouter Gemini and allows OpenAI", () => {
+    expect(initialWorkflowState.hookGenerationModel).toBe(
+      "google/gemini-3.6-flash"
+    );
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-hook-generation-model",
-      model: "google/gemini-3.6-flash"
+      model: "gpt-5.6-terra"
     });
 
-    expect(updated.hookGenerationModel).toBe("google/gemini-3.6-flash");
+    expect(updated.hookGenerationModel).toBe("gpt-5.6-terra");
   });
 
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {
