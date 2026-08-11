@@ -31,7 +31,7 @@ type ResponseContent =
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
-const DEFAULT_REQUEST_TIMEOUT_MS = 75_000;
+export const DEFAULT_BRAND_VISUAL_ANALYSIS_REQUEST_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_IMAGES = 8;
 const MAX_SOCIAL_EVIDENCE_ITEMS = 24;
 const MAX_EVIDENCE_CHARACTERS = 700;
@@ -54,7 +54,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     maxImages = DEFAULT_MAX_IMAGES,
     maxAttempts = 2,
     retryDelayMs = 250,
-    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
+    requestTimeoutMs = DEFAULT_BRAND_VISUAL_ANALYSIS_REQUEST_TIMEOUT_MS
   }: OpenAiBrandVisualAnalyzerOptions) {
     if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
 

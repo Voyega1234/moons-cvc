@@ -1,7 +1,7 @@
 import { handleClientIngestionWorkerRequest } from "../src/server/client-ingestion/client-ingestion-worker-endpoint.js";
 
 export const config = {
-  maxDuration: 300
+  maxDuration: 900
 };
 
 type VercelRequest = {

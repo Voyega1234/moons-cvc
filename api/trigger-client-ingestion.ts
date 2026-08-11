@@ -2,7 +2,7 @@ import { waitUntil } from "@vercel/functions";
 import { handleClientIngestionTriggerRequest } from "../src/server/client-ingestion/client-ingestion-trigger-endpoint.js";
 
 export const config = {
-  maxDuration: 300
+  maxDuration: 900
 };
 
 type VercelRequest = {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_BRAND_VISUAL_ANALYSIS_REQUEST_TIMEOUT_MS,
   extractResponseText,
   OpenAiBrandVisualAnalyzer,
   parseBrandSignalAnalysisJson,
@@ -60,6 +61,10 @@ const responseAnalysis = {
 };
 
 describe("OpenAiBrandVisualAnalyzer", () => {
+  it("allows the current analysis model five minutes per visual or text-only attempt", () => {
+    expect(DEFAULT_BRAND_VISUAL_ANALYSIS_REQUEST_TIMEOUT_MS).toBe(300_000);
+  });
+
   it("balances Posts and Ads evidence when both sources are available", () => {
     const posts = Array.from({ length: 10 }, (_, index) => ({
       sourceType: "facebook_post" as const,
