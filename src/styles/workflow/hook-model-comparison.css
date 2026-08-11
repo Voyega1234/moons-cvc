@@ -85,58 +85,72 @@
   line-height: 1.4;
 }
 
-.compass-app .compass-hook-model-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.compass-app .compass-hook-model-tag {
-  max-width: 100%;
-  min-height: 30px;
-  display: inline-flex;
-  align-items: center;
+.compass-app .compass-hook-model-options {
+  max-height: 240px;
+  display: grid;
   gap: 6px;
-  padding: 4px 5px 4px 9px;
-  border: 1px solid var(--accentLine);
-  border-radius: 999px;
-  background: var(--accentSoft);
-  color: var(--ink);
+  overflow-y: auto;
 }
 
-.compass-app .compass-hook-model-tag code {
+.compass-app .compass-hook-model-option {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.compass-app .compass-hook-model-option[data-selected="true"] {
+  border-color: var(--accentLine);
+  background: var(--accentSoft);
+}
+
+.compass-app .compass-hook-model-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.compass-app .compass-hook-model-option > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-hook-model-option strong,
+.compass-app .compass-hook-model-option code {
   overflow: hidden;
   font-family: inherit;
-  font-size: 10.5px;
-  font-weight: 700;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compass-app .compass-hook-model-tag button {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
+.compass-app .compass-hook-model-option strong {
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.compass-app .compass-hook-model-option code,
+.compass-app .compass-hook-model-option small {
   color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
+  font-size: 9.5px;
 }
 
-.compass-app .compass-hook-model-tag button:hover:not(:disabled) {
-  border-color: var(--accentLine);
-  background: rgba(89, 104, 255, 0.12);
-  color: var(--ink);
+.compass-app .compass-hook-model-option small {
+  white-space: nowrap;
 }
 
-.compass-app .compass-hook-model-tag button:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+.compass-app .compass-hook-model-option:focus-within {
+  outline: 3px solid var(--accentSoft);
+  outline-offset: 1px;
 }
 
 .compass-app .compass-hook-model-form {

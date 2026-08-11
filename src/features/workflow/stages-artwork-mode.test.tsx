@@ -6,15 +6,37 @@ import {
   within
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useReducer } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
 import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-brand-memory-repository";
-import { createInitialWorkflowState } from "./reducer";
+import { createInitialWorkflowState, workflowReducer } from "./reducer";
 import { DirectionsStage } from "./stages";
 import { BriefConfirmationModal } from "./stages/brief-confirmation-modal";
+import { HookGenerationModelSelect } from "./stages/shared";
 import { buildDirectionFixtures } from "./test-fixtures";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
+
+function StatefulHookModelPicker() {
+  const [state, dispatch] = useReducer(
+    workflowReducer,
+    createInitialWorkflowState({
+      id: "hook-model-picker-run",
+      now: "2026-08-11T08:00:00.000Z"
+    })
+  );
+  return (
+    <HookGenerationModelSelect
+      disabled={false}
+      state={state}
+      dispatch={dispatch}
+    />
+  );
+}
 
 describe("Artwork generation settings", () => {
   it("keeps hook generation controls on Hook and moves artwork controls into confirmation", async () => {
@@ -37,7 +59,7 @@ describe("Artwork generation settings", () => {
     );
 
     const hookModelPicker = screen.getByLabelText("Hook generation models");
-    expect(hookModelPicker.textContent).toContain("Compare 3 models");
+    expect(hookModelPicker.textContent).toContain("Gemini 3.6 Flash");
     await user.click(hookModelPicker);
     expect(screen.queryByText("Compass New")).toBeNull();
     expect(
@@ -53,8 +75,6 @@ describe("Artwork generation settings", () => {
       type: "set-hook-generation-models",
       models: [
         "google/gemini-3.6-flash",
-        "anthropic/claude-sonnet-4.6",
-        "openai/gpt-5.6-terra",
         "sakana/sakana-namazu"
       ]
     });
@@ -137,6 +157,70 @@ describe("Artwork generation settings", () => {
       type: "set-artwork-brief",
       brief: "Use one natural window light and avoid visible scent effects."
     });
+  });
+
+  it("saves added Hook models separately from per-run selection", async () => {
+    const user = userEvent.setup();
+    const firstView = render(<StatefulHookModelPicker />);
+
+    await user.click(screen.getByLabelText("Hook generation models"));
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Select qwen/qwen3.8-max"
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(false);
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select qwen/qwen3.8-max" })
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Unselect qwen/qwen3.8-max" })
+    );
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Select qwen/qwen3.8-max"
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(false);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "OpenRouter model ID" }),
+      "sakana/sakana-namazu"
+    );
+    await user.click(screen.getByRole("button", { name: "Add model" }));
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Unselect sakana/sakana-namazu"
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(true);
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Unselect sakana/sakana-namazu"
+      })
+    );
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Select sakana/sakana-namazu"
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(false);
+
+    firstView.unmount();
+    render(<StatefulHookModelPicker />);
+    await user.click(screen.getByLabelText("Hook generation models"));
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Select sakana/sakana-namazu"
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(false);
   });
 
   it("presents a saved non-visible artwork mode as Standard", () => {

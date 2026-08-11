@@ -98,17 +98,19 @@ The Research Agent always uses OpenAI with `web_search_preview` and Thailand
 location context and `medium` reasoning effort, even when the Hook Agent is
 routed through OpenRouter. The
 Hook Agent receives the dossier without a search tool so research and creative
-judgment remain separate. New runs default to a three-model comparison between
-`google/gemini-3.6-flash`, `qwen/qwen3.8-max`, and
-`openai/gpt-5.6-terra` through OpenRouter.
+judgment remain separate. New runs default to selecting only
+`google/gemini-3.6-flash` through OpenRouter. `qwen/qwen3.8-max` and
+`openai/gpt-5.6-terra` remain available in the saved-model catalog but are not
+selected by default.
 Users may select one to five Hook models. Direct Hook runs create one Research
 dossier first, reuse it for every selected model, and start all selected model
 requests concurrently. A failed model no longer discards successful results
 from the other models. The client
 records the originating model on every direction and groups the review cards
-into model columns inside each content type. The Hook picker stores
-OpenRouter `author/slug` model IDs as removable tags, accepts custom IDs, and
-links to the OpenRouter model catalog. The n8n route is hidden from this picker;
+into model columns inside each content type. The Hook picker saves custom
+OpenRouter `author/slug` model IDs in a persistent catalog and uses checkboxes
+to select up to five models per run. Unselecting a model does not delete it from
+the catalog. The picker links to the OpenRouter model catalog. The n8n route is hidden from this picker;
 its backend integration remains available for legacy compatibility. Legacy workspaces
 without a saved model list retain their single saved model, while Hook API
 requests without an explicit model still default to

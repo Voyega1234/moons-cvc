@@ -12,9 +12,41 @@ import {
   hookGenerationModelLabel,
   isOpenRouterModelId,
   MAX_HOOK_GENERATION_MODELS,
+  openRouterHookGenerationModels,
   type HookGenerationModel
 } from "../../../domain/creative-run";
 import type { WorkflowAction, WorkflowState } from "../model";
+
+const SAVED_HOOK_MODELS_STORAGE_KEY = "moons.saved-hook-models.v1";
+
+function readSavedHookModels(): readonly HookGenerationModel[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(SAVED_HOOK_MODELS_STORAGE_KEY) ?? "[]"
+    );
+    return Array.isArray(parsed)
+      ? Array.from(
+          new Set(
+            parsed.filter(
+              (model): model is HookGenerationModel =>
+                isOpenRouterModelId(model)
+            )
+          )
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHookModels(models: readonly HookGenerationModel[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    SAVED_HOOK_MODELS_STORAGE_KEY,
+    JSON.stringify(models.filter(isOpenRouterModelId))
+  );
+}
 
 export interface StageProps {
   state: WorkflowState;
@@ -63,6 +95,8 @@ export function HookGenerationModelSelect({
   const [open, setOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState("");
   const [modelError, setModelError] = useState<string | null>(null);
+  const [savedModels, setSavedModels] =
+    useState<readonly HookGenerationModel[]>(readSavedHookModels);
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -76,6 +110,13 @@ export function HookGenerationModelSelect({
     ? visibleStoredModels
     : [...defaultHookGenerationModels];
   const selectedSet = new Set(selectedModels);
+  const savedModelCatalog = Array.from(
+    new Set<HookGenerationModel>([
+      ...openRouterHookGenerationModels,
+      ...savedModels,
+      ...selectedModels
+    ])
+  );
   const summary =
     selectedModels.length === 1
       ? hookGenerationModelLabel(selectedModels[0]!)
@@ -124,27 +165,47 @@ export function HookGenerationModelSelect({
       setModelError("Use an OpenRouter model ID in provider/model format.");
       return;
     }
+    if (savedModelCatalog.includes(model)) {
+      setModelError("This model is already saved.");
+      return;
+    }
+    const nextSavedModels = [...savedModels, model];
+    setSavedModels(nextSavedModels);
+    saveHookModels(nextSavedModels);
+    if (selectedModels.length < MAX_HOOK_GENERATION_MODELS) {
+      dispatch({
+        type: "set-hook-generation-models",
+        models: [...selectedModels, model]
+      });
+    } else {
+      setModelError("Model saved. Unselect another model to use it.");
+    }
+    setModelDraft("");
+    if (selectedModels.length < MAX_HOOK_GENERATION_MODELS) {
+      setModelError(null);
+    }
+  }
+
+  function toggleModel(model: HookGenerationModel) {
     if (selectedSet.has(model)) {
-      setModelError("This model is already selected.");
+      if (selectedModels.length === 1) {
+        setModelError("Keep at least one Hook model selected.");
+        return;
+      }
+      dispatch({
+        type: "set-hook-generation-models",
+        models: selectedModels.filter((selected) => selected !== model)
+      });
+      setModelError(null);
       return;
     }
     if (selectedModels.length >= MAX_HOOK_GENERATION_MODELS) {
-      setModelError("Remove a model before adding another.");
+      setModelError(`Select up to ${MAX_HOOK_GENERATION_MODELS} models.`);
       return;
     }
     dispatch({
       type: "set-hook-generation-models",
       models: [...selectedModels, model]
-    });
-    setModelDraft("");
-    setModelError(null);
-  }
-
-  function removeModel(model: HookGenerationModel) {
-    if (selectedModels.length === 1) return;
-    dispatch({
-      type: "set-hook-generation-models",
-      models: selectedModels.filter((selected) => selected !== model)
     });
     setModelError(null);
   }
@@ -172,22 +233,29 @@ export function HookGenerationModelSelect({
         >
           <h3 id={titleId}>Hook models</h3>
           <p>
-            Add up to {MAX_HOOK_GENERATION_MODELS} OpenRouter model IDs. They run
-            concurrently.
+            Save OpenRouter model IDs, then select up to {MAX_HOOK_GENERATION_MODELS}
+            {" "}to run together.
           </p>
-          <div className="compass-hook-model-tags" aria-label="Selected models">
-            {selectedModels.map((model) => (
-              <span className="compass-hook-model-tag" key={model}>
-                <code>{model}</code>
-                <button
-                  type="button"
-                  aria-label={`Remove ${model}`}
-                  disabled={disabled || selectedModels.length === 1}
-                  onClick={() => removeModel(model)}
-                >
-                  ×
-                </button>
-              </span>
+          <div className="compass-hook-model-options" aria-label="Saved models">
+            {savedModelCatalog.map((model) => (
+              <label
+                className="compass-hook-model-option"
+                data-selected={selectedSet.has(model)}
+                key={model}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedSet.has(model)}
+                  disabled={disabled}
+                  aria-label={`${selectedSet.has(model) ? "Unselect" : "Select"} ${model}`}
+                  onChange={() => toggleModel(model)}
+                />
+                <span>
+                  <strong>{hookGenerationModelLabel(model)}</strong>
+                  <code>{model}</code>
+                </span>
+                <small>{selectedSet.has(model) ? "Selected" : "Available"}</small>
+              </label>
             ))}
           </div>
           <form className="compass-hook-model-form" onSubmit={addModel}>
@@ -200,9 +268,7 @@ export function HookGenerationModelSelect({
               value={modelDraft}
               placeholder="provider/model"
               autoComplete="off"
-              disabled={
-                disabled || selectedModels.length >= MAX_HOOK_GENERATION_MODELS
-              }
+              disabled={disabled}
               aria-describedby={modelError ? `${titleId}-error` : undefined}
               onChange={(event) => {
                 setModelDraft(event.target.value);
@@ -213,7 +279,6 @@ export function HookGenerationModelSelect({
               type="submit"
               disabled={
                 disabled ||
-                selectedModels.length >= MAX_HOOK_GENERATION_MODELS ||
                 !modelDraft.trim()
               }
             >
