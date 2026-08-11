@@ -181,6 +181,82 @@ function normalizeUgcVideoBrief(
     typeof record[field] === "string" && record[field].trim()
       ? record[field].trim()
       : fallbackValue;
+  const legacyScripts = [
+    text("openingScript", fallback.formatBeats[0] ?? fallback.hook),
+    text(
+      "showcaseScript",
+      fallback.formatBeats.slice(1, -1).join(" / ") || fallback.concept
+    ),
+    text(
+      "closingScript",
+      fallback.formatBeats.at(-1) ?? `${fallback.cta} ${fallback.caption}`
+    )
+  ];
+  const fallbackScenes = [
+    {
+      title: "HOOK",
+      duration: "0–5 วินาที",
+      scriptLines: [legacyScripts[0]!],
+      visual: fallback.visual,
+      textOverlay: fallback.hook
+    },
+    {
+      title: "DEVELOPMENT",
+      duration: "5–15 วินาที",
+      scriptLines: [legacyScripts[1]!],
+      visual: fallback.visual,
+      textOverlay: fallback.concept
+    },
+    {
+      title: "PROOF / BENEFIT",
+      duration: "15–25 วินาที",
+      scriptLines: [fallback.why],
+      visual: fallback.visual,
+      textOverlay: fallback.why
+    },
+    {
+      title: "CTA",
+      duration: "25–30 วินาที",
+      scriptLines: [legacyScripts[2]!],
+      visual: fallback.visual,
+      textOverlay: fallback.cta
+    }
+  ];
+  const scenes = Array.isArray(record.scenes)
+    ? record.scenes.flatMap((scene, index) => {
+        if (!scene || typeof scene !== "object" || Array.isArray(scene)) return [];
+        const item = scene as Record<string, unknown>;
+        const scriptLines = Array.isArray(item.scriptLines)
+          ? item.scriptLines.filter(
+              (line): line is string =>
+                typeof line === "string" && line.trim().length > 0
+            )
+          : [];
+        if (!scriptLines.length) return [];
+        const fallbackScene = fallbackScenes[index] ?? fallbackScenes[3]!;
+        return [
+          {
+            title:
+              typeof item.title === "string" && item.title.trim()
+                ? item.title.trim()
+                : fallbackScene.title,
+            duration:
+              typeof item.duration === "string" && item.duration.trim()
+                ? item.duration.trim()
+                : fallbackScene.duration,
+            scriptLines,
+            visual:
+              typeof item.visual === "string" && item.visual.trim()
+                ? item.visual.trim()
+                : fallbackScene.visual,
+            textOverlay:
+              typeof item.textOverlay === "string"
+                ? item.textOverlay.trim()
+                : fallbackScene.textOverlay
+          }
+        ];
+      })
+    : [];
 
   return {
     product: text("product", "สินค้า/บริการตาม Brief"),
@@ -192,17 +268,6 @@ function normalizeUgcVideoBrief(
       "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ"
     ),
     referenceDirection: text("referenceDirection", fallback.visual),
-    openingScript: text(
-      "openingScript",
-      fallback.formatBeats[0] ?? fallback.hook
-    ),
-    showcaseScript: text(
-      "showcaseScript",
-      fallback.formatBeats[1] ?? fallback.concept
-    ),
-    closingScript: text(
-      "closingScript",
-      fallback.formatBeats[2] ?? `${fallback.cta} — ${fallback.caption}`
-    )
+    scenes: scenes.length === 4 ? scenes : fallbackScenes
   };
 }

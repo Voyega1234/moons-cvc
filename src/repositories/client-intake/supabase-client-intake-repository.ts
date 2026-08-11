@@ -31,9 +31,9 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
     if (urlError) throw new Error(urlError);
     const categoryError = validateClientCategory(category ?? "");
     if (categoryError) throw new Error(categoryError);
-    const questionnaireError = validateOnboardingQuestionnaire(
-      questionnaire?.text ?? ""
-    );
+    const questionnaireError = questionnaire
+      ? validateOnboardingQuestionnaire(questionnaire.text)
+      : null;
     if (questionnaireError) throw new Error(questionnaireError);
 
     const client = getSupabaseClient();
@@ -107,9 +107,9 @@ export class SupabaseClientIntakeRepository implements ClientIntakeRepository {
   }: QueueClientIngestionInput): Promise<QueueClientIngestionResult> {
     const urlError = validateFacebookUrl(facebookUrl);
     if (urlError) throw new Error(urlError);
-    const questionnaireError = validateOnboardingQuestionnaire(
-      questionnaire?.text ?? ""
-    );
+    const questionnaireError = questionnaire
+      ? validateOnboardingQuestionnaire(questionnaire.text)
+      : null;
     if (questionnaireError) throw new Error(questionnaireError);
 
     const client = getSupabaseClient();
@@ -146,7 +146,8 @@ async function saveQuestionnaireSource({
   jobId: string;
   questionnaire: CreateClientDraftInput["questionnaire"];
 }): Promise<void> {
-  const text = questionnaire?.text.trim();
+  if (!questionnaire) return;
+  const text = questionnaire.text.trim();
   if (!text) return;
 
   const { error } = await client

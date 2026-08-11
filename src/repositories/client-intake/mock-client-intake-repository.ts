@@ -26,11 +26,11 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
     if (error) throw new Error(error);
     const categoryError = validateClientCategory(category ?? "");
     if (categoryError) throw new Error(categoryError);
-    const questionnaireError = validateOnboardingQuestionnaire(
-      questionnaire.text
-    );
+    const questionnaireError = questionnaire
+      ? validateOnboardingQuestionnaire(questionnaire.text)
+      : null;
     if (questionnaireError) throw new Error(questionnaireError);
-    const questionnaireText = questionnaire.text.trim();
+    const questionnaireText = questionnaire?.text.trim();
 
     const brand: Brand = {
       id: createClientId(name),
@@ -43,20 +43,24 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
       memory: { working: [], avoid: [] },
       existsInSystem: true,
       source: "system",
-      onboardingQuestionnaire: {
-        ...(questionnaire.sourceUrl?.trim()
-          ? { sourceUrl: questionnaire.sourceUrl.trim() }
-          : {}),
-        text: questionnaireText,
-        preview: questionnaireText.slice(0, 280),
-        facebookUrls: [],
-        ...(questionnaire.sheetTitle?.trim()
-          ? { sheetTitle: questionnaire.sheetTitle.trim() }
-          : {}),
-        ...(questionnaire.extractedFields?.length
-          ? { extractedFields: questionnaire.extractedFields }
-          : {})
-      }
+      ...(questionnaire && questionnaireText
+        ? {
+            onboardingQuestionnaire: {
+              ...(questionnaire.sourceUrl?.trim()
+                ? { sourceUrl: questionnaire.sourceUrl.trim() }
+                : {}),
+              text: questionnaireText,
+              preview: questionnaireText.slice(0, 280),
+              facebookUrls: [],
+              ...(questionnaire.sheetTitle?.trim()
+                ? { sheetTitle: questionnaire.sheetTitle.trim() }
+                : {}),
+              ...(questionnaire.extractedFields?.length
+                ? { extractedFields: questionnaire.extractedFields }
+                : {})
+            }
+          }
+        : {})
     };
 
     this.brandRepository.addClient(brand);
@@ -74,11 +78,11 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
   }: QueueClientIngestionInput): Promise<QueueClientIngestionResult> {
     const error = validateFacebookUrl(facebookUrl);
     if (error) throw new Error(error);
-    const questionnaireError = validateOnboardingQuestionnaire(
-      questionnaire.text
-    );
+    const questionnaireError = questionnaire
+      ? validateOnboardingQuestionnaire(questionnaire.text)
+      : null;
     if (questionnaireError) throw new Error(questionnaireError);
-    const questionnaireText = questionnaire.text.trim();
+    const questionnaireText = questionnaire?.text.trim();
 
     const brand = await this.brandRepository.getById(clientId);
     if (!brand) throw new Error("Client not found.");
@@ -88,20 +92,24 @@ export class MockClientIntakeRepository implements ClientIntakeRepository {
       facebookUrl: facebookUrl.trim() || undefined,
       ingestionStatus: "queued",
       ingestionError: undefined,
-      onboardingQuestionnaire: {
-        ...(questionnaire.sourceUrl?.trim()
-          ? { sourceUrl: questionnaire.sourceUrl.trim() }
-          : {}),
-        text: questionnaireText,
-        preview: questionnaireText.slice(0, 280),
-        facebookUrls: [],
-        ...(questionnaire.sheetTitle?.trim()
-          ? { sheetTitle: questionnaire.sheetTitle.trim() }
-          : {}),
-        ...(questionnaire.extractedFields?.length
-          ? { extractedFields: questionnaire.extractedFields }
-          : {})
-      }
+      ...(questionnaire && questionnaireText
+        ? {
+            onboardingQuestionnaire: {
+              ...(questionnaire.sourceUrl?.trim()
+                ? { sourceUrl: questionnaire.sourceUrl.trim() }
+                : {}),
+              text: questionnaireText,
+              preview: questionnaireText.slice(0, 280),
+              facebookUrls: [],
+              ...(questionnaire.sheetTitle?.trim()
+                ? { sheetTitle: questionnaire.sheetTitle.trim() }
+                : {}),
+              ...(questionnaire.extractedFields?.length
+                ? { extractedFields: questionnaire.extractedFields }
+                : {})
+            }
+          }
+        : {})
     });
 
     return { jobId: `job-${brand.id}` };

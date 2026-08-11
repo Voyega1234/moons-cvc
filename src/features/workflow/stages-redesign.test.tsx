@@ -1642,6 +1642,66 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
   });
 
+  it("continues brand analysis without Questionnaire when the Sheet has no supported tab", async () => {
+    const user = userEvent.setup();
+    const draftBrand = {
+      ...brands[0]!,
+      id: "draft-brand-without-questionnaire",
+      name: "Draft Brand Without Questionnaire",
+      facebookUrl: "https://www.facebook.com/draftbrand",
+      ingestionStatus: "draft" as const,
+      existsInSystem: true
+    };
+    const queueExistingClient = vi.fn(async () => ({ jobId: "job-without-questionnaire" }));
+    const questionnaireUrl =
+      "https://docs.google.com/spreadsheets/d/no-questionnaire-tab/edit?gid=0";
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-without-questionnaire",
+        now: "2026-07-15T00:00:00.000Z"
+      }),
+      brandMenuOpen: true
+    };
+    const view = render(
+      <BrandProvider
+        repository={{
+          list: async () => [draftBrand],
+          getById: async (id: string) => (id === draftBrand.id ? draftBrand : null)
+        }}
+        mappingRepository={{
+          list: async () => [],
+          readQuestionnaire: async () => null
+        }}
+      >
+        <ClientIntakeProvider
+          repository={{ createDraftClient: vi.fn(), queueExistingClient }}
+        >
+          <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+            <StartStage state={state} dispatch={vi.fn()} />
+          </BrandMemoryProvider>
+        </ClientIntakeProvider>
+      </BrandProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(await stage.findByRole("button", { name: "Set up brand" }));
+    await user.type(
+      stage.getByLabelText("Questionnaire Google Sheet URL"),
+      questionnaireUrl
+    );
+    await user.click(stage.getByRole("button", { name: "Analyze brand" }));
+
+    expect(queueExistingClient).toHaveBeenCalledWith({
+      clientId: draftBrand.id,
+      facebookUrl: draftBrand.facebookUrl
+    });
+    expect(
+      await stage.findByRole("dialog", {
+        name: "Draft Brand Without Questionnaire is in the queue."
+      })
+    ).toBeTruthy();
+  });
+
   it("confirms a manually added client without exposing backend job details", async () => {
     const user = userEvent.setup();
     const brandRepository = new MockBrandRepository();
@@ -1970,6 +2030,11 @@ describe("redesigned workflow stages", () => {
       })
     ).toBeTruthy();
 
+    await user.click(
+      stage.getByRole("button", { name: "Hook generation models" })
+    );
+    expect(stage.getByText(/Add up to 5 OpenRouter model IDs/)).toBeTruthy();
+
     await user.selectOptions(researchMode, "standard");
 
     expect(dispatch).toHaveBeenCalledWith({
@@ -2136,6 +2201,10 @@ describe("redesigned workflow stages", () => {
       ...baseState,
       directions: baseState.directions.map((direction, index) => ({
         ...direction,
+        generationModel:
+          index % 2 === 0
+            ? ("google/gemini-3.6-flash" as const)
+            : ("qwen/qwen3.8-max" as const),
         formatBeats:
           direction.service === "album-post"
             ? ["ปัญหาที่คนมองข้าม", "สิ่งที่ควรเปรียบเทียบ", "ทางเลือกที่นำไปใช้ได้"]
@@ -2165,6 +2234,16 @@ describe("redesigned workflow stages", () => {
     ).toBeNull();
     expect(stage.queryByRole("combobox", { name: "Output size" })).toBeNull();
     expect(stage.getByRole("heading", { name: "Review hooks" })).toBeTruthy();
+    expect(
+      stage.getAllByRole("region", {
+        name: "Gemini 3.6 Flash comparison"
+      }).length
+    ).toBeGreaterThan(0);
+    expect(
+      stage.getAllByRole("region", {
+        name: "Qwen 3.8 Max comparison"
+      }).length
+    ).toBeGreaterThan(0);
     expect(stage.queryByRole("button", { name: "Let Compass pick" })).toBeNull();
     expect(stage.getByRole("button", { name: "Export PDF" })).toBeTruthy();
     expect(stage.queryByRole("combobox", { name: "PDF design" })).toBeNull();
@@ -2340,6 +2419,36 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("keeps single-model Hook ideas in the three-card review grid", () => {
+    const baseState = buildCreativeState();
+    const state = {
+      ...baseState,
+      hookGenerationModel: "google/gemini-3.6-flash" as const,
+      hookGenerationModels: ["google/gemini-3.6-flash"] as const,
+      directions: baseState.directions.map((direction) => ({
+        ...direction,
+        generationModel: "google/gemini-3.6-flash" as const
+      }))
+    };
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage
+          state={{ ...state, stage: "directions" }}
+          dispatch={vi.fn()}
+        />
+      </BrandMemoryProvider>
+    );
+
+    const singleModelGroups = view.container.querySelectorAll(
+      ".compass-model-comparison:not(.is-comparing)"
+    );
+    expect(singleModelGroups).toHaveLength(3);
+    const staticIdeaGrid = singleModelGroups[0]?.querySelector(
+      ".compass-model-idea-grid"
+    );
+    expect(staticIdeaGrid?.children).toHaveLength(3);
+  });
+
   it("hides hook groups for content types with zero required ideas", () => {
     const baseState = buildMixedAngleState();
     const state = {
@@ -2428,7 +2537,7 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       within(preflight)
-        .getByRole("button", { name: "Design system" })
+        .getByRole("button", { name: "Standard" })
         .getAttribute("aria-pressed")
     ).toBe("true");
     await user.click(
@@ -2863,7 +2972,7 @@ describe("redesigned workflow stages", () => {
     expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
-  it("exports the Create UGC preview as one image with the three-part script", async () => {
+  it("exports the Create UGC preview as one image with production-ready scene scripts", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -2885,9 +2994,36 @@ describe("redesigned workflow stages", () => {
         moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว",
         productionStyle: "Handheld creator POV สลับ close-up อาหาร",
         referenceDirection: "UGC ครัวเช้า แสงธรรมชาติ และ text overlay สั้น",
-        openingScript: "เปิดนาฬิกาแล้วพูดว่าเหลือเวลาไม่ถึง 10 นาที",
-        showcaseScript: "เทไข่ลงกระทะและถ่าย close-up เนื้อไข่ข้น",
-        closingScript: "ยกจานขึ้นชิมแล้วชวนเลือก Colormic 24cm"
+        scenes: [
+          {
+            title: "HOOK",
+            duration: "0–5 วินาที",
+            scriptLines: ["เช้านี้เหลือเวลาไม่ถึง 10 นาที แต่ยังอยากกินไข่ข้นดี ๆ อยู่ไหม?"],
+            visual: "เปิดนาฬิกาแล้วหันมาพูดกับกล้อง",
+            textOverlay: "มื้อเช้าใน 10 นาที"
+          },
+          {
+            title: "DEVELOPMENT",
+            duration: "5–15 วินาที",
+            scriptLines: ["แค่เทไข่ลงกระทะ Colormic แล้วคนเบา ๆ ก็ได้เนื้อไข่นุ่มข้น"],
+            visual: "สาธิตเทไข่และคนในกระทะ",
+            textOverlay: "ทำง่าย ไม่ติดกระทะ"
+          },
+          {
+            title: "PROOF / BENEFIT",
+            duration: "15–25 วินาที",
+            scriptLines: ["กระทะร้อนทั่วถึง ทำให้ไข่สุกสวยโดยไม่ต้องใช้น้ำมันเยอะ"],
+            visual: "ถ่าย close-up เนื้อไข่ข้นและผิวกระทะ",
+            textOverlay: "ร้อนทั่วถึง ใช้น้ำมันน้อย"
+          },
+          {
+            title: "CTA",
+            duration: "25–30 วินาที",
+            scriptLines: ["เช้าที่รีบก็ยังอร่อยได้ เลือก Colormic 24cm ไว้ติดครัวเลย"],
+            visual: "ยกจานขึ้นชิมแล้วชูกระทะให้เห็น",
+            textOverlay: "เลือก Colormic 24cm"
+          }
+        ]
       }
     };
     const state = {
@@ -2925,6 +3061,13 @@ describe("redesigned workflow stages", () => {
           _slideObjects: Array<{
             _type: string;
             text?: Array<{ text: string }>;
+            options?: {
+              x?: number;
+              y?: number;
+              w?: number;
+              h?: number;
+              fontSize?: number;
+            };
           }>;
         }>;
       }
@@ -2935,23 +3078,53 @@ describe("redesigned workflow stages", () => {
         .join("\n") ?? "";
 
     expect(extraSlides).toHaveLength(0);
-    expect(storyboardText).toContain("UGC VISUAL REFERENCE");
+    expect(storyboardText).toContain("SHORT VIDEO STORYLINE");
     expect(storyboardText).not.toContain("Following");
     expect(storyboardText).not.toContain("For You");
     expect(storyboardText).not.toContain("@bonefitcreator");
     expect(storyboardText).not.toContain("Original sound · BoneFit");
-    expect(storyboardText).toContain("CREATIVE OBJECTIVE");
-    expect(storyboardText).toContain("Korea King Colormic 24cm");
+    expect(storyboardText).toContain("Headline:");
+    expect(storyboardText).toContain("Concept Idea:");
+    expect(storyboardText).toContain("Storyline:");
+    expect(storyboardText).toContain("Mood and Tone:");
+    expect(storyboardText).toContain("Script:");
     expect(storyboardText).toContain("15–30 วินาที");
-    expect(storyboardText).toContain("VIDEO STORYLINE");
-    expect(storyboardText).toContain("OPEN / HOOK");
-    expect(storyboardText).toContain("SHOWCASE");
-    expect(storyboardText).toContain("END / CTA");
+    expect(storyboardText).toContain("Scene 1: HOOK");
+    expect(storyboardText).toContain("Scene 2: DEVELOPMENT");
+    expect(storyboardText).toContain("Scene 3: PROOF / BENEFIT");
+    expect(storyboardText).toContain("Scene 4: CTA");
+    expect(storyboardText).toContain("เช้านี้เหลือเวลาไม่ถึง 10 นาที");
+    expect(storyboardText).toContain("Visual:");
+    expect(storyboardText).toContain("Text Overlay:");
     expect(storyboardText).not.toContain("CREATIVE DIRECTION");
     expect(storyboardText).not.toContain("ARTWORK & CAPTION");
+    const preview = storyboardSlide?._slideObjects.find(
+      (object) => object._type === "image"
+    );
+    expect(preview).toBeDefined();
+    expect(preview?.options).toMatchObject({
+      x: 3.02,
+      y: 1.18,
+      w: 4.24,
+      h: 5.3
+    });
     expect(
-      storyboardSlide?._slideObjects.filter((object) => object._type === "image")
-    ).toHaveLength(1);
+      Number(preview?.options?.w) / Number(preview?.options?.h)
+    ).toBeCloseTo(4 / 5);
+    const spokenScript = storyboardSlide?._slideObjects.find((object) =>
+      object.text?.some((run) => run.text.includes("เช้านี้เหลือเวลาไม่ถึง 10 นาที"))
+    );
+    expect(spokenScript?.options?.fontSize).toBe(10);
+    const scriptBodyObjects = storyboardSlide?._slideObjects.filter(
+      (object) =>
+        (object.options?.x === 7.48 || object.options?.x === 11.9) &&
+        Number(object.options?.y) >= 1.2 &&
+        Number(object.options?.y) < 7
+    );
+    expect(scriptBodyObjects).toHaveLength(20);
+    expect(
+      scriptBodyObjects?.every((object) => object.options?.fontSize === 10)
+    ).toBe(true);
   });
 
   it("groups three album panels into one review card and shows the saved master", async () => {

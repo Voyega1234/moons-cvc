@@ -25,6 +25,12 @@ export interface HookGenerationHarnessRequest {
   runId: string;
   hookIdeaMode: HookIdeaMode;
   generationModel?: HookGenerationModel;
+  /** Playground-only prompt override. Normal workflow requests omit this. */
+  agentHookPrompt?: string;
+  /** Playground-only operation that returns the Research dossier without ideas. */
+  researchOnly?: boolean;
+  /** Playground-only validated dossier reused across compared model requests. */
+  researchDossier?: unknown;
   albumFormat?: AlbumFormatPreference;
   brand: {
     id: string;
@@ -61,20 +67,67 @@ export interface HookGenerationHarnessResponse {
   directions: readonly RawDirection[];
 }
 
+interface HookGenerationHarnessResearchResponse {
+  researchDossier: unknown;
+}
+
 export async function generateDirectionsWithHarness({
   run,
-  extraInstructions
-}: HookGenerationRunInput): Promise<readonly CreativeDirection[]> {
+  extraInstructions,
+  researchDossier
+}: HookGenerationRunInput & {
+  researchDossier?: unknown;
+}): Promise<readonly CreativeDirection[]> {
+  const requestBody = buildHookGenerationHarnessRequest({
+    run,
+    extraInstructions
+  });
+  const payload = await postHarnessRequest<
+    Partial<HookGenerationHarnessResponse>
+  >(
+    researchDossier === undefined
+      ? requestBody
+      : { ...requestBody, researchDossier },
+    "Harness hook generation"
+  );
+
+  if (!Array.isArray(payload.directions)) {
+    throw new Error("Harness hook generation returned no hooks.");
+  }
+
+  return normalizeCreativeDirections(payload.directions);
+}
+
+export async function generateHookResearchWithHarness(
+  input: HookGenerationRunInput
+): Promise<unknown> {
+  const payload = await postHarnessRequest<
+    Partial<HookGenerationHarnessResearchResponse>
+  >(
+    {
+      ...buildHookGenerationHarnessRequest(input),
+      researchOnly: true
+    },
+    "Harness hook research"
+  );
+  if (payload.researchDossier === undefined) {
+    throw new Error("Harness hook research returned no dossier.");
+  }
+  return payload.researchDossier;
+}
+
+async function postHarnessRequest<T>(
+  body: HookGenerationHarnessRequest,
+  label: string
+): Promise<T> {
   const requestInit: RequestInit = {
     method: "POST",
     headers: await buildHeaders(),
-    body: JSON.stringify(
-      buildHookGenerationHarnessRequest({ run, extraInstructions })
-    )
+    body: JSON.stringify(body)
   };
   const maxAttempts = 2;
   let response: Response | undefined;
-  let payload: Partial<HookGenerationHarnessResponse> | undefined;
+  let payload: T | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     response = await fetch(env.hookGenerationHarnessEndpoint, requestInit);
@@ -82,9 +135,9 @@ export async function generateDirectionsWithHarness({
       ? maxAttempts
       : 1;
     try {
-      payload = await readJsonResponse<Partial<HookGenerationHarnessResponse>>(
+      payload = await readJsonResponse<T>(
         response,
-        "Harness hook generation",
+        label,
         attempt,
         attemptLimit
       );
@@ -101,21 +154,16 @@ export async function generateDirectionsWithHarness({
   }
 
   if (!response || !payload) {
-    throw new Error("Harness hook generation did not return a response.");
+    throw new Error(`${label} did not return a response.`);
   }
 
   if (!response.ok) {
     throw new Error(
       readErrorMessage(payload) ??
-        `Harness hook generation failed (${response.status}).`
+        `${label} failed (${response.status}).`
     );
   }
-
-  if (!Array.isArray(payload.directions)) {
-    throw new Error("Harness hook generation returned no hooks.");
-  }
-
-  return normalizeCreativeDirections(payload.directions);
+  return payload;
 }
 
 export function buildHookGenerationHarnessRequest({
@@ -243,7 +291,7 @@ class NonJsonResponseError extends Error {
 }
 
 function isRetryableGatewayStatus(status: number): boolean {
-  return status === 502 || status === 503;
+  return status === 500 || status === 502 || status === 503;
 }
 
 function readErrorMessage(payload: unknown): string | null {

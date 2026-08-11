@@ -128,6 +128,38 @@ describe("handleMappingClientsRequest", () => {
     );
   });
 
+  it("continues without Questionnaire context when the Sheet has no supported tab", async () => {
+    const reviewQuestionnaireExtraction = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        properties: { title: "Client portal" },
+        sheets: [{ properties: { sheetId: 0, title: "Overview" } }]
+      })
+    );
+    const sourceUrl =
+      "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=0";
+    const response = await handleMappingClientsRequest({
+      request: new Request(
+        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`,
+        { headers: { "X-Google-Access-Token": "google-provider-token" } }
+      ),
+      env: {
+        ...baseEnv,
+        GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com",
+        OPENAI_API_KEY: ""
+      },
+      fetchImpl,
+      reviewQuestionnaireExtraction
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      questionnaire: null
+    });
+    expect(reviewQuestionnaireExtraction).not.toHaveBeenCalled();
+  });
+
   it("requires Google OAuth access before reading a questionnaire", async () => {
     const sourceUrl =
       "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=8";

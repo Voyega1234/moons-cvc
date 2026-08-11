@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPastPostsCaptionStyleBlock,
   fetchPastPostExamples,
   selectPastPostsForCaption,
   type PastPostsClient
@@ -133,5 +134,32 @@ describe("selectPastPostsForCaption", () => {
       "Organic 5",
       "Organic 6"
     ]);
+  });
+});
+
+describe("buildPastPostsCaptionStyleBlock", () => {
+  it("labels examples as style-only evidence and preserves caption formatting", () => {
+    const block = buildPastPostsCaptionStyleBlock([
+      {
+        source: "ad_caption",
+        text: "เปิดเรื่องแบบเดิม\n\n• ข้อแรก\n• ข้อสอง\n\nทักหาเราได้เลย ✨"
+      }
+    ]);
+
+    expect(block).toContain("# Past posts — caption style evidence only");
+    expect(block).toContain(
+      "opening pattern, information order, paragraph length, line breaks"
+    );
+    expect(block).toContain("hashtag fingerprint");
+    expect(block).toContain("whether they appear inline or as a final block");
+    expect(block).toContain("opener → context/story → benefits or proof");
+    expect(block).toContain(
+      "Do not copy an old phrase, idea, offer, claim, hashtag, contact detail"
+    );
+    expect(block).toContain("เปิดเรื่องแบบเดิม\\n\\n• ข้อแรก");
+  });
+
+  it("omits the block when no past posts are available", () => {
+    expect(buildPastPostsCaptionStyleBlock([])).toBe("");
   });
 });

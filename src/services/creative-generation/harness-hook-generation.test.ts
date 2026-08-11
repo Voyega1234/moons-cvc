@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import {
   buildHookGenerationHarnessRequest,
-  generateDirectionsWithHarness
+  generateDirectionsWithHarness,
+  generateHookResearchWithHarness
 } from "./harness-hook-generation";
 import type { WorkflowState } from "../../features/workflow/model";
 
@@ -359,9 +360,36 @@ describe("buildHookGenerationHarnessRequest", () => {
                 moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว",
                 productionStyle: "Handheld creator POV สลับ close-up อาหาร",
                 referenceDirection: "UGC ครัวเช้า แสงธรรมชาติ และ text overlay สั้น",
-                openingScript: "เปิดนาฬิกาแล้วพูดว่าเหลือเวลาไม่ถึง 10 นาที",
-                showcaseScript: "เทไข่ลงกระทะและถ่าย close-up เนื้อไข่ข้น",
-                closingScript: "ยกจานขึ้นชิมแล้วชวนเลือก Colormic 24cm"
+                scenes: [
+                  {
+                    title: "HOOK",
+                    duration: "0–5 วินาที",
+                    scriptLines: ["เช้านี้เหลือเวลาไม่ถึง 10 นาที แต่ยังอยากกินไข่ข้นดี ๆ อยู่ไหม?"],
+                    visual: "เปิดนาฬิกาแล้วหันมาพูดกับกล้อง",
+                    textOverlay: "มื้อเช้าใน 10 นาที"
+                  },
+                  {
+                    title: "DEVELOPMENT",
+                    duration: "5–15 วินาที",
+                    scriptLines: ["แค่เทไข่ลงกระทะ Colormic แล้วคนเบา ๆ ก็ได้เนื้อไข่นุ่มข้น"],
+                    visual: "สาธิตเทไข่และคนในกระทะ",
+                    textOverlay: "ทำง่าย ไม่ติดกระทะ"
+                  },
+                  {
+                    title: "PROOF / BENEFIT",
+                    duration: "15–25 วินาที",
+                    scriptLines: ["กระทะร้อนทั่วถึง ทำให้ไข่สุกสวยโดยไม่ต้องใช้น้ำมันเยอะ"],
+                    visual: "ถ่าย close-up เนื้อไข่ข้นและผิวกระทะ",
+                    textOverlay: "ร้อนทั่วถึง ใช้น้ำมันน้อย"
+                  },
+                  {
+                    title: "CTA",
+                    duration: "25–30 วินาที",
+                    scriptLines: ["เช้าที่รีบก็ยังอร่อยได้ เลือก Colormic 24cm ไว้ติดครัวเลย"],
+                    visual: "ยกจานขึ้นชิมแล้วชูกระทะให้เห็น",
+                    textOverlay: "เลือก Colormic 24cm"
+                  }
+                ]
               },
               cta: "เลือก Colormic 24cm",
               caption: "มื้อเช้าที่รีบก็ยังทำให้น่ากินได้",
@@ -379,9 +407,61 @@ describe("buildHookGenerationHarnessRequest", () => {
     expect(direction?.ugcBrief).toMatchObject({
       product: "Korea King Colormic 24cm",
       duration: "15–30 วินาที",
-      moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว",
-      openingScript: "เปิดนาฬิกาแล้วพูดว่าเหลือเวลาไม่ถึง 10 นาที"
+      moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว"
     });
+    expect(direction?.ugcBrief?.scenes).toHaveLength(4);
+    expect(direction?.ugcBrief?.scenes[0]).toMatchObject({
+      title: "HOOK",
+      scriptLines: ["เช้านี้เหลือเวลาไม่ถึง 10 นาที แต่ยังอยากกินไข่ข้นดี ๆ อยู่ไหม?"]
+    });
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
+  it("requests Research once and reuses its dossier for generation", async () => {
+    const originalFetch = globalThis.fetch;
+    const dossier = {
+      brand: "Convert Cake",
+      overallFinding: "Shared evidence",
+      references: [],
+      insightCards: []
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ researchDossier: dossier }))
+      .mockResolvedValueOnce(
+        Response.json({
+          directions: [
+            {
+              id: "shared-research-direction",
+              service: "single-static",
+              hook: "หนึ่ง Research ใช้ได้กับทุกโมเดล",
+              subheadline: "ลดเวลารอและงานซ้ำ",
+              concept: "Shared dossier",
+              why: "Keeps model comparison consistent.",
+              visual: "One dossier branching to model outputs.",
+              formatBeats: [],
+              cta: "ดูผลเปรียบเทียบ",
+              caption: "เปรียบเทียบไอเดียจากหลักฐานชุดเดียวกัน",
+              score: 90
+            }
+          ]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const researchDossier = await generateHookResearchWithHarness({ run });
+    await generateDirectionsWithHarness({ run, researchDossier });
+
+    const researchBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as { researchOnly?: boolean };
+    const generationBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { researchDossier?: unknown; researchOnly?: boolean };
+    expect(researchBody.researchOnly).toBe(true);
+    expect(generationBody.researchOnly).toBeUndefined();
+    expect(generationBody.researchDossier).toEqual(dossier);
+
     vi.stubGlobal("fetch", originalFetch);
   });
 
@@ -423,6 +503,44 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
+  it("recovers when a non-JSON runtime 500 succeeds on the bounded retry", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("FUNCTION_INVOCATION_FAILED", {
+          status: 500,
+          headers: { "x-vercel-id": "dev1::failed-once" }
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          directions: [
+            {
+              id: "direction-after-runtime-restart",
+              service: "single-static",
+              hook: "Runtime ใหม่รับงานต่อได้",
+              subheadline: "ไม่ต้องให้ผู้ใช้เริ่มทั้งรอบใหม่",
+              concept: "Bounded runtime recovery",
+              why: "Recovers one transient worker failure.",
+              visual: "A completed model result after a worker restart.",
+              formatBeats: [],
+              cta: "ดูผลลัพธ์",
+              caption: "ระบบลองใหม่เพียงครั้งเดียว",
+              score: 88
+            }
+          ]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [direction] = await generateDirectionsWithHarness({ run });
+
+    expect(direction?.id).toBe("direction-after-runtime-restart");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
   it("does not replay a timed-out hook run after a non-JSON gateway response", async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn(async () =>
@@ -444,7 +562,7 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
-  it("does not replay a non-JSON 500 response", async () => {
+  it("retries a non-JSON 500 response once and then stops", async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn(async () =>
       new Response("FUNCTION_INVOCATION_FAILED", {
@@ -455,9 +573,9 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(generateDirectionsWithHarness({ run })).rejects.toThrow(
-      "Harness hook generation returned a non-JSON body instead of JSON after 1 attempt (500, text/plain;charset=UTF-8, request dev1::failed-1)."
+      "Harness hook generation returned a non-JSON body instead of JSON after 2 attempts (500, text/plain;charset=UTF-8, request dev1::failed-1)."
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     vi.stubGlobal("fetch", originalFetch);
   });

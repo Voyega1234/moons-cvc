@@ -77,11 +77,11 @@
 
 /* Action feedback, matched to the original Compass HTML notification card. */
 .compass-app .toast-wrap {
-  left: auto;
-  right: 24px;
+  left: 50%;
+  right: auto;
   bottom: 24px;
   width: min(360px, calc(100vw - 32px));
-  transform: none;
+  transform: translateX(-50%);
 }
 
 .compass-app .compass-action-toast {
@@ -1412,8 +1412,10 @@
 
 @media (max-width: 760px) {
   .compass-app .toast-wrap {
-    right: 16px;
+    left: 50%;
+    right: auto;
     bottom: 98px;
+    transform: translateX(-50%);
   }
 
   .compass-app .compass-action-toast {
@@ -5457,7 +5459,7 @@
   margin: 0;
   color: #171d2d;
   font-family: "Sukhumvit Set", var(--display);
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1.16;
   letter-spacing: -0.035em;
@@ -9044,7 +9046,7 @@
   }
 
   .compass-app .compass-angle-hook-wrap h3 {
-    font-size: 28px;
+    font-size: 25px;
   }
 
   .compass-app .compass-angle-card-foot {

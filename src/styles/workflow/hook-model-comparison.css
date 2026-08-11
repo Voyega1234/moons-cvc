@@ -1,0 +1,301 @@
+.compass-app .compass-hook-model-picker {
+  position: relative;
+  z-index: 12;
+}
+
+.compass-app .compass-hook-model-trigger {
+  min-height: 42px;
+  min-width: 164px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.compass-app .compass-hook-model-trigger::after {
+  content: "+";
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.compass-app .compass-hook-model-trigger[aria-expanded="true"]::after {
+  content: "×";
+}
+
+.compass-app .compass-hook-model-trigger > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-hook-model-trigger > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.compass-app .compass-hook-model-trigger:focus-visible {
+  outline: 3px solid var(--accentSoft);
+  outline-offset: 2px;
+}
+
+.compass-app .compass-hook-model-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.compass-app .compass-hook-model-panel {
+  width: min(420px, calc(100vw - 32px));
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(28, 35, 52, 0.16);
+}
+
+.compass-app .compass-hook-model-panel h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.compass-app .compass-hook-model-panel > p {
+  margin: 5px 0 12px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.compass-app .compass-hook-model-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compass-app .compass-hook-model-tag {
+  max-width: 100%;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--accentLine);
+  border-radius: 999px;
+  background: var(--accentSoft);
+  color: var(--ink);
+}
+
+.compass-app .compass-hook-model-tag code {
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-hook-model-tag button {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.compass-app .compass-hook-model-tag button:hover:not(:disabled) {
+  border-color: var(--accentLine);
+  background: rgba(89, 104, 255, 0.12);
+  color: var(--ink);
+}
+
+.compass-app .compass-hook-model-tag button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.compass-app .compass-hook-model-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.compass-app .compass-hook-model-form input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+}
+
+.compass-app .compass-hook-model-form input:focus {
+  border-color: var(--accentLine);
+  outline: 3px solid var(--accentSoft);
+}
+
+.compass-app .compass-hook-model-form button {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--accentLine);
+  border-radius: 10px;
+  background: var(--accentSoft);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.compass-app .compass-hook-model-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compass-app .compass-hook-model-error {
+  margin: 7px 0 0;
+  color: var(--danger, #b42318);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.compass-app .compass-hook-model-catalog-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.compass-app .compass-hook-model-catalog-link:hover {
+  text-decoration: underline;
+}
+
+.compass-app .compass-hook-model-catalog-link:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--accentSoft);
+  outline-offset: 2px;
+}
+
+.compass-app .compass-hook-model-form input::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.compass-app .compass-model-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+}
+
+.compass-app .compass-model-column {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f5f6f9;
+}
+
+.compass-app .compass-model-column-head {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.compass-app .compass-model-column-head h4,
+.compass-app .compass-model-column-head p {
+  margin: 0;
+}
+
+.compass-app .compass-model-column-head h4 {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.compass-app .compass-model-column-head p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.compass-app .compass-model-column-head > span {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.compass-app .compass-model-idea-grid {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 10px;
+}
+
+.compass-app .compass-model-comparison:not(.is-comparing)
+  .compass-model-column {
+  background: transparent;
+}
+
+.compass-app .compass-model-comparison:not(.is-comparing)
+  .compass-model-idea-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .compass-app .compass-hook-model-picker,
+  .compass-app .compass-hook-model-trigger {
+    width: 100%;
+  }
+
+  .compass-app .compass-hook-model-panel {
+    right: auto;
+    left: 0;
+  }
+
+  .compass-app .compass-model-comparison {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .compass-app .compass-model-comparison:not(.is-comparing)
+    .compass-model-idea-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

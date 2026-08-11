@@ -59,7 +59,13 @@ describe("agent_hook creative quality contract", () => {
     expect(prompt).toContain("## Caption");
     expect(prompt).toContain("เรียนรู้ Style Fingerprint จากหลายโพสต์ร่วมกัน");
     expect(prompt).toContain(
-      "วิธีเปิดเรื่อง ความยาวย่อหน้า การเว้นบรรทัด รูปแบบ Bullet"
+      "วิธีเปิดเรื่อง ลำดับการวางข้อมูล ความยาวย่อหน้า การเว้นบรรทัด"
+    );
+    expect(prompt).toContain("ชนิด จำนวน และตำแหน่งของ Emoji");
+    expect(prompt).toContain("เรียนรู้ Hashtag Fingerprint");
+    expect(prompt).toContain("วางแทรกในเนื้อหาหรือรวมเป็น Block ท้าย Caption");
+    expect(prompt).toContain(
+      "Opening → Context/Story → Benefit/Proof → Offer → CTA → Contact/Footer → Hashtag"
     );
     expect(prompt).toContain(
       "ห้ามเฉลี่ยเอกลักษณ์เหล่านี้จนกลายเป็นแคปชั่นโฆษณากลาง ๆ"

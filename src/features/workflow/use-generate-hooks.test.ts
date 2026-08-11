@@ -9,6 +9,7 @@ import { buildDirectionFixtures } from "./test-fixtures";
 import {
   buildCreativeMixInstructions,
   buildSuccessMetricInstructions,
+  selectedHookGenerationModels,
   useGenerateMoreHooks
 } from "./use-generate-hooks";
 
@@ -55,6 +56,30 @@ describe("buildCreativeMixInstructions", () => {
   });
 });
 
+describe("selectedHookGenerationModels", () => {
+  it("keeps at most five unique models", () => {
+    expect(
+      selectedHookGenerationModels({
+        hookGenerationModel: "google/gemini-3.6-flash",
+        hookGenerationModels: [
+          "google/gemini-3.6-flash",
+          "qwen/qwen3.8-max",
+          "sakana/sakana-namazu",
+          "openai/gpt-5.6-terra",
+          "meta-llama/llama-4-maverick",
+          "qwen/qwen3-max"
+        ]
+      })
+    ).toEqual([
+      "google/gemini-3.6-flash",
+      "qwen/qwen3.8-max",
+      "sakana/sakana-namazu",
+      "openai/gpt-5.6-terra",
+      "meta-llama/llama-4-maverick"
+    ]);
+  });
+});
+
 describe("useGenerateMoreHooks", () => {
   it("routes the new n8n mode to Compass New instead of the legacy webhook", async () => {
     const state = {
@@ -63,6 +88,7 @@ describe("useGenerateMoreHooks", () => {
         now: "2026-08-10T00:00:00.000Z"
       }),
       hookGenerationModel: "n8n-compass-new" as const,
+      hookGenerationModels: ["n8n-compass-new"] as const,
       directions: buildDirectionFixtures("Existing")
     };
     const generatedDirection = {
@@ -101,6 +127,7 @@ describe("useGenerateMoreHooks", () => {
         { id: "album", service: "album-post" as const, quantity: 1 }
       ],
       quantity: 3,
+      hookGenerationModels: ["google/gemini-3.6-flash"] as const,
       directions: buildDirectionFixtures("Targeted")
     };
     const generatedDirection = {
@@ -146,5 +173,55 @@ describe("useGenerateMoreHooks", () => {
       })
     );
     await waitFor(() => expect(result.current.loadingService).toBeNull());
+  });
+
+  it("starts selected model runs together and tags each model's ideas", async () => {
+    const state = {
+      ...createInitialWorkflowState({
+        id: "compare-models-run",
+        now: "2026-08-10T00:00:00.000Z"
+      }),
+      hookGenerationModels: [
+        "google/gemini-3.6-flash",
+        "qwen/qwen3.8-max"
+      ] as const,
+      directions: buildDirectionFixtures("Compared")
+    };
+    const generatedDirection = {
+      ...state.directions[0]!,
+      id: "compared-direction"
+    };
+    const resolvers: ((directions: typeof state.directions) => void)[] = [];
+    vi.mocked(generateDirectionsFromWebhook).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useGenerateMoreHooks(state, dispatch));
+
+    act(() => result.current.generateMore("single-static"));
+
+    await waitFor(() =>
+      expect(generateDirectionsFromWebhook).toHaveBeenCalledTimes(2)
+    );
+    await act(async () => {
+      resolvers.forEach((resolve) => resolve([generatedDirection]));
+    });
+
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "generate-more-directions",
+        directions: [
+          expect.objectContaining({
+            generationModel: "google/gemini-3.6-flash"
+          }),
+          expect.objectContaining({
+            generationModel: "qwen/qwen3.8-max"
+          })
+        ]
+      })
+    );
   });
 });

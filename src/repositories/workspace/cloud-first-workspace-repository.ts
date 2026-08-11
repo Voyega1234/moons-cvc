@@ -14,17 +14,20 @@ export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
 
   async load(): Promise<WorkspaceState | null> {
     const localWorkspace = await this.local.load();
+    let remoteWorkspace: WorkspaceState | null;
     try {
-      const remoteWorkspace = await this.remote.load();
-      if (remoteWorkspace) {
-        await this.local.save(remoteWorkspace);
-        return remoteWorkspace;
-      }
-      return localWorkspace;
-    } catch (error) {
-      if (localWorkspace) return localWorkspace;
-      throw error;
+      remoteWorkspace = await this.remote.load();
+    } catch {
+      // One immediate retry covers short-lived auth/network startup failures.
+      // If it still fails, do not expose stale local state as editable because
+      // WorkspaceProvider would autosave it back over an unknown cloud state.
+      remoteWorkspace = await this.remote.load();
     }
+    if (remoteWorkspace) {
+      await this.local.save(remoteWorkspace);
+      return remoteWorkspace;
+    }
+    return localWorkspace;
   }
 
   async save(workspace: WorkspaceState): Promise<void> {

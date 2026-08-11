@@ -1,8 +1,15 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { env } from "../../config/env";
-import type { ServiceType } from "../../domain/creative-run";
-import { generateDirectionsWithHarness } from "../../services/creative-generation/harness-hook-generation";
+import type {
+  HookGenerationModel,
+  ServiceType
+} from "../../domain/creative-run";
+import { MAX_HOOK_GENERATION_MODELS } from "../../domain/creative-run";
+import {
+  generateDirectionsWithHarness,
+  generateHookResearchWithHarness
+} from "../../services/creative-generation/harness-hook-generation";
 import {
   generateDirectionsFromNewCompassWebhook,
   generateDirectionsFromWebhook
@@ -47,10 +54,28 @@ function withCreativeMixInstructions(
 
 const GENERATE_MORE_IDEA_COUNT = 3;
 
-function generateDirectionsForState(
+export function selectedHookGenerationModels(
+  state: Pick<WorkflowState, "hookGenerationModel" | "hookGenerationModels">
+): readonly HookGenerationModel[] {
+  const selected =
+    state.hookGenerationModels?.length &&
+    state.hookGenerationModels[0] === state.hookGenerationModel
+      ? state.hookGenerationModels
+      : [state.hookGenerationModel];
+  return Array.from(new Set(selected)).slice(0, MAX_HOOK_GENERATION_MODELS);
+}
+
+function generateDirectionsForModel(
   state: WorkflowState,
-  extraInstructions: string
+  extraInstructions: string,
+  model: HookGenerationModel,
+  researchDossier?: unknown
 ) {
+  const modelState: WorkflowState = {
+    ...state,
+    hookGenerationModel: model,
+    hookGenerationModels: [model]
+  };
   const contentTypeQuotas = hookGenerationContentTypeQuotas(state);
   const webhookInput = {
     brand: state.brand,
@@ -64,13 +89,72 @@ function generateDirectionsForState(
     extraInstructions
   };
 
-  if (state.hookGenerationModel === "n8n-compass-new") {
+  if (model === "n8n-compass-new") {
     return generateDirectionsFromNewCompassWebhook(webhookInput);
   }
   if (env.hookGenerationMode === "harness") {
-    return generateDirectionsWithHarness({ run: state, extraInstructions });
+    return generateDirectionsWithHarness({
+      run: modelState,
+      extraInstructions,
+      researchDossier
+    });
   }
   return generateDirectionsFromWebhook(webhookInput);
+}
+
+async function generateDirectionsForState(
+  state: WorkflowState,
+  extraInstructions: string
+) {
+  const models = selectedHookGenerationModels(state);
+  const compared = models.length > 1;
+  const directModels = models.filter((model) => model !== "n8n-compass-new");
+  const researchDossier =
+    env.hookGenerationMode === "harness" && directModels.length
+      ? await generateHookResearchWithHarness({
+          run: {
+            ...state,
+            hookGenerationModel: directModels[0]!,
+            hookGenerationModels: [directModels[0]!]
+          },
+          extraInstructions
+        })
+      : undefined;
+  const settledResults = await Promise.allSettled(
+    models.map(async (model) => {
+      const directions = await generateDirectionsForModel(
+        state,
+        extraInstructions,
+        model,
+        model === "n8n-compass-new" ? undefined : researchDossier
+      );
+      const idPrefix = model.replaceAll(/[^a-z0-9]+/gi, "-");
+      return directions.map((direction, index) => ({
+        ...direction,
+        id: compared
+          ? `${idPrefix}-${direction.id || `direction-${index + 1}`}`
+          : direction.id,
+        generationModel: model
+      }));
+    })
+  );
+
+  const successful = settledResults.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  const failures = settledResults.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  if (!successful.length && failures.length) {
+    throw failures[0]!.reason;
+  }
+  if (failures.length) {
+    console.warn(
+      `${failures.length} Hook model request(s) failed; keeping successful model results.`,
+      failures.map((failure) => failure.reason)
+    );
+  }
+  return successful;
 }
 
 export function useGenerateHooks(
@@ -222,6 +306,11 @@ export function useRegenerateHook(
       const service = directionServiceAt(state, direction, directionIndex);
       const targetedState: WorkflowState = {
         ...state,
+        hookGenerationModel:
+          direction.generationModel ?? state.hookGenerationModel,
+        hookGenerationModels: [
+          direction.generationModel ?? state.hookGenerationModel
+        ],
         service,
         quantity: 1,
         creativeMix: [
@@ -298,18 +387,32 @@ export function useRegenerateAllHooks(
           number,
           WorkflowState["directions"][number]
         >();
-        const directionsByService = new Map<
-          ServiceType,
-          { direction: WorkflowState["directions"][number]; index: number }[]
+        const directionGroups = new Map<
+          string,
+          {
+            service: ServiceType;
+            model: HookGenerationModel;
+            items: {
+              direction: WorkflowState["directions"][number];
+              index: number;
+            }[];
+          }
         >();
         state.directions.forEach((direction, index) => {
           const service = directionServiceAt(state, direction, index);
-          const items = directionsByService.get(service) ?? [];
-          items.push({ direction, index });
-          directionsByService.set(service, items);
+          const model =
+            direction.generationModel ?? state.hookGenerationModel;
+          const key = `${service}:${model}`;
+          const group = directionGroups.get(key) ?? {
+            service,
+            model,
+            items: []
+          };
+          group.items.push({ direction, index });
+          directionGroups.set(key, group);
         });
 
-        for (const [service, items] of directionsByService) {
+        for (const { service, model, items } of directionGroups.values()) {
           for (
             let offset = 0;
             offset < items.length;
@@ -319,6 +422,8 @@ export function useRegenerateAllHooks(
           const originals = batch.map((item) => item.direction);
           const targetedState: WorkflowState = {
             ...state,
+            hookGenerationModel: model,
+            hookGenerationModels: [model],
             service,
             quantity: originals.length,
             creativeMix: [

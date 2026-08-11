@@ -21,28 +21,40 @@ export default async function handler(
   request: VercelRequest,
   response: VercelResponse
 ) {
-  const workerResponse = await handleHookGenerationHarnessRequest({
-    request: toFetchRequest(request),
-    env: {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      OPENAI_HOOK_GENERATION_MODEL: process.env.OPENAI_HOOK_GENERATION_MODEL,
-      OPENAI_HOOK_SUPPORT_MODEL: process.env.OPENAI_HOOK_SUPPORT_MODEL,
-      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-      OPENROUTER_HOOK_GENERATION_MODEL:
-        process.env.OPENROUTER_HOOK_GENERATION_MODEL,
-      HOOK_GENERATION_DEBUG_LOG_DIR: hookGenerationDebugLogDirectory(
-        process.env.VERCEL_ENV
-      ),
-      SUPABASE_URL: process.env.SUPABASE_URL,
-      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
-    }
-  });
+  try {
+    const workerResponse = await handleHookGenerationHarnessRequest({
+      request: toFetchRequest(request),
+      env: {
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        OPENAI_HOOK_GENERATION_MODEL: process.env.OPENAI_HOOK_GENERATION_MODEL,
+        OPENAI_HOOK_SUPPORT_MODEL: process.env.OPENAI_HOOK_SUPPORT_MODEL,
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+        OPENROUTER_HOOK_GENERATION_MODEL:
+          process.env.OPENROUTER_HOOK_GENERATION_MODEL,
+        HOOK_GENERATION_DEBUG_LOG_DIR: hookGenerationDebugLogDirectory(
+          process.env.VERCEL_ENV
+        ),
+        SUPABASE_URL: process.env.SUPABASE_URL,
+        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
+      }
+    });
 
-  const bodyText = await workerResponse.text();
+    const bodyText = await workerResponse.text();
 
-  response.status(workerResponse.status);
-  response.setHeader("Content-Type", "application/json");
-  response.json(parseJsonBody(bodyText));
+    response.status(workerResponse.status);
+    response.setHeader("Content-Type", "application/json");
+    response.json(parseJsonBody(bodyText));
+  } catch (error) {
+    response.status(500);
+    response.setHeader("Content-Type", "application/json");
+    response.json({
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Hook generation runtime failed unexpectedly."
+    });
+  }
 }
 
 function toFetchRequest(request: VercelRequest): Request {

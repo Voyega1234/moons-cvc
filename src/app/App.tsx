@@ -70,10 +70,19 @@ import {
   SummaryStage
 } from "../features/workflow/stages";
 import { MyWork } from "../features/workflow/my-work";
+import { HookAgentPlayground } from "../features/playground/hook-agent-playground";
 
 const CLEAR_TOAST_ACTION = { type: "clear-toast" } as const;
 
 export function App() {
+  if (window.location.pathname === "/playground") {
+    return <HookAgentPlayground />;
+  }
+
+  return <WorkflowApp />;
+}
+
+function WorkflowApp() {
   const {
     workspace,
     dispatch: workspaceDispatch,

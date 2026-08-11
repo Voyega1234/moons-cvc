@@ -7,7 +7,7 @@ export interface CreateClientDraftInput {
   name: string;
   facebookUrl: string;
   category?: string;
-  questionnaire: QuestionnaireIntakeSource;
+  questionnaire?: QuestionnaireIntakeSource;
 }
 
 export interface QuestionnaireIntakeSource {
@@ -25,7 +25,7 @@ export interface CreateClientDraftResult {
 export interface QueueClientIngestionInput {
   clientId: string;
   facebookUrl: string;
-  questionnaire: QuestionnaireIntakeSource;
+  questionnaire?: QuestionnaireIntakeSource;
 }
 
 export interface QueueClientIngestionResult {

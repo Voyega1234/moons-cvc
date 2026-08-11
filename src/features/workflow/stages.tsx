@@ -668,12 +668,16 @@ function MappingBrandSetupPanel({
       await repository.createDraftClient({
         name: brand.name,
         facebookUrl: facebookUrl.trim(),
-        questionnaire: {
-          text: questionnaire.text,
-          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
-          sheetTitle: questionnaire.sheetTitle,
-          extractedFields: questionnaire.extractedFields
-        }
+        ...(questionnaire
+          ? {
+              questionnaire: {
+                text: questionnaire.text,
+                sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+                sheetTitle: questionnaire.sheetTitle,
+                extractedFields: questionnaire.extractedFields
+              }
+            }
+          : {})
       });
       await onCreated(brand.name);
     } catch (error) {
@@ -783,12 +787,16 @@ function ExistingBrandSetupPanel({
       await repository.queueExistingClient({
         clientId: brand.id,
         facebookUrl: facebookUrl.trim(),
-        questionnaire: {
-          text: questionnaire.text,
-          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
-          sheetTitle: questionnaire.sheetTitle,
-          extractedFields: questionnaire.extractedFields
-        }
+        ...(questionnaire
+          ? {
+              questionnaire: {
+                text: questionnaire.text,
+                sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+                sheetTitle: questionnaire.sheetTitle,
+                extractedFields: questionnaire.extractedFields
+              }
+            }
+          : {})
       });
       await onQueued(brand.name);
     } catch (error) {
@@ -864,16 +872,12 @@ async function importQuestionnaireFromGoogleSheet(
   readQuestionnaire: (
     sheetUrl: string
   ) => Promise<OnboardingQuestionnaireSource | null>
-): Promise<OnboardingQuestionnaireSource> {
+): Promise<OnboardingQuestionnaireSource | null> {
   const urlError = validateQuestionnaireGoogleSheetUrl(sheetUrl);
   if (urlError) throw new Error(urlError);
 
   const questionnaire = await readQuestionnaire(sheetUrl.trim());
-  if (!questionnaire) {
-    throw new Error(
-      'The "1. Questionnaire" tab is empty or could not be read.'
-    );
-  }
+  if (!questionnaire) return null;
   const questionnaireError = validateOnboardingQuestionnaire(
     questionnaire.text
   );
@@ -1033,7 +1037,7 @@ function GoogleSheetExtractionSummary({
         <small>
           {questionnaireFields?.length
             ? `Extracted ${questionnaireFields.length} answered fields from the read-only ${questionnaireSource?.sheetTitle ?? "1. Questionnaire"} tab.`
-            : "Creative Compass reads only the tab named 1. Questionnaire and extracts answered fields from its {{field_name}} placeholders."}
+            : "Creative Compass reads a Questionnaire tab (including common naming variants) and extracts answered fields from its {{field_name}} placeholders."}
         </small>
       </div>
       {questionnaireFields?.length ? (
@@ -1060,7 +1064,7 @@ function GoogleSheetExtractionSummary({
       ) : (
         <ul>
           <li>Questionnaire answers</li>
-          <li>Tab: 1. Questionnaire (read-only)</li>
+          <li>Questionnaire tab (read-only)</li>
         </ul>
       )}
     </section>
@@ -1079,7 +1083,7 @@ function OnboardingQuestionnaireField({
   return (
     <div className="client-onboarding-questionnaire">
       <label>
-        <span>Questionnaire Google Sheet URL required</span>
+        <span>Questionnaire Google Sheet URL</span>
         <input
           aria-label="Questionnaire Google Sheet URL"
           type="url"
@@ -1090,8 +1094,9 @@ function OnboardingQuestionnaireField({
           onChange={(event) => onChange(event.target.value)}
         />
         <small>
-          Creative Compass uses read-only access and imports the 1. Questionnaire tab as
-          onboarding context. It is not the current campaign brief.
+          If the Sheet contains a Questionnaire tab (for example 1. Questionnaire
+          or Questionaies), Creative Compass imports it as read-only onboarding
+          context. If not, analysis continues without it.
         </small>
       </label>
     </div>
@@ -1152,12 +1157,16 @@ function AddClientPanel({
       const result = await repository.createDraftClient({
         name: trimmedName,
         facebookUrl: facebookUrl.trim(),
-        questionnaire: {
-          text: questionnaire.text,
-          sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
-          sheetTitle: questionnaire.sheetTitle,
-          extractedFields: questionnaire.extractedFields
-        },
+        ...(questionnaire
+          ? {
+              questionnaire: {
+                text: questionnaire.text,
+                sourceUrl: questionnaire.sourceUrl ?? questionnaireUrl.trim(),
+                sheetTitle: questionnaire.sheetTitle,
+                extractedFields: questionnaire.extractedFields
+              }
+            }
+          : {}),
         ...(category.trim() ? { category: category.trim() } : {})
       });
       await onCreated(result.brand.name);
@@ -1179,7 +1188,7 @@ function AddClientPanel({
       <button className="client-intake-toggle" type="button" onClick={onToggle}>
         <span>{open ? "Close add client" : "Add new client"}</span>
         <small>
-          Requires a Questionnaire Google Sheet URL. Facebook is optional.
+          Questionnaire is used when its tab exists. Facebook is optional.
         </small>
       </button>
       {open ? (
@@ -2008,6 +2017,9 @@ function OnboardingQuestionnaireMemory({
         sheetUrl,
         readMappingQuestionnaire
       );
+      if (!imported) {
+        throw new Error("No supported Questionnaire tab was found in this Sheet.");
+      }
       const saved = await repository.saveOnboardingQuestionnaire({
         clientId,
         text: imported.text,
@@ -4206,8 +4218,24 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                 </span>
               </div>
             </header>
-            <div className="direction-grid compass-angle-grid">
-              {group.directions.map(({ direction, originalIndex }, groupIndex) => (
+            <div
+              className={`compass-model-comparison ${group.modelGroups.length > 1 ? "is-comparing" : ""}`}
+            >
+              {group.modelGroups.map((modelGroup) => (
+                <section
+                  className="compass-model-column"
+                  key={`${group.service}-${modelGroup.key}`}
+                  aria-label={`${modelGroup.label} comparison`}
+                >
+                  <header className="compass-model-column-head">
+                    <div>
+                      <h4>{modelGroup.label}</h4>
+                      <p>{modelGroup.provider}</p>
+                    </div>
+                    <span>{modelGroup.directions.length} ideas</span>
+                  </header>
+                  <div className="direction-grid compass-angle-grid compass-model-idea-grid">
+              {modelGroup.directions.map(({ direction, originalIndex }, groupIndex) => (
           <article
             className={`direction-card compass-angle-card ${direction.selected ? "selected" : ""}`}
             key={direction.id}
@@ -4372,6 +4400,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               </div>
             </div>
           </article>
+              ))}
+                  </div>
+                </section>
               ))}
             </div>
           </section>

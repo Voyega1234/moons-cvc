@@ -63,10 +63,6 @@ export async function handleMappingClientsRequest({
           403
         );
       }
-      const openAiApiKey = required(
-        env.OPENAI_API_KEY,
-        "OPENAI_API_KEY for questionnaire QC"
-      );
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
         accessToken: googleAccessToken,
@@ -75,7 +71,10 @@ export async function handleMappingClientsRequest({
           reviewQuestionnaireExtraction({
             rows,
             extractedFields,
-            apiKey: openAiApiKey,
+            apiKey: required(
+              env.OPENAI_API_KEY,
+              "OPENAI_API_KEY for questionnaire QC"
+            ),
             model: env.OPENAI_QUESTIONNAIRE_QC_MODEL,
             fetchImpl
           })

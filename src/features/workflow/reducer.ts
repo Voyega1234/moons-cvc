@@ -3,9 +3,11 @@ import {
   defaultAlbumFormat,
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
+  defaultHookGenerationModels,
   defaultHookIdeaMode,
   emptyApprovalGate,
   inferredReferenceImageRole,
+  MAX_HOOK_GENERATION_MODELS,
   normalizeFormatBeatsForService,
   type ApprovalRole
 } from "../../domain/creative-run";
@@ -139,6 +141,7 @@ export function createInitialWorkflowState({
     service: "single-static",
     hookIdeaMode: defaultHookIdeaMode,
     hookGenerationModel: "google/gemini-3.6-flash",
+    hookGenerationModels: defaultHookGenerationModels,
     artworkMode: defaultArtworkMode,
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,
@@ -478,7 +481,23 @@ export function workflowReducer(
     case "set-hook-idea-mode":
       return { ...state, hookIdeaMode: "fresh-research" };
     case "set-hook-generation-model":
-      return { ...state, hookGenerationModel: action.model };
+      return {
+        ...state,
+        hookGenerationModel: action.model,
+        hookGenerationModels: [action.model]
+      };
+    case "set-hook-generation-models": {
+      const models = Array.from(new Set(action.models)).slice(
+        0,
+        MAX_HOOK_GENERATION_MODELS
+      );
+      if (!models.length) return state;
+      return {
+        ...state,
+        hookGenerationModel: models[0]!,
+        hookGenerationModels: models
+      };
+    }
     case "set-artwork-mode":
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":

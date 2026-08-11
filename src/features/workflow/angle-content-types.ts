@@ -1,4 +1,10 @@
-import type { CreativeDirection, ServiceType } from "../../domain/creative-run";
+import {
+  hookGenerationModelLabel,
+  hookGenerationProviderLabel,
+  type CreativeDirection,
+  type HookGenerationModel,
+  type ServiceType
+} from "../../domain/creative-run";
 import {
   directionSubheadline,
   resolveSubheadlineHighlight
@@ -80,6 +86,46 @@ export function buildAngleGroups(state: WorkflowState) {
       const directions = entries.filter(
         (entry) => entry.service === mixItem.service
       );
+      const preferredModels = state.hookGenerationModels?.length
+        ? state.hookGenerationModels
+        : [state.hookGenerationModel];
+      const encounteredModels = directions.flatMap((entry) =>
+        entry.direction.generationModel
+          ? [entry.direction.generationModel]
+          : []
+      );
+      const modelOrder = Array.from(
+        new Set<HookGenerationModel>([...preferredModels, ...encounteredModels])
+      );
+      const modelGroups = [
+        ...modelOrder.flatMap((model) => {
+          const modelDirections = directions.filter(
+            (entry) => entry.direction.generationModel === model
+          );
+          return modelDirections.length
+            ? [
+                {
+                  key: model,
+                  label: hookGenerationModelLabel(model),
+                  provider: hookGenerationProviderLabel(model),
+                  directions: modelDirections
+                }
+              ]
+            : [];
+        }),
+        ...(directions.some((entry) => !entry.direction.generationModel)
+          ? [
+              {
+                key: "unattributed" as const,
+                label: "Current ideas",
+                provider: "Saved or manual",
+                directions: directions.filter(
+                  (entry) => !entry.direction.generationModel
+                )
+              }
+            ]
+          : [])
+      ];
       return {
         service: mixItem.service,
         contentType: serviceContentTypeLabel(mixItem.service),
@@ -88,7 +134,8 @@ export function buildAngleGroups(state: WorkflowState) {
         initials: details.initials,
         required: mixItem.quantity,
         selected: directions.filter((entry) => entry.direction.selected).length,
-        directions
+        directions,
+        modelGroups
       };
     })
     .sort(

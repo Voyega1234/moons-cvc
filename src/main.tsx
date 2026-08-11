@@ -13,6 +13,7 @@ import "./styles/compass-redesign.css";
 import "./styles/workflow/brief-confirmation.css";
 import "./styles/workflow/brief-stage.css";
 import "./styles/workflow/hook-album-format.css";
+import "./styles/workflow/hook-model-comparison.css";
 import "./styles/workflow/preflight.css";
 import "./styles/workflow/create-build.css";
 import "./styles/workflow/ugc-preview.css";
@@ -20,6 +21,7 @@ import "./styles/workflow/internal-qc.css";
 import "./styles/workflow/client-review.css";
 import "./styles/workflow/learn-summary.css";
 import "./styles/workflow/my-work.css";
+import "./styles/playground.css";
 
 const root = document.getElementById("app");
 

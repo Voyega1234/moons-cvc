@@ -115,7 +115,7 @@ describe("workflowReducer", () => {
     expect(state.approved).toBe(true);
   });
 
-  it("uses Design System artwork generation by default and keeps other modes available internally", () => {
+  it("uses Standard artwork generation by default and keeps other modes available internally", () => {
     expect(initialWorkflowState.hookIdeaMode).toBe("fresh-research");
     expect(
       workflowReducer(initialWorkflowState, {
@@ -123,7 +123,7 @@ describe("workflowReducer", () => {
         mode: "standard"
       }).hookIdeaMode
     ).toBe("fresh-research");
-    expect(initialWorkflowState.artworkMode).toBe("design-system");
+    expect(initialWorkflowState.artworkMode).toBe("standard");
     expect(initialWorkflowState.albumFormat).toBe("auto");
     const albumFormatUpdate = workflowReducer(
       {
@@ -209,6 +209,11 @@ describe("workflowReducer", () => {
     expect(initialWorkflowState.hookGenerationModel).toBe(
       "google/gemini-3.6-flash"
     );
+    expect(initialWorkflowState.hookGenerationModels).toEqual([
+      "google/gemini-3.6-flash",
+      "qwen/qwen3.8-max",
+      "openai/gpt-5.6-terra"
+    ]);
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-hook-generation-model",
@@ -216,6 +221,30 @@ describe("workflowReducer", () => {
     });
 
     expect(updated.hookGenerationModel).toBe("gpt-5.6-terra");
+    expect(updated.hookGenerationModels).toEqual(["gpt-5.6-terra"]);
+  });
+
+  it("keeps up to five comparison models and uses the first as compatibility alias", () => {
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-hook-generation-models",
+      models: [
+        "qwen/qwen3.8-max",
+        "google/gemini-3.6-flash",
+        "sakana/sakana-namazu",
+        "gpt-5.6-terra",
+        "openai/gpt-5.6-terra",
+        "meta-llama/llama-4-maverick"
+      ]
+    });
+
+    expect(updated.hookGenerationModel).toBe("qwen/qwen3.8-max");
+    expect(updated.hookGenerationModels).toEqual([
+      "qwen/qwen3.8-max",
+      "google/gemini-3.6-flash",
+      "sakana/sakana-namazu",
+      "gpt-5.6-terra",
+      "openai/gpt-5.6-terra"
+    ]);
   });
 
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {

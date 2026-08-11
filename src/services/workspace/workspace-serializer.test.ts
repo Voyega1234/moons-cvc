@@ -447,7 +447,7 @@ describe("workspace serializer", () => {
     expect(restored?.toast).toBeNull();
   });
 
-  it("loads older snapshots without an artwork mode as Design System", () => {
+  it("loads older snapshots without an artwork mode as Standard", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -459,7 +459,7 @@ describe("workspace serializer", () => {
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
-    expect(restored?.runsById["run-1"]?.artworkMode).toBe("design-system");
+    expect(restored?.runsById["run-1"]?.artworkMode).toBe("standard");
   });
 
   it("restores an interrupted generation as retryable after refresh", () => {
@@ -633,6 +633,70 @@ describe("workspace serializer", () => {
     });
   });
 
+  it("round-trips production-ready UGC scene scripts", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "ugc-scenes",
+      now: "2026-08-11T10:00:00.000Z"
+    });
+    const run = workspace.runsById[workspace.activeRunId];
+    if (!run) throw new Error("Expected active run.");
+    const withUgcScenes = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [run.id]: {
+          ...run,
+          directions: [
+            {
+              id: "ugc-script",
+              service: "ugc-video" as const,
+              hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+              subheadline: "มื้อเช้าจริงในเวลาจำกัด",
+              concept: "Creator ทำมื้อเช้าให้ดูจริง",
+              why: "ทำให้เห็นประโยชน์ของสินค้า",
+              visual: "ครัวจริง แสงธรรมชาติ",
+              cta: "เลือก Colormic 24cm",
+              caption: "เช้ารีบก็ยังกินดีได้",
+              selected: false,
+              ugcBrief: {
+                product: "Korea King Colormic 24cm",
+                duration: "30 วินาที",
+                objective: "แสดงการใช้งานจริง",
+                moodAndTone: "สดใส เป็นธรรมชาติ",
+                productionStyle: "Creator-led vertical video",
+                referenceDirection: "ครัวเช้า",
+                scenes: ["HOOK", "DEVELOPMENT", "PROOF / BENEFIT", "CTA"].map(
+                  (title, index) => ({
+                    title,
+                    duration: `${index * 5}–${(index + 1) * 5} วินาที`,
+                    scriptLines: [`บทพูดจริงซีน ${index + 1}`],
+                    visual: `ภาพซีน ${index + 1}`,
+                    textOverlay: `ข้อความซีน ${index + 1}`
+                  })
+                )
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(withUgcScenes, "2026-08-11T10:01:00.000Z")
+    );
+
+    expect(restored?.runsById["ugc-scenes"]?.directions[0]?.ugcBrief?.scenes)
+      .toHaveLength(4);
+    expect(
+      restored?.runsById["ugc-scenes"]?.directions[0]?.ugcBrief?.scenes[0]
+    ).toMatchObject({
+      title: "HOOK",
+      scriptLines: ["บทพูดจริงซีน 1"],
+      visual: "ภาพซีน 1",
+      textOverlay: "ข้อความซีน 1"
+    });
+  });
+
   it("loads older snapshots without a success metric as CVR", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
@@ -675,18 +739,30 @@ describe("workspace serializer", () => {
     const parsed = JSON.parse(
       serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
     ) as {
-      data: { runsById: Record<string, { hookGenerationModel?: string }> };
+      data: {
+        runsById: Record<
+          string,
+          {
+            hookGenerationModel?: string;
+            hookGenerationModels?: string[];
+          }
+        >;
+      };
     };
     delete parsed.data.runsById["run-1"]?.hookGenerationModel;
+    delete parsed.data.runsById["run-1"]?.hookGenerationModels;
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
       "google/gemini-3.6-flash"
     );
+    expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
+      "google/gemini-3.6-flash"
+    ]);
   });
 
-  it("migrates the legacy OpenRouter Claude hook model to Gemini", () => {
+  it("migrates a saved Claude hook model to Qwen", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -694,17 +770,51 @@ describe("workspace serializer", () => {
     const parsed = JSON.parse(
       serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
     ) as {
-      data: { runsById: Record<string, { hookGenerationModel?: string }> };
+      data: {
+        runsById: Record<
+          string,
+          {
+            hookGenerationModel?: string;
+            hookGenerationModels?: string[];
+          }
+        >;
+      };
     };
     const run = parsed.data.runsById["run-1"];
     if (!run) throw new Error("Expected serialized run fixture.");
     run.hookGenerationModel = "anthropic/claude-sonnet-4.6";
+    run.hookGenerationModels = ["anthropic/claude-sonnet-4.6"];
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "google/gemini-3.6-flash"
+      "qwen/qwen3.8-max"
     );
+    expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
+      "qwen/qwen3.8-max"
+    ]);
+  });
+
+  it("preserves a custom OpenRouter hook model ID", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-06-23T10:00:00.000Z"
+    });
+    const run = workspace.runsById["run-1"];
+    if (!run) throw new Error("Expected run fixture.");
+    run.hookGenerationModel = "sakana/sakana-namazu";
+    run.hookGenerationModels = ["sakana/sakana-namazu"];
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-06-23T10:01:00.000Z")
+    );
+
+    expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
+      "sakana/sakana-namazu"
+    );
+    expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
+      "sakana/sakana-namazu"
+    ]);
   });
 
   it("loads older snapshots without an output size as 1088x1360", () => {

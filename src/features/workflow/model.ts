@@ -82,6 +82,8 @@ export interface WorkflowState {
   service: ServiceType;
   hookIdeaMode: HookIdeaMode;
   hookGenerationModel: HookGenerationModel;
+  /** Models run together for Hook comparison. Falls back to hookGenerationModel. */
+  hookGenerationModels?: readonly HookGenerationModel[];
   artworkMode: ArtworkMode;
   imagePromptModel: ImagePromptModel;
   albumFormat: AlbumFormatPreference;
@@ -130,6 +132,10 @@ export type WorkflowAction =
   | { type: "set-service"; service: ServiceType }
   | { type: "set-hook-idea-mode"; mode: HookIdeaMode }
   | { type: "set-hook-generation-model"; model: HookGenerationModel }
+  | {
+      type: "set-hook-generation-models";
+      models: readonly HookGenerationModel[];
+    }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-album-format"; format: AlbumFormatPreference }

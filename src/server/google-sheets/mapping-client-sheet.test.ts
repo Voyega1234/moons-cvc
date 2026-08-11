@@ -157,6 +157,27 @@ describe("readMappingClientsFromGoogleSheet", () => {
 });
 
 describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
+  it("returns null without reading values when no supported Questionnaire tab exists", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        properties: { title: "Client portal" },
+        sheets: [
+          { properties: { sheetId: 0, title: "Overview" } },
+          { properties: { sheetId: 1, title: "Campaign Brief" } }
+        ]
+      })
+    );
+
+    await expect(
+      readOnboardingQuestionnaireFromGoogleSheet({
+        sheetUrl: "https://docs.google.com/spreadsheets/d/no-questionnaire/edit",
+        accessToken: "google-provider-token",
+        fetchImpl
+      })
+    ).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the private "1. Questionnaire" tab with the signed-in Google token', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -242,6 +263,74 @@ describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
     expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
       headers: { Authorization: "Bearer google-provider-token" }
     });
+  });
+
+  it('accepts a tab named "Questionaies" and reads that exact range', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          properties: { title: "Client portal" },
+          sheets: [
+            {
+              properties: {
+                sheetId: 7,
+                title: "Questionaies"
+              }
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [["{{brand_name_en}}", "", "Aestheta Clinic"]]
+        })
+      );
+
+    const result = await readOnboardingQuestionnaireFromGoogleSheet({
+      sheetUrl: "https://docs.google.com/spreadsheets/d/aestheta/edit#gid=7",
+      accessToken: "google-provider-token",
+      fetchImpl
+    });
+
+    expect(result).toMatchObject({
+      sheetTitle: "Questionaies",
+      text:
+        "Source tab: Questionaies\nExtracted fields: 1\n\nBrand name EN [brand_name_en]\nAestheta Clinic"
+    });
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain(
+      encodeURIComponent("'Questionaies'")
+    );
+  });
+
+  it("prefers the canonical tab when both canonical and alias tabs exist", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          properties: { title: "Client portal" },
+          sheets: [
+            { properties: { sheetId: 7, title: "Questionaies" } },
+            { properties: { sheetId: 0, title: "1. Questionnaire" } }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [["{{brand_name_en}}", "", "Canonical Brand"]]
+        })
+      );
+
+    const result = await readOnboardingQuestionnaireFromGoogleSheet({
+      sheetUrl: "https://docs.google.com/spreadsheets/d/canonical/edit",
+      accessToken: "google-provider-token",
+      fetchImpl
+    });
+
+    expect(result?.sheetTitle).toBe("1. Questionnaire");
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain(
+      encodeURIComponent("'1. Questionnaire'")
+    );
   });
 });
 

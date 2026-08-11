@@ -30,7 +30,7 @@ describe("CloudFirstWorkspaceRepository", () => {
     expect(local.save).toHaveBeenCalledWith(shared);
   });
 
-  it("uses the local cache when shared state cannot be loaded", async () => {
+  it("does not expose the local cache as editable when cloud state cannot be verified", async () => {
     const cached = createInitialWorkspaceState({
       runId: "cached",
       now: "2026-07-16T10:00:00Z"
@@ -41,6 +41,7 @@ describe("CloudFirstWorkspaceRepository", () => {
 
     await expect(
       new CloudFirstWorkspaceRepository(local, remote).load()
-    ).resolves.toEqual(cached);
+    ).rejects.toThrow("offline");
+    expect(remote.load).toHaveBeenCalledTimes(2);
   });
 });

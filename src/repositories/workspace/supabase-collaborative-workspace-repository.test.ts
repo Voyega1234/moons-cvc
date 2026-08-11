@@ -93,6 +93,9 @@ describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
     await expect(repository.save(local)).rejects.toThrow(
       "Reload the workspace before editing"
     );
+    await expect(repository.save(local)).rejects.toThrow(
+      "Reload the workspace before editing"
+    );
     expect(inserts).toEqual([]);
   });
 

@@ -29,7 +29,7 @@ export interface HookGenerationDebugLog {
         max_results: number;
       }[];
       toolChoice?: "required";
-      reasoningEffort?: "high";
+      reasoningEffort?: "medium" | "high";
       responseSchema: "moons_hook_research";
     };
     response: {
@@ -63,7 +63,7 @@ export interface HookGenerationDebugLog {
           max_results: number;
         }[];
         toolChoice?: "required";
-        reasoningEffort?: "high";
+        reasoningEffort?: "medium" | "high";
         attachedImages: readonly {
           id: string;
           name: string;

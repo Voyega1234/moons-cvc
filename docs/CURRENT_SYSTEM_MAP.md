@@ -44,6 +44,7 @@ Async results must continue targeting the run that started the request.
 | Stage gates and action blockers | `src/features/workflow/rules.ts` |
 | Workspace/run persistence transitions | `src/features/workflow/workspace-reducer.ts` |
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
+| Hook Agent playground | `src/features/playground/hook-agent-playground.tsx`, `/playground` |
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
 | Client ingestion and recovery | `src/server/client-ingestion/client-ingestion-harness.ts`, `openai-brand-discovery-search.ts`, `openai-brand-visual-analyzer.ts` |
 | Google Sheet questionnaire extraction | `src/server/google-sheets/mapping-client-sheet.ts`, `questionnaire-extraction-qc-agent.ts` |
@@ -68,6 +69,19 @@ adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
 in review UI. Missing `subheadline` fields in legacy saved runs still fall back
 to the stored concept.
 
+`/playground` is the internal Hook Agent workbench. It reads the current
+`agent_hook.md` through the authenticated `/api/hook-agent-prompt` endpoint,
+allows a temporary prompt override, previews the exact request payload, and
+runs one to five direct Hook models concurrently. Users can add validated
+OpenRouter `provider/model` IDs from the Playground; n8n remains hidden there.
+It creates one validated
+Research dossier per experiment and reuses that exact dossier for every model,
+so model comparison is not confounded by separate research runs. Completed
+experiments are stored locally in the browser with their input, prompt,
+Research dossier, results, and per-model errors. The prompt editor also exposes
+a line-level diff against the source prompt. Prompt overrides are scoped to the
+playground request and never persist or change normal workflow runs.
+
 Hook generation always uses `fresh-research`. Legacy workspaces and requests
 that still contain the former hidden `standard` value are migrated at the
 workspace and server boundaries because the UI has no no-research selector.
@@ -81,18 +95,36 @@ connection, and its `evidenceIds` must resolve to references in the same
 dossier. The dossier is shared by every Hook batch, which is instructed to use
 the cards as its primary strategic starting points and the references as proof.
 The Research Agent always uses OpenAI with `web_search_preview` and Thailand
-location context, even when the Hook Agent is routed through OpenRouter. The
+location context and `medium` reasoning effort, even when the Hook Agent is
+routed through OpenRouter. The
 Hook Agent receives the dossier without a search tool so research and creative
-judgment remain separate. New runs, legacy workspaces without a saved Hook
-model, and Hook API requests without an explicit model default to
-`google/gemini-3.6-flash` through OpenRouter. The OpenAI Hook model remains
-user-selectable.
-The business context sent to both Research and Hook is intentionally limited to
-Questionnaire, Brand name, Brand system, and User brief; the Hook Agent then
-also receives the Research dossier. Brand Memory, Products, Documents,
-References, Past Posts, attachment names, and uploaded images are not included
-in Hook generation. Runtime quota, format, and JSON transport instructions are
-still appended so the workflow contract remains enforceable.
+judgment remain separate. New runs default to a three-model comparison between
+`google/gemini-3.6-flash`, `qwen/qwen3.8-max`, and
+`openai/gpt-5.6-terra` through OpenRouter.
+Users may select one to five Hook models. Direct Hook runs create one Research
+dossier first, reuse it for every selected model, and start all selected model
+requests concurrently. A failed model no longer discards successful results
+from the other models. The client
+records the originating model on every direction and groups the review cards
+into model columns inside each content type. The Hook picker stores
+OpenRouter `author/slug` model IDs as removable tags, accepts custom IDs, and
+links to the OpenRouter model catalog. The n8n route is hidden from this picker;
+its backend integration remains available for legacy compatibility. Legacy workspaces
+without a saved model list retain their single saved model, while Hook API
+requests without an explicit model still default to
+`google/gemini-3.6-flash`. A targeted rewrite stays on the direction's
+originating model. Normal workflow and Playground comparisons both share one
+validated dossier across models. A non-JSON 500 from the serverless boundary is
+retried only once; ordinary JSON errors and known 504 timeouts are not replayed.
+The OpenAI and n8n Hook routes remain user-selectable for compatibility.
+The business context sent to Research is intentionally limited to Questionnaire,
+Brand name, Brand system, and User brief. The Hook Agent receives that same
+context plus the Research dossier and up to six recent Past Posts (prefer four
+paid-ad captions and two organic posts) as caption-style evidence only. Past
+Posts must not supply ideas, offers, claims, facts, or product details. Brand
+Memory, Products, Documents, References, attachment names, and uploaded images
+are not included in Hook generation. Runtime quota, format, and JSON transport
+instructions are still appended so the workflow contract remains enforceable.
 Hook requests intentionally do not send the run's existing Hook history to
 either the direct Hook Agent or either n8n route. A targeted regeneration still
 includes only the specific original Hook and concept inside its explicit rewrite
@@ -103,8 +135,14 @@ hidden semantic regexes or self-score thresholds. Runtime validation remains
 limited to transport/schema requirements, requested quotas, Album panel counts,
 and the explicit Thai first-person prohibition. Search audit metadata is written
 to local Hook debug logs. Album `formatBeats` map one-to-one to non-cover panels
-(two for three-panel formats and three for four-panel formats). UGC and Motion
-may return as many `formatBeats` as their idea needs.
+(two for three-panel formats and three for four-panel formats). UGC returns four
+short storyline beats and a matching four-scene `ugcBrief` in the order Hook,
+Development, Proof / Benefit, and CTA. Every scene keeps 1–2 camera-ready
+`scriptLines`, its shot direction in `visual`, its on-screen copy in
+`textOverlay`, and its timing in `duration`; shot directions must never be
+presented as spoken script. Motion may return as many `formatBeats` as its idea
+needs. Workspace deserialization migrates the former opening/showcase/closing
+UGC fields into this scene structure for saved-run compatibility.
 
 Hook generation also exposes the user-selectable `n8n · Compass New` route.
 That selection sends the existing n8n Hook payload through the authenticated
@@ -128,7 +166,10 @@ the generated response. Usage persistence is non-blocking for the creative
 workflow: a ledger write failure is logged but does not discard a successful
 generation.
 
-Questionnaire imports from the read-only `1. Questionnaire` tab use a
+Questionnaire imports prefer the read-only `1. Questionnaire` tab and also
+accept explicit common naming variants such as `Questionnaire`, `Questionaires`,
+and `Questionaies`. If no supported tab exists, onboarding skips Questionnaire
+and continues brand analysis with the other available sources. Found tabs use a
 deterministic heading/placeholder extraction first, followed by one grounded
 GPT Luna QC request. Luna may reassign or omit fields, but every returned value
 is rebuilt server-side from verbatim substrings found in the original Sheet
@@ -184,9 +225,12 @@ Client presentation export uses one slide per creative. Static and Album
 creatives use a three-column review layout: campaign information and CTA on
 the left, artwork in the center, and the caption in a dedicated right-hand
 panel. Album slides widen the center artwork panel and use a narrower caption
-panel; Static slides keep the balanced three-column proportions. UGC uses its
-single-slide storyboard layout. Do not add separate Creative Direction or
-Artwork & Caption slides unless the export contract is intentionally changed.
+panel; Static slides keep the balanced three-column proportions. UGC uses one
+`SHORT VIDEO STORYLINE` slide: headline, time, concept, storyline, and mood on
+the left; the captured 9:16 Create preview in the center; and the four scenes'
+actual Script, Visual, and Text Overlay on the right. Do not add separate
+Creative Direction or Artwork & Caption slides unless the export contract is
+intentionally changed.
 
 ## Artwork prompt pipeline
 
@@ -194,6 +238,8 @@ Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
 the thin façade at
 `src/server/artwork-generation/artwork-generation-endpoint.ts`.
+New runs and legacy workspaces without a saved Artwork mode default to
+`standard`; an explicitly saved mode remains unchanged.
 
 The Hook Agent's `visual` / Visual direction field remains available for idea
 review, export, and learning, but it is excluded from artwork prompt agents,

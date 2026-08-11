@@ -4,7 +4,8 @@ import {
   type AlbumFormat,
   type CreativeDirection,
   type CreativeOutput,
-  type UgcVideoBrief
+  type UgcVideoBrief,
+  type UgcVideoScene
 } from "../../domain/creative-run";
 import { directionSubheadline } from "../../domain/subheadline-highlight";
 import type { WorkflowState } from "./model";
@@ -50,6 +51,13 @@ const COLORS = {
 
 const THAI_TEXT_PATTERN = /[\u0E00-\u0E7F]/;
 const SLIDE_FONT_FACE = "Sarabun";
+const UGC_LEFT_COLUMN_X = 0.38;
+const UGC_LEFT_COLUMN_WIDTH = 2.52;
+const UGC_PREVIEW_X = 3.02;
+const UGC_PREVIEW_Y = 1.18;
+const UGC_PREVIEW_WIDTH = 4.24;
+const UGC_PREVIEW_HEIGHT = 5.3;
+const UGC_SCRIPT_BODY_FONT_SIZE = 10;
 
 function localizedTextStyle(value: string) {
   return {
@@ -337,74 +345,149 @@ function resolvedUgcBrief(
         direction?.visual,
         "ภาพแนวตั้งแบบ native social ที่ดูจริงและไม่จัดฉากเกินไป"
       ),
-      openingScript: cleanText(beats[0], direction?.hook),
-      showcaseScript: cleanText(beats[1], direction?.concept),
-      closingScript: cleanText(beats[2], direction?.cta)
+      scenes: [
+        {
+          title: "HOOK",
+          duration: "0–5 วินาที",
+          scriptLines: [cleanText(direction?.hook)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(direction?.hook)
+        },
+        {
+          title: "DEVELOPMENT",
+          duration: "5–15 วินาที",
+          scriptLines: [cleanText(direction?.concept)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(beats[1], direction?.concept)
+        },
+        {
+          title: "PROOF / BENEFIT",
+          duration: "15–25 วินาที",
+          scriptLines: [cleanText(direction?.why)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(direction?.why)
+        },
+        {
+          title: "CTA",
+          duration: "25–30 วินาที",
+          scriptLines: [cleanText(direction?.cta)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(direction?.cta)
+        }
+      ]
     }
   );
 }
 
-function addUgcScriptRow(
-  pptx: PptxGenJS,
+function addUgcScriptScene(
   slide: PptxGenJS.Slide,
   index: number,
-  label: string,
-  value: string,
-  y: number
+  scene: UgcVideoScene,
+  y: number,
+  h: number
 ) {
-  slide.addShape(pptx.ShapeType.ellipse, {
-    x: 5.5,
-    y: y + 0.02,
-    w: 0.32,
-    h: 0.32,
-    fill: { color: COLORS.violetSoft },
-    line: { color: COLORS.violetSoft }
-  });
-  slide.addText(String(index).padStart(2, "0"), {
-    x: 5.53,
-    y: y + 0.105,
-    w: 0.26,
-    h: 0.1,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.8,
-    bold: true,
-    color: COLORS.violet,
-    align: "center"
-  });
-  slide.addText(label, {
-    x: 5.98,
+  const sceneTitle = `Scene ${index}: ${scene.title}`;
+  slide.addText(sceneTitle, {
+    x: 7.48,
     y,
-    w: 1.42,
-    h: 0.2,
+    w: 5.45,
+    h: 0.22,
     margin: 0,
-    ...localizedTextStyle(label),
-    fontSize: 9.5,
+    ...localizedTextStyle(sceneTitle),
+    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
     bold: true,
-    color: COLORS.violet,
-    fit: "shrink"
+    color: COLORS.ink,
+    breakLine: false
   });
-  const text = clampText(value, 520);
-  slide.addText(text, {
-    x: 7.45,
+  slide.addText(scene.duration, {
+    x: 11.9,
     y,
-    w: 4.92,
-    h: 0.58,
+    w: 1.03,
+    h: 0.22,
     margin: 0,
-    ...localizedTextStyle(text),
-    fontSize: 9.6,
+    ...localizedTextStyle(scene.duration),
+    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
+    color: COLORS.muted,
+    align: "right",
+    breakLine: false,
+  });
+  const script = clampText(
+    scene.scriptLines.map((line) => `• ${line}`).join("\n"),
+    190
+  );
+  slide.addText(script, {
+    x: 7.48,
+    y: y + 0.27,
+    w: 5.45,
+    h: Math.max(0.4, h - 0.94),
+    margin: 0,
+    ...localizedTextStyle(script),
+    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
     color: COLORS.ink,
     valign: "top",
-    fit: "shrink",
-    breakLine: false,
-    paraSpaceAfter: 0
+    breakLine: false
+  });
+  const visual = clampText(scene.visual, 115);
+  slide.addText(
+    [
+      { text: "Visual: ", options: { bold: true, color: COLORS.violet } },
+      { text: visual, options: { color: COLORS.ink } }
+    ],
+    {
+      x: 7.48,
+      y: y + h - 0.64,
+      w: 5.45,
+      h: 0.3,
+      margin: 0,
+      ...localizedTextStyle(visual),
+      fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
+      breakLine: false
+    }
+  );
+  const overlay = clampText(scene.textOverlay || "ไม่ใช้ข้อความบนจอ", 90);
+  slide.addText(
+    [
+      {
+        text: "Text Overlay: ",
+        options: { bold: true, color: COLORS.violet }
+      },
+      { text: overlay, options: { color: COLORS.ink } }
+    ],
+    {
+      x: 7.48,
+      y: y + h - 0.31,
+      w: 5.45,
+      h: 0.3,
+      margin: 0,
+      ...localizedTextStyle(overlay),
+      fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
+      breakLine: false
+    }
+  );
+}
+
+function addUgcSectionHeading(
+  slide: PptxGenJS.Slide,
+  text: string,
+  y: number
+) {
+  slide.addText(text, {
+    x: UGC_LEFT_COLUMN_X,
+    y,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: 0.26,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize: 15.5,
+    bold: true,
+    color: COLORS.violet,
+    breakLine: false
   });
 }
 
 function addCapturedUgcPreview(
   slide: PptxGenJS.Slide,
   brandName: string,
-  brief: UgcVideoBrief,
   previewImage: string | undefined
 ) {
   if (!previewImage) {
@@ -412,41 +495,13 @@ function addCapturedUgcPreview(
       "The UGC preview image was not captured from Create. Keep the Create page open and retry."
     );
   }
-
-  slide.addText("UGC VISUAL REFERENCE", {
-    x: 0.78,
-    y: 0.68,
-    w: 3.8,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
-    bold: true,
-    color: COLORS.violet,
-    charSpacing: 1.1
-  });
   slide.addImage({
     data: previewImage,
-    x: 0.87,
-    y: 1.05,
-    w: 3.72,
-    h: 4.65,
+    x: UGC_PREVIEW_X,
+    y: UGC_PREVIEW_Y,
+    w: UGC_PREVIEW_WIDTH,
+    h: UGC_PREVIEW_HEIGHT,
     altText: `${brandName} UGC preview captured from Create`
-  });
-
-  const referenceDirection = clampText(brief.referenceDirection, 150);
-  slide.addText(referenceDirection, {
-    x: 0.82,
-    y: 6.08,
-    w: 3.76,
-    h: 0.42,
-    margin: 0,
-    ...localizedTextStyle(referenceDirection),
-    fontSize: 8.8,
-    italic: true,
-    color: COLORS.muted,
-    align: "center",
-    fit: "shrink"
   });
 }
 
@@ -460,178 +515,179 @@ function addUgcClientSlide(
   previewImage?: string
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
-  slide.background = { color: COLORS.canvas };
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.45,
-    y: 0.45,
-    w: 4.55,
-    h: 6.6,
-    rectRadius: 0.16,
-    fill: { color: COLORS.paper },
-    line: { color: COLORS.line, width: 1 }
+  slide.background = { color: COLORS.paper };
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0.36,
+    y: 0.28,
+    w: 0.08,
+    h: 0.3,
+    fill: { color: COLORS.violet },
+    line: { color: COLORS.violet }
   });
-  addCapturedUgcPreview(slide, brandName, brief, previewImage);
-
-  const displayBrandName = brandName.toUpperCase();
-  slide.addText(displayBrandName, {
-    x: 5.5,
-    y: 0.64,
-    w: 3.6,
-    h: 0.22,
-    margin: 0,
-    ...localizedTextStyle(displayBrandName),
-    fontSize: 8,
-    bold: true,
-    color: COLORS.violet,
-    charSpacing: 1.2
-  });
-  slide.addText("UGC VIDEO", {
-    x: 11.08,
-    y: 0.64,
-    w: 1.28,
-    h: 0.22,
+  slide.addText("SHORT VIDEO STORYLINE", {
+    x: 0.54,
+    y: 0.25,
+    w: 4.3,
+    h: 0.36,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
+    fontSize: 18,
     bold: true,
-    color: COLORS.limeInk,
-    align: "right",
-    charSpacing: 0.8
+    color: COLORS.ink,
+    breakLine: false
   });
-  const hook = clampText(direction?.hook, 170);
-  const hookFontSize = fontSizeForFixedTextBox(
-    hook,
-    6.86,
-    0.72,
-    [25, 22, 19]
+  slide.addShape(pptx.ShapeType.line, {
+    x: 0.35,
+    y: 0.69,
+    w: 12.63,
+    h: 0,
+    line: { color: COLORS.line, width: 1 }
+  });
+
+  addCapturedUgcPreview(slide, brandName, previewImage);
+
+  const headline = clampText(direction?.hook, 125);
+  slide.addText(
+    [
+      { text: "Headline: ", options: { bold: true, color: COLORS.violet } },
+      { text: headline, options: { color: COLORS.ink } }
+    ],
+    {
+      x: UGC_LEFT_COLUMN_X,
+      y: 0.92,
+      w: UGC_LEFT_COLUMN_WIDTH,
+      h: 0.72,
+      margin: 0,
+      ...localizedTextStyle(headline),
+      fontSize: 10.2,
+      breakLine: false,
+      valign: "top",
+      fit: "shrink"
+    }
   );
-  slide.addText(hook, {
-    x: 5.5,
-    y: 1.04,
-    w: 6.86,
-    h: 0.72,
+  slide.addText(
+    [
+      { text: "Time: ", options: { bold: true, color: COLORS.ink } },
+      { text: brief.duration, options: { color: COLORS.ink } }
+    ],
+    {
+      x: UGC_LEFT_COLUMN_X,
+      y: 1.73,
+      w: UGC_LEFT_COLUMN_WIDTH,
+      h: 0.22,
+      margin: 0,
+      ...localizedTextStyle(brief.duration),
+      fontSize: 10,
+      breakLine: false
+    }
+  );
+  addUgcSectionHeading(slide, "Concept Idea:", 2.08);
+  const concept = clampText(direction?.concept, 285);
+  slide.addText(concept, {
+    x: UGC_LEFT_COLUMN_X,
+    y: 2.48,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: 1.12,
     margin: 0,
-    ...localizedTextStyle(hook),
-    fontSize: hookFontSize,
-    bold: true,
+    ...localizedTextStyle(concept),
+    fontSize: fontSizeForFixedTextBox(
+      concept,
+      UGC_LEFT_COLUMN_WIDTH,
+      1.12,
+      [10, 9, 8]
+    ),
     color: COLORS.ink,
     valign: "top",
     breakLine: false
   });
-
-  const projectDetails = `${brief.product}  •  ${brief.duration}`;
-  slide.addText(projectDetails, {
-    x: 5.5,
-    y: 1.88,
-    w: 6.86,
-    h: 0.22,
-    margin: 0,
-    ...localizedTextStyle(projectDetails),
-    fontSize: 9.5,
-    bold: true,
-    color: COLORS.violet,
-    fit: "shrink"
-  });
-  slide.addShape(pptx.ShapeType.rect, {
-    x: 5.5,
-    y: 2.28,
-    w: 0.42,
-    h: 0.04,
-    fill: { color: COLORS.violet },
-    line: { color: COLORS.violet }
-  });
-  slide.addText("CREATIVE OBJECTIVE", {
-    x: 5.5,
-    y: 2.48,
-    w: 1.2,
-    h: 0.16,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 7.5,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 1
-  });
-  const objective = clampText(brief.objective, 260);
-  const objectiveFontSize = fontSizeForFixedTextBox(
-    objective,
-    6.86,
-    0.72,
-    [12.5, 11, 9.5]
-  );
-  slide.addText(objective, {
-    x: 5.5,
-    y: 2.73,
-    w: 6.86,
-    h: 0.72,
-    margin: 0,
-    ...localizedTextStyle(objective),
-    fontSize: objectiveFontSize,
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false,
-    paraSpaceAfter: 5
-  });
-
-  slide.addText("VIDEO STORYLINE", {
-    x: 5.5,
-    y: 3.68,
-    w: 2.1,
-    h: 0.18,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 1.1
-  });
-  addUgcScriptRow(pptx, slide, 1, "OPEN / HOOK", brief.openingScript, 4.0);
-  addUgcScriptRow(pptx, slide, 2, "SHOWCASE", brief.showcaseScript, 4.64);
-  addUgcScriptRow(pptx, slide, 3, "END / CTA", brief.closingScript, 5.28);
-
   slide.addShape(pptx.ShapeType.line, {
-    x: 5.5,
-    y: 6.0,
-    w: 6.86,
+    x: UGC_LEFT_COLUMN_X,
+    y: 3.72,
+    w: UGC_LEFT_COLUMN_WIDTH,
     h: 0,
-    line: { color: COLORS.line, width: 1 }
+    line: { color: COLORS.muted, width: 0.8 }
   });
-  const production = clampText(
-    `${brief.moodAndTone} • ${brief.productionStyle}`,
-    240
-  );
-  slide.addText(production, {
-    x: 5.5,
-    y: 6.16,
-    w: 6.86,
-    h: 0.36,
+  addUgcSectionHeading(slide, "Storyline:", 3.98);
+  const storyline = brief.scenes
+    .map((scene) => `• ${scene.title}`)
+    .join("\n");
+  slide.addText(storyline, {
+    x: UGC_LEFT_COLUMN_X + 0.04,
+    y: 4.36,
+    w: UGC_LEFT_COLUMN_WIDTH - 0.1,
+    h: 0.92,
     margin: 0,
-    ...localizedTextStyle(production),
-    fontSize: 8.8,
-    italic: true,
-    color: COLORS.muted,
-    fit: "shrink",
+    ...localizedTextStyle(storyline),
+    fontSize: 9.6,
+    color: COLORS.ink,
+    breakLine: false,
     valign: "top"
   });
-  slide.addText("Prepared by Convert Cake", {
-    x: 5.5,
-    y: 6.68,
-    w: 2.5,
-    h: 0.18,
+  slide.addShape(pptx.ShapeType.line, {
+    x: UGC_LEFT_COLUMN_X,
+    y: 5.38,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: 0,
+    line: { color: COLORS.muted, width: 0.8 }
+  });
+  addUgcSectionHeading(slide, "Mood and Tone:", 5.62);
+  const mood = clampText(
+    `${brief.moodAndTone} ${brief.productionStyle}`,
+    220
+  );
+  slide.addText(mood, {
+    x: UGC_LEFT_COLUMN_X,
+    y: 6.02,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: 0.82,
+    margin: 0,
+    ...localizedTextStyle(mood),
+    fontSize: fontSizeForFixedTextBox(
+      mood,
+      UGC_LEFT_COLUMN_WIDTH,
+      0.82,
+      [9.5, 8.5, 7.5]
+    ),
+    color: COLORS.ink,
+    breakLine: false,
+    valign: "top"
+  });
+
+  slide.addText("Script:", {
+    x: 7.48,
+    y: 0.82,
+    w: 2,
+    h: 0.34,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
+    fontSize: 16,
+    bold: true,
+    color: COLORS.violet,
+    breakLine: false
+  });
+  brief.scenes.forEach((scene, index) => {
+    addUgcScriptScene(slide, index + 1, scene, 1.2 + index * 1.44, 1.38);
+  });
+
+  slide.addText("Prepared by Convert Cake", {
+    x: 7.48,
+    y: 7.12,
+    w: 2.5,
+    h: 0.14,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 6.8,
     bold: true,
     color: COLORS.muted
   });
   slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: 11.75,
-    y: 6.68,
+    x: 12.25,
+    y: 7.12,
     w: 0.7,
-    h: 0.18,
+    h: 0.14,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
+    fontSize: 6.8,
     color: COLORS.muted,
     align: "right"
   });

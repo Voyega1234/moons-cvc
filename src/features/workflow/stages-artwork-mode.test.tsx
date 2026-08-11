@@ -36,24 +36,32 @@ describe("Artwork generation settings", () => {
       </BrandMemoryProvider>
     );
 
-    const hookModel = screen.getByRole("combobox", {
-      name: "Hook generation model"
-    }) as HTMLSelectElement;
-    expect(hookModel.value).toBe("google/gemini-3.6-flash");
-    expect(hookModel.selectedOptions[0]?.textContent).toBe("OpenRouter");
+    const hookModelPicker = screen.getByLabelText("Hook generation models");
+    expect(hookModelPicker.textContent).toContain("Compare 3 models");
+    await user.click(hookModelPicker);
+    expect(screen.queryByText("Compass New")).toBeNull();
     expect(
-      within(hookModel).getByRole("option", { name: "n8n · Compass New" })
-    ).toBeTruthy();
-    await user.selectOptions(hookModel, "gpt-5.6-terra");
+      screen.getByRole("link", { name: "Browse OpenRouter models" })
+        .getAttribute("href")
+    ).toBe("https://openrouter.ai/models");
+    await user.type(
+      screen.getByRole("textbox", { name: "OpenRouter model ID" }),
+      "sakana/sakana-namazu"
+    );
+    await user.click(screen.getByRole("button", { name: "Add model" }));
     expect(dispatch).toHaveBeenCalledWith({
-      type: "set-hook-generation-model",
-      model: "gpt-5.6-terra"
+      type: "set-hook-generation-models",
+      models: [
+        "google/gemini-3.6-flash",
+        "anthropic/claude-sonnet-4.6",
+        "openai/gpt-5.6-terra",
+        "sakana/sakana-namazu"
+      ]
     });
-    await user.selectOptions(hookModel, "n8n-compass-new");
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "set-hook-generation-model",
-      model: "n8n-compass-new"
-    });
+    fireEvent.pointerDown(document.body);
+    expect(
+      screen.queryByRole("group", { name: "Hook models" })
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Reference library" })
     ).toBeNull();
@@ -131,7 +139,7 @@ describe("Artwork generation settings", () => {
     });
   });
 
-  it("presents a saved non-visible artwork mode as Design system", () => {
+  it("presents a saved non-visible artwork mode as Standard", () => {
     const dispatch = vi.fn();
     const state = {
       ...createInitialWorkflowState({
@@ -159,7 +167,7 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Design system" }).getAttribute(
+      screen.getByRole("button", { name: "Standard" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");

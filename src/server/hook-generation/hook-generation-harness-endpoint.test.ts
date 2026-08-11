@@ -111,22 +111,26 @@ function highlightResponse(id: string, highlights: readonly string[]) {
 function validHookResearchResponse() {
   return new Response(
     JSON.stringify({
-      output_text: JSON.stringify({
-        brand: "Convert Cake",
-        productFocus: "AI SEO webinar",
-        overallFinding: "Use verified brand and audience evidence.",
-        references: [],
-        insightCards: [],
-        strongestInsightIds: [],
-        strongestReferenceIds: [],
-        researchGaps: [],
-        researchLimitations: "No external claims used by this fixture.",
-        excluded: [],
-        searchQueriesUsed: ["AI SEO Thailand"]
-      })
+      output_text: JSON.stringify(validHookResearchDossier())
     }),
     { status: 200 }
   );
+}
+
+function validHookResearchDossier() {
+  return {
+    brand: "Convert Cake",
+    productFocus: "AI SEO webinar",
+    overallFinding: "Use verified brand and audience evidence.",
+    references: [],
+    insightCards: [],
+    strongestInsightIds: [],
+    strongestReferenceIds: [],
+    researchGaps: [],
+    researchLimitations: "No external claims used by this fixture.",
+    excluded: [],
+    searchQueriesUsed: ["AI SEO Thailand"]
+  };
 }
 
 function openRouterResearchResponse(
@@ -203,6 +207,40 @@ function openAiUgcDirectionResponse(hook: string) {
           }
         ]
       })
+    }),
+    { status: 200 }
+  );
+}
+
+function openAiStaticDirection() {
+  return {
+    id: "shared-research-hook",
+    sourceCandidateId: "direct-01",
+    service: "single-static",
+    hook: "AI เปลี่ยนวิธีที่ลูกค้าเจอธุรกิจไปแล้ว",
+    subheadline: "เริ่มวางระบบ visibility ก่อนคู่แข่ง",
+    concept: "AI visibility gap",
+    why: "Connects the category shift to a business consequence.",
+    visual: "Search result and AI answer comparison",
+    cta: "จองที่นั่ง Webinar",
+    supportingPoints: [],
+    albumFormat: null,
+    formatBeats: [],
+    ugcBrief: null,
+    ctaActionType: "website",
+    ctaDestination: "https://example.com/webinar",
+    contactLine: "",
+    caption: "เตรียมธุรกิจให้พร้อมกับพฤติกรรมการค้นหาแบบใหม่",
+    score: 90,
+    reasoning: "Uses the supplied shared dossier.",
+    citations: []
+  };
+}
+
+function openAiStaticDirectionResponse() {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({ directions: [openAiStaticDirection()] })
     }),
     { status: 200 }
   );
@@ -292,6 +330,55 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it("returns one reusable Research dossier without running the Hook Agent", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse());
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...singleStaticRequestBody,
+          researchOnly: true
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      researchDossier: validHookResearchDossier()
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a supplied Research dossier without starting another search", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(openAiStaticDirectionResponse())
+      .mockResolvedValueOnce(
+        highlightResponse("shared-research-hook", ["visibility"])
+      );
+    const loadHookResearchPrompt = vi.fn(async () => "RESEARCH_PROMPT");
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({
+          ...singleStaticRequestBody,
+          researchDossier: validHookResearchDossier()
+        })
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      loadAgentHookPrompt: async () => "HOOK_PROMPT",
+      loadHookResearchPrompt
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(loadHookResearchPrompt).not.toHaveBeenCalled();
   });
 
   it("uses one research-enabled pass to return final directions", async () => {
@@ -386,7 +473,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       expect.objectContaining({ type: "web_search_preview" })
     ]);
     expect(researchBody.tool_choice).toBe("required");
-    expect(researchBody.reasoning).toEqual({ effort: "high" });
+    expect(researchBody.reasoning).toEqual({ effort: "medium" });
     expect(researchBody.text.format.name).toBe("moons_hook_research");
 
     const generationBody = JSON.parse(
@@ -426,6 +513,9 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(prompt).toContain("# Required output mix");
     expect(prompt).toContain("# Format");
+    expect(prompt).toContain("scriptLines คือคำพูดจริง");
+    expect(JSON.stringify(directionSchema.properties)).toContain("scriptLines");
+    expect(JSON.stringify(directionSchema.properties)).toContain("textOverlay");
 
     const supportBody = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body)
@@ -822,7 +912,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       plugins?: readonly Record<string, unknown>[];
       provider?: { require_parameters?: boolean };
     };
-    expect(generationBody.model).toBe("anthropic/test-hook-model");
+    expect(generationBody.model).toBe("google/gemini-3.6-flash");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
     expect(generationBody.messages[0]?.content).toHaveLength(1);
     expect(generationBody.response_format).toMatchObject({
@@ -844,6 +934,8 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(openRouterSchema).not.toContain('"type":["string","null"]');
     expect(openRouterSchema).not.toContain('"type":["object","null"]');
     expect(openRouterSchema).toContain('"anyOf"');
+    expect(openRouterSchema).toContain('"scriptLines"');
+    expect(openRouterSchema).toContain('"textOverlay"');
     const directionSchema = generationBody.response_format.json_schema.schema as {
       properties: {
         directions: {
@@ -859,6 +951,16 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(generationBody.plugins).toBeUndefined();
     expect(generationBody.provider).toEqual({ require_parameters: true });
+    const highlightBody = JSON.parse(
+      String(fetchMock.mock.calls[2]?.[1]?.body)
+    ) as {
+      response_format: {
+        json_schema: { schema: unknown };
+      };
+    };
+    expect(
+      JSON.stringify(highlightBody.response_format.json_schema.schema)
+    ).not.toContain("maxItems");
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { model: string; tools?: unknown[]; tool_choice?: string };
@@ -1000,6 +1102,74 @@ describe("handleHookGenerationHarnessRequest", () => {
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
     expect(debugEntry).not.toHaveProperty("pastContentAgent");
     expect(debugEntry).not.toHaveProperty("captionAgent");
+  });
+
+  it("adds past posts to Hook generation as caption-style evidence but keeps them out of Research", async () => {
+    const loadPastPostExamples = vi.fn(async () => [
+      {
+        source: "ad_caption" as const,
+        text: "เริ่มด้วยปัญหาแบบตรง ๆ\n\nแล้วค่อยขยายเหตุผล\n\nทักมาคุยกัน"
+      },
+      {
+        source: "organic_post" as const,
+        text: "เบื้องหลังงานวันนี้ ✨\n\nเล่าสั้นเป็นย่อหน้า"
+      }
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          directions: [
+            {
+              ...openAiStaticDirection(),
+              id: "past-style-hook",
+              sourceCandidateId: "direct-01"
+            }
+          ]
+        })
+      }), { status: 200 }))
+      .mockResolvedValueOnce(
+        highlightResponse("past-style-hook", ["พฤติกรรมการค้นหา"])
+      );
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleStaticRequestBody)
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      loadPastPostExamples
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadPastPostExamples).toHaveBeenCalledWith({
+      clientId: "convert-cake",
+      env: { OPENAI_API_KEY: "test-key" },
+      accessToken: null
+    });
+
+    const researchPrompt = JSON.stringify(
+      (JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { input: unknown }).input
+    );
+    const generationPrompt = JSON.stringify(
+      (JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { input: unknown }).input
+    );
+    expect(researchPrompt).not.toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
+    expect(generationPrompt).toContain(
+      "# Past posts — caption style evidence only"
+    );
+    expect(generationPrompt).toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
+    expect(generationPrompt).toContain("เบื้องหลังงานวันนี้");
+    expect(generationPrompt).toContain("hashtag fingerprint");
+    expect(generationPrompt).toContain(
+      "whether they appear inline or as a final block"
+    );
+    expect(generationPrompt).toContain("contact/footer → hashtags");
+    expect(generationPrompt).toContain(
+      "Do not copy an old phrase, idea, offer, claim, hashtag, contact detail"
+    );
   });
 
   it("returns a readable error when OpenAI returns an empty body", async () => {

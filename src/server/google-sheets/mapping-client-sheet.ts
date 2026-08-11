@@ -6,6 +6,13 @@ import { ONBOARDING_QUESTIONNAIRE_MAX_LENGTH } from "../../domain/client-ingesti
 import type { MappingClient } from "../../ports/mapping-client-repository.js";
 
 export const QUESTIONNAIRE_SHEET_TITLE = "1. Questionnaire";
+const QUESTIONNAIRE_SHEET_TITLE_ALIASES = new Set([
+  "questionnaire",
+  "questionnaires",
+  "questionaire",
+  "questionaires",
+  "questionaies"
+]);
 
 export interface MappingSheetExtraction {
   spreadsheetTitle: string;
@@ -210,16 +217,14 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
     accessToken,
     fetchImpl
   );
-  const questionnaireSheet = readSheetProperties(metadata).find(
-    (sheet) => sheet.title === QUESTIONNAIRE_SHEET_TITLE
-  );
-  if (!questionnaireSheet) {
-    throw new Error(
-      `Google Sheet must contain a tab named "${QUESTIONNAIRE_SHEET_TITLE}".`
-    );
-  }
+  const sheets = readSheetProperties(metadata);
+  const questionnaireSheet =
+    sheets.find((sheet) => sheet.title.trim() === QUESTIONNAIRE_SHEET_TITLE) ??
+    sheets.find((sheet) => isQuestionnaireSheetTitle(sheet.title));
+  if (!questionnaireSheet) return null;
+  const questionnaireSheetTitle = questionnaireSheet.title;
   const range = encodeURIComponent(
-    `'${QUESTIONNAIRE_SHEET_TITLE.replaceAll("'", "''")}'`
+    `'${questionnaireSheetTitle.replaceAll("'", "''")}'`
   );
   const valuesPayload = await googleJson(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(source.spreadsheetId)}/values/${range}?majorDimension=ROWS`,
@@ -233,10 +238,10 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
     : deterministicFields;
   if (!extractedFields.length) {
     throw new Error(
-      `No questionnaire fields were found in "${QUESTIONNAIRE_SHEET_TITLE}". Expected placeholders such as {{brand_name_en}} or a supported questionnaire heading.`
+      `No questionnaire fields were found in "${questionnaireSheetTitle}". Expected placeholders such as {{brand_name_en}} or a supported questionnaire heading.`
     );
   }
-  const text = questionnaireFieldsToText(extractedFields);
+  const text = questionnaireFieldsToText(extractedFields, questionnaireSheetTitle);
   const facebookUrls = extractFacebookUrls(extractedFields);
 
   return {
@@ -244,7 +249,7 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
     text,
     preview: text.slice(0, 280),
     facebookUrls,
-    sheetTitle: QUESTIONNAIRE_SHEET_TITLE,
+    sheetTitle: questionnaireSheetTitle,
     extractedFields
   };
 }
@@ -546,10 +551,11 @@ function normalizeQuestionnaireHeading(value: string): string {
 }
 
 function questionnaireFieldsToText(
-  fields: readonly QuestionnaireExtractedField[]
+  fields: readonly QuestionnaireExtractedField[],
+  sheetTitle = QUESTIONNAIRE_SHEET_TITLE
 ): string {
   return [
-    `Source tab: ${QUESTIONNAIRE_SHEET_TITLE}`,
+    `Source tab: ${sheetTitle}`,
     `Extracted fields: ${fields.length}`,
     "",
     ...fields.flatMap((field) => [
@@ -561,6 +567,17 @@ function questionnaireFieldsToText(
     .join("\n")
     .trim()
     .slice(0, ONBOARDING_QUESTIONNAIRE_MAX_LENGTH);
+}
+
+function isQuestionnaireSheetTitle(title: string): boolean {
+  const normalizedTitle = title
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("en-US")
+    .replace(/^[0-9๐-๙]+\s*[.)\-:]?\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return QUESTIONNAIRE_SHEET_TITLE_ALIASES.has(normalizedTitle);
 }
 
 export function questionnaireFieldLabel(key: string): string {

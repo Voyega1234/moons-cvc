@@ -9,9 +9,10 @@ import {
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
   emptyApprovalComments,
-  hookGenerationModels,
   hookIdeaModes,
   imagePromptModels,
+  isHookGenerationModel,
+  MAX_HOOK_GENERATION_MODELS,
   normalizeFormatBeatsForService,
   referenceImageRoles,
   serviceTypes,
@@ -36,6 +37,8 @@ import { successMetrics } from "../../features/workflow/model";
 import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
+const LEGACY_CLAUDE_HOOK_MODEL = "anthropic/claude-sonnet-4.6";
+const QWEN_HOOK_MODEL = "qwen/qwen3.8-max";
 
 interface WorkspaceSnapshotV1 {
   schemaVersion: 1;
@@ -134,15 +137,33 @@ function parseRun(value: unknown): WorkflowState | null {
       ? "fresh-research"
       : parseMember(value.hookIdeaMode, hookIdeaModes);
   const hookIdeaMode = storedHookIdeaMode ? "fresh-research" : null;
-  const hookGenerationModel =
+  const storedHookGenerationModel =
     value.hookGenerationModel === undefined
       ? "google/gemini-3.6-flash"
-      : value.hookGenerationModel === "anthropic/claude-sonnet-4.6"
-        ? "google/gemini-3.6-flash"
-        : parseMember(value.hookGenerationModel, hookGenerationModels);
+      : parseHookGenerationModel(value.hookGenerationModel);
+  const hookGenerationModel = migrateHookGenerationModel(
+    storedHookGenerationModel
+  );
+  const selectedHookGenerationModels =
+    value.hookGenerationModels === undefined
+      ? hookGenerationModel
+        ? [hookGenerationModel]
+        : null
+      : Array.isArray(value.hookGenerationModels)
+        ? Array.from(
+            new Set(
+              value.hookGenerationModels
+                .map(parseHookGenerationModel)
+                .map(migrateHookGenerationModel)
+                .filter(
+                  (model): model is NonNullable<typeof model> => Boolean(model)
+                )
+            )
+          ).slice(0, MAX_HOOK_GENERATION_MODELS)
+        : null;
   const artworkMode =
     value.artworkMode === undefined
-      ? "design-system"
+      ? "standard"
       : parseMember(value.artworkMode, artworkModes);
   const imagePromptModel =
     value.imagePromptModel === undefined
@@ -206,6 +227,7 @@ function parseRun(value: unknown): WorkflowState | null {
     !service ||
     !hookIdeaMode ||
     !hookGenerationModel ||
+    !selectedHookGenerationModels?.length ||
     !artworkMode ||
     !imagePromptModel ||
     !albumFormat ||
@@ -291,6 +313,7 @@ function parseRun(value: unknown): WorkflowState | null {
     service: creativeMix[0]?.service ?? (service as ServiceType),
     hookIdeaMode,
     hookGenerationModel,
+    hookGenerationModels: selectedHookGenerationModels,
     artworkMode,
     imagePromptModel,
     albumFormat,
@@ -314,6 +337,10 @@ function parseRun(value: unknown): WorkflowState | null {
     clientSent: value.clientSent,
     done: value.done
   };
+}
+
+function migrateHookGenerationModel<T extends string | null>(model: T): T {
+  return (model === LEGACY_CLAUDE_HOOK_MODEL ? QWEN_HOOK_MODEL : model) as T;
 }
 
 function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {
@@ -567,6 +594,10 @@ function parseDirections(
   const directions = value.map((item) => {
     if (!isRecord(item)) return null;
     const id = parseString(item.id);
+    const generationModel =
+      item.generationModel === undefined
+        ? undefined
+        : parseHookGenerationModel(item.generationModel);
     const service =
       item.service === undefined
         ? undefined
@@ -631,6 +662,7 @@ function parseDirections(
     const caption = parseString(item.caption, true);
     if (
       !id ||
+      (item.generationModel !== undefined && !generationModel) ||
       (item.service !== undefined && !service) ||
       manual === null ||
       pillar === null ||
@@ -659,6 +691,7 @@ function parseDirections(
     }
     return {
       id,
+      generationModel: generationModel ?? undefined,
       service: service ?? undefined,
       manual: manual ?? undefined,
       pillar: pillar ?? undefined,
@@ -702,9 +735,46 @@ function parseUgcVideoBrief(value: unknown): UgcVideoBrief | null {
   const moodAndTone = parseString(value.moodAndTone, true);
   const productionStyle = parseString(value.productionStyle, true);
   const referenceDirection = parseString(value.referenceDirection, true);
+  const parsedScenes = parseUgcVideoScenes(value.scenes);
   const openingScript = parseString(value.openingScript, true);
   const showcaseScript = parseString(value.showcaseScript, true);
   const closingScript = parseString(value.closingScript, true);
+  const legacyScenes =
+    openingScript !== null &&
+    showcaseScript !== null &&
+    closingScript !== null
+      ? [
+          {
+            title: "HOOK",
+            duration: "0–5 วินาที",
+            scriptLines: [openingScript],
+            visual: referenceDirection ?? "",
+            textOverlay: ""
+          },
+          {
+            title: "DEVELOPMENT",
+            duration: "5–15 วินาที",
+            scriptLines: [showcaseScript],
+            visual: referenceDirection ?? "",
+            textOverlay: ""
+          },
+          {
+            title: "PROOF / BENEFIT",
+            duration: "15–25 วินาที",
+            scriptLines: [showcaseScript],
+            visual: referenceDirection ?? "",
+            textOverlay: ""
+          },
+          {
+            title: "CTA",
+            duration: "25–30 วินาที",
+            scriptLines: [closingScript],
+            visual: referenceDirection ?? "",
+            textOverlay: ""
+          }
+        ]
+      : null;
+  const scenes = parsedScenes ?? legacyScenes;
   if (
     product === null ||
     duration === null ||
@@ -712,9 +782,7 @@ function parseUgcVideoBrief(value: unknown): UgcVideoBrief | null {
     moodAndTone === null ||
     productionStyle === null ||
     referenceDirection === null ||
-    openingScript === null ||
-    showcaseScript === null ||
-    closingScript === null
+    scenes === null
   ) {
     return null;
   }
@@ -725,10 +793,37 @@ function parseUgcVideoBrief(value: unknown): UgcVideoBrief | null {
     moodAndTone,
     productionStyle,
     referenceDirection,
-    openingScript,
-    showcaseScript,
-    closingScript
+    scenes
   };
+}
+
+function parseUgcVideoScenes(value: unknown): UgcVideoBrief["scenes"] | null {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const scenes = value.map((scene) => {
+    if (!isRecord(scene)) return null;
+    const title = parseString(scene.title);
+    const duration = parseString(scene.duration);
+    const scriptLines = parseStringArray(scene.scriptLines)?.filter(
+      (line) => line.trim().length > 0
+    );
+    const visual = parseString(scene.visual, true);
+    const textOverlay = parseString(scene.textOverlay, true);
+    if (
+      !title ||
+      !duration ||
+      !scriptLines ||
+      scriptLines.length < 1 ||
+      scriptLines.length > 2 ||
+      visual === null ||
+      textOverlay === null
+    ) {
+      return null;
+    }
+    return { title, duration, scriptLines, visual, textOverlay };
+  });
+  return scenes.every((scene) => scene !== null)
+    ? (scenes as UgcVideoBrief["scenes"])
+    : null;
 }
 
 function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
@@ -937,6 +1032,10 @@ function parseStringArray(value: unknown): readonly string[] | null {
   return Array.isArray(value) && value.every((item) => typeof item === "string")
     ? value
     : null;
+}
+
+function parseHookGenerationModel(value: unknown): string | null {
+  return isHookGenerationModel(value) ? value : null;
 }
 
 function parseMember<const Values extends readonly string[]>(

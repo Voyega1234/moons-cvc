@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import {
   albumFormatPreferences,
   albumFormats,
   ctaActionTypes,
   defaultAlbumFormatPreference,
-  hookGenerationModels,
+  isHookGenerationModel,
+  isOpenRouterHookGenerationModel,
   serviceTypes,
   type AlbumFormat,
   type AlbumFormatPreference,
@@ -34,6 +36,12 @@ import {
   parseHookResearchDossier,
   type HookResearchDossier
 } from "./hook-research-agent.js";
+import {
+  buildPastPostsCaptionStyleBlock,
+  fetchPastPostExamples,
+  type PastPostExample,
+  type PastPostsClient
+} from "./past-posts.js";
 
 type FetchLike = typeof fetch;
 
@@ -56,6 +64,11 @@ export interface HookGenerationHarnessEndpointOptions {
   loadAgentHookPrompt?: () => Promise<string>;
   loadHookResearchPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
+  loadPastPostExamples?: (input: {
+    clientId: string;
+    env: HookGenerationHarnessEndpointEnv;
+    accessToken: string | null;
+  }) => Promise<readonly PastPostExample[]>;
   writeDebugLog?: HookGenerationDebugLogger;
 }
 
@@ -111,7 +124,6 @@ interface ResearchAudit {
 
 const DEFAULT_HOOK_MODEL = "google/gemini-3.6-flash";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
-const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.6-flash";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
@@ -119,6 +131,7 @@ const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
 const HOOK_GENERATION_BATCH_SIZE = 12;
 const HOOK_GENERATION_CONCURRENCY = 3;
 const HOOK_GENERATION_REASONING_EFFORT = "high" as const;
+const HOOK_RESEARCH_REASONING_EFFORT = "medium" as const;
 const SUBHEADLINE_BATCH_SIZE = 24;
 const THAI_WEB_SEARCH_TOOL = {
   type: "web_search_preview",
@@ -135,6 +148,7 @@ export async function handleHookGenerationHarnessRequest({
   loadAgentHookPrompt = defaultLoadAgentHookPrompt,
   loadHookResearchPrompt = defaultLoadHookResearchPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
+  loadPastPostExamples = defaultLoadPastPostExamples,
   writeDebugLog = writeHookGenerationDebugLog
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
   if (request.method !== "POST") {
@@ -155,7 +169,11 @@ export async function handleHookGenerationHarnessRequest({
       return jsonResponse({ ok: false, error: "Unauthorized." }, 401);
     }
 
-    const input = parseRequestBody(await request.json());
+    const parsedInput = parseRequestBody(await request.json());
+    const input = {
+      ...parsedInput,
+      generationModel: parsedInput.generationModel ?? DEFAULT_HOOK_MODEL
+    };
     const providerFetchImpl = createAiUsageTrackingFetch({
       fetchImpl,
       context: {
@@ -169,7 +187,7 @@ export async function handleHookGenerationHarnessRequest({
       }
     });
     const generationProvider =
-      input.generationModel === DEFAULT_OPENROUTER_MODEL
+      isOpenRouterHookGenerationModel(input.generationModel)
         ? "openrouter"
         : "openai";
     const generationApiKey =
@@ -184,9 +202,7 @@ export async function handleHookGenerationHarnessRequest({
     }
     const model =
       generationProvider === "openrouter"
-        ? env.OPENROUTER_HOOK_GENERATION_MODEL?.trim() ||
-          input.generationModel ||
-          DEFAULT_OPENROUTER_MODEL
+        ? input.generationModel
         : env.OPENAI_HOOK_GENERATION_MODEL?.trim() ||
           input.generationModel ||
           DEFAULT_OPENAI_MODEL;
@@ -194,20 +210,37 @@ export async function handleHookGenerationHarnessRequest({
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const researchModel =
       env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
-    const agentHookPrompt = await loadAgentHookPrompt();
-    const hookResearchPrompt = await loadHookResearchPrompt();
+    const researchTrace = input.researchDossier
+      ? reusedResearchTrace(input.researchDossier as HookResearchDossier)
+      : await withTransientRetry(async () =>
+          runHookResearchStep({
+            input,
+            policyPrompt: await loadHookResearchPrompt(),
+            apiKey: openAiApiKey,
+            model: researchModel,
+            fetchImpl: providerFetchImpl
+          })
+        );
+    if (input.researchOnly) {
+      return jsonResponse({
+        ok: true,
+        researchDossier: researchTrace.output
+      });
+    }
+
+    const pastPosts = input.brand
+      ? await loadPastPostExamples({
+          clientId: input.brand.id,
+          env,
+          accessToken: auth.accessToken
+        })
+      : [];
+
+    const agentHookPrompt =
+      input.agentHookPrompt?.trim() || (await loadAgentHookPrompt());
     const subheadlineHighlightPrompt =
       await loadSubheadlineHighlightPrompt();
     const generationBatches = buildHookGenerationBatches(input);
-    const researchTrace = await withTransientRetry(() =>
-      runHookResearchStep({
-        input,
-        policyPrompt: hookResearchPrompt,
-        apiKey: openAiApiKey,
-        model: researchModel,
-        fetchImpl: providerFetchImpl
-      })
-    );
     const directTraces = await mapWithConcurrency(
       generationBatches,
       HOOK_GENERATION_CONCURRENCY,
@@ -217,6 +250,7 @@ export async function handleHookGenerationHarnessRequest({
             input: batch,
             agentHookPrompt,
             researchDossier: researchTrace.output,
+            pastPosts,
             apiKey: generationApiKey,
             model,
             provider: generationProvider,
@@ -288,10 +322,34 @@ async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
   );
 }
 
+async function defaultLoadPastPostExamples({
+  clientId,
+  env,
+  accessToken
+}: {
+  clientId: string;
+  env: HookGenerationHarnessEndpointEnv;
+  accessToken: string | null;
+}): Promise<readonly PastPostExample[]> {
+  const supabaseUrl = env.SUPABASE_URL?.trim();
+  const supabaseAnonKey = env.SUPABASE_ANON_KEY?.trim();
+  if (!supabaseUrl || !supabaseAnonKey || !accessToken) return [];
+
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } }
+  });
+  return fetchPastPostExamples({
+    client: client as unknown as PastPostsClient,
+    clientId
+  });
+}
+
 async function runGenerationStep({
   input,
   agentHookPrompt,
   researchDossier,
+  pastPosts,
   apiKey,
   model,
   provider,
@@ -300,6 +358,7 @@ async function runGenerationStep({
   input: HookGenerationHarnessRequest;
   agentHookPrompt: string;
   researchDossier: HookResearchDossier;
+  pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
   provider: "openai" | "openrouter";
@@ -308,7 +367,8 @@ async function runGenerationStep({
   const inputText = buildDirectHookGenerationPrompt(
     input,
     agentHookPrompt,
-    researchDossier
+    researchDossier,
+    pastPosts
   );
   const requestDirections = (requestInputText: string) =>
     callResponsesApi({
@@ -403,7 +463,7 @@ async function runHookResearchStep({
     schema: hookResearchSchema,
     tools: [THAI_WEB_SEARCH_TOOL],
     toolChoice: "required",
-    reasoningEffort: HOOK_GENERATION_REASONING_EFFORT,
+    reasoningEffort: HOOK_RESEARCH_REASONING_EFFORT,
     provider: "openai"
   });
   return {
@@ -411,6 +471,20 @@ async function runHookResearchStep({
     output: parseHookResearchDossier(extractResponseText(payload)),
     rawResponse: payload,
     researchAudit: extractResearchAudit(payload)
+  };
+}
+
+function reusedResearchTrace(
+  dossier: HookResearchDossier
+): TracedAgentResult<HookResearchDossier> {
+  return {
+    inputText: "Shared Research dossier supplied by Hook Agent Playground.",
+    output: dossier,
+    rawResponse: { reused: true },
+    researchAudit: {
+      webSearchRequests: 0,
+      citationUrls: dossier.references.map((reference) => reference.sourceUrl)
+    }
   };
 }
 
@@ -450,7 +524,7 @@ function buildDirectHookGenerationDebugLog({
         tools: [THAI_WEB_SEARCH_TOOL],
         plugins: [],
         toolChoice: "required" as const,
-        reasoningEffort: HOOK_GENERATION_REASONING_EFFORT,
+        reasoningEffort: HOOK_RESEARCH_REASONING_EFFORT,
         responseSchema: "moons_hook_research" as const
       },
       response: {
@@ -809,7 +883,7 @@ async function callResponsesApi({
   tools?: readonly Record<string, unknown>[];
   plugins?: readonly Record<string, unknown>[];
   toolChoice?: "required";
-  reasoningEffort?: "high";
+  reasoningEffort?: "medium" | "high";
   provider?: "openai" | "openrouter";
 }): Promise<unknown> {
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
@@ -918,10 +992,9 @@ function openRouterCompatibleSchema(value: unknown): unknown {
   if (!isRecord(value)) return value;
 
   const normalized = Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      openRouterCompatibleSchema(item)
-    ])
+    Object.entries(value)
+      .filter(([key]) => key !== "maxItems")
+      .map(([key, item]) => [key, openRouterCompatibleSchema(item)])
   ) as Record<string, unknown>;
   const declaredType = normalized.type;
   if (!Array.isArray(declaredType) || !declaredType.includes("null")) {
@@ -944,8 +1017,10 @@ function openRouterCompatibleSchema(value: unknown): unknown {
 function buildDirectHookGenerationPrompt(
   input: HookGenerationHarnessRequest,
   agentHookPrompt: string,
-  researchDossier: HookResearchDossier
+  researchDossier: HookResearchDossier,
+  pastPosts: readonly PastPostExample[]
 ): string {
+  const pastPostsBlock = buildPastPostsCaptionStyleBlock(pastPosts);
   return [
     agentHookPrompt,
     "",
@@ -955,6 +1030,7 @@ function buildDirectHookGenerationPrompt(
     buildInputBlock(input),
     "",
     hookResearchDossierBlock(researchDossier),
+    ...(pastPostsBlock ? ["", pastPostsBlock] : []),
     "",
     "# Required output mix",
     `คืน ${input.quantity} directions ให้ครบและเรียงตาม quota นี้: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
@@ -966,7 +1042,9 @@ function buildDirectHookGenerationPrompt(
       input.albumFormat ?? defaultAlbumFormatPreference
     ),
     "- album-post: ugcBrief = null.",
-    "- ugc-video: albumFormat = null, ugcBrief ต้องมีข้อมูลครบ และ formatBeats ไม่มีจำนวนบังคับ.",
+    "- ugc-video: albumFormat = null, ugcBrief ต้องมีข้อมูลครบ และ scenes ต้องมี 4 ฉากตามลำดับ HOOK, DEVELOPMENT, PROOF / BENEFIT, CTA.",
+    "- แต่ละ UGC scene: scriptLines คือคำพูดจริงที่ผู้พูดสามารถอ่านหน้ากล้องได้ 1–2 ประโยค ห้ามใส่คำสั่งกล้องหรือคำอธิบายภาพ; visual คือสิ่งที่ต้องถ่าย; textOverlay คือข้อความสั้นที่ขึ้นบนจอ; duration คือช่วงเวลาของฉาก.",
+    "- UGC formatBeats ให้เป็นชื่อ Storyline สั้น ๆ 4 ข้อที่ตรงกับ scenes และห้ามนำคำอธิบาย Visual มาปนกับบทพูด.",
     "- motion-static: albumFormat = null, ugcBrief = null และ formatBeats ไม่มีจำนวนบังคับ."
   ].join("\n");
 }
@@ -1089,7 +1167,28 @@ const hookGenerationSchema = {
               objective: { type: "string" },
               moodAndTone: { type: "string" },
               productionStyle: { type: "string" },
-              referenceDirection: { type: "string" }
+              referenceDirection: { type: "string" },
+              scenes: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string" },
+                    duration: { type: "string" },
+                    scriptLines: stringArraySchema,
+                    visual: { type: "string" },
+                    textOverlay: { type: "string" }
+                  },
+                  required: [
+                    "title",
+                    "duration",
+                    "scriptLines",
+                    "visual",
+                    "textOverlay"
+                  ]
+                }
+              }
             },
             required: [
               "product",
@@ -1097,7 +1196,8 @@ const hookGenerationSchema = {
               "objective",
               "moodAndTone",
               "productionStyle",
-              "referenceDirection"
+              "referenceDirection",
+              "scenes"
             ]
           },
           ctaActionType: { type: "string", enum: ctaActionTypes },
@@ -1184,6 +1284,9 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
     runId,
     hookIdeaMode: readHookIdeaMode(value.hookIdeaMode),
     generationModel: readHookGenerationModel(value.generationModel),
+    agentHookPrompt: readOptionalAgentHookPrompt(value.agentHookPrompt),
+    researchOnly: readOptionalBoolean(value.researchOnly, "researchOnly"),
+    researchDossier: readOptionalResearchDossier(value.researchDossier),
     albumFormat: readAlbumFormat(value.albumFormat),
     brand: value.brand === null ? null : parseBrand(value.brand),
     service: service as HookGenerationHarnessRequest["service"],
@@ -1214,6 +1317,41 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readOptionalAgentHookPrompt(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("agentHookPrompt must be a non-empty string.");
+  }
+  if (value.length > 120_000) {
+    throw new Error("agentHookPrompt is too long.");
+  }
+  return value;
+}
+
+function readOptionalBoolean(
+  value: unknown,
+  field: string
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`${field} must be boolean.`);
+  return value;
+}
+
+function readOptionalResearchDossier(
+  value: unknown
+): HookResearchDossier | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return parseHookResearchDossier(JSON.stringify(value));
+  } catch (error) {
+    throw new Error(
+      `researchDossier is invalid: ${
+        error instanceof Error ? error.message : "unexpected dossier shape"
+      }`
+    );
+  }
 }
 
 function readAlbumFormat(value: unknown): AlbumFormatPreference {
@@ -1265,12 +1403,7 @@ function readHookIdeaMode(value: unknown): HookIdeaMode {
 
 function readHookGenerationModel(value: unknown): HookGenerationModel {
   if (value === undefined) return DEFAULT_HOOK_MODEL;
-  if (
-    typeof value === "string" &&
-    hookGenerationModels.includes(value as HookGenerationModel)
-  ) {
-    return value as HookGenerationModel;
-  }
+  if (isHookGenerationModel(value)) return value;
   throw new Error("generationModel is invalid.");
 }
 
@@ -1559,16 +1692,36 @@ function readUgcVideoBrief(
     formatBeats: readonly string[];
   }
 ): UgcVideoBrief {
-  const openingScript =
-    fallback.formatBeats[0] ?? fallback.hook;
-  const showcaseScript =
-    fallback.formatBeats.length > 2
-      ? fallback.formatBeats.slice(1, -1).join(" / ")
-      : fallback.concept;
-  const closingScript =
-    fallback.formatBeats.length > 1
-      ? fallback.formatBeats[fallback.formatBeats.length - 1]!
-      : fallback.cta;
+  const fallbackScenes = [
+    {
+      title: "HOOK",
+      duration: "0–5 วินาที",
+      scriptLines: [fallback.hook],
+      visual: fallback.visual,
+      textOverlay: fallback.hook
+    },
+    {
+      title: "DEVELOPMENT",
+      duration: "5–15 วินาที",
+      scriptLines: [fallback.concept],
+      visual: fallback.visual,
+      textOverlay: fallback.formatBeats[1] ?? fallback.concept
+    },
+    {
+      title: "PROOF / BENEFIT",
+      duration: "15–25 วินาที",
+      scriptLines: [fallback.why],
+      visual: fallback.visual,
+      textOverlay: fallback.why
+    },
+    {
+      title: "CTA",
+      duration: "25–30 วินาที",
+      scriptLines: [fallback.cta],
+      visual: fallback.visual,
+      textOverlay: fallback.cta
+    }
+  ];
 
   if (value === undefined) {
     return {
@@ -1578,13 +1731,34 @@ function readUgcVideoBrief(
       moodAndTone: fallback.visual,
       productionStyle: "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ",
       referenceDirection: fallback.visual,
-      openingScript,
-      showcaseScript,
-      closingScript
+      scenes: fallbackScenes
     };
   }
 
   const record = readRecord(value, field);
+  if (!Array.isArray(record.scenes) || record.scenes.length !== 4) {
+    throw new Error(`${field}.scenes must contain exactly 4 scenes.`);
+  }
+  const scenes = record.scenes.map((scene, index) => {
+    const sceneField = `${field}.scenes[${index}]`;
+    const item = readRecord(scene, sceneField);
+    const scriptLines = readStringArray(
+      item.scriptLines,
+      `${sceneField}.scriptLines`
+    )
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (scriptLines.length < 1 || scriptLines.length > 2) {
+      throw new Error(`${sceneField}.scriptLines must contain 1 or 2 lines.`);
+    }
+    return {
+      title: readString(item.title, `${sceneField}.title`),
+      duration: readString(item.duration, `${sceneField}.duration`),
+      scriptLines,
+      visual: readString(item.visual, `${sceneField}.visual`),
+      textOverlay: readString(item.textOverlay, `${sceneField}.textOverlay`)
+    };
+  });
   return {
     product: readString(record.product, `${field}.product`),
     duration: readString(record.duration, `${field}.duration`),
@@ -1598,9 +1772,7 @@ function readUgcVideoBrief(
       record.referenceDirection,
       `${field}.referenceDirection`
     ),
-    openingScript,
-    showcaseScript,
-    closingScript
+    scenes
   };
 }
 

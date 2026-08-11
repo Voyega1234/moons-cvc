@@ -210,8 +210,10 @@ export class SupabaseCollaborativeWorkspaceRepository
       if (!known) {
         const existing = await this.findKnownRun(run.id);
         if (existing) {
-          this.knownRuns.set(run.id, existing);
-          if (existing.serialized === serialized) continue;
+          if (existing.serialized === serialized) {
+            this.knownRuns.set(run.id, existing);
+            continue;
+          }
           throw staleLocalProjectError();
         }
 
@@ -246,8 +248,10 @@ export class SupabaseCollaborativeWorkspaceRepository
               "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
             );
           }
-          this.knownRuns.set(run.id, conflictingRun);
-          if (conflictingRun.serialized === serialized) continue;
+          if (conflictingRun.serialized === serialized) {
+            this.knownRuns.set(run.id, conflictingRun);
+            continue;
+          }
           throw staleLocalProjectError();
         }
         this.knownRuns.set(run.id, {
@@ -260,7 +264,14 @@ export class SupabaseCollaborativeWorkspaceRepository
       }
 
       if (known.currentOwnerUserId !== userId) {
-        throw new Error("Only the current owner can edit this project.");
+        const latest = await this.findKnownRun(run.id);
+        if (latest) {
+          known = latest;
+          this.knownRuns.set(run.id, latest);
+        }
+        if (known.currentOwnerUserId !== userId) {
+          throw new Error("Only the current owner can edit this project.");
+        }
       }
 
       const snapshot = JSON.parse(serialized) as Json;
