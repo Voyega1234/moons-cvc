@@ -1035,6 +1035,7 @@ function buildDirectHookGenerationPrompt(
     "# Required output mix",
     `คืน ${input.quantity} directions ให้ครบและเรียงตาม quota นี้: ${JSON.stringify(contentTypeQuotasForPrompt(input))}`,
     "sourceCandidateId ใช้ id ภายในแบบ direct-01, direct-02 และห้ามซ้ำกัน.",
+    "subheadline เป็น optional: ใช้เฉพาะเมื่อเพิ่มรายละเอียดรองที่จำเป็นจริง; หาก Headline ยืนได้ด้วยตัวเองให้ส่ง null.",
     "",
     "# Format",
     "- single-static และ resize: formatBeats = [], albumFormat = null และ ugcBrief = null.",
@@ -1144,7 +1145,7 @@ const hookGenerationSchema = {
           sourceCandidateId: { type: "string" },
           service: { type: "string", enum: serviceTypes },
           hook: { type: "string" },
-          subheadline: { type: "string" },
+          subheadline: { type: ["string", "null"] },
           concept: { type: "string" },
           why: { type: "string" },
           visual: { type: "string" },
@@ -1583,10 +1584,13 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         sourceCandidateId,
         service,
         hook,
-        subheadline: readString(
-          direction.subheadline,
-          `directions[${index}].subheadline`
-        ),
+        subheadline:
+          direction.subheadline === undefined || direction.subheadline === null
+            ? ""
+            : readString(
+                direction.subheadline,
+                `directions[${index}].subheadline`
+              ),
         concept,
         why,
         visual,

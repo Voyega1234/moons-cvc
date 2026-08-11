@@ -677,7 +677,7 @@ describe("handleHookGenerationHarnessRequest", () => {
                   id: "hook-migrated-research",
                   service: "single-static",
                   hook: "เริ่มจากสิ่งที่ผู้ชมสนใจจริง",
-                  subheadline: "",
+                  subheadline: null,
                   concept: "Legacy mode migrated to researched generation",
                   why: "The UI no longer exposes a no-research choice",
                   visual: "Clean and direct",
@@ -713,6 +713,10 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
+    const responseBody = (await response.clone().json()) as {
+      directions: Array<{ subheadline: string }>;
+    };
+    expect(responseBody.directions[0]?.subheadline).toBe("");
     const generationBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { tools?: unknown[]; tool_choice?: string; input: unknown };
@@ -722,9 +726,27 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationBody.tool_choice).toBe("required");
     const hookBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
-    ) as { tools?: unknown[]; input: unknown };
+    ) as {
+      tools?: unknown[];
+      input: unknown;
+      text: {
+        format: {
+          schema: {
+            properties: {
+              directions: {
+                items: { properties: { subheadline: { type: string[] } } };
+              };
+            };
+          };
+        };
+      };
+    };
     expect(hookBody.tools).toBeUndefined();
     expect(JSON.stringify(hookBody.input)).toContain("Research status: completed");
+    expect(
+      hookBody.text.format.schema.properties.directions.items.properties
+        .subheadline.type
+    ).toEqual(["string", "null"]);
   });
 
   it("rewrites a final Thai direction when its copy uses ฉัน", async () => {

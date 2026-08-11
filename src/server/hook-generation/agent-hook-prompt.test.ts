@@ -3,6 +3,19 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("agent_hook creative quality contract", () => {
+  it("treats subheadline as optional supporting copy", async () => {
+    const prompt = await readFile(
+      join(process.cwd(), "agent_prompt", "agent_hook.md"),
+      "utf8"
+    );
+
+    expect(prompt).toContain("Subheadline เป็น Optional มีหรือไม่มีก็ได้");
+    expect(prompt).toContain(
+      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น `null`"
+    );
+    expect(prompt).toContain("ห้ามแต่งประโยคเพิ่มเพียงเพื่อให้ครบช่อง");
+  });
+
   it("separates art-direction constraints from creative execution", async () => {
     const prompt = await readFile(
       join(process.cwd(), "agent_prompt", "agent_hook.md"),
@@ -98,7 +111,7 @@ describe("agent_hook creative quality contract", () => {
     );
     expect(prompt).toContain("Headline ต้องยืนได้ด้วยตัวเองเสมอ");
     expect(prompt).toContain(
-      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น string ว่าง"
+      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น `null`"
     );
     expect(prompt).toContain("อย่ากำหนดจำนวนคำถาม");
     expect(prompt).toContain(

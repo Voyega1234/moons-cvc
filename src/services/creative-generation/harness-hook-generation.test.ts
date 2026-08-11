@@ -337,6 +337,37 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
+  it("keeps an omitted generated subheadline empty instead of copying concept", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          directions: [
+            {
+              id: "direction-without-subheadline",
+              service: "single-static",
+              hook: "Headline นี้จบความหมายในตัวเอง",
+              concept: "Internal concept must not leak into artwork copy",
+              why: "The headline needs no supporting line.",
+              visual: "One focused visual.",
+              formatBeats: [],
+              cta: "ดูรายละเอียด",
+              caption: "รายละเอียดสำหรับแคปชัน",
+              score: 90
+            }
+          ]
+        })
+      )
+    );
+
+    const [direction] = await generateDirectionsWithHarness({ run });
+
+    expect(direction?.subheadline).toBe("");
+    expect(direction?.subheadlineHighlight).toBe("");
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
   it("preserves the production-ready UGC brief returned by hook generation", async () => {
     const originalFetch = globalThis.fetch;
     vi.stubGlobal(
