@@ -5,15 +5,16 @@ import type {
   WorkspaceRepository
 } from "../../ports/workspace-repository";
 
-/** Uses shared cloud state when available and keeps a per-user local fallback. */
+/** Uses shared cloud state as the source of truth and local state only for migration. */
 export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
+  private localCleanupAttempted = false;
+
   constructor(
     private readonly local: WorkspaceRepository,
     private readonly remote: WorkspaceRepository
   ) {}
 
   async load(): Promise<WorkspaceState | null> {
-    const localWorkspace = await this.local.load();
     let remoteWorkspace: WorkspaceState | null;
     try {
       remoteWorkspace = await this.remote.load();
@@ -24,20 +25,24 @@ export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
       remoteWorkspace = await this.remote.load();
     }
     if (remoteWorkspace) {
-      await this.local.save(remoteWorkspace);
+      await this.discardLocalCache();
       return remoteWorkspace;
     }
-    return localWorkspace;
+    return this.local.load();
   }
 
   async save(workspace: WorkspaceState): Promise<void> {
-    await this.local.save(workspace);
     await this.remote.save(workspace);
+    await this.discardLocalCache();
   }
 
   async clear(): Promise<void> {
-    await this.local.clear();
     await this.remote.clear();
+    try {
+      await this.local.clear();
+    } catch {
+      // Cloud state is authoritative; local cleanup must not report a cloud failure.
+    }
   }
 
   async createCheckpoint(
@@ -45,13 +50,7 @@ export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
     runId: string,
     reason: WorkspaceCheckpointReason
   ): Promise<WorkspaceCheckpoint> {
-    const localCheckpoint = await this.local.createCheckpoint?.(
-      workspace,
-      runId,
-      reason
-    );
     if (!this.remote.createCheckpoint) {
-      if (localCheckpoint) return localCheckpoint;
       throw new Error("Recovery points are unavailable.");
     }
     return this.remote.createCheckpoint(workspace, runId, reason);
@@ -89,7 +88,16 @@ export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
       runId,
       checkpointId
     );
-    await this.local.save(restored);
     return restored;
+  }
+
+  private async discardLocalCache(): Promise<void> {
+    if (this.localCleanupAttempted) return;
+    this.localCleanupAttempted = true;
+    try {
+      await this.local.clear();
+    } catch {
+      // A full or unavailable browser cache must not block verified cloud state.
+    }
   }
 }
