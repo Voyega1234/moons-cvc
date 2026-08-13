@@ -451,10 +451,10 @@ describe("buildHookGenerationHarnessRequest", () => {
   it("requests Research once and reuses its dossier for generation", async () => {
     const originalFetch = globalThis.fetch;
     const dossier = {
-      brand: "Convert Cake",
-      overallFinding: "Shared evidence",
+      summary: "Shared evidence",
       references: [],
-      insightCards: []
+      insights: [],
+      gaps: []
     };
     const fetchMock = vi
       .fn()

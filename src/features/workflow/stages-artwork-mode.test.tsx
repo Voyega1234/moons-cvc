@@ -59,7 +59,7 @@ describe("Artwork generation settings", () => {
     );
 
     const hookModelPicker = screen.getByLabelText("Hook generation models");
-    expect(hookModelPicker.textContent).toContain("Gemini 3.6 Flash");
+    expect(hookModelPicker.textContent).toContain("Compare 3 models");
     await user.click(hookModelPicker);
     expect(screen.queryByText("Compass New")).toBeNull();
     expect(
@@ -75,6 +75,8 @@ describe("Artwork generation settings", () => {
       type: "set-hook-generation-models",
       models: [
         "google/gemini-3.6-flash",
+        "anthropic/claude-sonnet-5",
+        "openai/gpt-5.6-terra",
         "sakana/sakana-namazu"
       ]
     });
@@ -167,20 +169,17 @@ describe("Artwork generation settings", () => {
     expect(
       (
         screen.getByRole("checkbox", {
-          name: "Select qwen/qwen3.8-max"
+          name: "Unselect anthropic/claude-sonnet-5"
         }) as HTMLInputElement
       ).checked
-    ).toBe(false);
+    ).toBe(true);
     await user.click(
-      screen.getByRole("checkbox", { name: "Select qwen/qwen3.8-max" })
-    );
-    await user.click(
-      screen.getByRole("checkbox", { name: "Unselect qwen/qwen3.8-max" })
+      screen.getByRole("checkbox", { name: "Unselect anthropic/claude-sonnet-5" })
     );
     expect(
       (
         screen.getByRole("checkbox", {
-          name: "Select qwen/qwen3.8-max"
+          name: "Select anthropic/claude-sonnet-5"
         }) as HTMLInputElement
       ).checked
     ).toBe(false);

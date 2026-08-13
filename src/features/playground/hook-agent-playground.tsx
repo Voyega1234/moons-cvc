@@ -77,7 +77,8 @@ interface PlaygroundExperiment {
   includeQuestionnaire: boolean;
   includeBrief: boolean;
   selectedBrandItemIds: readonly string[];
-  researchDossier: HookResearchDossier;
+  useSharedResearchDossier?: boolean;
+  researchDossier: HookResearchDossier | null;
   results: readonly PlaygroundResult[];
   errors: readonly string[];
 }
@@ -123,6 +124,8 @@ export function HookAgentPlayground() {
   );
   const [researchDossier, setResearchDossier] =
     useState<HookResearchDossier | null>(null);
+  const [useSharedResearchDossier, setUseSharedResearchDossier] =
+    useState(true);
   const [runErrors, setRunErrors] = useState<readonly string[]>([]);
   const [results, setResults] = useState<readonly PlaygroundResult[]>([]);
   const [history, setHistory] = useState<readonly PlaygroundExperiment[]>(() =>
@@ -295,35 +298,40 @@ export function HookAgentPlayground() {
   async function runComparison() {
     if (!brand || !canRun) return;
     setRunning(true);
-    setRunningPhase("research");
+    setRunningPhase(useSharedResearchDossier ? "research" : "models");
     setRunErrors([]);
     setResults([]);
     setResearchDossier(null);
 
     try {
       const runKey = Date.now();
-      const researchResponse = await fetch(env.hookGenerationHarnessEndpoint, {
-        method: "POST",
-        headers: await authHeaders(),
-        body: JSON.stringify({
-          ...requestPreview,
-          runId: `playground-${runKey}-research`,
-          generationModel: "gpt-5.6-terra",
-          researchOnly: true
-        })
-      });
-      const researchPayload =
-        (await researchResponse.json()) as GenerationResponse;
-      if (!researchResponse.ok || !researchPayload.researchDossier) {
-        throw new Error(
-          researchPayload.error ||
-            `Shared Research failed (${researchResponse.status}).`
+      let sharedDossier: HookResearchDossier | null = null;
+      if (useSharedResearchDossier) {
+        const researchResponse = await fetch(
+          env.hookGenerationHarnessEndpoint,
+          {
+            method: "POST",
+            headers: await authHeaders(),
+            body: JSON.stringify({
+              ...requestPreview,
+              runId: `playground-${runKey}-research`,
+              generationModel: "gpt-5.6-terra",
+              researchOnly: true
+            })
+          }
         );
+        const researchPayload =
+          (await researchResponse.json()) as GenerationResponse;
+        if (!researchResponse.ok || !researchPayload.researchDossier) {
+          throw new Error(
+            researchPayload.error ||
+              `Shared Research failed (${researchResponse.status}).`
+          );
+        }
+        sharedDossier = researchPayload.researchDossier;
+        setResearchDossier(sharedDossier);
+        setRunningPhase("models");
       }
-
-      const sharedDossier = researchPayload.researchDossier;
-      setResearchDossier(sharedDossier);
-      setRunningPhase("models");
 
       const settled = await Promise.allSettled(
         models.map(async (model): Promise<PlaygroundResult> => {
@@ -331,12 +339,14 @@ export function HookAgentPlayground() {
           const response = await fetch(env.hookGenerationHarnessEndpoint, {
             method: "POST",
             headers: await authHeaders(),
-            body: JSON.stringify({
-              ...requestPreview,
-              runId: `playground-${runKey}-${model.replaceAll("/", "-")}`,
-              generationModel: model,
-              researchDossier: sharedDossier
-            })
+            body: JSON.stringify(
+              buildPlaygroundModelRequest({
+                request: requestPreview,
+                runId: `playground-${runKey}-${model.replaceAll("/", "-")}`,
+                model,
+                researchDossier: sharedDossier
+              })
+            )
           });
           const payload = (await response.json()) as GenerationResponse;
           if (!response.ok || !Array.isArray(payload.directions)) {
@@ -378,6 +388,7 @@ export function HookAgentPlayground() {
         includeQuestionnaire,
         includeBrief,
         selectedBrandItemIds: [...selectedBrandItemIds],
+        useSharedResearchDossier,
         researchDossier: sharedDossier,
         results: nextResults,
         errors: nextErrors
@@ -425,6 +436,10 @@ export function HookAgentPlayground() {
     setPrompt(experiment.request.agentHookPrompt);
     setOriginalPrompt(experiment.originalPrompt);
     setPromptView("edit");
+    setUseSharedResearchDossier(
+      experiment.useSharedResearchDossier ??
+        Boolean(experiment.researchDossier)
+    );
     setResearchDossier(experiment.researchDossier);
     setResults(experiment.results);
     setRunErrors(experiment.errors);
@@ -767,6 +782,12 @@ export function HookAgentPlayground() {
           dossier={researchDossier}
           loading={runningPhase === "research"}
           modelCount={models.length}
+          enabled={useSharedResearchDossier}
+          disabled={running}
+          onEnabledChange={(enabled) => {
+            setUseSharedResearchDossier(enabled);
+            if (!enabled) setResearchDossier(null);
+          }}
         />
 
         <section className="playground-model-section">
@@ -894,8 +915,8 @@ export function HookAgentPlayground() {
                         <h3>{direction.hook}</h3>
                         {direction.subheadline ? <p className="playground-subheadline">{direction.subheadline}</p> : null}
                         <div className="playground-idea-detail">
-                          <span>Concept</span>
-                          <p>{direction.concept}</p>
+                          <span>Why it works</span>
+                          <p>{direction.why}</p>
                         </div>
                         {direction.formatBeats?.length ? (
                           <div className="playground-idea-detail">
@@ -986,11 +1007,17 @@ function ExperimentHistory({
 function ResearchDossierPanel({
   dossier,
   loading,
-  modelCount
+  modelCount,
+  enabled,
+  disabled,
+  onEnabledChange
 }: {
   dossier: HookResearchDossier | null;
   loading: boolean;
   modelCount: number;
+  enabled: boolean;
+  disabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
 }) {
   return (
     <section className="playground-research-panel">
@@ -999,12 +1026,36 @@ function ResearchDossierPanel({
           <Sparkle aria-hidden="true" size={18} />
           <div>
             <h2>Shared Research Dossier</h2>
-            <p>Generated once, then reused unchanged across every Hook model.</p>
+            <p>
+              {enabled
+                ? "Generated once, then reused unchanged across every Hook model."
+                : "Each Hook model will generate its own Research dossier."}
+            </p>
           </div>
         </div>
-        <span>{dossier ? `Shared by ${modelCount} models` : "Waiting to run"}</span>
+        <div className="playground-research-actions">
+          <button
+            type="button"
+            aria-pressed={enabled}
+            disabled={disabled}
+            onClick={() => onEnabledChange(!enabled)}
+          >
+            {enabled ? "Send dossier" : "Don't send"}
+          </button>
+          <span>
+            {enabled
+              ? dossier
+                ? `Shared by ${modelCount} models`
+                : "Will be shared"
+              : "Not shared"}
+          </span>
+        </div>
       </header>
-      {loading ? (
+      {!enabled ? (
+        <div className="playground-research-empty">
+          Shared dossier is off. Every selected model will research separately.
+        </div>
+      ) : loading ? (
         <div className="playground-research-loading">
           <div className="playground-skeleton is-research-lead" />
           <div className="playground-skeleton is-research-card" />
@@ -1014,26 +1065,18 @@ function ResearchDossierPanel({
         <div className="playground-research-body">
           <div className="playground-research-finding">
             <span>Overall finding</span>
-            <h3>{dossier.overallFinding}</h3>
-            <p>
-              {dossier.brand} / {dossier.productFocus}
-            </p>
+            <h3>{dossier.summary}</h3>
           </div>
           <div className="playground-insight-list">
-            {dossier.insightCards.map((insight) => (
-              <article key={insight.id}>
-                <span>{Math.round(insight.confidenceScore)} confidence</span>
-                <h4>{insight.tension}</h4>
-                <p>{insight.brandConnection}</p>
-                <small>{insight.evidence}</small>
+            {dossier.insights.map((insight, index) => (
+              <article key={`${insight.title}-${index}`}>
+                <h4>{insight.title}</h4>
+                <p>{insight.content}</p>
               </article>
             ))}
           </div>
           <details className="playground-research-references">
-            <summary>
-              {dossier.references.length} references and{" "}
-              {dossier.searchQueriesUsed.length} search queries
-            </summary>
+            <summary>{dossier.references.length} references</summary>
             <div>
               {dossier.references.map((reference) => (
                 <a
@@ -1042,8 +1085,8 @@ function ResearchDossierPanel({
                   rel="noreferrer"
                   key={reference.id}
                 >
-                  <b>{reference.sourceTitle}</b>
-                  <span>{reference.finding}</span>
+                  <b>{reference.title}</b>
+                  <span>{reference.content}</span>
                 </a>
               ))}
               {dossier.references.length === 0 ? (
@@ -1162,6 +1205,25 @@ export function buildPlaygroundRequest({
       docs: [] as readonly unknown[],
       refs: [] as readonly unknown[]
     }
+  };
+}
+
+export function buildPlaygroundModelRequest({
+  request,
+  runId,
+  model,
+  researchDossier
+}: {
+  request: Record<string, unknown>;
+  runId: string;
+  model: string;
+  researchDossier: HookResearchDossier | null;
+}) {
+  return {
+    ...request,
+    runId,
+    generationModel: model,
+    ...(researchDossier ? { researchDossier } : {})
   };
 }
 

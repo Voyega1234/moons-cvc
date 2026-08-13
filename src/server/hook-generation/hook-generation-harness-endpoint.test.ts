@@ -119,17 +119,10 @@ function validHookResearchResponse() {
 
 function validHookResearchDossier() {
   return {
-    brand: "Convert Cake",
-    productFocus: "AI SEO webinar",
-    overallFinding: "Use verified brand and audience evidence.",
+    summary: "Use verified brand and audience evidence.",
     references: [],
-    insightCards: [],
-    strongestInsightIds: [],
-    strongestReferenceIds: [],
-    researchGaps: [],
-    researchLimitations: "No external claims used by this fixture.",
-    excluded: [],
-    searchQueriesUsed: ["AI SEO Thailand"]
+    insights: [],
+    gaps: ["No external claims used by this fixture."]
   };
 }
 
@@ -391,17 +384,10 @@ describe("handleHookGenerationHarnessRequest", () => {
         new Response(
           JSON.stringify({
             output_text: JSON.stringify({
-              brand: "Convert Cake",
-              productFocus: "AI SEO webinar",
-              overallFinding: "ธุรกิจไทยเริ่มให้ความสำคัญกับ AI visibility",
+              summary: "ธุรกิจไทยเริ่มให้ความสำคัญกับ AI visibility",
               references: [],
-              insightCards: [],
-              strongestInsightIds: [],
-              strongestReferenceIds: [],
-              researchGaps: [],
-              researchLimitations: "No strong public source was found.",
-              excluded: [],
-              searchQueriesUsed: ["AI SEO Thailand B2B"]
+              insights: [],
+              gaps: ["No strong public source was found."]
             })
           }),
           { status: 200 }

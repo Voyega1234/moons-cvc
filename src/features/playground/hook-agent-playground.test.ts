@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { brands } from "../../data/mock-brands";
+import type { HookResearchDossier } from "../../server/hook-generation/hook-research-agent";
 import {
   PLAYGROUND_MODEL_LIMIT,
+  buildPlaygroundModelRequest,
   buildPlaygroundRequest,
   buildPromptDiff,
   filterPlaygroundBrands,
@@ -42,6 +44,35 @@ describe("buildPlaygroundRequest", () => {
     ]);
     expect(request.brandLibrary.products).toEqual([]);
     expect(request.agentHookPrompt).toBe("Test prompt");
+  });
+});
+
+describe("buildPlaygroundModelRequest", () => {
+  it("only sends the shared dossier when sharing is enabled", () => {
+    const request = { brief: "Campaign brief" };
+    const dossier = {
+      summary: "Shared finding",
+      references: [],
+      insights: [],
+      gaps: []
+    } as HookResearchDossier;
+
+    expect(
+      buildPlaygroundModelRequest({
+        request,
+        runId: "run-shared",
+        model: "sakana/sakana-namazu",
+        researchDossier: dossier
+      })
+    ).toMatchObject({ researchDossier: dossier });
+    expect(
+      buildPlaygroundModelRequest({
+        request,
+        runId: "run-independent",
+        model: "sakana/sakana-namazu",
+        researchDossier: null
+      })
+    ).not.toHaveProperty("researchDossier");
   });
 });
 

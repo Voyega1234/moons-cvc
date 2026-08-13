@@ -38,7 +38,8 @@ import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
 const LEGACY_CLAUDE_HOOK_MODEL = "anthropic/claude-sonnet-4.6";
-const QWEN_HOOK_MODEL = "qwen/qwen3.8-max";
+const LEGACY_QWEN_HOOK_MODEL = "qwen/qwen3.8-max";
+const CLAUDE_HOOK_MODEL = "anthropic/claude-sonnet-5";
 
 interface WorkspaceSnapshotV1 {
   schemaVersion: 1;
@@ -340,7 +341,11 @@ function parseRun(value: unknown): WorkflowState | null {
 }
 
 function migrateHookGenerationModel<T extends string | null>(model: T): T {
-  return (model === LEGACY_CLAUDE_HOOK_MODEL ? QWEN_HOOK_MODEL : model) as T;
+  return (
+    model === LEGACY_CLAUDE_HOOK_MODEL || model === LEGACY_QWEN_HOOK_MODEL
+      ? CLAUDE_HOOK_MODEL
+      : model
+  ) as T;
 }
 
 function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {

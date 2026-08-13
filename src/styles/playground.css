@@ -937,7 +937,37 @@
   font-size: 10px;
 }
 
-.playground-research-panel > header > span {
+.playground-research-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playground-research-actions button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.playground-research-actions button[aria-pressed="true"] {
+  border-color: var(--accentLine);
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+
+.playground-research-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.playground-research-actions > span {
   padding: 5px 8px;
   border-radius: 8px;
   background: var(--accentSoft);
@@ -1506,7 +1536,11 @@
     display: grid;
   }
 
-  .playground-research-panel > header > span {
+  .playground-research-actions {
+    justify-content: space-between;
+  }
+
+  .playground-research-actions > span {
     width: fit-content;
   }
 

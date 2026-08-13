@@ -4318,10 +4318,8 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               </div>
             ) : null}
             <div className="compass-angle-copy-block compass-angle-concept-block">
-              <span className="compass-angle-card-kicker">
-                {angleConceptLabel(group.service)}
-              </span>
-              <p>{direction.concept}</p>
+              <span className="compass-angle-card-kicker">Why it works</span>
+              <p>{direction.why}</p>
             </div>
             <div className="compass-angle-copy-block">
               <span className="compass-angle-card-kicker">CTA</span>
@@ -4508,13 +4506,6 @@ function angleFormatBeatsLabel(service: ServiceType): string {
   if (service === "album-post") return "Inside slides";
   if (service === "ugc-video") return "UGC video flow";
   return "Motion flow";
-}
-
-function angleConceptLabel(service: ServiceType): string {
-  if (service === "album-post") return "Album concept";
-  if (service === "ugc-video") return "UGC concept";
-  if (service === "motion-static") return "Motion concept";
-  return "Concept";
 }
 
 function AngleSubheadline({

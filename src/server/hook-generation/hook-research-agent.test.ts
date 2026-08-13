@@ -6,48 +6,24 @@ import {
 } from "./hook-research-agent";
 
 const dossier = {
-  brand: "De Hygienique",
-  productFocus: "บริการทำความสะอาดที่นอน",
-  overallFinding: "ผู้ชมต้องการหลักฐานเรื่องกระบวนการและเวลาใช้งานต่อ",
+  summary: "ผู้ชมต้องการหลักฐานเรื่องกระบวนการและเวลาใช้งานต่อ",
   references: [
     {
       id: "ref-01",
-      name: "Dry mattress cleaning process",
-      type: "product_truth",
-      dateOrPeriod: "current",
-      finding: "บริการใช้ระบบแห้ง",
-      thaiAudienceRelevance: "ลดความกังวลเรื่องเวลารอ",
-      brandRelevance: "เป็นกระบวนการของบริการ",
-      sourceTitle: "Mattress Cleaning",
-      sourcePublisher: "De Hygienique Thailand",
-      sourceDate: "",
+      title: "Mattress Cleaning",
+      content: "หน้า Product ระบุว่าบริการใช้ระบบแห้ง",
+      publishedAt: "current",
       sourceUrl: "https://example.com/mattress-cleaning",
-      proofType: "official_product_page",
-      proofSummary: "หน้า Product ระบุระบบแห้ง",
-      brandSafety: "low_risk",
-      evidenceStrength: "strong",
-      confidenceScore: 94
     }
   ],
-  insightCards: [
+  insights: [
     {
-      id: "insight-01",
-      evidenceIds: ["ref-01"],
-      evidence: "บริการใช้ระบบแห้งตามหน้า Product ทางการ",
-      tension: "ลูกค้ากังวลเรื่องเวลารอ ทั้งที่กระบวนการไม่ใช่การซักแบบเปียก",
-      beliefChallenged: "การทำความสะอาดที่นอนต้องทำให้ที่นอนเปียกและรอแห้งเสมอ",
-      humanConsequence: "ความเข้าใจผิดเรื่องเวลารออาจทำให้ลูกค้าเลื่อนการตัดสินใจ",
-      brandConnection: "อธิบายระบบแห้งของบริการด้วย Product truth ที่ตรวจสอบได้",
-      freshnessReason: "เปลี่ยนจากการขายความสะอาดทั่วไปไปแก้ความกังวลเรื่องการใช้งานต่อ",
-      confidenceScore: 90
+      title: "ความกังวลเรื่องเวลารอเกิดจากภาพจำการซักแบบเปียก",
+      content: "บริการใช้ระบบแห้งตามหน้า Product ทางการ แต่ลูกค้าอาจยังเชื่อว่าการทำความสะอาดที่นอนต้องรอแห้ง ความเข้าใจผิดนี้อาจทำให้เลื่อนการตัดสินใจ แบรนด์จึงมี Product truth ที่ใช้คลายข้อกังวลได้",
+      referenceIds: ["ref-01"]
     }
   ],
-  strongestInsightIds: ["insight-01"],
-  strongestReferenceIds: ["ref-01"],
-  researchGaps: [],
-  researchLimitations: "",
-  excluded: [],
-  searchQueriesUsed: ["บริการทำความสะอาดที่นอนระบบแห้ง"]
+  gaps: []
 } as const;
 
 describe("Hook Research Agent contract", () => {
@@ -70,9 +46,13 @@ describe("Hook Research Agent contract", () => {
 
     expect(block).toContain("Dedicated Research Agent dossier");
     expect(block).toContain("https://example.com/mattress-cleaning");
-    expect(block).toContain("ลูกค้ากังวลเรื่องเวลารอ");
-    expect(block).toContain("Start creative reasoning from the insightCards");
-    expect(block).toContain("must copy its sourceUrl into citations");
+    expect(block).toContain("ความกังวลเรื่องเวลารอ");
+    expect(block).toContain("Start creative reasoning from insights");
+    expect(block).toContain("Treat references as factual guardrails");
+    expect(block).toContain("not as a generic fact dump");
+    expect(block).toContain(
+      "must copy the matching reference sourceUrl into citations"
+    );
   });
 
   it("rejects research references without a real HTTP source URL", () => {
@@ -86,17 +66,17 @@ describe("Hook Research Agent contract", () => {
     ).toThrow("sourceUrl must be a valid HTTP URL");
   });
 
-  it("rejects insight cards that cite unknown evidence ids", () => {
+  it("rejects insights that cite unknown reference ids", () => {
     expect(() =>
       parseHookResearchDossier(
         JSON.stringify({
           ...dossier,
-          insightCards: [
-            { ...dossier.insightCards[0], evidenceIds: ["missing-ref"] }
+          insights: [
+            { ...dossier.insights[0], referenceIds: ["missing-ref"] }
           ]
         })
       )
-    ).toThrow("references unknown evidence id: missing-ref");
+    ).toThrow("references unknown reference id: missing-ref");
   });
 
   it("rejects insight cards without supporting evidence", () => {
@@ -104,9 +84,36 @@ describe("Hook Research Agent contract", () => {
       parseHookResearchDossier(
         JSON.stringify({
           ...dossier,
-          insightCards: [{ ...dossier.insightCards[0], evidenceIds: [] }]
+          insights: [{ ...dossier.insights[0], referenceIds: [] }]
         })
       )
-    ).toThrow("must include evidenceIds");
+    ).toThrow("must include referenceIds");
+  });
+
+  it("normalizes a previously saved verbose dossier", () => {
+    const parsed = parseHookResearchDossier(JSON.stringify({
+      overallFinding: "Legacy summary",
+      references: [{
+        id: "legacy-ref",
+        sourceTitle: "Legacy source",
+        proofSummary: "Legacy proof",
+        sourceDate: "2026-01-01",
+        sourceUrl: "https://example.com/legacy"
+      }],
+      insightCards: [{
+        id: "legacy-insight",
+        evidenceIds: ["legacy-ref"],
+        tension: "Legacy tension",
+        evidence: "Legacy evidence",
+        brandConnection: "Legacy connection"
+      }],
+      researchGaps: []
+    }));
+
+    expect(parsed).toMatchObject({
+      summary: "Legacy summary",
+      references: [{ title: "Legacy source", content: "Legacy proof" }],
+      insights: [{ title: "Legacy tension", referenceIds: ["legacy-ref"] }]
+    });
   });
 });

@@ -74,9 +74,10 @@ to the stored concept.
 allows a temporary prompt override, previews the exact request payload, and
 runs one to five direct Hook models concurrently. Users can add validated
 OpenRouter `provider/model` IDs from the Playground; n8n remains hidden there.
-It creates one validated
-Research dossier per experiment and reuses that exact dossier for every model,
-so model comparison is not confounded by separate research runs. Completed
+Shared Research is enabled by default: it creates one validated Research
+dossier and reuses that exact dossier for every model. Users can turn sharing
+off to omit the dossier and let each model request run its own Research step.
+Completed
 experiments are stored locally in the browser with their input, prompt,
 Research dossier, results, and per-model errors. The prompt editor also exposes
 a line-level diff against the source prompt. Prompt overrides are scoped to the
@@ -89,19 +90,31 @@ Before creative generation, the dedicated Research Agent at
 `agent_prompt/agent_hook_research.md` searches Product Truth, Thai audience
 behavior, category/competitor context, provable moments, cultural/platform
 signals, and consumer language once per request. It returns a structured
-dossier with direct source URLs plus evidence-backed `insightCards`. Each card
-must connect Evidence, Tension, Belief challenged, Human consequence, and Brand
-connection, and its `evidenceIds` must resolve to references in the same
-dossier. The dossier is shared by every Hook batch, which is instructed to use
-the cards as its primary strategic starting points and the references as proof.
+dossier with a compact `summary`, direct-source `references`, evidence-backed
+`insights`, and material `gaps`. Each insight compresses Evidence, Tension,
+Belief challenged, Human consequence, Why now, and Brand connection into one
+content field, while its `referenceIds` must resolve inside the same dossier.
+The dossier is shared by every Hook batch, which uses the ordered insights as
+its primary strategic starting points and the references as proof.
 The Research Agent always uses OpenAI with `web_search_preview` and Thailand
 location context and `medium` reasoning effort, even when the Hook Agent is
 routed through OpenRouter. The
 Hook Agent receives the dossier without a search tool so research and creative
-judgment remain separate. New runs default to selecting only
-`google/gemini-3.6-flash` through OpenRouter. `qwen/qwen3.8-max` and
-`openai/gpt-5.6-terra` remain available in the saved-model catalog but are not
-selected by default.
+judgment remain separate. Research is discovery-first: at least eight distinct
+queries adapt to the brand across fresh domain news/research, current Thai
+societal tension, the next 60 days of seasonal moments, recent platform/search
+language, and category shifts. B2B, marketing, and technology brands weight
+official updates, studies, and benchmarks more heavily; consumer brands weight
+seasonal, cultural, and consumer-language signals more heavily. At least six
+queries exclude brand and competitor names, while brand/product verification is
+capped at two queries and two selected brand-owned references. Product truth is
+a factual guardrail rather than the default idea seed. Every current signal must
+pass a `Brand truth × Audience tension × Current signal` usefulness gate and
+state the specific content leverage it unlocks before Hook generation. New runs
+default to comparing `google/gemini-3.6-flash`,
+`anthropic/claude-sonnet-5`, and `openai/gpt-5.6-terra` through OpenRouter.
+Saved selections using Qwen 3.8 Max or Claude Sonnet 4.6 are migrated to Claude
+Sonnet 5.
 Users may select one to five Hook models. Direct Hook runs create one Research
 dossier first, reuse it for every selected model, and start all selected model
 requests concurrently. A failed model no longer discards successful results

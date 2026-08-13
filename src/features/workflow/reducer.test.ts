@@ -210,7 +210,9 @@ describe("workflowReducer", () => {
       "google/gemini-3.6-flash"
     );
     expect(initialWorkflowState.hookGenerationModels).toEqual([
-      "google/gemini-3.6-flash"
+      "google/gemini-3.6-flash",
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5.6-terra"
     ]);
 
     const updated = workflowReducer(initialWorkflowState, {

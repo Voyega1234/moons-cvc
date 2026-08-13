@@ -1,73 +1,22 @@
-export const hookResearchReferenceTypes = [
-  "product_truth",
-  "evidence_backed_behavior",
-  "category_signal",
-  "provable_moment",
-  "cultural_fever",
-  "platform_buzz",
-  "consumer_language"
-] as const;
-
-export const hookResearchProofTypes = [
-  "official_product_page",
-  "official_date",
-  "campaign_date",
-  "seasonality",
-  "survey",
-  "report",
-  "government_data",
-  "platform_ranking",
-  "google_trends",
-  "news",
-  "ecommerce_data",
-  "industry_report",
-  "entertainment_ranking",
-  "social_signal"
-] as const;
-
 export interface HookResearchReference {
   id: string;
-  name: string;
-  type: (typeof hookResearchReferenceTypes)[number];
-  dateOrPeriod: string;
-  finding: string;
-  thaiAudienceRelevance: string;
-  brandRelevance: string;
-  sourceTitle: string;
-  sourcePublisher: string;
-  sourceDate: string;
+  title: string;
+  content: string;
+  publishedAt: string;
   sourceUrl: string;
-  proofType: (typeof hookResearchProofTypes)[number];
-  proofSummary: string;
-  brandSafety: "low_risk" | "medium_risk" | "high_risk";
-  evidenceStrength: "strong" | "medium" | "weak";
-  confidenceScore: number;
 }
 
-export interface HookResearchInsightCard {
-  id: string;
-  evidenceIds: string[];
-  evidence: string;
-  tension: string;
-  beliefChallenged: string;
-  humanConsequence: string;
-  brandConnection: string;
-  freshnessReason: string;
-  confidenceScore: number;
+export interface HookResearchInsight {
+  title: string;
+  content: string;
+  referenceIds: string[];
 }
 
 export interface HookResearchDossier {
-  brand: string;
-  productFocus: string;
-  overallFinding: string;
+  summary: string;
   references: HookResearchReference[];
-  insightCards: HookResearchInsightCard[];
-  strongestInsightIds: string[];
-  strongestReferenceIds: string[];
-  researchGaps: string[];
-  researchLimitations: string;
-  excluded: { name: string; reason: string }[];
-  searchQueriesUsed: string[];
+  insights: HookResearchInsight[];
+  gaps: string[];
 }
 
 const stringArraySchema = {
@@ -79,9 +28,7 @@ export const hookResearchSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    brand: { type: "string" },
-    productFocus: { type: "string" },
-    overallFinding: { type: "string" },
+    summary: { type: "string" },
     references: {
       type: "array",
       items: {
@@ -89,108 +36,30 @@ export const hookResearchSchema = {
         additionalProperties: false,
         properties: {
           id: { type: "string" },
-          name: { type: "string" },
-          type: { type: "string", enum: hookResearchReferenceTypes },
-          dateOrPeriod: { type: "string" },
-          finding: { type: "string" },
-          thaiAudienceRelevance: { type: "string" },
-          brandRelevance: { type: "string" },
-          sourceTitle: { type: "string" },
-          sourcePublisher: { type: "string" },
-          sourceDate: { type: "string" },
-          sourceUrl: { type: "string" },
-          proofType: { type: "string", enum: hookResearchProofTypes },
-          proofSummary: { type: "string" },
-          brandSafety: {
-            type: "string",
-            enum: ["low_risk", "medium_risk", "high_risk"]
-          },
-          evidenceStrength: {
-            type: "string",
-            enum: ["strong", "medium", "weak"]
-          },
-          confidenceScore: { type: "number" }
+          title: { type: "string" },
+          content: { type: "string" },
+          publishedAt: { type: "string" },
+          sourceUrl: { type: "string" }
         },
-        required: [
-          "id",
-          "name",
-          "type",
-          "dateOrPeriod",
-          "finding",
-          "thaiAudienceRelevance",
-          "brandRelevance",
-          "sourceTitle",
-          "sourcePublisher",
-          "sourceDate",
-          "sourceUrl",
-          "proofType",
-          "proofSummary",
-          "brandSafety",
-          "evidenceStrength",
-          "confidenceScore"
-        ]
+        required: ["id", "title", "content", "publishedAt", "sourceUrl"]
       }
     },
-    insightCards: {
+    insights: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          id: { type: "string" },
-          evidenceIds: { ...stringArraySchema, minItems: 1 },
-          evidence: { type: "string" },
-          tension: { type: "string" },
-          beliefChallenged: { type: "string" },
-          humanConsequence: { type: "string" },
-          brandConnection: { type: "string" },
-          freshnessReason: { type: "string" },
-          confidenceScore: { type: "number" }
+          title: { type: "string" },
+          content: { type: "string" },
+          referenceIds: { ...stringArraySchema, minItems: 1 }
         },
-        required: [
-          "id",
-          "evidenceIds",
-          "evidence",
-          "tension",
-          "beliefChallenged",
-          "humanConsequence",
-          "brandConnection",
-          "freshnessReason",
-          "confidenceScore"
-        ]
+        required: ["title", "content", "referenceIds"]
       }
     },
-    strongestInsightIds: stringArraySchema,
-    strongestReferenceIds: stringArraySchema,
-    researchGaps: stringArraySchema,
-    researchLimitations: { type: "string" },
-    excluded: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: { type: "string" },
-          reason: { type: "string" }
-        },
-        required: ["name", "reason"]
-      }
-    },
-    searchQueriesUsed: stringArraySchema
+    gaps: stringArraySchema
   },
-  required: [
-    "brand",
-    "productFocus",
-    "overallFinding",
-    "references",
-    "insightCards",
-    "strongestInsightIds",
-    "strongestReferenceIds",
-    "researchGaps",
-    "researchLimitations",
-    "excluded",
-    "searchQueriesUsed"
-  ]
+  required: ["summary", "references", "insights", "gaps"]
 } as const;
 
 export function buildHookResearchPrompt(
@@ -209,16 +78,20 @@ export function buildHookResearchPrompt(
 }
 
 export function parseHookResearchDossier(text: string): HookResearchDossier {
-  const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
+  const raw = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
+  const parsed = normalizeLegacyDossier(raw);
   if (
     !isRecord(parsed) ||
+    typeof parsed.summary !== "string" ||
     !Array.isArray(parsed.references) ||
-    !Array.isArray(parsed.insightCards)
+    !Array.isArray(parsed.insights) ||
+    !Array.isArray(parsed.gaps)
   ) {
     throw new Error(
-      "Hook Research Agent must return references and insightCards arrays."
+      "Hook Research Agent must return summary, references, insights, and gaps."
     );
   }
+
   const referenceIds = new Set<string>();
   for (const [index, item] of parsed.references.entries()) {
     if (!isRecord(item) || !isHttpUrl(item.sourceUrl)) {
@@ -228,26 +101,77 @@ export function parseHookResearchDossier(text: string): HookResearchDossier {
     }
     if (typeof item.id === "string") referenceIds.add(item.id);
   }
-  for (const [index, item] of parsed.insightCards.entries()) {
+  for (const [index, item] of parsed.insights.entries()) {
     if (
       !isRecord(item) ||
-      !Array.isArray(item.evidenceIds) ||
-      item.evidenceIds.length === 0
+      !Array.isArray(item.referenceIds) ||
+      item.referenceIds.length === 0
     ) {
       throw new Error(
-        `Hook Research Agent insightCards[${index}] must include evidenceIds.`
+        `Hook Research Agent insights[${index}] must include referenceIds.`
       );
     }
-    const missingEvidenceId = item.evidenceIds.find(
+    const missingReferenceId = item.referenceIds.find(
       (id) => typeof id !== "string" || !referenceIds.has(id)
     );
-    if (missingEvidenceId !== undefined) {
+    if (missingReferenceId !== undefined) {
       throw new Error(
-        `Hook Research Agent insightCards[${index}] references unknown evidence id: ${String(missingEvidenceId)}.`
+        `Hook Research Agent insights[${index}] references unknown reference id: ${String(missingReferenceId)}.`
       );
     }
   }
   return parsed as unknown as HookResearchDossier;
+}
+
+function normalizeLegacyDossier(value: unknown): unknown {
+  if (!isRecord(value) || Array.isArray(value.insights)) return value;
+  if (!Array.isArray(value.references) || !Array.isArray(value.insightCards)) {
+    return value;
+  }
+
+  return {
+    summary: readString(value.overallFinding),
+    references: value.references.map((reference) => {
+      if (!isRecord(reference)) return reference;
+      return {
+        id: readString(reference.id),
+        title: readString(reference.sourceTitle) || readString(reference.name),
+        content:
+          readString(reference.proofSummary) || readString(reference.finding),
+        publishedAt:
+          readString(reference.sourceDate) ||
+          readString(reference.dateOrPeriod) ||
+          "unknown",
+        sourceUrl: readString(reference.sourceUrl)
+      };
+    }),
+    insights: value.insightCards.map((insight) => {
+      if (!isRecord(insight)) return insight;
+      return {
+        title: readString(insight.tension) || readString(insight.id),
+        content: [
+          readString(insight.evidence),
+          readString(insight.beliefChallenged),
+          readString(insight.humanConsequence),
+          readString(insight.brandConnection),
+          readString(insight.freshnessReason)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        referenceIds: Array.isArray(insight.evidenceIds)
+          ? insight.evidenceIds
+          : []
+      };
+    }),
+    gaps: [
+      ...(Array.isArray(value.researchGaps) ? value.researchGaps : []),
+      readString(value.researchLimitations)
+    ].filter(Boolean)
+  };
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function unwrapJsonCodeFence(text: string): string {
@@ -261,10 +185,12 @@ export function hookResearchDossierBlock(
 ): string {
   return [
     "# Dedicated Research Agent dossier",
-    "Research has already been completed. Start creative reasoning from the insightCards, especially their tension, beliefChallenged, and humanConsequence fields.",
-    "Use references as proof for each card's evidence. Do not turn an unsupported inference into a factual claim, and do not force every card or reference into a Direction.",
-    "Any external fact or claim taken from this dossier must copy its sourceUrl into citations. Do not cite a URL that does not directly support the wording used.",
-    JSON.stringify(dossier, null, 2)
+    "Research has already been completed. Start creative reasoning from insights, which are ordered strongest first and compactly combine evidence, tension, belief challenged, human consequence, why now, and brand connection.",
+    "Treat references as factual guardrails. Prefer insights that begin with an external audience, seasonal, societal, cultural, platform, consumer-language, or category signal and connect the brand only after the tension is clear.",
+    "When an insight contains a current update, statistic, benchmark, or research finding, use it to sharpen stakes, scale, comparison, consequence, or belief—not as a generic fact dump.",
+    "Use each insight's referenceIds as proof. Do not turn an unsupported inference into a factual claim, and do not force every insight or reference into a Direction.",
+    "Any external fact or claim taken from this dossier must copy the matching reference sourceUrl into citations. Do not cite a URL that does not directly support the wording used.",
+    JSON.stringify(dossier)
   ].join("\n");
 }
 

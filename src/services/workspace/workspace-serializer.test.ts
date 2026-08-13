@@ -762,7 +762,7 @@ describe("workspace serializer", () => {
     ]);
   });
 
-  it("migrates a saved Claude hook model to Qwen", () => {
+  it("migrates saved legacy Claude and Qwen hook models to Claude Sonnet 5", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -788,10 +788,17 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "qwen/qwen3.8-max"
+      "anthropic/claude-sonnet-5"
     );
     expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
-      "qwen/qwen3.8-max"
+      "anthropic/claude-sonnet-5"
+    ]);
+
+    run.hookGenerationModel = "qwen/qwen3.8-max";
+    run.hookGenerationModels = ["qwen/qwen3.8-max"];
+    const restoredQwen = deserializeWorkspace(JSON.stringify(parsed));
+    expect(restoredQwen?.runsById["run-1"]?.hookGenerationModels).toEqual([
+      "anthropic/claude-sonnet-5"
     ]);
   });
 

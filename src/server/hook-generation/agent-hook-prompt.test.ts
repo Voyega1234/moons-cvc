@@ -16,6 +16,36 @@ describe("agent_hook creative quality contract", () => {
     expect(prompt).toContain("ห้ามแต่งประโยคเพิ่มเพียงเพื่อให้ครบช่อง");
   });
 
+  it("forces a discovery-first Research search portfolio", async () => {
+    const prompt = await readFile(
+      join(process.cwd(), "agent_prompt", "agent_hook_research.md"),
+      "utf8"
+    );
+
+    expect(prompt).toContain("discovery-first, brand-verification-last");
+    expect(prompt).toContain("อย่างน้อย 6 จาก 8 Query");
+    expect(prompt).toContain("สี่ Query แรกต้องไม่มีชื่อแบรนด์");
+    expect(prompt).toContain("Seasonal & current moment");
+    expect(prompt).toContain("Domain intelligence & fresh evidence");
+    expect(prompt).toContain("AI Search / AI SEO");
+    expect(prompt).toContain("Official announcement, changelog");
+    expect(prompt).toContain("Original report หรือ Paper");
+    expect(prompt).toContain(
+      "Stakes, Scale, Comparison, Consequence หรือ Belief"
+    );
+    expect(prompt).toContain("ปัจจุบันถึง 60 วันข้างหน้า");
+    expect(prompt).toContain(
+      "Brand truth × Audience tension × Current signal → Content leverage"
+    );
+    expect(prompt).toContain("What does it unlock?");
+    expect(prompt).toContain("Why now → Brand connection");
+    expect(prompt).toContain("Output มีเพียง 4 ส่วน");
+    expect(prompt).toContain("confidence score");
+    expect(prompt).toContain(
+      "Brand-owned References มีได้ไม่เกิน 2 รายการ"
+    );
+  });
+
   it("separates art-direction constraints from creative execution", async () => {
     const prompt = await readFile(
       join(process.cwd(), "agent_prompt", "agent_hook.md"),
@@ -169,6 +199,16 @@ describe("agent_hook creative quality contract", () => {
       "ระบุว่าข้อมูลส่วนใดขาดหรือควรมีหลักฐานเพิ่ม"
     );
     expect(researchPrompt).toContain("Consumer language");
+    expect(researchPrompt).toContain(
+      "discovery-first, brand-verification-last"
+    );
+    expect(researchPrompt).toContain("อย่างน้อย 6 จาก 8 Query");
+    expect(researchPrompt).toContain("สี่ Query แรกต้องไม่มีชื่อแบรนด์");
+    expect(researchPrompt).toContain("Seasonal & current moment");
+    expect(researchPrompt).toContain("ปัจจุบันถึง 60 วันข้างหน้า");
+    expect(researchPrompt).toContain(
+      "Brand-owned References มีได้ไม่เกิน 2 รายการ"
+    );
     expect(hookPrompt).toContain(
       "อนุญาตให้ตีความและเชื่อมโยงอย่างสร้างสรรค์จากข้อเท็จจริงที่มี"
     );

@@ -2033,7 +2033,7 @@ describe("redesigned workflow stages", () => {
     await user.click(
       stage.getByRole("button", { name: "Hook generation models" })
     );
-    expect(stage.getByText(/Add up to 5 OpenRouter model IDs/)).toBeTruthy();
+    expect(stage.getByText(/Save OpenRouter model IDs/)).toBeTruthy();
 
     await user.selectOptions(researchMode, "standard");
 
@@ -2204,7 +2204,7 @@ describe("redesigned workflow stages", () => {
         generationModel:
           index % 2 === 0
             ? ("google/gemini-3.6-flash" as const)
-            : ("qwen/qwen3.8-max" as const),
+            : ("anthropic/claude-sonnet-5" as const),
         formatBeats:
           direction.service === "album-post"
             ? ["ปัญหาที่คนมองข้าม", "สิ่งที่ควรเปรียบเทียบ", "ทางเลือกที่นำไปใช้ได้"]
@@ -2241,7 +2241,7 @@ describe("redesigned workflow stages", () => {
     ).toBeGreaterThan(0);
     expect(
       stage.getAllByRole("region", {
-        name: "Qwen 3.8 Max comparison"
+        name: "Claude Sonnet 5 comparison"
       }).length
     ).toBeGreaterThan(0);
     expect(stage.queryByRole("button", { name: "Let Compass pick" })).toBeNull();
@@ -2291,6 +2291,9 @@ describe("redesigned workflow stages", () => {
     );
     expect(angleCards[0]?.querySelector(".compass-angle-hook-wrap")).toBeTruthy();
     expect(angleCards[0]?.querySelectorAll(".compass-angle-copy-block")).toHaveLength(3);
+    expect(angleCards[0]?.textContent).toContain("Why it works");
+    expect(angleCards[0]?.textContent).toContain(state.directions[0]?.why);
+    expect(angleCards[0]?.textContent).not.toContain(state.directions[0]?.concept);
     const albumCard = Array.from(angleCards).find((card) =>
       card.textContent?.includes("ALBUM AD")
     );
@@ -2332,7 +2335,7 @@ describe("redesigned workflow stages", () => {
     expect(within(angleCards[0] as HTMLElement).getByText("82")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("score")).toBeTruthy();
     expect(within(angleCards[0] as HTMLElement).getByText("Subheadline 1")).toBeTruthy();
-    expect(within(angleCards[0] as HTMLElement).getByText("Concept 1")).toBeTruthy();
+    expect(within(angleCards[0] as HTMLElement).getByText("Why 1")).toBeTruthy();
     expect(stage.getAllByRole("button", { name: /Edit Idea/ })).toHaveLength(
       state.directions.length
     );
