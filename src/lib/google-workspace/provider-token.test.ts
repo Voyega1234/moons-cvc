@@ -110,4 +110,50 @@ describe("Google Workspace provider token", () => {
       Object.values(window.localStorage).includes("google-refresh-token")
     ).toBe(false);
   });
+
+  it("retries a transient failure while saving Google renewal", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+
+    await expect(
+      cacheGoogleProviderRefreshToken(
+        {
+          access_token: "supabase-access-token",
+          provider_refresh_token: "google-refresh-token"
+        },
+        fetchImpl
+      )
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a transient failure while renewing Google access", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            accessToken: "renewed-after-retry",
+            expiresIn: 3_600
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    await expect(
+      requireGoogleProviderToken(
+        fetchImpl,
+        async () => "supabase-access-token"
+      )
+    ).resolves.toBe("renewed-after-retry");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 });

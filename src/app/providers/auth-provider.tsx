@@ -123,7 +123,12 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
         return;
       }
       captureGoogleProviderToken(nextSession);
-      void cacheGoogleProviderRefreshToken(nextSession).catch(() => undefined);
+      void cacheGoogleProviderRefreshToken(nextSession).catch((caught) => {
+        console.error(
+          "Could not cache Google access renewal.",
+          caught instanceof Error ? caught.message : "Unknown error"
+        );
+      });
       setSession(nextSession);
       setLoading(false);
     }

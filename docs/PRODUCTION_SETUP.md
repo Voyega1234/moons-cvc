@@ -105,13 +105,13 @@ GOOGLE_TOKEN_ENCRYPTION_KEY=<32-random-bytes-as-base64>
 ```
 
 Generate the encryption key once with `openssl rand -base64 32` and keep the
-same value across deployments. Existing users must sign out and continue with
-Google once after this migration so Google can issue the initial offline
-refresh token. Routine access-token expiry after that does not require another
-login.
+same value across deployments. Existing users must use Reconnect Google once
+after this migration so Google can issue the initial offline refresh token;
+they do not need to sign out first. Routine access-token expiry after that does
+not require another login.
 
-After adding Drive folder browsing, existing users must also sign out and
-continue with Google once so the cached refresh grant includes
+After adding Drive folder browsing, existing users must also use Reconnect
+Google once so the cached refresh grant includes
 `drive.readonly`. Google Cloud must list that scope under Data Access before
 deployment. It is used only to list and download images from folders the
 signed-in user can already access.

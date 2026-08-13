@@ -136,7 +136,74 @@ describe("Google provider token cache endpoint", () => {
     expect(await response.json()).toEqual({
       ok: false,
       error:
-        "Google access needs a one-time reconnect. Sign out and continue with Google once."
+        "Google access needs a one-time reconnect. Continue with Google once."
+    });
+  });
+
+  it("treats a transient Google failure as retryable without asking for reconnect", async () => {
+    const encrypted = encryptRefreshToken(
+      "google-refresh-token",
+      ENCRYPTION_KEY
+    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "0d4c7456-3876-47d4-bf72-4dfbcd614e40",
+          email: "designer@convertcake.com"
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ encrypted_refresh_token: encrypted }])
+      )
+      .mockRejectedValueOnce(new Error("temporary network failure"));
+
+    const response = await handleGoogleProviderTokenRequest({
+      request: authorizedRequest("GET"),
+      env: ENV,
+      fetchImpl
+    });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Google access renewal is temporarily unavailable. Try again."
+    });
+  });
+
+  it("asks for reconnect when Google has revoked the saved grant", async () => {
+    const encrypted = encryptRefreshToken(
+      "google-refresh-token",
+      ENCRYPTION_KEY
+    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "0d4c7456-3876-47d4-bf72-4dfbcd614e40",
+          email: "designer@convertcake.com"
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ encrypted_refresh_token: encrypted }])
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "invalid_grant" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+
+    const response = await handleGoogleProviderTokenRequest({
+      request: authorizedRequest("GET"),
+      env: ENV,
+      fetchImpl
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Google access needs a one-time reconnect. Continue with Google once."
     });
   });
 });

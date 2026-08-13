@@ -7,6 +7,7 @@ const GOOGLE_PROVIDER_TOKEN_EXPIRES_AT_KEY =
   "creative-compass.google-provider-token-expires-at";
 const GOOGLE_PROVIDER_TOKEN_TTL_MS = 55 * 60 * 1000;
 const GOOGLE_PROVIDER_TOKEN_ENDPOINT = `${env.apiBaseUrl}/google-provider-token`;
+const PROVIDER_TOKEN_MAX_ATTEMPTS = 2;
 
 interface GoogleProviderTokenPayload {
   ok?: unknown;
@@ -41,7 +42,7 @@ export async function cacheGoogleProviderRefreshToken(
   const refreshToken = session?.provider_refresh_token?.trim();
   if (!accessToken || !refreshToken) return;
 
-  const response = await fetchImpl(GOOGLE_PROVIDER_TOKEN_ENDPOINT, {
+  const response = await fetchProviderToken(fetchImpl, {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -103,7 +104,7 @@ async function refreshGoogleProviderToken(
     throw new Error("Your session has expired. Continue with Google again.");
   }
 
-  const response = await fetchImpl(GOOGLE_PROVIDER_TOKEN_ENDPOINT, {
+  const response = await fetchProviderToken(fetchImpl, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${accessToken}` }
   });
@@ -156,7 +157,40 @@ async function currentSupabaseAccessToken(): Promise<string | null> {
     error
   } = await getSupabaseClient().auth.getSession();
   if (error) throw error;
+  try {
+    await cacheGoogleProviderRefreshToken(session);
+  } catch (caught) {
+    console.error(
+      "Could not update saved Google access renewal.",
+      caught instanceof Error ? caught.message : "Unknown error"
+    );
+  }
   return session?.access_token ?? null;
+}
+
+async function fetchProviderToken(
+  fetchImpl: typeof fetch,
+  init: RequestInit
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < PROVIDER_TOKEN_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetchImpl(GOOGLE_PROVIDER_TOKEN_ENDPOINT, init);
+      if (!isTransientStatus(response.status) || attempt === PROVIDER_TOKEN_MAX_ATTEMPTS - 1) {
+        return response;
+      }
+    } catch (caught) {
+      lastError = caught;
+      if (attempt === PROVIDER_TOKEN_MAX_ATTEMPTS - 1) throw caught;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Google access renewal failed.");
+}
+
+function isTransientStatus(status: number): boolean {
+  return status === 429 || status >= 500;
 }
 
 async function providerTokenError(response: Response): Promise<string> {

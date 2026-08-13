@@ -410,7 +410,7 @@ queryParams: {
 }
 ```
 
-Google อาจส่ง refresh token เฉพาะตอน consent ครั้งแรกหรือเมื่อบังคับ consent ใหม่ จึงต้องออกแบบ flow การเชื่อมบัญชีและ reconnect ให้ชัดเจน
+Google อาจส่ง refresh token เฉพาะตอน consent ครั้งแรกหรือเมื่อบังคับ consent ใหม่ จึงต้องออกแบบ flow การเชื่อมบัญชีและ reconnect ให้ชัดเจน โดย reconnect เริ่ม OAuth ใหม่ได้โดยไม่ต้อง sign out ก่อน
 
 Creative Compass ใช้ Option B:
 

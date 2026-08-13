@@ -36,7 +36,11 @@ export default async function handler(
     response.setHeader("Content-Type", "application/json");
     response.setHeader("Cache-Control", "no-store");
     response.json(await tokenResponse.json());
-  } catch {
+  } catch (caught) {
+    console.error(
+      "Google provider token endpoint failed.",
+      caught instanceof Error ? caught.message : "Unknown error"
+    );
     response.status(500);
     response.setHeader("Content-Type", "application/json");
     response.setHeader("Cache-Control", "no-store");

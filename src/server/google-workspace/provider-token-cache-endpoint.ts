@@ -36,6 +36,10 @@ interface GoogleTokenResponse {
   error_description?: unknown;
 }
 
+type GoogleRefreshResult =
+  | { ok: true; accessToken: string; expiresIn: number }
+  | { ok: false; reconnectRequired: boolean };
+
 export async function handleGoogleProviderTokenRequest({
   request,
   env,
@@ -105,7 +109,7 @@ export async function handleGoogleProviderTokenRequest({
         {
           ok: false,
           error:
-            "Google access needs a one-time reconnect. Sign out and continue with Google once."
+            "Google access needs a one-time reconnect. Continue with Google once."
         },
         409
       );
@@ -134,10 +138,11 @@ export async function handleGoogleProviderTokenRequest({
       return jsonResponse(
         {
           ok: false,
-          error:
-            "Google access needs a one-time reconnect. Sign out and continue with Google once."
+          error: refreshed.reconnectRequired
+            ? "Google access needs a one-time reconnect. Continue with Google once."
+            : "Google access renewal is temporarily unavailable. Try again."
         },
-        409
+        refreshed.reconnectRequired ? 409 : 502
       );
     }
 
@@ -261,19 +266,23 @@ async function storeCredential({
   encryptedRefreshToken: string;
   fetchImpl: typeof fetch;
 }): Promise<boolean> {
-  const response = await fetchImpl(
-    `${supabaseUrl}/rest/v1/${TOKEN_TABLE}?on_conflict=user_id`,
-    {
-      method: "POST",
-      headers: serviceRoleHeaders(serviceRoleKey, true),
-      body: JSON.stringify({
-        user_id: userId,
-        encrypted_refresh_token: encryptedRefreshToken,
-        updated_at: new Date().toISOString()
-      })
-    }
-  );
-  return response.ok;
+  try {
+    const response = await fetchImpl(
+      `${supabaseUrl}/rest/v1/${TOKEN_TABLE}?on_conflict=user_id`,
+      {
+        method: "POST",
+        headers: serviceRoleHeaders(serviceRoleKey, true),
+        body: JSON.stringify({
+          user_id: userId,
+          encrypted_refresh_token: encryptedRefreshToken,
+          updated_at: new Date().toISOString()
+        })
+      }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function loadCredential({
@@ -290,18 +299,22 @@ async function loadCredential({
   | { ok: true; credential: StoredCredential | null }
   | { ok: false }
 > {
-  const response = await fetchImpl(
-    `${supabaseUrl}/rest/v1/${TOKEN_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=encrypted_refresh_token&limit=1`,
-    { headers: serviceRoleHeaders(serviceRoleKey) }
-  );
-  if (!response.ok) return { ok: false };
+  try {
+    const response = await fetchImpl(
+      `${supabaseUrl}/rest/v1/${TOKEN_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=encrypted_refresh_token&limit=1`,
+      { headers: serviceRoleHeaders(serviceRoleKey) }
+    );
+    if (!response.ok) return { ok: false };
 
-  const rows = (await response.json()) as unknown;
-  if (!Array.isArray(rows)) return { ok: false };
-  return {
-    ok: true,
-    credential: isRecord(rows[0]) ? (rows[0] as StoredCredential) : null
-  };
+    const rows = (await response.json()) as unknown;
+    if (!Array.isArray(rows)) return { ok: false };
+    return {
+      ok: true,
+      credential: isRecord(rows[0]) ? (rows[0] as StoredCredential) : null
+    };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function serviceRoleHeaders(
@@ -331,32 +344,49 @@ async function refreshGoogleAccessToken({
   clientId: string;
   clientSecret: string;
   fetchImpl: typeof fetch;
-}): Promise<
-  | { ok: true; accessToken: string; expiresIn: number }
-  | { ok: false }
-> {
-  const response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token"
-    })
-  });
-  if (!response.ok) return { ok: false };
+}): Promise<GoogleRefreshResult> {
+  try {
+    const response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token"
+      })
+    });
+    const body = await readGoogleTokenResponse(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        reconnectRequired: body?.error === "invalid_grant"
+      };
+    }
 
-  const body = (await response.json()) as GoogleTokenResponse;
-  const accessToken =
-    typeof body.access_token === "string" ? body.access_token.trim() : "";
-  const expiresIn =
-    typeof body.expires_in === "number" && Number.isFinite(body.expires_in)
-      ? Math.max(60, Math.floor(body.expires_in))
-      : 3_600;
-  return accessToken
-    ? { ok: true, accessToken, expiresIn }
-    : { ok: false };
+    const accessToken =
+      typeof body?.access_token === "string" ? body.access_token.trim() : "";
+    const expiresIn =
+      typeof body?.expires_in === "number" && Number.isFinite(body.expires_in)
+        ? Math.max(60, Math.floor(body.expires_in))
+        : 3_600;
+    return accessToken
+      ? { ok: true, accessToken, expiresIn }
+      : { ok: false, reconnectRequired: false };
+  } catch {
+    return { ok: false, reconnectRequired: false };
+  }
+}
+
+async function readGoogleTokenResponse(
+  response: Response
+): Promise<GoogleTokenResponse | null> {
+  try {
+    const body = (await response.json()) as unknown;
+    return isRecord(body) ? (body as GoogleTokenResponse) : null;
+  } catch {
+    return null;
+  }
 }
 
 function jsonResponse(
