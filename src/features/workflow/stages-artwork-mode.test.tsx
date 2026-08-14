@@ -75,7 +75,7 @@ describe("Artwork generation settings", () => {
       type: "set-hook-generation-models",
       models: [
         "google/gemini-3.6-flash",
-        "anthropic/claude-sonnet-5",
+        "google/gemini-3.7-flash",
         "openai/gpt-5.6-terra",
         "sakana/sakana-namazu"
       ]
@@ -169,17 +169,17 @@ describe("Artwork generation settings", () => {
     expect(
       (
         screen.getByRole("checkbox", {
-          name: "Unselect anthropic/claude-sonnet-5"
+          name: "Unselect google/gemini-3.7-flash"
         }) as HTMLInputElement
       ).checked
     ).toBe(true);
     await user.click(
-      screen.getByRole("checkbox", { name: "Unselect anthropic/claude-sonnet-5" })
+      screen.getByRole("checkbox", { name: "Unselect google/gemini-3.7-flash" })
     );
     expect(
       (
         screen.getByRole("checkbox", {
-          name: "Select anthropic/claude-sonnet-5"
+          name: "Select google/gemini-3.7-flash"
         }) as HTMLInputElement
       ).checked
     ).toBe(false);
