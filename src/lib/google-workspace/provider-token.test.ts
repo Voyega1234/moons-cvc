@@ -29,7 +29,7 @@ describe("Google Workspace provider token", () => {
     await expect(
       requireGoogleProviderToken(fetch, async () => null)
     ).rejects.toThrow(
-      "Your session has expired. Continue with Google again."
+      "Your Creative Compass session has expired. Sign in again."
     );
   });
 
@@ -76,7 +76,7 @@ describe("Google Workspace provider token", () => {
         async () => "supabase-access-token"
       )
     ).rejects.toThrow(
-      "Google access could not be renewed. Continue with Google again."
+      "Google Workspace access could not be authorized."
     );
   });
 

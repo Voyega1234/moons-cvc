@@ -166,12 +166,10 @@ as a migration fallback and for each user's local view preference.
 
 ### `moons.google_workspace_credentials`
 
-Stores one AES-256-GCM-encrypted Google provider refresh token per Supabase
-user so Drive and Sheets access can be renewed without another login. The
-browser never reads this table or receives the refresh token. RLS is enabled,
-all `anon` and `authenticated` table privileges are revoked, and only the
-authenticated `/api/google-provider-token` backend may access it through
-`service_role`.
+Legacy table that stored one encrypted Google provider refresh token per
+Supabase user. Current Google login requests identity scopes only and does not
+write or read this table. Workspace access now uses Vercel OIDC, Workload
+Identity Federation, and Domain-Wide Delegation instead.
 
 Created by:
 

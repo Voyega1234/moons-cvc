@@ -6,7 +6,6 @@ import { env } from "../../../config/env";
 import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type BrandPastWorkItem, type BrandProduct } from "../../../domain/brand-memory";
 import { creativeMaterialRoles, inferredReferenceImageRole, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
-import { useOptionalAuth } from "../../../app/providers/auth-provider";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
 import { downloadGoogleDriveMaterial, loadGoogleDriveMaterialFolder, openGoogleDriveMaterialFolder, type GoogleDriveMaterialFolder, type GoogleDriveMaterialImage } from "../../../services/google-drive/google-drive-materials";
 import { getFileNames } from "../../../shared/utils/files";
@@ -349,12 +348,10 @@ export function CreativeMaterialsEditor({
   onAssetCountChange?: (kind: BrandAssetKind, count: number) => void;
 }) {
   const brandMemoryRepository = useBrandMemoryRepository();
-  const auth = useOptionalAuth();
   const [uploadPending, setUploadPending] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [driveLink, setDriveLink] = useState("");
   const [drivePending, setDrivePending] = useState(false);
-  const [googleReconnectPending, setGoogleReconnectPending] = useState(false);
   const assetKind = kind;
   const [assetFolders, setAssetFolders] = useState<readonly BrandAssetFolder[]>(
     []
@@ -384,27 +381,6 @@ export function CreativeMaterialsEditor({
   >({});
   const driveImportIds = useRef(new Set<string>());
   const selectedMaterials = selectedUploadedMaterials(state);
-  const googleReconnectRequired = Boolean(
-    uploadError &&
-      /Google access|Continue with Google|session has expired/i.test(uploadError)
-  );
-
-  async function reconnectGoogle(): Promise<void> {
-    if (!auth?.enabled || googleReconnectPending) return;
-    setGoogleReconnectPending(true);
-    setUploadError(null);
-    try {
-      await auth.reconnectGoogle();
-    } catch (caught) {
-      setUploadError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not reconnect Google."
-      );
-      setGoogleReconnectPending(false);
-    }
-  }
-
   useEffect(() => {
     const clientId = state.brand?.id;
     if (!clientId) {
@@ -1262,18 +1238,6 @@ export function CreativeMaterialsEditor({
           {uploadError ? (
             <div className="compass-google-reconnect-error" role="alert">
               <span>{uploadError}</span>
-              {googleReconnectRequired && auth?.enabled ? (
-                <button
-                  className="btn secondary small"
-                  type="button"
-                  disabled={googleReconnectPending}
-                  onClick={() => void reconnectGoogle()}
-                >
-                  {googleReconnectPending
-                    ? "Connecting…"
-                    : "Reconnect Google"}
-                </button>
-              ) : null}
             </div>
           ) : null}
         </div>

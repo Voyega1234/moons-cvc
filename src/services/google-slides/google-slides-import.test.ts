@@ -1,31 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { captureGoogleProviderToken } from "../../lib/google-workspace/provider-token";
-import {
-  requestGoogleDriveAccessToken,
-  uploadPptxToGoogleSlides
-} from "./google-slides-import";
+import { describe, expect, it, vi } from "vitest";
+import { uploadPptxToGoogleSlides } from "./google-slides-import";
 
 describe("uploadPptxToGoogleSlides", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("reuses the Google token granted during Supabase sign-in", async () => {
-    captureGoogleProviderToken({ provider_token: "supabase-google-token" });
-
-    await expect(requestGoogleDriveAccessToken()).resolves.toBe(
-      "supabase-google-token"
-    );
-  });
-
-  it("uploads a PowerPoint deck and asks Drive to convert it to Google Slides", async () => {
+  it("gets a server-authorized upload session and converts the deck to Google Slides", async () => {
     const blob = new Blob(["deck"], {
       type: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     });
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(null, {
+        new Response(JSON.stringify({
+          ok: true,
+          uploadUrl: "https://upload.example/session",
+          name: "Korea King creative slides"
+        }), {
           status: 200,
-          headers: { Location: "https://upload.example/session" }
+          headers: { "Content-Type": "application/json" }
         })
       )
       .mockResolvedValueOnce(
@@ -43,27 +33,27 @@ describe("uploadPptxToGoogleSlides", () => {
     const result = await uploadPptxToGoogleSlides({
       blob,
       name: "Korea King creative slides.pptx",
-      accessToken: "google-access-token",
+      sessionToken: "supabase-session-token",
+      endpoint: "/api/google-slides-upload-session",
       fetchImpl: fetchImpl as typeof fetch
     });
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining("uploadType=resumable"),
+      "/api/google-slides-upload-session",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
-          Authorization: "Bearer google-access-token",
-          "X-Upload-Content-Length": String(blob.size)
+          Authorization: "Bearer supabase-session-token"
         })
       })
     );
     const initializeBody = JSON.parse(
       String(fetchImpl.mock.calls[0]?.[1]?.body)
-    ) as { name: string; mimeType: string };
+    ) as { name: string; size: number };
     expect(initializeBody).toEqual({
       name: "Korea King creative slides",
-      mimeType: "application/vnd.google-apps.presentation"
+      size: blob.size
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
@@ -78,13 +68,18 @@ describe("uploadPptxToGoogleSlides", () => {
   });
 
   it("stops with a useful error when Drive does not return an upload URL", async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
 
     await expect(
       uploadPptxToGoogleSlides({
         blob: new Blob(["deck"]),
         name: "Creative slides",
-        accessToken: "google-access-token",
+        sessionToken: "supabase-session-token",
         fetchImpl: fetchImpl as typeof fetch
       })
     ).rejects.toThrow("Google Drive did not return an upload location.");
@@ -102,7 +97,7 @@ describe("uploadPptxToGoogleSlides", () => {
       uploadPptxToGoogleSlides({
         blob: new Blob(["deck"]),
         name: "Creative slides",
-        accessToken: "google-access-token",
+        sessionToken: "supabase-session-token",
         fetchImpl: fetchImpl as typeof fetch
       })
     ).rejects.toThrow("Drive API has not been enabled.");

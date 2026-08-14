@@ -1,8 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { currentGoogleProviderToken } from "../../lib/google-workspace/provider-token";
-
 const authMocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   signInWithOAuth: vi.fn(),
@@ -46,7 +44,7 @@ describe("Supabase account flow", () => {
     window.localStorage.clear();
   });
 
-  it("starts Google OAuth with Drive, Sheets, and Convert Cake domain settings", async () => {
+  it("starts Google login without requesting Workspace scopes", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
@@ -62,17 +60,13 @@ describe("Supabase account flow", () => {
       provider: "google",
       options: {
         redirectTo: "http://localhost:3000",
-        scopes:
-          "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly",
-        queryParams: {
-          hd: "convertcake.com",
-          include_granted_scopes: "true",
-          access_type: "offline",
-          prompt: "consent"
-        }
+        queryParams: { hd: "convertcake.com" }
       }
     });
-    expect(screen.getByText("Only @convertcake.com accounts")).toBeTruthy();
+    const oauthRequest = authMocks.signInWithOAuth.mock.calls[0]?.[0];
+    expect(oauthRequest.options).not.toHaveProperty("scopes");
+    expect(oauthRequest.options.queryParams).not.toHaveProperty("access_type");
+    expect(oauthRequest.options.queryParams).not.toHaveProperty("prompt");
   });
 
   it("rejects a restored session outside the Convert Cake domain", async () => {
@@ -97,20 +91,18 @@ describe("Supabase account flow", () => {
     await waitFor(() => expect(authMocks.signOut).toHaveBeenCalled());
   });
 
-  it("captures the Google provider token returned after OAuth", async () => {
+  it("opens the private workspace after Google signs the user in", async () => {
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
     await screen.findByRole("button", { name: "Continue with Google" });
 
     act(() => {
       authMocks.authStateCallback?.("SIGNED_IN", {
         access_token: "supabase-token",
-        provider_token: "google-provider-token",
         user: { email: "designer@convertcake.com" }
       });
     });
 
     expect(await screen.findByText("Private workspace")).toBeTruthy();
-    expect(currentGoogleProviderToken()).toBe("google-provider-token");
   });
 
   it("restores a session and exposes sign out to the account UI", async () => {

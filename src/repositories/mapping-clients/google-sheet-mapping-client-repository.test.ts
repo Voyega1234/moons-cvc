@@ -147,8 +147,7 @@ describe("GoogleSheetMappingClientRepository", () => {
     const repository = new GoogleSheetMappingClientRepository(
       "/api/mapping-clients",
       fetchImpl,
-      async () => "supabase-token",
-      () => "google-provider-token"
+      async () => "supabase-token"
     );
 
     await expect(
@@ -175,8 +174,7 @@ describe("GoogleSheetMappingClientRepository", () => {
     expect(fetchImpl.mock.calls[0]?.[1]).toEqual({
       cache: "no-store",
       headers: {
-        Authorization: "Bearer supabase-token",
-        "X-Google-Access-Token": "google-provider-token"
+        Authorization: "Bearer supabase-token"
       }
     });
   });

@@ -1,4 +1,4 @@
-import { handleGoogleProviderTokenRequest } from "../src/server/google-workspace/provider-token-cache-endpoint.js";
+import { handleGoogleWorkspaceAccessTokenRequest } from "../src/server/google-workspace/workspace-access-token-endpoint.js";
 
 type VercelRequest = {
   method?: string;
@@ -17,19 +17,20 @@ export default async function handler(
   response: VercelResponse
 ) {
   try {
-    const tokenResponse = await handleGoogleProviderTokenRequest({
+    const tokenResponse = await handleGoogleWorkspaceAccessTokenRequest({
       request: toWebRequest(request),
       env: {
+        VERCEL_ENV: process.env.VERCEL_ENV,
         SUPABASE_URL: process.env.SUPABASE_URL,
         SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        GOOGLE_OAUTH_CLIENT_ID:
-          process.env.GOOGLE_OAUTH_CLIENT_ID ??
-          process.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
-        GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-        GOOGLE_TOKEN_ENCRYPTION_KEY:
-          process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-      }
+        GOOGLE_CLOUD_PROJECT_NUMBER: process.env.GOOGLE_CLOUD_PROJECT_NUMBER,
+        GOOGLE_WORKLOAD_IDENTITY_POOL: process.env.GOOGLE_WORKLOAD_IDENTITY_POOL,
+        GOOGLE_WORKLOAD_IDENTITY_PROVIDER: process.env.GOOGLE_WORKLOAD_IDENTITY_PROVIDER,
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        GOOGLE_WORKSPACE_LOCAL_USER: process.env.GOOGLE_WORKSPACE_LOCAL_USER
+      },
+      oidcToken: headerValue(request.headers["x-vercel-oidc-token"])
     });
 
     response.status(tokenResponse.status);
@@ -46,9 +47,13 @@ export default async function handler(
     response.setHeader("Cache-Control", "no-store");
     response.json({
       ok: false,
-      error: "Google access could not be renewed. Continue with Google again."
+      error: "Google Workspace access could not be authorized."
     });
   }
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value.join(",") : value;
 }
 
 function toWebRequest(request: VercelRequest): Request {

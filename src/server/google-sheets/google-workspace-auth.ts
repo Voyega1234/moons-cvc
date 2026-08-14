@@ -2,8 +2,12 @@ import { GoogleAuth } from "google-auth-library";
 
 const CLOUD_PLATFORM_SCOPE =
   "https://www.googleapis.com/auth/cloud-platform";
-const SHEETS_READONLY_SCOPE =
+export const GOOGLE_SHEETS_READONLY_SCOPE =
   "https://www.googleapis.com/auth/spreadsheets.readonly";
+export const GOOGLE_DRIVE_FILE_SCOPE =
+  "https://www.googleapis.com/auth/drive.file";
+export const GOOGLE_DRIVE_READONLY_SCOPE =
+  "https://www.googleapis.com/auth/drive.readonly";
 const GOOGLE_STS_ENDPOINT = "https://sts.googleapis.com/v1/token";
 const GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -26,16 +30,32 @@ export interface GoogleSheetsAccessTokenOptions {
 }
 
 export async function createGoogleSheetsAccessToken({
+  ...options
+}: GoogleSheetsAccessTokenOptions): Promise<string> {
+  return createGoogleWorkspaceAccessToken({
+    ...options,
+    scopes: [GOOGLE_SHEETS_READONLY_SCOPE]
+  });
+}
+
+export interface GoogleWorkspaceAccessTokenOptions
+  extends GoogleSheetsAccessTokenOptions {
+  scopes: readonly string[];
+}
+
+export async function createGoogleWorkspaceAccessToken({
   env,
   subjectEmail,
+  scopes,
   oidcToken,
   fetchImpl = fetch,
   adcAccessTokenProvider = defaultAdcAccessToken,
   now = Date.now
-}: GoogleSheetsAccessTokenOptions): Promise<string> {
+}: GoogleWorkspaceAccessTokenOptions): Promise<string> {
   const delegatedSubject = normalizeConvertCakeEmail(subjectEmail);
+  const normalizedScopes = normalizeScopes(scopes);
   if (!isVercelDeployment(env.VERCEL_ENV)) {
-    return localAdcAccessToken(env, adcAccessTokenProvider);
+    return localAdcAccessToken(env, normalizedScopes, adcAccessTokenProvider);
   }
 
   const serviceAccountEmail = required(
@@ -51,6 +71,7 @@ export async function createGoogleSheetsAccessToken({
   const signedJwt = await signDomainWideDelegationJwt({
     serviceAccountEmail,
     subjectEmail: delegatedSubject,
+    scopes: normalizedScopes,
     cloudAccessToken,
     issuedAt,
     fetchImpl
@@ -102,6 +123,7 @@ async function exchangeVercelOidcToken({
 
 async function localAdcAccessToken(
   env: GoogleWorkspaceAuthEnv,
+  scopes: readonly string[],
   provider: () => Promise<string>
 ): Promise<string> {
   if (env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) {
@@ -109,11 +131,18 @@ async function localAdcAccessToken(
       "Local Google auth must use user ADC. Unset GOOGLE_APPLICATION_CREDENTIALS."
     );
   }
-  return required(await provider(), "Application Default Credentials token");
+  return required(
+    provider === defaultAdcAccessToken
+      ? await defaultAdcAccessToken(scopes)
+      : await provider(),
+    "Application Default Credentials token"
+  );
 }
 
-async function defaultAdcAccessToken(): Promise<string> {
-  const auth = new GoogleAuth({ scopes: [SHEETS_READONLY_SCOPE] });
+async function defaultAdcAccessToken(
+  scopes: readonly string[] = [GOOGLE_SHEETS_READONLY_SCOPE]
+): Promise<string> {
+  const auth = new GoogleAuth({ scopes: [...scopes] });
   const client = await auth.getClient();
   const result = await client.getAccessToken();
   const token = typeof result === "string" ? result : result.token;
@@ -123,12 +152,14 @@ async function defaultAdcAccessToken(): Promise<string> {
 async function signDomainWideDelegationJwt({
   serviceAccountEmail,
   subjectEmail,
+  scopes,
   cloudAccessToken,
   issuedAt,
   fetchImpl
 }: {
   serviceAccountEmail: string;
   subjectEmail: string;
+  scopes: readonly string[];
   cloudAccessToken: string;
   issuedAt: number;
   fetchImpl: typeof fetch;
@@ -145,7 +176,7 @@ async function signDomainWideDelegationJwt({
         payload: JSON.stringify({
           iss: serviceAccountEmail,
           sub: subjectEmail,
-          scope: SHEETS_READONLY_SCOPE,
+          scope: scopes.join(" "),
           aud: GOOGLE_OAUTH_TOKEN_ENDPOINT,
           iat: issuedAt,
           exp: issuedAt + 3600
@@ -222,6 +253,12 @@ function normalizeConvertCakeEmail(value: string): string {
     throw new Error("Google Sheets access requires a @convertcake.com user.");
   }
   return email;
+}
+
+function normalizeScopes(scopes: readonly string[]): string[] {
+  const normalized = [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
+  if (!normalized.length) throw new Error("At least one Google Workspace scope is required.");
+  return normalized;
 }
 
 function isVercelDeployment(value: string | undefined): boolean {

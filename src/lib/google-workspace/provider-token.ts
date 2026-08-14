@@ -101,7 +101,7 @@ async function refreshGoogleProviderToken(
 ): Promise<string> {
   const accessToken = await accessTokenProvider();
   if (!accessToken) {
-    throw new Error("Your session has expired. Continue with Google again.");
+    throw new Error("Your Creative Compass session has expired. Sign in again.");
   }
 
   const response = await fetchProviderToken(fetchImpl, {
@@ -120,7 +120,7 @@ async function refreshGoogleProviderToken(
         ? payload.error
         : response.ok
           ? "Could not renew Google access."
-          : "Google access could not be renewed. Continue with Google again."
+          : "Google Workspace access could not be authorized."
     );
   }
 
@@ -157,14 +157,6 @@ async function currentSupabaseAccessToken(): Promise<string | null> {
     error
   } = await getSupabaseClient().auth.getSession();
   if (error) throw error;
-  try {
-    await cacheGoogleProviderRefreshToken(session);
-  } catch (caught) {
-    console.error(
-      "Could not update saved Google access renewal.",
-      caught instanceof Error ? caught.message : "Unknown error"
-    );
-  }
   return session?.access_token ?? null;
 }
 

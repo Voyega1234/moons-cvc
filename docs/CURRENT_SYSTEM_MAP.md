@@ -56,6 +56,27 @@ Async results must continue targeting the run that started the request.
 | Main application composition | `src/app/App.tsx` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
+| Login and session gate | `src/app/providers/auth-provider.tsx` (Supabase Sign in with Google, identity scopes only) |
+| Google Workspace OIDC/DWD token exchange | `src/server/google-sheets/google-workspace-auth.ts` |
+| Google Slides resumable upload authorization | `src/server/google-workspace/google-slides-upload-session-endpoint.ts` |
+
+For signed-in users, `moons.runs` is the workspace persistence source of truth
+through `SupabaseCollaborativeWorkspaceRepository`. The former full-workspace
+row in `moons.workspaces` is read only for legacy migration and is not written
+on autosave. `CloudFirstWorkspaceRepository` does not write workspace snapshots
+to `localStorage`; local state is only a one-time migration fallback when the
+cloud has no workspace.
+
+Login uses Supabase Sign in with Google and retains the existing `auth.users`
+UUID identity used by database foreign keys and RLS. The OAuth request contains
+only Google's basic identity access and no Sheets, Drive, Slides, offline, or
+forced-consent parameters. The Before User Created hook accepts only Google
+identities whose verified email ends in `@convertcake.com`.
+Private Sheets, Google Slides export, and Drive material access are authorized
+separately on the server through Vercel OIDC, Google Workload Identity
+Federation, a dedicated service account, and Domain-Wide Delegation. Sheets use
+`spreadsheets.readonly`, Slides creation uses `drive.file`, and Drive material
+browsing uses `drive.readonly`.
 
 Hook generation uses `agent_prompt/agent_hook.md` as the single creative-policy
 source of truth. The runtime endpoint adds only changing campaign evidence,

@@ -59,11 +59,11 @@ after this pass — see the last section of this document.
 
 | ID | Case | Steps | Expected | Priority | Verified |
 | --- | --- | --- | --- | --- | --- |
-| AUTH-01 | Unauthenticated user sees Google sign-in, not the app | Load the app with `VITE_DATA_SOURCE=supabase` and no session | `SupabaseAuthGate` renders "Continue with Google"; no workspace UI is reachable | High | Derived |
-| AUTH-02 | Google OAuth requests only the required Workspace access | Click "Continue with Google" | `signInWithOAuth` requests `drive.file`, `drive.readonly`, and `spreadsheets.readonly`, plus `hd=convertcake.com` | High | Derived |
-| AUTH-03 | Non-Convert-Cake Google session is rejected | Return from OAuth with a user email outside `@convertcake.com` | Session is signed out and the workspace stays inaccessible | High | Derived |
-| AUTH-04 | Google provider token is shared with Workspace features | Complete Google OAuth, then import a Questionnaire or export Slides | Questionnaire calls Sheets API and Slides calls Drive API with the captured provider token | High | Derived |
-| AUTH-05 | Redirect URL differs prod vs local | Compare `googleSignInRedirectUrl()` on `localhost`/`127.0.0.1`/`::1` vs any other hostname | Localhost returns `location.origin`; anything else returns `https://moons-cvc.vercel.app/` | Medium | Derived |
+| AUTH-01 | Unauthenticated user sees Google sign-in, not the app | Load the app with `VITE_DATA_SOURCE=supabase` and no session | `SupabaseAuthGate` renders **Continue with Google**; no workspace UI is reachable | High | Automated |
+| AUTH-02 | Google login requests identity only | Select **Continue with Google** | `signInWithOAuth` uses the Google provider with the `hd` account hint and no Workspace scopes, offline access, or forced-consent parameters | High | Automated |
+| AUTH-03 | Non-Convert-Cake session is rejected | Complete OAuth with an account outside `@convertcake.com` | The restored session is signed out and the workspace stays inaccessible; the signup hook also rejects new non-domain users | High | Automated |
+| AUTH-04 | Google Workspace access is server-authorized | Import a Questionnaire, export Slides, and open a Drive material folder | Server exchanges Vercel OIDC through WIF/DWD with the operation's minimum Google scope | High | Automated |
+| AUTH-05 | Slides upload keeps Google tokens off the client | Export a Slides deck | Backend returns a resumable upload URL; browser uploads the PPTX without receiving a Google access token | High | Automated |
 | AUTH-06 | Supabase misconfigured shows a hard error, not a blank screen | Unset `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` with `VITE_DATA_SOURCE=supabase` | `.boot-error` screen: "Supabase is not configured." with the two env var names | Low | Derived |
 | AUTH-07 | Mock mode fully bypasses auth | Set `VITE_DATA_SOURCE=mock`, reload | App loads straight into Studio with no login screen, `enabled: false` in `AuthContext` | High | **Live** |
 

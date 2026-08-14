@@ -50,19 +50,12 @@ export async function handleMappingClientsRequest({
       "questionnaireSheetUrl"
     );
     if (questionnaireSheetUrl) {
-      const googleAccessToken = request.headers
-        .get("x-google-access-token")
-        ?.trim();
-      if (!googleAccessToken) {
-        return jsonResponse(
-          {
-            ok: false,
-            error:
-              "Google access is required. Try again to renew it automatically."
-          },
-          403
-        );
-      }
+      const googleAccessToken = await createSheetsAccessToken({
+        env,
+        subjectEmail: resolveSubjectEmail(auth.email, env),
+        oidcToken,
+        fetchImpl
+      });
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
         accessToken: googleAccessToken,

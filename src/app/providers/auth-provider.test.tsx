@@ -1,29 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  googleSignInRedirectUrl,
   shouldRequireAuth,
   validateConvertCakeEmail
 } from "./auth-provider";
 
-describe("googleSignInRedirectUrl", () => {
-  it("keeps local sign-ins on the active development origin", () => {
-    expect(
-      googleSignInRedirectUrl({
-        hostname: "localhost",
-        origin: "http://localhost:4173"
-      })
-    ).toBe("http://localhost:4173");
-  });
-
-  it("keeps non-local sign-ins on the current production URL", () => {
-    expect(
-      googleSignInRedirectUrl({
-        hostname: "moons-cvc-git-feature.vercel.app",
-        origin: "https://moons-cvc-git-feature.vercel.app"
-      })
-    ).toBe("https://creative-compass-os.vercel.app/");
-  });
-
+describe("Supabase Google authentication", () => {
   it("limits authenticated accounts to Convert Cake email addresses", () => {
     expect(validateConvertCakeEmail("designer@convertcake.com")).toBeNull();
     expect(validateConvertCakeEmail("designer@example.com")).toBe(
@@ -42,5 +23,4 @@ describe("googleSignInRedirectUrl", () => {
       shouldRequireAuth({ production: false, dataSource: "supabase" })
     ).toBe(true);
   });
-
 });

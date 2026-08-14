@@ -1,5 +1,4 @@
 import {
-  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -9,40 +8,19 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { env } from "../../config/env";
-import {
-  cacheGoogleProviderRefreshToken,
-  captureGoogleProviderToken,
-  clearGoogleProviderToken
-} from "../../lib/google-workspace/provider-token";
+import { clearGoogleProviderToken } from "../../lib/google-workspace/provider-token";
 import {
   getSupabaseClient,
   isSupabaseConfigured
 } from "../../lib/supabase/client";
 
-const PRODUCTION_AUTH_REDIRECT_URL = "https://creative-compass-os.vercel.app/";
-export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/spreadsheets.readonly"
-].join(" ");
-
 interface AuthContextValue {
   enabled: boolean;
   session: Session | null;
-  reconnectGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-export function googleSignInRedirectUrl(
-  location: Pick<Location, "hostname" | "origin"> = window.location
-): string {
-  const hostname = location.hostname.toLowerCase();
-  return ["localhost", "127.0.0.1", "::1"].includes(hostname)
-    ? location.origin
-    : PRODUCTION_AUTH_REDIRECT_URL;
-}
 
 export function validateConvertCakeEmail(email: string): string | null {
   const normalized = email.trim().toLowerCase();
@@ -80,7 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         value={{
           enabled: false,
           session: null,
-          reconnectGoogle: async () => undefined,
           signOut: async () => undefined
         }}
       >
@@ -122,13 +99,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
         void client.auth.signOut();
         return;
       }
-      captureGoogleProviderToken(nextSession);
-      void cacheGoogleProviderRefreshToken(nextSession).catch((caught) => {
-        console.error(
-          "Could not cache Google access renewal.",
-          caught instanceof Error ? caught.message : "Unknown error"
-        );
-      });
+      clearGoogleProviderToken();
       setSession(nextSession);
       setLoading(false);
     }
@@ -151,30 +122,20 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  const startGoogleOAuth = useCallback(async () => {
-    const { error: signInError } = await client.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: googleSignInRedirectUrl(),
-          scopes: GOOGLE_WORKSPACE_OAUTH_SCOPES,
-          queryParams: {
-            hd: "convertcake.com",
-            include_granted_scopes: "true",
-            access_type: "offline",
-            prompt: "consent"
-          }
-        }
-      });
-    if (signInError) throw signInError;
-  }, [client]);
-
   async function signInWithGoogle() {
     if (pending) return;
     setError(null);
     setPending(true);
 
     try {
-      await startGoogleOAuth();
+      const { error: signInError } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: { hd: "convertcake.com" }
+        }
+      });
+      if (signInError) throw signInError;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed.");
       setPending(false);
@@ -185,17 +146,13 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     () => ({
       enabled: true,
       session,
-      reconnectGoogle: async () => {
-        clearGoogleProviderToken();
-        await startGoogleOAuth();
-      },
       signOut: async () => {
         clearGoogleProviderToken();
         const { error: signOutError } = await client.auth.signOut();
         if (signOutError) throw signOutError;
       }
     }),
-    [client, session, startGoogleOAuth]
+    [client, session]
   );
 
   if (loading) {
@@ -221,9 +178,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
         <section className="auth-card">
           <p className="eyebrow">Convert Cake account</p>
           <h1>Sign in to Creative Compass</h1>
-          <p>
-            Continue with your Convert Cake Google Workspace account.
-          </p>
+          <p>Continue with your Convert Cake Google Workspace account.</p>
 
           <button
             className="btn primary auth-google-button"
@@ -238,8 +193,8 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           <div className="auth-google-access">
             <b>Only @convertcake.com accounts</b>
             <span>
-              Used to create Google Slides in your Drive and read onboarding
-              questionnaire Sheets.
+              Sign-in requests only your basic Google identity. Sheets, Drive,
+              and Slides access is authorized separately by the server.
             </span>
           </div>
 

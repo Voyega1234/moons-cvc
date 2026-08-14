@@ -40,93 +40,47 @@ https://moons-cvc.vercel.app/
 http://localhost:3000
 ```
 
-Creative Compass uses Supabase Google OAuth instead of email magic links. Set
-up the Google Cloud and Supabase providers as follows:
+Creative Compass uses Supabase **Sign in with Google** for authentication while
+Google Workspace API access remains separate. The login request uses only the
+basic identity scopes required by Supabase (`openid`, email, and profile); it
+does not request Sheets, Drive, or Slides permissions and does not request an
+offline Google refresh token.
 
-1. Use a Google Cloud project owned by the Convert Cake Google Workspace
-   organization.
-2. In Google Auth Platform → Audience, choose **Internal** so only Workspace
-   organization accounts can authorize the app.
-3. Enable the **Google Drive API** and **Google Sheets API**.
-4. In Google Auth Platform → Data Access, configure:
-
-   ```text
-   openid
-   https://www.googleapis.com/auth/userinfo.email
-   https://www.googleapis.com/auth/userinfo.profile
-   https://www.googleapis.com/auth/drive.file
-   https://www.googleapis.com/auth/drive.readonly
-   https://www.googleapis.com/auth/spreadsheets.readonly
-   ```
-
-5. Create a **Web application** OAuth client. Add the production origin and
-   `http://localhost:3000` as authorized JavaScript origins.
-6. Add the callback URL shown in Supabase Auth → Providers → Google as the
-   Google client's authorized redirect URI. It has this shape:
-
-   ```text
-   https://<supabase-project-ref>.supabase.co/auth/v1/callback
-   ```
-
-7. In Supabase Auth → Providers → Google, enable the provider and enter that
+1. In Supabase Auth → Providers, enable **Google** with the existing Google Web
    OAuth client ID and secret.
-8. Apply `202607240001_google_auth_domain_hook.sql` and
-   `202607260001_google_provider_token_cache.sql`. Also apply
-   `202607270002_brand_asset_library.sql` for persistent Materials and
-   References folders. Then open Supabase
-   Authentication → Hooks and select
-   `public.hook_restrict_creative_compass_signup` for **Before User Created**.
-   This rejects non-Google and non-`@convertcake.com` signups before an
-   `auth.users` record is created.
-9. After Google login is verified in Production, disable the Supabase Email
-   provider to prevent new magic-link sign-ins.
+2. In Google Auth Platform → Data Access, keep only `openid`,
+   `.../auth/userinfo.email`, and `.../auth/userinfo.profile` on the login
+   client. Do not add Workspace API scopes to this OAuth client.
+3. Apply all pending migrations, including
+   `202608140002_google_identity_auth.sql`. Then open Supabase Authentication →
+   Hooks and select `public.hook_restrict_creative_compass_signup` for
+   **Before User Created**. The corrective migration restores Google-only
+   login if the earlier Email OTP migration was already deployed.
+4. Keep the `@convertcake.com` validation in the hook. Google's `hd` login hint
+   improves account selection but is not the authorization boundary.
 
-The app also sends `hd=convertcake.com` to improve Google's account chooser,
-then verifies the returned Supabase user's email again in the browser and in
-every protected server endpoint. The `hd` parameter is not treated as an
-authorization boundary.
+Existing Google users continue using the same Supabase `auth.users` UUID, so
+database foreign keys and RLS ownership do not require an identity migration.
 
-Google's provider access token is kept in browser storage for at most 55
-minutes and cleared on sign out. The Google refresh token is sent once to the
-authenticated backend, encrypted with AES-256-GCM, and stored in
-`moons.google_workspace_credentials`, which is accessible only to
-`service_role`. When Google access expires, the browser retrieves a fresh
-short-lived access token from `/api/google-provider-token`; the refresh token
-is never written to browser storage or returned to the browser.
+Google Workspace access is independent from Google login. Enable the Google
+Drive API and Google Sheets API in the Cloud project. Production and Preview
+then use Vercel OIDC → Google Workload Identity Federation → a dedicated
+service account → Google Workspace Domain-Wide Delegation. The backend
+impersonates the authenticated `@convertcake.com` user only for the scope
+required by the operation:
 
-Configure these server-only environment variables using the same Web OAuth
-client configured in Supabase:
+- `spreadsheets.readonly` reads the private Mapping and Questionnaire Sheets;
+- `drive.file` creates the converted Google Slides file in that user's Drive;
+- `drive.readonly` reads a Drive material folder the user can already access.
 
-```bash
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-GOOGLE_OAUTH_CLIENT_ID=<google-web-client-id>
-GOOGLE_OAUTH_CLIENT_SECRET=<google-web-client-secret>
-GOOGLE_TOKEN_ENCRYPTION_KEY=<32-random-bytes-as-base64>
-```
+The Slides endpoint creates a resumable Google upload session server-side and
+returns only that session URL. Google access tokens and service-account
+credentials are not returned for Slides export. Drive material browsing uses a
+short-lived DWD token cached in browser storage for at most 55 minutes; no
+refresh token or service-account credential is stored in the browser.
 
-Generate the encryption key once with `openssl rand -base64 32` and keep the
-same value across deployments. Existing users must use Reconnect Google once
-after this migration so Google can issue the initial offline refresh token;
-they do not need to sign out first. Routine access-token expiry after that does
-not require another login.
-
-After adding Drive folder browsing, existing users must also use Reconnect
-Google once so the cached refresh grant includes
-`drive.readonly`. Google Cloud must list that scope under Data Access before
-deployment. It is used only to list and download images from folders the
-signed-in user can already access.
-
-The same Google grant is used for:
-
-- converting generated PowerPoint files into Google Slides with
-  `drive.file`;
-- browsing private Drive folders and importing selected source images with
-  `drive.readonly`;
-- reading the private `1. Questionnaire` tab with
-  `spreadsheets.readonly`.
-
-Questionnaire Sheets no longer need **Anyone with the link**. The signed-in
-`@convertcake.com` user must have read access to the Sheet.
+Questionnaire Sheets do not need **Anyone with the link**. The impersonated
+employee must have read access to the Sheet.
 
 Do not expose the Supabase service role key in Vite/client env.
 
@@ -217,10 +171,12 @@ Production and Preview use the Vercel OIDC token with Google Workload Identity
 Federation. Grant only the matching Vercel project/environment principal
 `roles/iam.serviceAccountTokenCreator` on the dedicated service account.
 Authorize that service account's numeric OAuth client ID in Google Workspace
-Domain-Wide Delegation with only:
+Domain-Wide Delegation with only these scopes:
 
 ```text
 https://www.googleapis.com/auth/spreadsheets.readonly
+https://www.googleapis.com/auth/drive.file
+https://www.googleapis.com/auth/drive.readonly
 ```
 
 For local development, grant the developer or developer group
@@ -228,7 +184,7 @@ direct read access to the domain-restricted Sheets and run:
 
 ```bash
 gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly
+  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly,https://www.googleapis.com/auth/drive.file,https://www.googleapis.com/auth/drive.readonly
 ```
 
 If the local request has no authenticated Supabase email, set

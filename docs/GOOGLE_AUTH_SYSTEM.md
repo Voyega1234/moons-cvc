@@ -1,3 +1,12 @@
+# Legacy user-delegated Google Workspace OAuth reference
+
+> This document describes the former flow where Google login also granted the
+> application user-delegated Drive and Sheets access. It is retained only for
+> migration history. Current login still uses Supabase Sign in with Google, but
+> requests identity scopes only. Google Workspace access uses Vercel OIDC,
+> Workload Identity Federation, and Domain-Wide Delegation. Follow
+> `docs/PRODUCTION_SETUP.md` and `docs/CURRENT_SYSTEM_MAP.md`.
+
 # Google Auth System with Supabase
 
 คู่มือนี้อธิบายระบบ Google OAuth สำหรับเว็บแอปที่ใช้ Supabase Auth และต้องการ:

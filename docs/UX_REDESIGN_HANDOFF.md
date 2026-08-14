@@ -225,11 +225,10 @@ lime/orange semantic accents, soft borders, and medium information density.
 - The browser ingestion trigger now converts a native `Failed to fetch` into an
   actionable message that tells local developers to start Compass with
   `npm run dev:full`.
-- Authentication moved from email magic links to Supabase Google OAuth on
-  2026-07-24. The login requests `drive.file` for Slides export and
-  `spreadsheets.readonly` for private onboarding Questionnaire reads. Google
-  receives `hd=convertcake.com` as an account hint, while the app enforces the
-  email domain again in the auth gate and protected server endpoints.
+- Authentication uses Supabase Sign in with Google with identity-only scopes.
+  Private Sheets, Slides export, and Drive materials do not use the user's
+  Google provider token; they use server-issued Google Workspace access through
+  Vercel OIDC, Workload Identity Federation, and Domain-Wide Delegation.
 - Two duplicate `Power Art Material` Supabase client records and their queued
   ingestion jobs were removed on 2026-07-16 before either job started. A
   post-delete query confirmed that no client or job rows remain for those IDs,
