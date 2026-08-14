@@ -81,9 +81,12 @@ export function createAiUsageTrackingFetch({
       throw error;
     }
     const durationMs = Math.max(0, Date.now() - startedAt);
+    let responseForCaller = response;
 
     try {
-      const payload = await readResponsePayload(response.clone());
+      const body = await response.arrayBuffer();
+      responseForCaller = replayResponse(response, body);
+      const payload = readResponsePayload(body);
       const event = buildUsageEvent({
         context,
         requestGroupId,
@@ -98,7 +101,7 @@ export function createAiUsageTrackingFetch({
       console.warn("Could not record AI usage event.", error);
     }
 
-    return response;
+    return responseForCaller;
   }) as FetchLike;
 }
 
@@ -310,8 +313,16 @@ async function persistAiUsageEvent({
   }
 }
 
-async function readResponsePayload(response: Response): Promise<unknown> {
-  const text = await response.text();
+function replayResponse(response: Response, body: ArrayBuffer): Response {
+  return new Response(body.byteLength ? body : null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  });
+}
+
+function readResponsePayload(body: ArrayBuffer): unknown {
+  const text = new TextDecoder().decode(body);
   if (!text.trim()) return {};
   try {
     return JSON.parse(text) as unknown;

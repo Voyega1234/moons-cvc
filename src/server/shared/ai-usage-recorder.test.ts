@@ -160,6 +160,29 @@ describe("createAiUsageTrackingFetch", () => {
     });
   });
 
+  it("returns a fresh readable body without relying on Response.clone", async () => {
+    const providerResponse = jsonResponse({
+      id: "resp_123",
+      usage: { total_tokens: 12 }
+    });
+    Object.defineProperty(providerResponse, "clone", {
+      value: () => providerResponse
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes("/rest/v1/ai_usage_events")
+        ? new Response(null, { status: 201 })
+        : providerResponse
+    );
+    const trackedFetch = createAiUsageTrackingFetch({ fetchImpl, context });
+
+    const response = await trackedFetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "gpt-5.6-terra" })
+    });
+
+    await expect(response.json()).resolves.toMatchObject({ id: "resp_123" });
+  });
+
   it("does not attempt persistence when there is no authenticated identity", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ usage: {} }));
     const trackedFetch = createAiUsageTrackingFetch({

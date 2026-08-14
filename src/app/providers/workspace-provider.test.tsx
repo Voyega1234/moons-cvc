@@ -187,6 +187,38 @@ describe("WorkspaceProvider", () => {
     expect(screen.getByText("Cloud unavailable")).toBeTruthy();
   });
 
+  it("shows the message and code from Supabase error objects", async () => {
+    const persisted = createInitialWorkspaceState({
+      runId: "supabase-error-run",
+      now: "2026-07-20T15:00:00.000Z"
+    });
+    const repository: WorkspaceRepository = {
+      load: vi.fn(async () => persisted),
+      save: vi.fn(async () => {
+        throw {
+          code: "42501",
+          message: "permission denied for table workspaces"
+        };
+      }),
+      clear: vi.fn(async () => undefined)
+    };
+
+    render(
+      <WorkspaceProvider repository={repository}>
+        <WorkspaceProbe />
+      </WorkspaceProvider>
+    );
+
+    expect(await screen.findByText("supabase-error-run")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "permission denied for table workspaces (42501)",
+        {},
+        { timeout: 1_500 }
+      )
+    ).toBeTruthy();
+  });
+
   it("creates and restores a recovery point around the active project", async () => {
     const persisted = createInitialWorkspaceState({
       runId: "checkpoint-run",

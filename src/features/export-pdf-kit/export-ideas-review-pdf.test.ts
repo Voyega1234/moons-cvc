@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { buildCompassReviewPdfPages } from "./export-ideas-review-pdf"
+import {
+  buildCompassReviewPdfPages,
+  getReviewPdfSubheadline,
+} from "./export-ideas-review-pdf"
 
 function idea(title: string, contentType: string) {
   return {
@@ -15,6 +18,15 @@ function idea(title: string, contentType: string) {
 }
 
 describe("Compass review PDF page planning", () => {
+  it("uses a hyphen when an idea has no subheadline", () => {
+    expect(getReviewPdfSubheadline({ copywriting: {} })).toBe("-")
+    expect(
+      getReviewPdfSubheadline({
+        copywriting: { sub_headline_1: "   ", sub_headline_2: "" },
+      }),
+    ).toBe("-")
+  })
+
   it("groups by creative type, places Recommended first, and preserves the current renderer inputs", () => {
     const pages = buildCompassReviewPdfPages(
       [

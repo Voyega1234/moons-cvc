@@ -91,8 +91,35 @@ describe("workflow rules", () => {
     });
 
     expect(workflowActionBlockReason(run, { type: "create-outputs" })).toBe(
-      `Select ${run.quantity} hooks first.`
+      "Select at least one hook first."
     );
+  });
+
+  it("allows artwork generation above the planned quota", () => {
+    const directions = buildDirectionFixtures("Quota").slice(0, 2).map(
+      (direction) => ({
+        ...direction,
+        service: "single-static" as const,
+        selected: true
+      })
+    );
+    const run = {
+      ...createInitialWorkflowState({
+        id: "run-over-quota",
+        now: "2026-08-14T00:00:00.000Z"
+      }),
+      creativeMix: [
+        { id: "static", service: "single-static" as const, quantity: 1 }
+      ],
+      directions
+    };
+
+    expect(
+      workflowActionBlockReason(run, { type: "start-artwork-generation" })
+    ).toBeNull();
+    expect(
+      workflowActionBlockReason(run, { type: "create-outputs" })
+    ).toBeNull();
   });
 
   it("allows a manual hook without a subheadline", () => {

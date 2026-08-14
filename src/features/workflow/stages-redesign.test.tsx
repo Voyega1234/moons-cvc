@@ -2422,6 +2422,128 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("allows every editable hook text field to be cleared and saved", async () => {
+    const user = userEvent.setup();
+    const baseState = buildCreativeState();
+    const state = {
+      ...baseState,
+      stage: "directions" as const,
+      directions: baseState.directions.map((direction, index) =>
+        index === 0
+          ? {
+              ...direction,
+              supportingPoints: ["Proof point"],
+              ctaDestination: "https://example.com",
+              contactLine: "LINE: @example"
+            }
+          : direction
+      )
+    };
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+
+    await user.click(stage.getByRole("button", { name: "Edit Idea 1" }));
+    const dialog = stage.getByRole("dialog", {
+      name: "Update this creative direction"
+    });
+    const editor = within(dialog);
+
+    for (const label of [
+      "Hook",
+      "Sub-headline",
+      "Concept",
+      "Why it might work",
+      "Visual direction",
+      "CTA",
+      "Supporting points (one per line)",
+      "Verified CTA destination",
+      "Verified contact / footer line",
+      "Caption"
+    ]) {
+      await user.clear(editor.getByLabelText(label));
+    }
+
+    const save = editor.getByRole("button", { name: "Save changes" });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    await user.click(save);
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "replace-direction",
+      id: state.directions[0]?.id,
+      direction: expect.objectContaining({
+        hook: "",
+        subheadline: "",
+        concept: "",
+        why: "",
+        visual: "",
+        cta: "",
+        supportingPoints: [],
+        ctaDestination: "",
+        contactLine: "",
+        caption: ""
+      })
+    });
+  });
+
+  it("shows compact quota feedback and keeps over-quota generation available", async () => {
+    const user = userEvent.setup();
+    const baseState = buildCreativeState();
+    const extraStaticOption = {
+      ...baseState.directions[0]!,
+      id: "extra-static-option",
+      hook: "Extra static option",
+      selected: false
+    };
+    const initialState = {
+      ...baseState,
+      stage: "directions" as const,
+      directions: [...baseState.directions, extraStaticOption]
+    };
+
+    function OverQuotaDirectionsHarness() {
+      const [state, dispatch] = useReducer(workflowReducer, initialState);
+      return <DirectionsStage state={state} dispatch={dispatch} />;
+    }
+
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <OverQuotaDirectionsHarness />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const selectNext = stage.getAllByRole("button", {
+      name: /^Select Idea/
+    })[0];
+    if (!selectNext) throw new Error("Expected an unselected hook option.");
+
+    await user.click(selectNext);
+
+    const feedback = await stage.findByRole("status");
+    expect(within(feedback).getByText("Above planned quota")).toBeTruthy();
+    expect(
+      within(feedback).getByText("Extra selections will also be generated.")
+    ).toBeTruthy();
+    const overCount = feedback.querySelector(
+      ".compass-selection-feedback-counts .over"
+    );
+    expect(overCount).toBeTruthy();
+    const count = overCount?.textContent?.match(/(\d+)\/(\d+)/);
+    expect(Number(count?.[1])).toBeGreaterThan(Number(count?.[2]));
+    expect(
+      view.container.querySelector(".compass-angle-group-progress.over")
+    ).toBeTruthy();
+    expect(
+      (stage.getByRole("button", {
+        name: "Confirm hooks & create →"
+      }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
   it("keeps single-model Hook ideas in the three-card review grid", () => {
     const baseState = buildCreativeState();
     const state = {

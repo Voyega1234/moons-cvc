@@ -315,5 +315,17 @@ export function useOptionalWorkspace(): WorkspaceContextValue | null {
 }
 
 function toError(value: unknown, fallback: string): Error {
-  return value instanceof Error ? value : new Error(fallback);
+  if (value instanceof Error) return value;
+  if (typeof value === "string" && value.trim()) return new Error(value.trim());
+  if (value && typeof value === "object") {
+    const candidate = value as { code?: unknown; message?: unknown };
+    if (typeof candidate.message === "string" && candidate.message.trim()) {
+      const code =
+        typeof candidate.code === "string" && candidate.code.trim()
+          ? ` (${candidate.code.trim()})`
+          : "";
+      return new Error(`${candidate.message.trim()}${code}`);
+    }
+  }
+  return new Error(fallback);
 }

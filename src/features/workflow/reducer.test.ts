@@ -600,7 +600,7 @@ describe("workflowReducer", () => {
     expect(state.outputs[0]?.savedToReferences).toBe(true);
   });
 
-  it("limits manual selection to each content-type quota", () => {
+  it("allows manual selection beyond each content-type quota", () => {
     const directions = buildDirectionFixtures("Quota").slice(0, 3).map(
       (direction) => ({
         ...direction,
@@ -628,7 +628,7 @@ describe("workflowReducer", () => {
 
     expect(state.directions.map((direction) => direction.selected)).toEqual([
       true,
-      false,
+      true,
       false
     ]);
   });

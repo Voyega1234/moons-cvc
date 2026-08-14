@@ -192,12 +192,10 @@ export class SupabaseCollaborativeWorkspaceRepository
       version: data.version,
       serialized: serializeSharedRun(restoredRun)
     });
-    await this.legacy.save(restoredWorkspace);
     return restoredWorkspace;
   }
 
   private async persist(workspace: WorkspaceState): Promise<void> {
-    await this.legacy.save(workspace);
     const userId = await getUserId(this.client);
 
     for (const runId of workspace.runOrder) {

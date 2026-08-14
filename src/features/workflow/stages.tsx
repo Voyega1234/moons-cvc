@@ -15,6 +15,7 @@ import {
   PencilSimple,
   Sparkle,
   TextT,
+  WarningCircle,
   X
 } from "@phosphor-icons/react";
 import {
@@ -3865,6 +3866,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
   } | null>(null);
   const [exportingAngles, setExportingAngles] = useState(false);
   const [exportAnglesError, setExportAnglesError] = useState<string | null>(null);
+  const [showSelectionFeedback, setShowSelectionFeedback] = useState(false);
   const {
     generateMore,
     loading: generatingMore,
@@ -3887,6 +3889,15 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     error: createError,
     progress: artworkProgress
   } = useCreateSelectedHooks(state, dispatch, brandMemoryRepository);
+
+  useEffect(() => {
+    if (!showSelectionFeedback) return;
+    const timeout = window.setTimeout(
+      () => setShowSelectionFeedback(false),
+      2800
+    );
+    return () => window.clearTimeout(timeout);
+  }, [selected, showSelectionFeedback]);
 
   async function handleExportAngles() {
     setExportingAngles(true);
@@ -3921,6 +3932,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
   }
 
   const angleGroups = buildAngleGroups(state);
+  const selectionOverQuota = angleGroups.some(
+    (group) => group.selected > group.required
+  );
   const preflightServiceOrder: Record<ServiceType, number> = {
     "single-static": 0,
     "album-post": 1,
@@ -3994,6 +4008,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     const selectingAlbum =
       direction.service === "album-post" && !direction.selected;
     dispatch({ type: "toggle-direction", id: direction.id });
+    setShowSelectionFeedback(true);
     if (selectingAlbum) setAlbumFormatDirectionId(direction.id);
   }
 
@@ -4001,9 +4016,15 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     <DecisionCard
       eyebrow="Create · Hooks"
       title="Pick the hooks for this creative mix."
-      helper="Creative Compass preselects a complete first set based on your quota. Keep the recommendations or swap any hook within its creative type."
+      helper="Creative Compass preselects a first set from your planned quota. You can select more when the campaign needs it."
       status={`Creative Compass picked ${selected} / ${requiredCount}`}
-      statusClass={selected === requiredCount ? "green" : "blue"}
+      statusClass={
+        selected > requiredCount
+          ? "amber"
+          : selected === requiredCount
+            ? "green"
+            : "blue"
+      }
       className="compass-stage-angles"
       actions={
         <>
@@ -4031,12 +4052,50 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
         </>
       }
     >
+      {showSelectionFeedback ? (
+        <aside
+          className={`compass-selection-feedback ${selectionOverQuota ? "over" : ""}`}
+          role="status"
+          key={`selection-feedback-${selected}`}
+        >
+          <span className="compass-selection-feedback-icon" aria-hidden="true">
+            {selectionOverQuota ? (
+              <WarningCircle size={16} weight="fill" />
+            ) : (
+              <CheckCircle size={16} weight="fill" />
+            )}
+          </span>
+          <div className="compass-selection-feedback-copy">
+            <b>
+              {selectionOverQuota ? "Above planned quota" : "Selection updated"}
+            </b>
+            <small>
+              {selectionOverQuota
+                ? "Extra selections will also be generated."
+                : "The planned mix is a guide, not a limit."}
+            </small>
+            <div className="compass-selection-feedback-counts">
+              {angleGroups.map((group) => (
+                <span
+                  className={group.selected > group.required ? "over" : ""}
+                  key={group.service}
+                >
+                  <strong>
+                    {group.service === "single-static" ? "Single" : group.title}
+                  </strong>
+                  <b>{group.selected}/{group.required}</b>
+                </span>
+              ))}
+            </div>
+          </div>
+        </aside>
+      ) : null}
       <div className="direction-tools compass-angle-toolbar">
         <div>
           <h3>Review hooks</h3>
           <p>
-            Select up to {requiredCount} hooks. Selected hooks export as
-            Recommended; the rest stay as Options until deleted.
+            Select any hooks you want. The planned quota is {requiredCount};
+            extra selections will also be generated.
           </p>
         </div>
         <div className="compass-angle-toolbar-actions">
@@ -4212,7 +4271,13 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   </button>
                 </div>
                 <span
-                  className={`compass-angle-group-progress ${group.selected === group.required ? "complete" : ""}`}
+                  className={`compass-angle-group-progress ${
+                    group.selected > group.required
+                      ? "over"
+                      : group.selected === group.required
+                        ? "complete"
+                        : ""
+                  }`}
                 >
                   {group.selected}/{group.required} selected
                 </span>
@@ -4744,11 +4809,6 @@ function HookEditModal({
           <button
             className="btn primary"
             type="button"
-            disabled={
-              !draft.hook.trim() ||
-              !draft.subheadline.trim() ||
-              !draft.concept.trim()
-            }
             onClick={() => onSave(draft)}
           >
             Save changes

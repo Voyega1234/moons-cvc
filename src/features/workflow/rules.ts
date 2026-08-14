@@ -150,14 +150,14 @@ export function workflowActionBlockReason(
         return "Artwork generation is already in progress.";
       }
       if (!run.directions.length) return "Generate hooks first.";
-      return selectedDirectionCount(run) === totalCreativeMixQuantity(run)
+      return selectedDirectionCount(run) > 0
         ? null
-        : `Select ${totalCreativeMixQuantity(run)} hooks first.`;
+        : "Select at least one hook first.";
     case "create-outputs":
       if (!run.directions.length) return "Generate hooks first.";
-      return selectedDirectionCount(run) === totalCreativeMixQuantity(run)
+      return selectedDirectionCount(run) > 0
         ? null
-        : `Select ${totalCreativeMixQuantity(run)} hooks first.`;
+        : "Select at least one hook first.";
     case "run-qa":
       return run.outputs.length > 0 ? null : "Create outputs before QA.";
     case "approve-all":

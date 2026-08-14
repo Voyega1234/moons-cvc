@@ -325,6 +325,14 @@ function getContentTypeLabel(contentType?: string) {
   return contentType ? labels[contentType.toUpperCase()] || contentType : ""
 }
 
+export function getReviewPdfSubheadline(idea: IdeaRecommendation) {
+  return (
+    idea.copywriting?.sub_headline_1?.trim() ||
+    idea.copywriting?.sub_headline_2?.trim() ||
+    "-"
+  )
+}
+
 function getCardData(idea: IdeaRecommendation) {
   const metaTags = [...(idea.tags || []), idea.content_pillar, idea.product_focus]
     .filter((tag): tag is string => typeof tag === "string" && Boolean(tag))
@@ -334,7 +342,7 @@ function getCardData(idea: IdeaRecommendation) {
 
   return {
     hook: idea.copywriting?.headline || idea.title || idea.concept_idea || "",
-    subheadline: idea.copywriting?.sub_headline_1 || idea.copywriting?.sub_headline_2 || "",
+    subheadline: getReviewPdfSubheadline(idea),
     cta: idea.copywriting?.cta || "",
     why: idea.competitiveGap || getIdeaWhy(idea),
     metaTags,

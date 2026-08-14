@@ -857,37 +857,16 @@ export function workflowReducer(
       };
     }
     case "toggle-direction": {
-      const directionIndex = state.directions.findIndex(
-        (direction) => direction.id === action.id
-      );
-      const target = state.directions[directionIndex];
-      if (!target) return state;
-      const targetService = directionServiceAt(state, target, directionIndex);
-      const selectedCount = state.directions.filter(
-        (direction) => direction.selected
-      ).length;
-      const requiredCount = totalCreativeMixQuantity(state);
-      const serviceRequired =
-        creativeMixItems(state).find((item) => item.service === targetService)
-          ?.quantity ?? requiredCount;
-      const serviceSelected = state.directions.reduce((count, direction, index) => {
-        return direction.selected &&
-          directionServiceAt(state, direction, index) === targetService
-          ? count + 1
-          : count;
-      }, 0);
-      const canSelect =
-        selectedCount < requiredCount && serviceSelected < serviceRequired;
+      if (!state.directions.some((direction) => direction.id === action.id)) {
+        return state;
+      }
       return {
         ...state,
         directions: state.directions.map((direction) =>
           direction.id === action.id
             ? {
                 ...direction,
-                selected:
-                  direction.selected || canSelect
-                    ? !direction.selected
-                    : direction.selected
+                selected: !direction.selected
               }
             : direction
         )

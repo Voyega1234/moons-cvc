@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createInitialWorkspaceState,
@@ -48,6 +48,29 @@ describe("mergeCollaborativeWorkspace", () => {
 });
 
 describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
+  it("does not let the legacy full-workspace store block run persistence", async () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const legacy = {
+      ...memoryRepository(),
+      save: vi.fn(async () => {
+        throw new Error("Legacy workspace is too large");
+      })
+    };
+    const { client, inserts } = createClient({});
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      legacy,
+      client
+    );
+
+    await expect(repository.save(workspace)).resolves.toBeUndefined();
+
+    expect(inserts).toHaveLength(1);
+    expect(legacy.save).not.toHaveBeenCalled();
+  });
+
   it("discovers an existing cloud run before attempting an insert", async () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
