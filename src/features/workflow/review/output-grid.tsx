@@ -683,7 +683,8 @@ function OutputRegenerateModal({
             run,
             direction,
             extraInstructions: revisionInstructions,
-            sourceImageUrl: selectedAsset?.assetUrl,
+            sourceImageUrl:
+              selectedAsset?.albumMasterAssetUrl ?? selectedAsset?.assetUrl,
             additionalReferenceImages
           })
         : [

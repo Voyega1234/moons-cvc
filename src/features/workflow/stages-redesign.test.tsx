@@ -3325,6 +3325,51 @@ describe("redesigned workflow stages", () => {
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
   });
 
+  it("uses the selected Album master as the regenerate reference", async () => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const sourceOutput = base.outputs[0];
+    if (!sourceOutput) throw new Error("Expected a creative fixture.");
+    const masterUrl = "https://example.com/album-master.png";
+    const state = {
+      ...base,
+      outputs: [1, 2, 3].map((panel) => ({
+        ...sourceOutput,
+        id: `${sourceOutput.directionId}-album-${panel}-v1`,
+        format: "Album post",
+        assetUrl: `https://example.com/album-panel-${panel}.png`,
+        albumMasterAssetUrl: masterUrl,
+        albumMasterAssetStoragePath: "brand/run/outputs/album-master.png"
+      }))
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ outputs: state.outputs }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const stage = within(view.container);
+
+    await user.click(
+      stage.getByRole("button", { name: "Regenerate draft" })
+    );
+    const dialog = stage.getByRole("dialog", { name: "Regenerate album" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Regenerate album" })
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      referenceImages?: Array<{ kind?: string; url?: string }>;
+    };
+    expect(request.referenceImages?.[0]).toMatchObject({
+      kind: "url",
+      url: masterUrl
+    });
+  });
+
   it("does not show a fake score for generated artwork before real QA runs", () => {
     const base = buildCreativeState();
     const state = {
