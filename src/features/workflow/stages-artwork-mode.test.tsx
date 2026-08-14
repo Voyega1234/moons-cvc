@@ -59,7 +59,7 @@ describe("Artwork generation settings", () => {
     );
 
     const hookModelPicker = screen.getByLabelText("Hook generation models");
-    expect(hookModelPicker.textContent).toContain("Compare 3 models");
+    expect(hookModelPicker.textContent).toContain("Gemini 3.6 Flash");
     await user.click(hookModelPicker);
     expect(screen.queryByText("Compass New")).toBeNull();
     expect(
@@ -75,8 +75,6 @@ describe("Artwork generation settings", () => {
       type: "set-hook-generation-models",
       models: [
         "google/gemini-3.6-flash",
-        "google/gemini-3.7-flash",
-        "openai/gpt-5.6-terra",
         "sakana/sakana-namazu"
       ]
     });
@@ -166,24 +164,6 @@ describe("Artwork generation settings", () => {
     const firstView = render(<StatefulHookModelPicker />);
 
     await user.click(screen.getByLabelText("Hook generation models"));
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Unselect google/gemini-3.7-flash"
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(true);
-    await user.click(
-      screen.getByRole("checkbox", { name: "Unselect google/gemini-3.7-flash" })
-    );
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Select google/gemini-3.7-flash"
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(false);
-
     await user.type(
       screen.getByRole("textbox", { name: "OpenRouter model ID" }),
       "sakana/sakana-namazu"

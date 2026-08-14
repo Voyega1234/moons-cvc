@@ -154,9 +154,7 @@ export const openRouterHookGenerationModels = [
 export type OpenRouterHookGenerationModel =
   (typeof openRouterHookGenerationModels)[number];
 export const defaultHookGenerationModels = [
-  "google/gemini-3.6-flash",
-  "google/gemini-3.7-flash",
-  "openai/gpt-5.6-terra"
+  "google/gemini-3.6-flash"
 ] as const satisfies readonly HookGenerationModel[];
 export const MAX_HOOK_GENERATION_MODELS = 5;
 
