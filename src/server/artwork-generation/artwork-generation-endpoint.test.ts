@@ -911,22 +911,13 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editForm?.get("quality")).toBe("medium");
     expect(editForm?.getAll("image[]")).toHaveLength(1);
     const prompt = String(editForm?.get("prompt"));
-    expect(prompt).toContain("meaningful enhancement of Image 1");
-    expect(prompt).toContain("Increase whitespace around the CTA.");
-    expect(prompt).toContain("minimum required improvement");
-    expect(prompt).toContain("change font style");
-    expect(prompt).toContain("Google or Meta");
-    expect(prompt).toContain("anti-AI production audit");
-    expect(prompt).toContain("must not look obviously AI-generated");
-    expect(prompt).toContain("earn the intended audience's attention within one second");
-    expect(prompt).toContain("strengthen rather than weaken brand perception");
-    expect(prompt).toContain("contact shadows");
-    expect(prompt).toContain("one plausible lighting system");
-    expect(prompt).toContain("Balance, Contrast, Emphasis, Movement");
-    expect(prompt).toContain("mobile-feed size");
-    expect(prompt).toContain("material improvement in at least three areas");
+    expect(prompt).toBe("Increase whitespace around the CTA.");
     expect(prompt).not.toContain(requestBody.brief);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/v1/responses"))).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toBe(false);
     expect(uploads).toEqual([
       {
         bucket: "creative-assets",
@@ -946,6 +937,88 @@ describe("handleArtworkGenerationRequest", () => {
         directionId: "hook-1"
       })
     ]);
+  });
+
+  it("revises an Album master with only the user instruction and selected source", async () => {
+    const masterImage = await albumMasterPng();
+    let editForm: FormData | undefined;
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+          status: 200
+        });
+      }
+      if (href === "https://example.com/album-master.png") {
+        return new Response(Uint8Array.from(masterImage), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (href.includes("/v1/images/edits")) {
+        editForm = init?.body as FormData;
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: masterImage.toString("base64") }] }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/responses")) {
+        throw new Error("Album revision must not invoke a prompt agent.");
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const request = new Request("https://moons.local/api/artwork-generation", {
+      method: "POST",
+      headers: { authorization: "Bearer user-token" },
+      body: JSON.stringify({
+        requestType: "artwork-revision",
+        model: "gpt-image-2",
+        clientId: "flora",
+        runId: "run-1",
+        outputId: "hook-1-album-1-v1",
+        directionId: "hook-1",
+        assetVersion: 2,
+        format: "Album post",
+        sourceImageUrl: "https://example.com/album-master.png",
+        instructions: "Change only the cover background to blue.",
+        album: {
+          format: "three-horizontal",
+          outputIds: [
+            "hook-1-album-1-v1",
+            "hook-1-album-2-v1",
+            "hook-1-album-3-v1"
+          ]
+        },
+        output: { size: "1024x1024", format: "png" }
+      })
+    });
+    const { client, uploads } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request,
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      writeDebugLog: async () => undefined,
+      createStorageClient: () => client
+    });
+    const payload = (await response.json()) as { outputs: unknown[] };
+
+    expect(response.status).toBe(200);
+    expect(String(editForm?.get("prompt"))).toBe(
+      "Change only the cover background to blue."
+    );
+    expect(editForm?.getAll("image[]")).toHaveLength(1);
+    expect(payload.outputs).toHaveLength(3);
+    expect(uploads).toHaveLength(4);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toBe(false);
   });
 
   it("generates and uploads artwork for each selected hook", async () => {

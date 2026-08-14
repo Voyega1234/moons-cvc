@@ -11,6 +11,7 @@ import { persistArtworkOutput } from "./artwork-persistence.js";
 import { composeImagePrompt } from "./prompt-runtime.js";
 import { resolveReferenceImages } from "./reference-images.js";
 import { editImage } from "./openai-images-client.js";
+import { splitAlbumMaster } from "./album-master.js";
 
 type ArtworkOutput = ArtworkGenerationResponse["outputs"][number];
 
@@ -33,56 +34,17 @@ export async function reviseArtworkOutput({
   supabaseUrl: string;
   fetchImpl: typeof fetch;
 }): Promise<ArtworkOutput> {
-  const [sourceImage, ...additionalReferences] = await resolveReferenceImages(
-    [
-      {
-        kind: "url",
-        url: input.sourceImageUrl,
-        label: "Image 1 — current artwork"
-      },
-      ...(input.referenceImages ?? [])
-    ],
-    fetchImpl,
-    storage,
-    supabaseUrl
-  );
-  if (!sourceImage) {
-    throw new Error("Could not load the current artwork for revision.");
-  }
-  const revisionReferences = [sourceImage, ...additionalReferences];
-
-  const prompt = composeImagePrompt([
-    buildArtworkRevisionPrompt(
-      input.instructions,
-      additionalReferences.length
-    )
-  ]);
-  const hook = { id: input.directionId };
-  const imageRequestDebug = buildImageRequestDebugBundle({
-    model,
-    runId: input.runId,
-    hook,
-    prompt,
-    size: input.output.size,
-    quality: "medium",
-    references: revisionReferences
-  });
-  await writeDebugLog(
-    debugLogDirectory,
-    imageRequestDebug.entry,
-    imageRequestDebug.assets
-  );
-
-  const image = await editImage({
+  const image = await generateRevisedArtwork({
+    input,
     apiKey,
     model,
-    prompt,
-    size: input.output.size,
-    quality: "medium",
-    referenceImages: revisionReferences,
+    debugLogDirectory,
+    writeDebugLog,
+    storage,
+    supabaseUrl,
     fetchImpl
   });
-
+  const hook = { id: input.directionId };
   return persistArtworkOutput({
     input: {
       runId: input.runId,
@@ -102,29 +64,115 @@ export async function reviseArtworkOutput({
   });
 }
 
-export function buildArtworkRevisionPrompt(
-  instructions: string,
-  additionalReferenceCount = 0
-): string {
-  return [
-    "Act as a Senior Art Director performing a meaningful enhancement of Image 1.",
-    "Image 1 is the source of truth for the core advertising idea and recognizable hero visual, but its current layout and styling are not locked. The result must look visibly more considered, persuasive, and production-ready—not like the same artwork with one small patch.",
-    "Treat the following creative review direction as the minimum required improvement, not the limit of what you may enhance:",
-    instructions.trim(),
-    ...(additionalReferenceCount > 0
-      ? [
-          `Images 2–${additionalReferenceCount + 1} are user-supplied visual references for this revision. Use their relevant composition, mood, camera, material, styling, or finish as direction while preserving the current artwork's campaign intent and official brand assets.`
-        ]
-      : []),
-    "Before editing, perform an anti-AI production audit of Image 1. Look for inconsistent geometry or perspective, conflicting light direction, missing contact shadows, weak ambient occlusion, floating or pasted elements, melted edges, repeated textures, warped text or logos, implausible materials, excessive glow, generic glossy CGI, fake interface details, and decorative clutter without a visual system. Correct every visible issue that applies; do not invent defects that are not present.",
-    "The finished advertisement must not look obviously AI-generated. Make it feel art-directed, composited, retouched, and finished by an experienced designer. Preserve intentional 3D or stylized art when appropriate, but replace synthetic plastic smoothness with believable material texture, controlled imperfection, coherent depth, clean edges, and purposeful graphic construction.",
-    "At mobile-feed size, the revised artwork must earn the intended audience's attention within one second and strengthen rather than weaken brand perception. Create one distinctive visual or typographic hook, immediate message comprehension, recognizable brand character, and a credible reason to keep looking. Eliminate any cheap, generic, cluttered, misleading, or visibly AI-made treatment that could reduce trust; do not use sensational decoration or clickbait as a substitute for art direction.",
-    "Build one plausible lighting system across the full canvas. Keep key light direction, color temperature, reflections, highlights, cast shadows, contact shadows, and ambient occlusion consistent with object position and surface. Correct scale and perspective so every element feels grounded in the same scene.",
-    "Preserve the core concept, marketing intent, recognizable main visual or product, correct brand identity, essential headline meaning, and aspect ratio. Do not replace the campaign with an unrelated idea or generic template.",
-    "Use professional art-direction judgment across the whole canvas. You may redesign the grid and composition; change font style, weights, line breaks, scale, alignment, and text containers; reposition, resize, crop, or refine existing elements; simplify or rewrite secondary copy; strengthen the CTA; improve lighting, depth, retouching, and graphic layering; and create a clearer visual journey.",
-    "You may add relevant supporting elements when they make the advertisement feel more complete: icons, benefit modules, labels, dividers, microcopy, proof or trust strips, platform or partner elements such as Google or Meta, and brand-appropriate graphic accents. Integrate them into one coherent design system instead of pasting them into empty space.",
-    "Plausible editable placeholder proof, offer details, or supporting copy may be introduced when useful for a complete social advertisement. Do not duplicate the logo, wordmark, CTA, or the same claim in multiple places, and do not create internally contradictory information.",
-    "Apply Balance, Contrast, Emphasis, Movement, Dominance, Pattern, Rhythm, Unity, Variety, Proportion, Scale, and Space together with hierarchy, alignment, proximity, and grid discipline. Use empty areas intentionally, keep at least one genuine quiet zone, and judge readability at mobile-feed size. Avoid tiny text, excessive decoration, crowded edges, an oversized hero that suffocates the layout, and making every element equally loud.",
-    "Make a material improvement in at least three areas such as typography, composition, hierarchy, brand presence, CTA, supporting graphics, lighting, or final finish. Return one polished, high-end, production-ready social media advertisement."
-  ].join("\n\n");
+export async function reviseAlbumArtworkOutputs(
+  options: Parameters<typeof reviseArtworkOutput>[0]
+): Promise<readonly ArtworkOutput[]> {
+  const { input, model, storage, debugLogDirectory, writeDebugLog } = options;
+  if (!input.album) throw new Error("Album revision details are required.");
+  const album = input.album;
+  const image = await generateRevisedArtwork(options);
+  const imageBytes = Buffer.from(image.base64, "base64");
+  const panels = await splitAlbumMaster(imageBytes, album.format);
+  const persistenceInput = {
+    runId: input.runId,
+    brand: { id: input.clientId }
+  };
+  const masterOutput = await persistArtworkOutput({
+    input: persistenceInput,
+    hook: { id: `${input.directionId}-album-master` },
+    outputId: `${input.directionId}-album-master-v${input.assetVersion}`,
+    directionId: input.directionId,
+    assetVersion: input.assetVersion,
+    format: input.format,
+    model,
+    imageBytes,
+    mimeType: image.mimeType,
+    storage,
+    debugLogDirectory,
+    writeDebugLog
+  });
+  return Promise.all(
+    panels.map(async (panel, index) => ({
+      ...(await persistArtworkOutput({
+        input: persistenceInput,
+        hook: { id: `${input.directionId}-album-${panel.index}` },
+        outputId:
+          album.outputIds[index] ??
+          `${input.directionId}-album-${panel.index}`,
+        directionId: input.directionId,
+        assetVersion: input.assetVersion,
+        format: input.format,
+        model,
+        imageBytes: panel.bytes,
+        mimeType: "image/png",
+        storage,
+        debugLogDirectory,
+        writeDebugLog
+      })),
+      albumMasterAssetUrl: masterOutput.assetUrl,
+      albumMasterAssetStoragePath: masterOutput.assetStoragePath
+    }))
+  );
+}
+
+async function generateRevisedArtwork({
+  input,
+  apiKey,
+  model,
+  debugLogDirectory,
+  writeDebugLog,
+  storage,
+  supabaseUrl,
+  fetchImpl
+}: Parameters<typeof reviseArtworkOutput>[0]) {
+  const [sourceImage, ...additionalReferences] = await resolveReferenceImages(
+    [
+      {
+        kind: "url",
+        url: input.sourceImageUrl,
+        label: "Image 1 — current artwork"
+      },
+      ...(input.referenceImages ?? [])
+    ],
+    fetchImpl,
+    storage,
+    supabaseUrl
+  );
+  if (!sourceImage) {
+    throw new Error("Could not load the current artwork for revision.");
+  }
+  const revisionReferences = [sourceImage, ...additionalReferences];
+
+  const prompt = composeImagePrompt([
+    buildArtworkRevisionPrompt(input.instructions)
+  ]);
+  const hook = { id: input.directionId };
+  const imageRequestDebug = buildImageRequestDebugBundle({
+    model,
+    runId: input.runId,
+    hook,
+    prompt,
+    size: input.output.size,
+    quality: "medium",
+    references: revisionReferences
+  });
+  await writeDebugLog(
+    debugLogDirectory,
+    imageRequestDebug.entry,
+    imageRequestDebug.assets
+  );
+
+  return editImage({
+    apiKey,
+    model,
+    prompt,
+    size: input.output.size,
+    quality: "medium",
+    referenceImages: revisionReferences,
+    fetchImpl
+  });
+}
+
+export function buildArtworkRevisionPrompt(instructions: string): string {
+  return instructions.trim();
 }

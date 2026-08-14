@@ -9,7 +9,7 @@ import { directionSubheadline } from "../../../domain/subheadline-highlight";
 import { CREATIVE_STRATEGIST_AGENT_NAME, type CreativeQualityReport } from "../../../domain/quality-check";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
 import {
-  regenerateOutputImages,
+  reviseAlbumOutputImages,
   reviseOutputImage,
   type ArtworkReferenceImage
 } from "../../../services/artwork-generation/openai-image-generation";
@@ -673,19 +673,28 @@ function OutputRegenerateModal({
             }
           ]
         : [];
-    const revisionInstructions =
-      prompt.trim() ||
-      "Use the attached visual reference to improve this artwork while preserving its core message and brand identity.";
+    const revisionInstructions = prompt.trim();
+    if (!revisionInstructions) {
+      setPhase("idle");
+      setError("Describe exactly what you want to change.");
+      return;
+    }
 
     try {
       const updatedOutputs = album
-        ? await regenerateOutputImages({
+        ? await reviseAlbumOutputImages({
             run,
-            direction,
-            extraInstructions: revisionInstructions,
+            outputs,
+            instructions: revisionInstructions,
             sourceImageUrl:
-              selectedAsset?.albumMasterAssetUrl ?? selectedAsset?.assetUrl,
-            additionalReferenceImages
+              selectedAsset?.albumMasterAssetUrl ??
+              selectedAsset?.assetUrl ??
+              "",
+            albumFormat: resolvedAlbumFormatForDirection(
+              run.albumFormat,
+              direction
+            ),
+            referenceImages: additionalReferenceImages
           })
         : [
             await reviseOutputImage({
@@ -874,7 +883,7 @@ function OutputRegenerateModal({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !busy) {
                 event.preventDefault();
-                if (album || prompt.trim() || referenceAttachment) {
+                if (prompt.trim()) {
                   void handleRegenerate();
                 }
               }
@@ -894,7 +903,7 @@ function OutputRegenerateModal({
               className="output-chat-send-button"
               type="button"
               aria-label={album ? "Regenerate album" : "Regenerate image"}
-              disabled={busy || (!album && !prompt.trim() && !referenceAttachment)}
+              disabled={busy || !prompt.trim()}
               onClick={() => void handleRegenerate()}
             >
               {busy ? <Spinner /> : <ArrowUp size={18} weight="bold" />}

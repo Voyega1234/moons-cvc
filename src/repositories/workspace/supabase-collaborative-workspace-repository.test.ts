@@ -122,6 +122,51 @@ describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
     expect(inserts).toEqual([]);
   });
 
+  it("persists a new run even when another run has a stale cloud conflict", async () => {
+    const staleLocal = createInitialWorkspaceState({
+      runId: "stale-run",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const staleRemote = {
+      ...staleLocal,
+      runsById: {
+        ...staleLocal.runsById,
+        "stale-run": {
+          ...getActiveRun(staleLocal),
+          brief: "Newer cloud brief",
+          updatedAt: "2026-07-16T11:00:00Z"
+        }
+      }
+    };
+    const freshWorkspace = createInitialWorkspaceState({
+      runId: "fresh-run",
+      now: "2026-07-16T12:00:00Z"
+    });
+    const workspace = {
+      ...staleLocal,
+      activeRunId: "fresh-run",
+      runOrder: ["stale-run", "fresh-run"],
+      runsById: {
+        ...staleLocal.runsById,
+        ...freshWorkspace.runsById
+      }
+    };
+    const { client, inserts } = createClient({
+      lookupRuns: [null, sharedRunRow(staleRemote)]
+    });
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(),
+      client
+    );
+
+    await expect(repository.save(workspace)).rejects.toThrow(
+      "Reload the workspace before editing"
+    );
+
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({ workspace_run_id: "fresh-run" });
+  });
+
   it("recovers when another tab inserts the same run at the same time", async () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",

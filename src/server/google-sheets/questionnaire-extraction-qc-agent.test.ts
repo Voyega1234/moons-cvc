@@ -118,7 +118,49 @@ describe("reviewQuestionnaireExtractionWithLuna", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects any Luna quote that is not present in a source cell", async () => {
+  it("discards an ungrounded quote without rejecting other grounded evidence", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        output_text: JSON.stringify({
+          fields: [
+            {
+              key: "brand_name_en",
+              sourceQuotes: ["Real Brand", "Invented Brand"]
+            },
+            {
+              key: "brand_description",
+              sourceQuotes: ["A real description"]
+            }
+          ]
+        })
+      })
+    );
+
+    await expect(
+      reviewQuestionnaireExtractionWithLuna({
+        rows: [
+          ["Brand name EN", "Real Brand"],
+          ["Brand description", "A real description"]
+        ],
+        extractedFields: [],
+        apiKey: "openai-key",
+        fetchImpl
+      })
+    ).resolves.toEqual([
+      {
+        key: "brand_name_en",
+        label: "Brand name EN",
+        value: "Real Brand"
+      },
+      {
+        key: "brand_description",
+        label: "Brand description",
+        value: "A real description"
+      }
+    ]);
+  });
+
+  it("rejects a Luna result with no grounded Sheet evidence", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({
         output_text: JSON.stringify({
@@ -139,7 +181,7 @@ describe("reviewQuestionnaireExtractionWithLuna", () => {
         apiKey: "openai-key",
         fetchImpl
       })
-    ).rejects.toThrow("is not grounded in the Google Sheet");
+    ).rejects.toThrow("found no grounded answered fields");
   });
 
   it("surfaces provider failures instead of accepting unchecked extraction", async () => {

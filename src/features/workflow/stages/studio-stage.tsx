@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
 import type { WorkflowAction } from "../model";
 import { workflowActionBlockReason } from "../rules";
@@ -8,6 +8,7 @@ import { useRunQualityCheck } from "../use-run-quality-check";
 import { DecisionCard, Spinner, type StageProps } from "./shared";
 import { reviewCreativeCount, reviewGuidedImprovementCount } from "../review/output-groups";
 import { OutputGrid } from "../review/output-grid";
+import { downloadAllOutputsArchive } from "../review/downloads";
 
 export function StudioStage({
   state,
@@ -20,6 +21,10 @@ export function StudioStage({
   const [slidesImporting, setSlidesImporting] = useState(false);
   const [slidesError, setSlidesError] = useState<string | null>(null);
   const [googleSlidesUrl, setGoogleSlidesUrl] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadAllError, setDownloadAllError] = useState<string | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const backAction: WorkflowAction = { type: "set-stage", stage: "directions" };
   const approvalAction: WorkflowAction = {
     type: "set-stage",
@@ -37,9 +42,30 @@ export function StudioStage({
     progress: regenerateAllArtworkProgress
   } = useCreateSelectedHooks(state, dispatch);
   const creativeCount = reviewCreativeCount(state.outputs);
+  const downloadableCount = state.outputs.filter(
+    (output) => output.assetUrl
+  ).length;
   const slideCount = createStageClientSlideItems(state).length;
   const failedCount = reviewGuidedImprovementCount(state.outputs);
   const readyCount = state.qaComplete ? creativeCount - failedCount : 0;
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExportMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [exportMenuOpen]);
 
   const handleRegenerateAllArtwork = () => {
     if (
@@ -53,6 +79,7 @@ export function StudioStage({
   };
 
   const handleOpenGoogleSlides = async () => {
+    setExportMenuOpen(false);
     setSlidesImporting(true);
     setSlidesError(null);
     setGoogleSlidesUrl(null);
@@ -68,6 +95,23 @@ export function StudioStage({
       );
     } finally {
       setSlidesImporting(false);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    setExportMenuOpen(false);
+    setDownloadingAll(true);
+    setDownloadAllError(null);
+    try {
+      await downloadAllOutputsArchive(state.outputs);
+    } catch (caught) {
+      setDownloadAllError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not prepare the artwork ZIP. Please try again."
+      );
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -135,26 +179,61 @@ export function StudioStage({
                 : "Preparing…"
               : "↻ Regenerate all images"}
           </button>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={
-              !slideCount ||
-              slidesImporting ||
-              regeneratingAllArtwork ||
-              checking ||
-              sendingToQc
-            }
-            title={
-              slideCount
-                ? `Create ${slideCount} creative set${slideCount === 1 ? "" : "s"} in Google Slides`
-                : "Generate artwork before creating Google Slides"
-            }
-            onClick={() => void handleOpenGoogleSlides()}
-          >
-            {slidesImporting ? <Spinner /> : null}
-            {slidesImporting ? "Importing to Google…" : "Open in Google Slides"}
-          </button>
+          <div className="compass-create-export" ref={exportMenuRef}>
+            <button
+              className="btn secondary"
+              type="button"
+              aria-expanded={exportMenuOpen}
+              aria-haspopup="true"
+              disabled={
+                (!downloadableCount && !slideCount) ||
+                downloadingAll ||
+                slidesImporting ||
+                regeneratingAllArtwork ||
+                checking ||
+                sendingToQc
+              }
+              onClick={() => setExportMenuOpen((current) => !current)}
+            >
+              {downloadingAll || slidesImporting ? <Spinner /> : null}
+              {downloadingAll
+                ? "Preparing ZIP…"
+                : slidesImporting
+                  ? "Importing to Google…"
+                  : "Export"}
+            </button>
+            {exportMenuOpen ? (
+              <div
+                className="compass-create-export-menu"
+                role="group"
+                aria-label="Export options"
+              >
+                <button
+                  type="button"
+                  aria-label="Download All"
+                  disabled={!downloadableCount}
+                  onClick={() => void handleDownloadAll()}
+                >
+                  <b>Download All</b>
+                  <span>Download every artwork image in one ZIP file</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Export to Slides"
+                  disabled={!slideCount}
+                  title={
+                    slideCount
+                      ? `Create ${slideCount} creative set${slideCount === 1 ? "" : "s"} in Google Slides`
+                      : "Generate artwork before creating Google Slides"
+                  }
+                  onClick={() => void handleOpenGoogleSlides()}
+                >
+                  <b>Export to Slides</b>
+                  <span>Open the existing creative deck in Google Slides</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             className="btn primary"
             type="button"
@@ -199,6 +278,9 @@ export function StudioStage({
         ) : null}
         {slidesError ? (
           <p className="repository-message error">{slidesError}</p>
+        ) : null}
+        {downloadAllError ? (
+          <p className="repository-message error">{downloadAllError}</p>
         ) : null}
         {googleSlidesUrl ? (
           <p className="repository-message success">

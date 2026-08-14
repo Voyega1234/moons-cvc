@@ -5,6 +5,7 @@ import {
   emptyApprovalGate,
   inferredReferenceImageRole,
   outputFormatForService,
+  type AlbumFormat,
   type AlbumFormatPreference,
   referenceImageRoleLabels,
   type ArtworkOutputSize,
@@ -171,6 +172,10 @@ export interface ArtworkRevisionRequest {
   sourceImageUrl: string;
   instructions: string;
   referenceImages?: readonly ArtworkReferenceImage[];
+  album?: {
+    format: AlbumFormat;
+    outputIds: readonly string[];
+  };
   output: {
     size: ArtworkOutputSize;
     format: "png";
@@ -288,11 +293,55 @@ export async function reviseOutputImage({
     instructions,
     referenceImages
   });
-  const endpoint = env.artworkGenerationEndpoint;
-  if (!endpoint) {
-    throw new Error("Artwork generation endpoint is not configured.");
+  const [revised] = await requestArtworkRevision(request);
+  if (!revised) {
+    throw new Error("Artwork revision returned no output.");
   }
 
+  return normalizeArtworkOutput(revised);
+}
+
+export async function reviseAlbumOutputImages({
+  run,
+  outputs,
+  sourceImageUrl,
+  albumFormat,
+  instructions,
+  referenceImages = []
+}: {
+  run: WorkflowState;
+  outputs: readonly CreativeOutput[];
+  sourceImageUrl: string;
+  albumFormat: AlbumFormat;
+  instructions: string;
+  referenceImages?: readonly ArtworkReferenceImage[];
+}): Promise<readonly CreativeOutput[]> {
+  const output = outputs[0];
+  if (!output) {
+    throw new Error("The current album artwork is required for revision.");
+  }
+  const request = buildArtworkRevisionRequest({
+    run,
+    output: { ...output, assetUrl: sourceImageUrl },
+    instructions,
+    referenceImages,
+    album: {
+      format: albumFormat,
+      outputIds: outputs.map((candidate) => candidate.id)
+    }
+  });
+  const revised = await requestArtworkRevision(request);
+  if (revised.length < outputs.length) {
+    throw new Error("Album regeneration did not return every panel.");
+  }
+  return revised.map(normalizeArtworkOutput);
+}
+
+async function requestArtworkRevision(
+  request: ArtworkRevisionRequest
+): Promise<readonly CreativeOutput[]> {
+  const endpoint = env.artworkGenerationEndpoint;
+  if (!endpoint) throw new Error("Artwork generation endpoint is not configured.");
   const response = await fetch(endpoint, {
     method: "POST",
     headers: await buildHeaders(),
@@ -301,29 +350,24 @@ export async function reviseOutputImage({
   const payload = await readJsonResponse<
     Partial<ArtworkGenerationResponse> & { error?: string }
   >(response, "Artwork revision");
-
   if (!response.ok) {
     throw new Error(payload.error ?? `Artwork revision failed (${response.status}).`);
   }
-
-  const revised = payload.outputs?.[0];
-  if (!revised) {
-    throw new Error("Artwork revision returned no output.");
-  }
-
-  return normalizeArtworkOutput(revised);
+  return payload.outputs ?? [];
 }
 
 export function buildArtworkRevisionRequest({
   run,
   output,
   instructions,
-  referenceImages = []
+  referenceImages = [],
+  album
 }: {
   run: WorkflowState;
   output: CreativeOutput;
   instructions: string;
   referenceImages?: readonly ArtworkReferenceImage[];
+  album?: ArtworkRevisionRequest["album"];
 }): ArtworkRevisionRequest {
   const sourceImageUrl = output.assetUrl?.trim();
   if (!sourceImageUrl) {
@@ -346,6 +390,7 @@ export function buildArtworkRevisionRequest({
     sourceImageUrl,
     instructions: trimmedInstructions,
     ...(referenceImages.length ? { referenceImages } : {}),
+    ...(album ? { album } : {}),
     output: {
       size: run.outputSize ?? defaultArtworkOutputSize,
       format: "png"

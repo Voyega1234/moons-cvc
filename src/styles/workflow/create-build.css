@@ -51,6 +51,57 @@
   padding: 10px 13px;
 }
 
+.compass-app .compass-create-export {
+  position: relative;
+}
+
+.compass-app .compass-create-export-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: grid;
+  width: min(280px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid #dfe3ea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(31, 38, 52, 0.16);
+}
+
+.compass-app .compass-create-export-menu button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #252b38;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compass-app .compass-create-export-menu button:hover:not(:disabled),
+.compass-app .compass-create-export-menu button:focus-visible {
+  background: #f3f5f8;
+}
+
+.compass-app .compass-create-export-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compass-app .compass-create-export-menu b {
+  font-size: 12px;
+}
+
+.compass-app .compass-create-export-menu span {
+  color: #7a8394;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
 .compass-app .compass-build-hidden-preflight,
 .compass-app .compass-build-qa,
 .compass-app .compass-build-qa-strip {

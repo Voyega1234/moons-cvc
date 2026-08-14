@@ -17,6 +17,7 @@ import {
   BriefStage,
   ClientStage,
   downloadAlbumArchive,
+  downloadAllOutputsArchive,
   downloadOutputAsset,
   DirectionsStage,
   missingBrandIdentityInputs,
@@ -262,6 +263,51 @@ describe("redesigned workflow stages", () => {
       expect.objectContaining({ type: "application/zip" })
     );
     expect(downloadedFileName).toBe("compass-album-3.zip");
+  });
+
+  it("downloads every Create artwork inside one zip file", async () => {
+    const outputs = buildCreativeState().outputs.slice(0, 3).map((output, index) => ({
+      ...output,
+      assetUrl: `https://storage.example.com/creative-${index + 1}.png`,
+      assetStoragePath: `run/outputs/creative-${index + 1}.png`
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        const outputIndex = outputs.findIndex((output) => output.assetUrl === url);
+        return Promise.resolve({
+          ok: outputIndex >= 0,
+          status: outputIndex >= 0 ? 200 : 404,
+          blob: vi.fn().mockResolvedValue(
+            new Blob([`creative-${outputIndex + 1}`], { type: "image/png" })
+          )
+        });
+      })
+    );
+    const createObjectUrl = vi.fn().mockReturnValue("blob:create-artwork-zip");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    });
+    let downloadedFileName = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadedFileName = this.download;
+    });
+
+    await downloadAllOutputsArchive(outputs);
+
+    expect(fetch).toHaveBeenCalledTimes(outputs.length);
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(createObjectUrl.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ type: "application/zip" })
+    );
+    expect(downloadedFileName).toBe("compass-create-artwork.zip");
   });
 
   it("presents Signal with the reference workspace and memory composition", async () => {
@@ -2870,8 +2916,10 @@ describe("redesigned workflow stages", () => {
     expect(
       stage.getByRole("button", { name: "↻ Regenerate all images" })
     ).toBeTruthy();
+    fireEvent.click(stage.getByRole("button", { name: "Export" }));
+    expect(stage.getByRole("button", { name: "Download All" })).toBeTruthy();
     expect(
-      stage.getByRole("button", { name: "Open in Google Slides" })
+      stage.getByRole("button", { name: "Export to Slides" })
     ).toBeTruthy();
   });
 
@@ -2886,8 +2934,9 @@ describe("redesigned workflow stages", () => {
     };
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
     const stage = within(view.container);
+    fireEvent.click(stage.getByRole("button", { name: "Export" }));
     const googleSlidesButton = stage.getByRole("button", {
-      name: "Open in Google Slides"
+      name: "Export to Slides"
     });
 
     expect(googleSlidesButton.hasAttribute("disabled")).toBe(false);
@@ -2927,10 +2976,11 @@ describe("redesigned workflow stages", () => {
       <StudioStage state={state} dispatch={vi.fn()} canEdit={false} />
     );
     const stage = within(view.container);
+    fireEvent.click(stage.getByRole("button", { name: "Export" }));
 
     expect(
       stage
-        .getByRole("button", { name: "Open in Google Slides" })
+        .getByRole("button", { name: "Export to Slides" })
         .hasAttribute("disabled")
     ).toBe(false);
     expect(
@@ -3356,18 +3406,34 @@ describe("redesigned workflow stages", () => {
       stage.getByRole("button", { name: "Regenerate draft" })
     );
     const dialog = stage.getByRole("dialog", { name: "Regenerate album" });
+    expect(
+      (within(dialog).getByRole("button", {
+        name: "Regenerate album"
+      }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    await user.type(
+      within(dialog).getByRole("textbox", {
+        name: "Regeneration instructions"
+      }),
+      "Change only the cover background to blue."
+    );
     await user.click(
       within(dialog).getByRole("button", { name: "Regenerate album" })
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      referenceImages?: Array<{ kind?: string; url?: string }>;
+      sourceImageUrl?: string;
+      instructions?: string;
+      brief?: string;
+      brand?: unknown;
     };
-    expect(request.referenceImages?.[0]).toMatchObject({
-      kind: "url",
-      url: masterUrl
-    });
+    expect(request.sourceImageUrl).toBe(masterUrl);
+    expect(request.instructions).toBe(
+      "Change only the cover background to blue."
+    );
+    expect(request).not.toHaveProperty("brief");
+    expect(request).not.toHaveProperty("brand");
   });
 
   it("does not show a fake score for generated artwork before real QA runs", () => {

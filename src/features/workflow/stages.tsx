@@ -121,6 +121,7 @@ import {
 import {
   downloadAlbumArchive,
   downloadAllOutputs,
+  downloadAllOutputsArchive,
   downloadOutputAsset
 } from "./review/downloads";
 import { ApprovalStage } from "./stages/approval-stage";
@@ -141,6 +142,7 @@ export {
   BriefStage,
   StudioStage,
   downloadAlbumArchive,
+  downloadAllOutputsArchive,
   downloadOutputAsset
 };
 

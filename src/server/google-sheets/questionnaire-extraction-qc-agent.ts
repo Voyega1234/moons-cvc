@@ -189,7 +189,7 @@ function parseGroundedFields(
 
   const allowed = new Set(allowedKeys);
   const seen = new Set<string>();
-  const fields = parsed.fields.map((item, index) => {
+  const fields = parsed.fields.flatMap((item, index) => {
     if (!isRecord(item)) {
       throw new Error(`Questionnaire QC fields[${index}] must be an object.`);
     }
@@ -203,27 +203,28 @@ function parseGroundedFields(
         `Questionnaire QC fields[${index}].sourceQuotes must contain evidence.`
       );
     }
-    const quotes = item.sourceQuotes.map((quote, quoteIndex) => {
+    const quotes = item.sourceQuotes.flatMap((quote, quoteIndex) => {
       const value = readString(
         quote,
         `fields[${index}].sourceQuotes[${quoteIndex}]`
       ).trim();
       if (!value || !sourceCells.some((cell) => cell.includes(value))) {
-        throw new Error(
-          `Questionnaire QC fields[${index}].sourceQuotes[${quoteIndex}] is not grounded in the Google Sheet.`
-        );
+        return [];
       }
-      return value;
+      return [value];
     });
-    return {
-      key,
-      label: questionnaireFieldLabel(key),
-      value: [...new Set(quotes)].join("\n\n")
-    };
+    if (!quotes.length) return [];
+    return [
+      {
+        key,
+        label: questionnaireFieldLabel(key),
+        value: [...new Set(quotes)].join("\n\n")
+      }
+    ];
   });
 
   if (!fields.length) {
-    throw new Error("GPT Luna questionnaire QC found no answered fields.");
+    throw new Error("GPT Luna questionnaire QC found no grounded answered fields.");
   }
   return fields;
 }

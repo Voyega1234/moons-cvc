@@ -100,7 +100,10 @@ import {
   type ArtworkGenerationDebugLogger
 } from "./artwork-debug-log.js";
 import { persistArtworkOutput } from "./artwork-persistence.js";
-import { reviseArtworkOutput } from "./artwork-revision.js";
+import {
+  reviseAlbumArtworkOutputs,
+  reviseArtworkOutput
+} from "./artwork-revision.js";
 
 export { buildArtworkRevisionPrompt } from "./artwork-revision.js";
 
@@ -214,7 +217,7 @@ export async function handleArtworkGenerationRequest({
     if (revisionInput) {
       const model =
         env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || revisionInput.model;
-      const output = await reviseArtworkOutput({
+      const revisionOptions = {
         input: revisionInput,
         apiKey,
         model,
@@ -223,8 +226,11 @@ export async function handleArtworkGenerationRequest({
         storage,
         supabaseUrl,
         fetchImpl: providerFetchImpl
-      });
-      return jsonResponse({ ok: true, outputs: [output] });
+      };
+      const outputs = revisionInput.album
+        ? await reviseAlbumArtworkOutputs(revisionOptions)
+        : [await reviseArtworkOutput(revisionOptions)];
+      return jsonResponse({ ok: true, outputs });
     }
 
     if (!input) throw new Error("Invalid artwork generation request.");

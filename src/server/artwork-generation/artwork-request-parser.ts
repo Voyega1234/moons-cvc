@@ -1,4 +1,5 @@
 import {
+  albumFormatPanelCount,
   albumFormatPreferences,
   albumFormats,
   artworkModes,
@@ -41,6 +42,21 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
     throw new Error("Revision instructions are required.");
   }
 
+  const albumValue = value.album;
+  let album: ArtworkRevisionRequest["album"];
+  if (albumValue !== undefined) {
+    const albumRecord = readRecord(albumValue, "album");
+    const format = readString(albumRecord.format, "album.format") as AlbumFormat;
+    if (!albumFormats.includes(format)) {
+      throw new Error("album.format is not supported.");
+    }
+    const outputIds = readStringArray(albumRecord.outputIds, "album.outputIds");
+    if (outputIds.length !== albumFormatPanelCount(format)) {
+      throw new Error("album.outputIds must match the album panel count.");
+    }
+    album = { format, outputIds };
+  }
+
   return {
     requestType: "artwork-revision",
     model: readString(value.model, "model") as ArtworkRevisionRequest["model"],
@@ -58,6 +74,7 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
     referenceImages: Array.isArray(value.referenceImages)
       ? (value.referenceImages as ArtworkRevisionRequest["referenceImages"])
       : [],
+    ...(album ? { album } : {}),
     output: { size: outputSize as ArtworkOutputSize, format: "png" }
   };
 }
@@ -341,5 +358,3 @@ function readStringArray(value: unknown, field: string): readonly string[] {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
-

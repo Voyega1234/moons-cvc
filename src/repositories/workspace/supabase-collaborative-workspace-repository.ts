@@ -197,109 +197,76 @@ export class SupabaseCollaborativeWorkspaceRepository
 
   private async persist(workspace: WorkspaceState): Promise<void> {
     const userId = await getUserId(this.client);
+    const orderedRunIds = [
+      workspace.activeRunId,
+      ...workspace.runOrder.filter((runId) => runId !== workspace.activeRunId)
+    ];
+    let firstError: unknown = null;
 
-    for (const runId of workspace.runOrder) {
+    for (const runId of orderedRunIds) {
       const run = workspace.runsById[runId];
       if (!run) continue;
-      const serialized = serializeSharedRun(run);
-      let known = this.knownRuns.get(run.id);
-      if (known?.serialized === serialized) continue;
-
-      if (!known) {
-        const existing = await this.findKnownRun(run.id);
-        if (existing) {
-          if (existing.serialized === serialized) {
-            this.knownRuns.set(run.id, existing);
-            continue;
-          }
-          throw staleLocalProjectError();
-        }
-
-        const snapshot = JSON.parse(serialized) as Json;
-        const { data, error } = await this.client
-          .schema("moons")
-          .from("runs")
-          .insert({
-            owner_user_id: userId,
-            current_owner_user_id: userId,
-            updated_by: userId,
-            client_id: run.brand?.id ?? null,
-            workspace_run_id: run.id,
-            snapshot,
-            status: run.done ? "completed" : "active",
-            version: 1,
-            stage: run.stage,
-            service: run.service,
-            quantity: run.quantity,
-            brief: run.brief,
-            is_pitching: false,
-            completed_at: run.done ? nowIso() : null
-          })
-          .select("id,current_owner_user_id,version")
-          .single();
-
-        if (error) {
-          if (!isUniqueViolation(error)) throw error;
-          const conflictingRun = await this.findKnownRun(run.id);
-          if (!conflictingRun) {
-            throw new Error(
-              "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
-            );
-          }
-          if (conflictingRun.serialized === serialized) {
-            this.knownRuns.set(run.id, conflictingRun);
-            continue;
-          }
-          throw staleLocalProjectError();
-        }
-        this.knownRuns.set(run.id, {
-          databaseId: data.id,
-          currentOwnerUserId: data.current_owner_user_id,
-          version: data.version,
-          serialized
-        });
-        continue;
+      try {
+        await this.persistRun(run, userId);
+      } catch (error: unknown) {
+        firstError ??= error;
       }
+    }
 
-      if (known.currentOwnerUserId !== userId) {
-        const latest = await this.findKnownRun(run.id);
-        if (latest) {
-          known = latest;
-          this.knownRuns.set(run.id, latest);
+    if (firstError) throw firstError;
+  }
+
+  private async persistRun(run: WorkflowState, userId: string): Promise<void> {
+    const serialized = serializeSharedRun(run);
+    let known = this.knownRuns.get(run.id);
+    if (known?.serialized === serialized) return;
+
+    if (!known) {
+      const existing = await this.findKnownRun(run.id);
+      if (existing) {
+        if (existing.serialized === serialized) {
+          this.knownRuns.set(run.id, existing);
+          return;
         }
-        if (known.currentOwnerUserId !== userId) {
-          throw new Error("Only the current owner can edit this project.");
-        }
+        throw staleLocalProjectError();
       }
 
       const snapshot = JSON.parse(serialized) as Json;
       const { data, error } = await this.client
         .schema("moons")
         .from("runs")
-        .update({
+        .insert({
+          owner_user_id: userId,
+          current_owner_user_id: userId,
+          updated_by: userId,
           client_id: run.brand?.id ?? null,
+          workspace_run_id: run.id,
           snapshot,
           status: run.done ? "completed" : "active",
-          version: known.version + 1,
-          updated_by: userId,
+          version: 1,
           stage: run.stage,
           service: run.service,
           quantity: run.quantity,
           brief: run.brief,
+          is_pitching: false,
           completed_at: run.done ? nowIso() : null
         })
-        .eq("workspace_run_id", run.id)
-        .eq("version", known.version)
         .select("id,current_owner_user_id,version")
-        .maybeSingle();
+        .single();
 
-      if (error) throw error;
-      if (!data) {
-        const latest = await this.findKnownRun(run.id);
-        if (latest) this.knownRuns.set(run.id, latest);
-        throw new Error(
-          "This project changed in another browser. Reload the latest version before continuing."
-        );
+      if (error) {
+        if (!isUniqueViolation(error)) throw error;
+        const conflictingRun = await this.findKnownRun(run.id);
+        if (!conflictingRun) {
+          throw new Error(
+            "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
+          );
+        }
+        if (conflictingRun.serialized === serialized) {
+          this.knownRuns.set(run.id, conflictingRun);
+          return;
+        }
+        throw staleLocalProjectError();
       }
       this.knownRuns.set(run.id, {
         databaseId: data.id,
@@ -307,7 +274,55 @@ export class SupabaseCollaborativeWorkspaceRepository
         version: data.version,
         serialized
       });
+      return;
     }
+
+    if (known.currentOwnerUserId !== userId) {
+      const latest = await this.findKnownRun(run.id);
+      if (latest) {
+        known = latest;
+        this.knownRuns.set(run.id, latest);
+      }
+      if (known.currentOwnerUserId !== userId) {
+        throw new Error("Only the current owner can edit this project.");
+      }
+    }
+
+    const snapshot = JSON.parse(serialized) as Json;
+    const { data, error } = await this.client
+      .schema("moons")
+      .from("runs")
+      .update({
+        client_id: run.brand?.id ?? null,
+        snapshot,
+        status: run.done ? "completed" : "active",
+        version: known.version + 1,
+        updated_by: userId,
+        stage: run.stage,
+        service: run.service,
+        quantity: run.quantity,
+        brief: run.brief,
+        completed_at: run.done ? nowIso() : null
+      })
+      .eq("workspace_run_id", run.id)
+      .eq("version", known.version)
+      .select("id,current_owner_user_id,version")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      const latest = await this.findKnownRun(run.id);
+      if (latest) this.knownRuns.set(run.id, latest);
+      throw new Error(
+        "This project changed in another browser. Reload the latest version before continuing."
+      );
+    }
+    this.knownRuns.set(run.id, {
+      databaseId: data.id,
+      currentOwnerUserId: data.current_owner_user_id,
+      version: data.version,
+      serialized
+    });
   }
 
   private async findKnownRun(workspaceRunId: string): Promise<KnownRun | null> {

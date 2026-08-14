@@ -75,6 +75,37 @@ export async function downloadAlbumArchive(
   downloadBlob(blob, `compass-album-${albumIndex + 1}.zip`);
 }
 
+export async function downloadAllOutputsArchive(
+  outputs: readonly CreativeOutput[]
+): Promise<void> {
+  const downloadableOutputs = outputs.filter((output) => output.assetUrl);
+  if (!downloadableOutputs.length) {
+    throw new Error("No downloadable artwork is available.");
+  }
+  const { default: JSZip } = await import("jszip");
+  const archive = new JSZip();
+  for (const [index, output] of downloadableOutputs.entries()) {
+    const response = await fetch(output.assetUrl!);
+    if (!response.ok) {
+      throw new Error(
+        `Could not download creative ${index + 1} (${response.status}).`
+      );
+    }
+    const blob = await response.blob();
+    const creativeNumber = String(index + 1).padStart(2, "0");
+    archive.file(
+      `creative-${creativeNumber}-${downloadFileName(output, index, blob)}`,
+      blob
+    );
+  }
+  const blob = await archive.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 }
+  });
+  downloadBlob(blob, "compass-create-artwork.zip");
+}
+
 export async function downloadAllOutputs(
   outputs: readonly CreativeOutput[]
 ): Promise<void> {
