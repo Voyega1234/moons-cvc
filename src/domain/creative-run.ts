@@ -83,6 +83,7 @@ export function normalizeFormatBeatsForService(
 export const artworkModes = [
   "standard",
   "design-system",
+  "design-system-2026-07-23",
   "design-system-new",
   "direct-final-artwork",
   "reference-library"
@@ -95,6 +96,7 @@ export type ArtworkMode = (typeof artworkModes)[number];
 export const userSelectableArtworkModes = [
   "standard",
   "design-system",
+  "design-system-2026-07-23",
   "design-system-new",
   "direct-final-artwork"
 ] as const satisfies readonly ArtworkMode[];

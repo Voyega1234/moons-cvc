@@ -2432,6 +2432,94 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).not.toContain("{{");
   });
 
+  it("runs the restored 23 July Design System workflow as an isolated mode", async () => {
+    const responseCalls: Record<string, unknown>[] = [];
+    const imageCalls: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(
+            JSON.stringify({ email: "team@convertcake.com" }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          responseCalls.push(body);
+          return strategyAgentResponse();
+        }
+        if (href.includes("/v1/images/generations")) {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          imageCalls.push(body);
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  b64_json: Buffer.from("historical-mode-png").toString(
+                    "base64"
+                  )
+                }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+
+    const { client } = fakeStorage();
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system-2026-07-23",
+          imagePromptModel: "anthropic/claude-sonnet-4.6",
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              supportingPoints: [
+                "Same-day delivery in Bangkok",
+                "Hand-arranged seasonal stems"
+              ]
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status).toBe(200);
+    expect(responseCalls).toHaveLength(1);
+    expect(responseCalls[0]?.model).toBe("gpt-5.6-luna");
+    expect(imageCalls).toHaveLength(1);
+    expect(imageCalls[0]?.model).toBe("gpt-image-2");
+    const prompt = String(imageCalls[0]?.prompt);
+    expect(prompt).toContain(
+      "# DIRECT CREATIVE ARTWORK PROMPT — GPT IMAGE 2"
+    );
+    expect(prompt).toContain(
+      "Create **ONE complete, publication-ready social media advertising artwork**"
+    );
+    expect(prompt).toContain("Create a new visual system from the message");
+    expect(prompt).toContain("Content type: lifestyle");
+    expect(prompt).toContain("Selling approach: desire");
+    expect(prompt).toContain("Human presence: essential");
+    expect(prompt).toContain("Same-day delivery in Bangkok");
+    expect(prompt).toContain("Hand-arranged seasonal stems");
+    expect(prompt).not.toContain("{{");
+    expect(prompt.length).toBeLessThanOrEqual(32_000);
+  });
+
   it("runs V6 upstream with the V6.2 Judgment final prompt in design-system mode", async () => {
     const editCalls: FormData[] = [];
     const strategyCalls: Record<string, unknown>[] = [];

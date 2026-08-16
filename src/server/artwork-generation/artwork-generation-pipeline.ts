@@ -21,6 +21,8 @@ import {
   compactPromptList,
   compactPromptText,
   composeImagePrompt,
+  loadDesignSystem20260723FinalArtworkPrompt,
+  loadDesignSystem20260723StrategyPrompt,
   loadDesignSystemV62JudgmentPrompt,
   loadDesignSystemV6StrategyPrompt,
   loadDirectFinalArtworkPrompt,
@@ -237,6 +239,7 @@ export async function handleArtworkGenerationRequest({
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const promptProvider: ImagePromptProvider =
       input.artworkMode !== "standard" &&
+      input.artworkMode !== "design-system-2026-07-23" &&
       input.imagePromptModel === "anthropic/claude-sonnet-4.6"
         ? "openrouter"
         : "openai";
@@ -535,6 +538,8 @@ async function generateOutputForHook({
   const canvasRatio = canvasRatioFromSize(generationSize);
   const isDirectFinalArtwork =
     input.artworkMode === "direct-final-artwork";
+  const isHistoricalDesignSystem =
+    input.artworkMode === "design-system-2026-07-23";
   const setDirection = designSystemNewFlow?.setDirection.setDirection;
   const shotOpportunity = designSystemNewFlow?.setDirection.ideas.find(
     (idea) => idea.directionId === hook.id
@@ -551,6 +556,7 @@ async function generateOutputForHook({
   if (
     input.artworkMode === "reference-library" ||
     input.artworkMode === "design-system" ||
+    input.artworkMode === "design-system-2026-07-23" ||
     input.artworkMode === "design-system-new"
   ) {
     try {
@@ -618,6 +624,15 @@ async function generateOutputForHook({
           shotOpportunity
         })
     : undefined;
+  const compiledHistoricalDesignSystemPrompt = isHistoricalDesignSystem
+    ? await buildHistoricalDesignSystem20260723Prompt({
+        input,
+        hook,
+        references: promptReferences,
+        canvasRatio,
+        strategy
+      })
+    : undefined;
   const compiledDirectFinalArtworkPrompt = isDirectFinalArtwork
     ? await buildDirectFinalArtworkPrompt({
         input,
@@ -629,6 +644,8 @@ async function generateOutputForHook({
   const prompt =
     isDirectFinalArtwork
       ? compiledDirectFinalArtworkPrompt ?? ""
+      : isHistoricalDesignSystem
+      ? compiledHistoricalDesignSystemPrompt ?? ""
       : isDesignSystemMode
       ? compiledDesignSystemPrompt ?? ""
       : await resolveImagePrompt({
@@ -649,7 +666,7 @@ async function generateOutputForHook({
           fetchImpl
         });
   const promptParts =
-    isDirectFinalArtwork || isDesignSystemMode
+    isDirectFinalArtwork || isHistoricalDesignSystem || isDesignSystemMode
       ? [prompt]
       : input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
@@ -1178,10 +1195,12 @@ async function resolveCreativeStrategy({
     model,
     provider,
     fetchImpl,
-    ...(input.artworkMode === "design-system" ||
-    input.artworkMode === "design-system-new"
-      ? { loadPrompt: loadDesignSystemV6StrategyPrompt }
-      : {}),
+    ...(input.artworkMode === "design-system-2026-07-23"
+      ? { loadPrompt: loadDesignSystem20260723StrategyPrompt }
+      : input.artworkMode === "design-system" ||
+          input.artworkMode === "design-system-new"
+        ? { loadPrompt: loadDesignSystemV6StrategyPrompt }
+        : {}),
     input: {
       brand: input.brand,
       service: input.service,
@@ -1293,6 +1312,203 @@ function compactReferenceRole(label: string | undefined): string {
     return "supplied supporting component";
   }
   return "client reference";
+}
+
+async function buildHistoricalDesignSystem20260723Prompt({
+  input,
+  hook,
+  references,
+  canvasRatio,
+  strategy
+}: {
+  input: ArtworkGenerationRequest;
+  hook: SelectedHook;
+  references: readonly ReferenceImageInput[];
+  canvasRatio: string;
+  strategy?: CreativeStrategyEnrichment;
+}): Promise<string> {
+  const artifactMap = references.map((reference, index) => ({
+    image: index + 1,
+    role: compactPromptText(reference.label ?? "Reference image", 180)
+  }));
+  const supportingCopy = hook.supportingPoints?.length
+    ? hook.supportingPoints
+    : ["None supplied; do not add filler copy merely to occupy space."];
+  const additionalRequirements = input.textInputs.length
+    ? input.textInputs
+    : ["None supplied."];
+  const editableGuidelineItems = input.brandLibrary.docs.filter(
+    isEditableBrandGuidelineItem
+  );
+  const derivedGuidelineItems = input.brandLibrary.brand.filter(
+    isBrandGuidelineItem
+  );
+  const guidelineItems = editableGuidelineItems.length
+    ? editableGuidelineItems
+    : derivedGuidelineItems;
+  const otherBrandItems = input.brandLibrary.brand.filter(
+    (item) => !isBrandGuidelineItem(item)
+  );
+  const otherDocumentItems = input.brandLibrary.docs.filter(
+    (item) => !isEditableBrandGuidelineItem(item)
+  );
+  const thickContext = {
+    brand: input.brand
+      ? {
+          id: compactPromptText(input.brand.id, 120),
+          name: compactPromptText(input.brand.name, 180),
+          category: compactPromptText(input.brand.category, 180),
+          personality: compactPromptList(input.brand.personality, 8, 120),
+          colors: compactPromptList(input.brand.colors, 12, 40)
+        }
+      : null,
+    brandMemory: {
+      working: compactPromptList(input.brandMemory.working, 8, 240),
+      avoid: compactPromptList(input.brandMemory.avoid, 8, 240)
+    },
+    brandLibrary: {
+      guidelines: historicalCompactPromptLibrary(guidelineItems, 3, 4_000),
+      brand: historicalCompactPromptLibrary(otherBrandItems, 6, 400),
+      products: historicalCompactPromptLibrary(
+        input.brandLibrary.products,
+        8,
+        500
+      ),
+      docs: historicalCompactPromptLibrary(otherDocumentItems, 4, 280),
+      refs: historicalCompactPromptLibrary(input.brandLibrary.refs, 6, 280)
+    },
+    campaignContext: {
+      rationale: compactPromptText(hook.why, 1_000),
+      caption: compactPromptText(hook.caption, 1_500)
+    },
+    attachedArtifacts: artifactMap.slice(0, 16)
+  };
+
+  const prompt = renderDesignSystemPromptTemplate(
+    await loadDesignSystem20260723FinalArtworkPrompt(),
+    {
+      "{{COMMERCIAL_STYLE}}": compactPromptText(
+        strategy?.commercialStyle ?? "select from the brief and brand context",
+        300
+      ),
+      "{{TREATMENT}}": compactPromptText(
+        historicalDesignSystemTreatmentFor(strategy?.commercialStyle),
+        500
+      ),
+      "{{SELLING_MECHANISM}}": compactPromptText(
+        strategy?.sellingMechanism ??
+          "select the clearest approach for the message",
+        300
+      ),
+      "{{HUMAN_PRESENCE}}": compactPromptText(
+        strategy?.humanPresence ?? "avoid",
+        40
+      ),
+      "{{AUDIENCE_MOMENT}}": compactPromptText(
+        strategy?.audienceMoment ??
+          "infer conservatively from the supplied context",
+        500
+      ),
+      "{{BRAND_FIT_REASON}}": compactPromptText(
+        strategy?.reasonToBelieve ??
+          "Use the supplied brand context and artifacts as evidence.",
+        500
+      ),
+      "{{BRAND_NAME_AND_CATEGORY}}": compactPromptText(
+        `${input.brand?.name ?? "Not supplied"}${
+          input.brand?.category ? ` — ${input.brand.category}` : ""
+        }`,
+        360
+      ),
+      "{{OBJECTIVE}}": compactPromptText(input.brief || hook.why, 1_500),
+      "{{MAIN_MESSAGE}}": compactPromptText(hook.concept, 800),
+      "{{EXACT_HEADLINE}}": compactPromptText(hook.hook, 500),
+      "{{SUPPORTING_COPY}}": compactPromptText(
+        supportingCopy.join(" | "),
+        1_200
+      ),
+      "{{CTA}}": compactPromptText(hook.cta, 300),
+      "{{CANVAS}}": compactPromptText(`${canvasRatio} ${input.service}`, 120),
+      "{{ON_ARTWORK_COPY_PRIORITY}}":
+        buildHistoricalDesignSystemCopyPriority(input.service, hook),
+      "{{ADDITIONAL_REQUIREMENTS}}": additionalRequirements
+        .slice(0, 5)
+        .map((requirement) => `* ${compactPromptText(requirement, 500)}`)
+        .join("\n"),
+      "{{THICK_CONTEXT_JSON}}": JSON.stringify(thickContext, null, 2)
+    }
+  );
+
+  if (prompt.length > 32_000) {
+    throw new Error(
+      `Historical Design System prompt is too long (${prompt.length}/32000).`
+    );
+  }
+  return prompt;
+}
+
+function historicalCompactPromptLibrary(
+  items: readonly { title: string; description: string }[],
+  maxItems: number,
+  maxDescriptionCharacters: number
+) {
+  return items.slice(0, maxItems).map((item) => ({
+    title: compactPromptText(item.title, 140),
+    description: compactPromptText(
+      item.description,
+      maxDescriptionCharacters
+    )
+  }));
+}
+
+function historicalDesignSystemTreatmentFor(
+  style: CreativeStrategyEnrichment["commercialStyle"] | undefined
+): string {
+  switch (style) {
+    case "minimal":
+      return "Restrained and immediately clear; let one strong real visual and disciplined typography carry the message.";
+    case "lifestyle":
+      return "Human, natural, and relatable; show the product or benefit inside a believable lived moment.";
+    case "premium":
+      return "Refined and desirable through art direction, material quality, crop, lighting, and restraint—not a generic black-and-gold treatment.";
+    case "promotion":
+      return "Energetic, urgent, and exciting with decisive contrast and a clearly visible offer, while keeping mobile hierarchy controlled rather than crowded.";
+    case "infographic":
+      return "Explain the idea visually through one clear diagram, comparison, or evidence structure; remain image-led and avoid turning the artwork into a dense slide.";
+    case "social-proof":
+      return "Build trust through supplied evidence, authentic human context, or recognizable proof; never invent a real reviewer or certification.";
+    case "story":
+      return "Create one specific, visually legible tension or transformation that the viewer understands without reading a paragraph. Do not assume that the story needs a human protagonist.";
+    case "playful":
+      return "Use expressive color, scale, rhythm, and surprise appropriate to the brand while keeping the focal message unmistakable.";
+    default:
+      return "Choose the content behavior and emotional energy that best fit this specific message and brand.";
+  }
+}
+
+function buildHistoricalDesignSystemCopyPriority(
+  service: ArtworkGenerationRequest["service"],
+  hook: SelectedHook
+): string {
+  const supportingOptions =
+    hook.supportingPoints?.filter((point) => point.trim()) ?? [];
+  const lines = [
+    `Render the exact headline once: “${compactPromptText(hook.hook, 500)}”`,
+    supportingOptions.length
+      ? `Select the smallest useful combination from these evidence-backed supporting options. You may use multiple short items when they make the artwork more complete, but omit anything redundant with the visual: ${compactPromptText(supportingOptions.join(" | "), 1_000)}`
+      : "Create concise supporting or offer copy only when it closes a product-recognition, persuasion, trust, or action gap.",
+    `Use the supplied logo and the CTA “${compactPromptText(hook.cta, 300)}”.`,
+    "Build a cohesive secondary-information group that feels complete without becoming dense. It may combine a product or service descriptor, relevant benefits or proof, and a useful action detail.",
+    "Complete the ad unit rather than filling the image like a standalone poster. Check Identification, Persuasion, and Action; count information already supplied by the visual and surrounding platform UI.",
+    "For paid social or Meta, do not repeat page identity or contact merely because space is available. For standalone, organic, downloadable, or reshared artwork, a compact self-contained contact path may be useful.",
+    "You may add plausible editable mockup details such as a date, price, discount, page name, LINE handle, URL, phone number, urgency note, or contact line when they genuinely complete this ad. Use brand-derived, obviously replaceable contact formats rather than invented real personal details."
+  ];
+  if (service === "album-post" && hook.formatBeats?.length) {
+    lines.push(
+      `Album story beats may be distributed across the three crops: ${compactPromptText(hook.formatBeats.join(" | "), 1_000)}`
+    );
+  }
+  return lines.join("\n");
 }
 
 // async function buildDirectDesignSystemPrompt({

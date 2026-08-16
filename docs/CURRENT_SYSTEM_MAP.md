@@ -317,6 +317,17 @@ square preview so its native panel ratios are not stretched.
   three-sentence creative provocation is compiled into the V6.2 Judgment prompt
   and sent directly to GPT Image 2. Only the final-art stage changed in V6.2;
   the archived V6 strategy and concept prompts remain active upstream.
+- `design-system-2026-07-23` is a user-selectable historical comparison mode.
+  It restores the exact strategy and final-art prompt files from commit
+  `009c176097353f5ab00090d06a7592bf1ef89274` under
+  `agent_prompt/artwork_modes/design-system-2026-07-23/`. For each selected
+  idea it calls `gpt-5.6-luna` once for structured strategy enrichment,
+  deterministically compiles that result and the campaign/Brand Kit input into
+  the archived final-art template, then calls `gpt-image-2` once. It bypasses
+  the current V6 Creative Concept Director, set director, candidate selection,
+  and post-generation Visual QC. The historical compiler lives in
+  `src/server/artwork-generation/artwork-generation-pipeline.ts`; prompt paths
+  are owned by `src/server/artwork-generation/prompt-runtime.ts`.
 - `design-system-new` now reuses the proven archived V6 chain and V6.2 final-art
   prompt instead of the former Campaign Truth Normalizer/current-design-system
   route. At request start the endpoint deterministically locks the confirmed

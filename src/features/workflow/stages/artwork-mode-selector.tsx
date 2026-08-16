@@ -10,6 +10,7 @@ const artworkModeLabels: Record<
 > = {
   standard: "Standard",
   "design-system": "Design system",
+  "design-system-2026-07-23": "Design system · 23 Jul 2026",
   "design-system-new": "Design system (new)",
   "direct-final-artwork": "Final artwork"
 };

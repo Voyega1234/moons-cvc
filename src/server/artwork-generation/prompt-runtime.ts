@@ -87,6 +87,32 @@ export function loadDesignSystemV62JudgmentPrompt(): Promise<string> {
   );
 }
 
+export function loadDesignSystem20260723StrategyPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "artwork_modes",
+      "design-system-2026-07-23",
+      "01-creative-strategy-enrichment.md"
+    ),
+    "utf8"
+  );
+}
+
+export function loadDesignSystem20260723FinalArtworkPrompt(): Promise<string> {
+  return readFile(
+    join(
+      process.cwd(),
+      "agent_prompt",
+      "artwork_modes",
+      "design-system-2026-07-23",
+      "02-final-artwork.md"
+    ),
+    "utf8"
+  );
+}
+
 export function loadDirectFinalArtworkPrompt(): Promise<string> {
   return readFile(
     join(
@@ -149,5 +175,4 @@ export function renderDesignSystemPromptTemplate(
 
   return rendered;
 }
-
 

@@ -28,6 +28,8 @@ function artworkModeLabel(mode: ArtworkMode): string {
       return "Standard";
     case "design-system":
       return "Design system";
+    case "design-system-2026-07-23":
+      return "Design system · 23 Jul 2026";
     case "design-system-new":
       return "Design system (new)";
     case "direct-final-artwork":

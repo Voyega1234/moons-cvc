@@ -41,7 +41,15 @@ reconfigure the OpenAI/n8n provider choice above:
    CTA, or logo compositor. Selected campaign references are authoritative for
    visual medium and design grammar, so photographic/editorial work must not
    collapse into generic isometric 3D or SaaS illustration.
-3. `design-system-new` — keeps the complete `design-system` strategy,
+3. `design-system-2026-07-23` — restores the historical workflow from Git
+   commit `009c176`. One `gpt-5.6-luna` strategy-enrichment call uses the exact
+   archived strategy prompt, application code compiles its structured response
+   and campaign input into the exact archived final-art prompt, and one
+   `gpt-image-2` request generates the original artwork. This comparison mode
+   has no candidate selection and no post-generation Visual QC. Its isolated
+   prompts and full contract are documented in
+   `agent_prompt/artwork_modes/design-system-2026-07-23/README.md`.
+4. `design-system-new` — keeps the complete `design-system` strategy,
    creative-concept, campaign-context compilation, reference, and asset flow.
    Instead of sending the rendered `agent_design_system.md` directly to GPT
    Image 2, it sends that rendered master prompt plus the same attached images
@@ -51,7 +59,7 @@ reconfigure the OpenAI/n8n provider choice above:
    ENVIRONMENT, CAMERA, LIGHT AND MATERIAL, TYPOGRAPHY, OFFICIAL ASSETS,
    IMMUTABLE FACTS, DO NOT INVENT, and OUTPUT sections. Only that concise brief
    is sent to GPT Image 2.
-4. `reference-library` — loads
+5. `reference-library` — loads
    `agent_prompt/agent_artwork_reference.md`, a catalog distilled from the
    verified specs and reconstruction prompts in `agent_prompt/Images/output`.
    Before selection, a GPT Luna (`gpt-5.6-luna`) strategy-enrichment step reads

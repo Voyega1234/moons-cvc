@@ -117,6 +117,9 @@ describe("Artwork generation settings", () => {
     expect(
       screen.getByRole("button", { name: "Design system (new)" })
     ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Design system · 23 Jul 2026" })
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Final artwork" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Standard" }));
     expect(dispatch).toHaveBeenCalledWith({
