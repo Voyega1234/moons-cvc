@@ -54,9 +54,8 @@ up the Google Cloud and Supabase providers as follows:
    openid
    https://www.googleapis.com/auth/userinfo.email
    https://www.googleapis.com/auth/userinfo.profile
-   https://www.googleapis.com/auth/drive.file
+   # Optional, requested only by the private Drive Materials browser:
    https://www.googleapis.com/auth/drive.readonly
-   https://www.googleapis.com/auth/spreadsheets.readonly
    ```
 
 5. Create a **Web application** OAuth client. Add the production origin and
@@ -86,13 +85,10 @@ then verifies the returned Supabase user's email again in the browser and in
 every protected server endpoint. The `hd` parameter is not treated as an
 authorization boundary.
 
-Google's provider access token is kept in browser storage for at most 55
-minutes and cleared on sign out. The Google refresh token is sent once to the
-authenticated backend, encrypted with AES-256-GCM, and stored in
-`moons.google_workspace_credentials`, which is accessible only to
-`service_role`. When Google access expires, the browser retrieves a fresh
-short-lived access token from `/api/google-provider-token`; the refresh token
-is never written to browser storage or returned to the browser.
+Normal sign-in requests no Drive or Sheets data scopes. Google provider tokens
+are used only by the optional private Drive Materials browser after an operator
+explicitly chooses **Reconnect Google** there. Slides and Questionnaire access
+use backend workload credentials and never require a browser Google token.
 
 Configure these server-only environment variables using the same Web OAuth
 client configured in Supabase:
@@ -116,14 +112,8 @@ Google once so the cached refresh grant includes
 deployment. It is used only to list and download images from folders the
 signed-in user can already access.
 
-The same Google grant is used for:
-
-- converting generated PowerPoint files into Google Slides with
-  `drive.file`;
-- browsing private Drive folders and importing selected source images with
-  `drive.readonly`;
-- reading the private `1. Questionnaire` tab with
-  `spreadsheets.readonly`.
+The optional Materials grant uses only `drive.readonly`. Google Slides creation
+and private Questionnaire reads are separate backend flows.
 
 Questionnaire Sheets no longer need **Anyone with the link**. The signed-in
 `@convertcake.com` user must have read access to the Sheet.
@@ -211,6 +201,7 @@ GOOGLE_CLOUD_PROJECT_NUMBER=<numeric-project-number>
 GOOGLE_WORKLOAD_IDENTITY_POOL=<pool-id>
 GOOGLE_WORKLOAD_IDENTITY_PROVIDER=<provider-id>
 GOOGLE_SERVICE_ACCOUNT_EMAIL=<service-account-email>
+GOOGLE_SLIDES_FOLDER_ID=<shared-drive-folder-id>
 ```
 
 Production and Preview use the Vercel OIDC token with Google Workload Identity
@@ -223,20 +214,28 @@ Domain-Wide Delegation with only:
 https://www.googleapis.com/auth/spreadsheets.readonly
 ```
 
+Add the same dedicated service account to the Shared Drive or export folder
+identified by `GOOGLE_SLIDES_FOLDER_ID` with permission to create and share
+files. Google Slides export uses the service account itself, not Domain-Wide
+Delegation: the backend creates a resumable upload session, the browser uploads
+the generated PPTX without receiving a Google access token, and the backend
+verifies the finished file is in the configured folder before sharing it with
+the authenticated user's email.
+
 For local development, grant the developer or developer group
 direct read access to the domain-restricted Sheets and run:
 
 ```bash
 gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly
+  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly,https://www.googleapis.com/auth/drive
 ```
 
 If the local request has no authenticated Supabase email, set
 `GOOGLE_WORKSPACE_LOCAL_USER` to the developer's `@convertcake.com` email as a
 domain-validation fallback.
-Local development uses the user ADC Sheets token directly and does not require
-`GOOGLE_SERVICE_ACCOUNT_EMAIL`; that variable is required only in Production
-and Preview for OIDC plus Domain-Wide Delegation.
+Local development uses user ADC directly and does not require
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`; that variable is required in Production and
+Preview for OIDC-backed Sheets and Slides access.
 Do not set `GOOGLE_APPLICATION_CREDENTIALS`; service-account JSON keys are
 intentionally rejected.
 

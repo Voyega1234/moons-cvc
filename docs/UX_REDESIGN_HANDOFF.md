@@ -226,10 +226,11 @@ lime/orange semantic accents, soft borders, and medium information density.
   actionable message that tells local developers to start Compass with
   `npm run dev:full`.
 - Authentication moved from email magic links to Supabase Google OAuth on
-  2026-07-24. The login requests `drive.file` for Slides export and
-  `spreadsheets.readonly` for private onboarding Questionnaire reads. Google
-  receives `hd=convertcake.com` as an account hint, while the app enforces the
-  email domain again in the auth gate and protected server endpoints.
+  2026-07-24. As of 2026-08-16, normal login requests no Drive or Sheets data
+  scopes. Slides export uses a backend Shared Drive service account and private
+  Questionnaire reads use delegated backend access. Google receives
+  `hd=convertcake.com` as an account hint, while the app enforces the email
+  domain again in the auth gate and protected server endpoints.
 - Two duplicate `Power Art Material` Supabase client records and their queued
   ingestion jobs were removed on 2026-07-16 before either job started. A
   post-delete query confirmed that no client or job rows remain for those IDs,

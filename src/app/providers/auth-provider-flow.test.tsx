@@ -46,7 +46,7 @@ describe("Supabase account flow", () => {
     window.localStorage.clear();
   });
 
-  it("starts Google OAuth with Drive, Sheets, and Convert Cake domain settings", async () => {
+  it("starts Google sign-in without Drive or Sheets scopes", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
@@ -62,14 +62,7 @@ describe("Supabase account flow", () => {
       provider: "google",
       options: {
         redirectTo: "http://localhost:3000",
-        scopes:
-          "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly",
-        queryParams: {
-          hd: "convertcake.com",
-          include_granted_scopes: "true",
-          access_type: "offline",
-          prompt: "consent"
-        }
+        queryParams: { hd: "convertcake.com" }
       }
     });
     expect(screen.getByText("Only @convertcake.com accounts")).toBeTruthy();

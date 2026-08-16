@@ -1,11 +1,9 @@
-import {
-  clearGoogleProviderToken,
-  requireGoogleProviderToken
-} from "../../lib/google-workspace/provider-token";
+import { env } from "../../config/env";
+import { getSupabaseClient, isSupabaseConfigured } from "../../lib/supabase/client";
 
 const POWERPOINT_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const GOOGLE_SLIDES_MIME_TYPE = "application/vnd.google-apps.presentation";
+const GOOGLE_SLIDES_ENDPOINT = `${env.apiBaseUrl}/google-slides`;
 
 export interface GoogleSlidesImportResult {
   id: string;
@@ -16,82 +14,112 @@ export interface GoogleSlidesImportResult {
 interface UploadPptxOptions {
   blob: Blob;
   name: string;
-  accessToken: string;
   fetchImpl?: typeof fetch;
+  accessTokenProvider?: () => Promise<string | null>;
+  endpoint?: string;
 }
 
-export async function requestGoogleDriveAccessToken(): Promise<string> {
-  return requireGoogleProviderToken();
-}
-
-async function driveError(response: Response): Promise<Error> {
-  if (response.status === 401) {
-    clearGoogleProviderToken();
-    return new Error(
-      "Google access expired during the upload. Try the export again to renew it automatically."
-    );
-  }
-  const fallback = `Google Drive returned ${response.status}.`;
-  try {
-    const body = (await response.json()) as {
-      error?: { message?: string };
-      message?: string;
-    };
-    return new Error(body.error?.message || body.message || fallback);
-  } catch {
-    return new Error(fallback);
-  }
+interface SlidesEndpointPayload {
+  ok?: unknown;
+  uploadUrl?: unknown;
+  id?: unknown;
+  name?: unknown;
+  url?: unknown;
+  error?: unknown;
 }
 
 export async function uploadPptxToGoogleSlides({
   blob,
   name,
-  accessToken,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  accessTokenProvider = currentSupabaseAccessToken,
+  endpoint = GOOGLE_SLIDES_ENDPOINT
 }: UploadPptxOptions): Promise<GoogleSlidesImportResult> {
   const normalizedName = name.replace(/\.pptx$/i, "").trim() || "Creative slides";
-  const initialize = await fetchImpl(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,webViewLink",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Type": POWERPOINT_MIME_TYPE,
-        "X-Upload-Content-Length": String(blob.size)
-      },
-      body: JSON.stringify({
-        name: normalizedName,
-        mimeType: GOOGLE_SLIDES_MIME_TYPE
-      })
-    }
-  );
-
-  if (!initialize.ok) throw await driveError(initialize);
-  const uploadUrl = initialize.headers.get("Location");
-  if (!uploadUrl) {
-    throw new Error("Google Drive did not return an upload location.");
+  const accessToken = await accessTokenProvider();
+  const headers = requestHeaders(accessToken);
+  const initialize = await fetchImpl(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "initialize",
+      name: normalizedName,
+      size: blob.size
+    })
+  });
+  const initialized = await endpointPayload(initialize);
+  if (!initialize.ok || initialized.ok !== true || typeof initialized.uploadUrl !== "string") {
+    throw new Error(endpointError(initialized, "Could not start Google Slides upload."));
   }
 
-  const uploaded = await fetchImpl(uploadUrl, {
+  const uploaded = await fetchImpl(initialized.uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": POWERPOINT_MIME_TYPE },
     body: blob
   });
-  if (!uploaded.ok) throw await driveError(uploaded);
+  const file = await endpointPayload(uploaded);
+  if (!uploaded.ok || typeof file.id !== "string" || !file.id.trim()) {
+    throw new Error(endpointError(file, "Google Drive did not return a file ID."));
+  }
 
-  const file = (await uploaded.json()) as {
-    id?: string;
-    name?: string;
-    webViewLink?: string;
-  };
-  if (!file.id) throw new Error("Google Drive uploaded the deck without a file ID.");
+  const shared = await fetchImpl(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action: "share", fileId: file.id.trim() })
+  });
+  const result = await endpointPayload(shared);
+  if (
+    !shared.ok ||
+    result.ok !== true ||
+    typeof result.id !== "string" ||
+    typeof result.name !== "string" ||
+    typeof result.url !== "string"
+  ) {
+    throw new Error(endpointError(result, "Could not share Google Slides."));
+  }
 
+  return { id: result.id, name: result.name, url: result.url };
+}
+
+async function currentSupabaseAccessToken(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  const { data, error } = await getSupabaseClient().auth.getSession();
+  if (error) throw error;
+  return data.session?.access_token ?? null;
+}
+
+function requestHeaders(accessToken: string | null): Record<string, string> {
   return {
-    id: file.id,
-    name: file.name || normalizedName,
-    url:
-      file.webViewLink ||
-      `https://docs.google.com/presentation/d/${file.id}/edit`
+    "Content-Type": "application/json",
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
   };
+}
+
+async function endpointPayload(response: Response): Promise<SlidesEndpointPayload> {
+  const text = await response.text();
+  if (!text.trim()) return {};
+  try {
+    const value = JSON.parse(text) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as SlidesEndpointPayload)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function endpointError(payload: SlidesEndpointPayload, fallback: string): string {
+  if (typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error.trim();
+  }
+  if (
+    payload.error &&
+    typeof payload.error === "object" &&
+    "message" in payload.error &&
+    typeof payload.error.message === "string" &&
+    payload.error.message.trim()
+  ) {
+    return payload.error.message.trim();
+  }
+  return fallback;
 }

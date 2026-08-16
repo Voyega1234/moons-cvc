@@ -73,8 +73,7 @@ describe("handleMappingClientsRequest", () => {
       "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=8";
     const response = await handleMappingClientsRequest({
       request: new Request(
-        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`,
-        { headers: { "X-Google-Access-Token": "google-provider-token" } }
+        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`
       ),
       env: {
         ...baseEnv,
@@ -106,7 +105,12 @@ describe("handleMappingClientsRequest", () => {
         ]
       }
     });
-    expect(createSheetsAccessToken).not.toHaveBeenCalled();
+    expect(createSheetsAccessToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subjectEmail: "developer@convertcake.com",
+        oidcToken: undefined
+      })
+    );
     expect(reviewQuestionnaireExtraction).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: "openai-key",
@@ -123,12 +127,13 @@ describe("handleMappingClientsRequest", () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       expect.stringContaining("sheets.googleapis.com/v4/spreadsheets"),
       expect.objectContaining({
-        headers: { Authorization: "Bearer google-provider-token" }
+        headers: { Authorization: "Bearer sheets-token" }
       })
     );
   });
 
   it("continues without Questionnaire context when the Sheet has no supported tab", async () => {
+    const createSheetsAccessToken = vi.fn(async () => "sheets-token");
     const reviewQuestionnaireExtraction = vi.fn();
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({
@@ -140,8 +145,7 @@ describe("handleMappingClientsRequest", () => {
       "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=0";
     const response = await handleMappingClientsRequest({
       request: new Request(
-        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`,
-        { headers: { "X-Google-Access-Token": "google-provider-token" } }
+        `http://localhost/api/mapping-clients?questionnaireSheetUrl=${encodeURIComponent(sourceUrl)}`
       ),
       env: {
         ...baseEnv,
@@ -149,6 +153,7 @@ describe("handleMappingClientsRequest", () => {
         OPENAI_API_KEY: ""
       },
       fetchImpl,
+      createSheetsAccessToken,
       reviewQuestionnaireExtraction
     });
 
@@ -160,7 +165,7 @@ describe("handleMappingClientsRequest", () => {
     expect(reviewQuestionnaireExtraction).not.toHaveBeenCalled();
   });
 
-  it("requires Google OAuth access before reading a questionnaire", async () => {
+  it("requires a configured delegated subject before reading a questionnaire", async () => {
     const sourceUrl =
       "https://docs.google.com/spreadsheets/d/client-portal/edit#gid=8";
     const response = await handleMappingClientsRequest({
@@ -170,11 +175,10 @@ describe("handleMappingClientsRequest", () => {
       env: baseEnv
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       ok: false,
-      error:
-        "Google access is required. Try again to renew it automatically."
+      error: "GOOGLE_WORKSPACE_LOCAL_USER is required."
     });
   });
 

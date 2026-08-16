@@ -20,11 +20,8 @@ import {
 } from "../../lib/supabase/client";
 
 const PRODUCTION_AUTH_REDIRECT_URL = "https://creative-compass-os.vercel.app/";
-export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/spreadsheets.readonly"
-].join(" ");
+export const GOOGLE_DRIVE_MATERIAL_OAUTH_SCOPE =
+  "https://www.googleapis.com/auth/drive.readonly";
 
 interface AuthContextValue {
   enabled: boolean;
@@ -151,18 +148,22 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  const startGoogleOAuth = useCallback(async () => {
+  const startGoogleOAuth = useCallback(async (requestDriveAccess = false) => {
     const { error: signInError } = await client.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: googleSignInRedirectUrl(),
-          scopes: GOOGLE_WORKSPACE_OAUTH_SCOPES,
-          queryParams: {
-            hd: "convertcake.com",
-            include_granted_scopes: "true",
-            access_type: "offline",
-            prompt: "consent"
-          }
+          ...(requestDriveAccess
+            ? { scopes: GOOGLE_DRIVE_MATERIAL_OAUTH_SCOPE }
+            : {}),
+          queryParams: requestDriveAccess
+            ? {
+                hd: "convertcake.com",
+                include_granted_scopes: "true",
+                access_type: "offline",
+                prompt: "consent"
+              }
+            : { hd: "convertcake.com" }
         }
       });
     if (signInError) throw signInError;
@@ -174,7 +175,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
     setPending(true);
 
     try {
-      await startGoogleOAuth();
+      await startGoogleOAuth(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed.");
       setPending(false);
@@ -187,7 +188,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
       session,
       reconnectGoogle: async () => {
         clearGoogleProviderToken();
-        await startGoogleOAuth();
+        await startGoogleOAuth(true);
       },
       signOut: async () => {
         clearGoogleProviderToken();
@@ -238,8 +239,8 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           <div className="auth-google-access">
             <b>Only @convertcake.com accounts</b>
             <span>
-              Used to create Google Slides in your Drive and read onboarding
-              questionnaire Sheets.
+              Google is used only to sign in. Slides and questionnaire access
+              are handled securely by the workspace backend.
             </span>
           </div>
 

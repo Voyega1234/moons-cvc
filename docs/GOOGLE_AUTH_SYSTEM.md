@@ -100,19 +100,19 @@ https://www.googleapis.com/auth/userinfo.email
 https://www.googleapis.com/auth/userinfo.profile
 ```
 
-Scopes สำหรับตัวอย่างนี้:
+Scope เพิ่มเติมที่ browser ขอแบบ on-demand เฉพาะ Materials:
 
 ```text
-https://www.googleapis.com/auth/drive.file
 https://www.googleapis.com/auth/drive.readonly
-https://www.googleapis.com/auth/spreadsheets.readonly
 ```
 
 ความหมาย:
 
-- `drive.file` ให้แอปทำงานกับไฟล์ที่แอปสร้างหรือไฟล์ที่ผู้ใช้เลือกให้แอปเข้าถึง เป็น scope ที่แคบกว่าการขอ Drive ทั้งหมด
 - `drive.readonly` ใช้เปิดโฟลเดอร์ Drive ที่ user มีสิทธิ์อยู่แล้ว และดาวน์โหลดเฉพาะรูปที่ user เลือกนำเข้า Materials; scope นี้อ่าน Drive ได้กว้างกว่า `drive.file` และต้องตั้งค่า Data Access ให้ครบ
-- `spreadsheets.readonly` อ่านข้อมูลใน Google Sheets ที่ผู้ใช้มีสิทธิ์เข้าถึง แต่แก้ไขไม่ได้
+
+Slides และ Questionnaire ไม่ขอ scope จาก browser: backend ใช้ Service
+Account สำหรับ Shared Drive และใช้ Domain-Wide Delegation ที่จำกัดด้วย
+`spreadsheets.readonly` สำหรับ Questionnaire
 
 ขอเฉพาะ scope ที่จำเป็น ถ้า feature ยังไม่ถูกใช้ อาจขอสิทธิ์แบบ incremental ตอนผู้ใช้เริ่มใช้ feature นั้น
 
@@ -267,12 +267,6 @@ Hook นี้บล็อกเฉพาะการสร้าง user ให
 ## 7. Frontend sign-in
 
 ```ts
-const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/spreadsheets.readonly"
-].join(" ");
-
 async function signInWithGoogle() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -281,12 +275,7 @@ async function signInWithGoogle() {
         window.location.hostname === "localhost"
           ? window.location.origin
           : "https://app.example.com",
-      scopes: GOOGLE_SCOPES,
-      queryParams: {
-        hd: "example.com",
-        include_granted_scopes: "true",
-        prompt: "consent"
-      }
+      queryParams: { hd: "example.com" }
     }
   });
 
@@ -440,11 +429,10 @@ GOOGLE_TOKEN_ENCRYPTION_KEY=
 
 ## 10. Protect application APIs
 
-Request ที่อ่าน Google data ควรมี:
+Request สำหรับ Slides และ Questionnaire จาก browser มีเพียง:
 
 ```http
 Authorization: Bearer <supabase-access-token>
-X-Google-Access-Token: <google-provider-access-token>
 ```
 
 ลำดับที่ backend ต้องทำ:
@@ -452,9 +440,9 @@ X-Google-Access-Token: <google-provider-access-token>
 1. ตรวจ Supabase access token
 2. โหลด user จาก Supabase Auth
 3. ตรวจ exact email domain หรือ server-side claim
-4. ตรวจว่ามี Google provider token
-5. เรียก Google API ด้วย Google token
-6. ไม่เขียน token ลง log, error response หรือ analytics
+4. แลก Vercel OIDC เป็น short-lived backend credential
+5. เรียก Google API ด้วย Service Account หรือ delegated token
+6. ไม่ส่ง Google token กลับ browser หรือเขียนลง log/analytics
 
 ตัวอย่างตรวจ Supabase user:
 
@@ -539,14 +527,11 @@ Target MIME:
 application/vnd.google-apps.presentation
 ```
 
-Authorization:
-
-```http
-Authorization: Bearer <google-provider-access-token>
-```
-
-การสร้าง Slides ใช้ `drive.file` ส่วน Materials folder browser ใช้
-`drive.readonly` เพื่อ list/download รูปจากโฟลเดอร์ที่ user มีสิทธิ์เปิด
+Authorization ใช้ backend Service Account ผ่าน Vercel OIDC และ Workload
+Identity Federation โดยสร้างไฟล์ใน Shared Drive folder ที่กำหนดไว้ จากนั้น
+backend แชร์ไฟล์ให้ email จาก Supabase session; browser ไม่ได้รับ Google
+access token ส่วน Materials folder browser ยังคงขอ `drive.readonly` แบบ
+on-demand เมื่อผู้ใช้เลือก Reconnect Google เท่านั้น
 
 ## 13. Profile data and avatar
 
@@ -641,9 +626,9 @@ async function signOut() {
 
 - [ ] Private Sheet ที่ user มีสิทธิ์อ่านได้
 - [ ] Private Sheet ที่ user ไม่มีสิทธิ์อ่านตอบ 403
-- [ ] Google token หมดอายุตอบข้อความ reconnect ที่เข้าใจง่าย
+- [ ] Questionnaire ใช้ delegated backend token โดยไม่มี browser Google token
 - [ ] `spreadsheets.readonly` ไม่สามารถเขียน Sheet
-- [ ] สร้าง Slides ได้ด้วย `drive.file`
+- [ ] สร้าง Slides ใน Shared Drive และแชร์ให้ authenticated user ได้
 - [ ] Drive folder browser เห็นเฉพาะไฟล์ที่ user คนนั้นมีสิทธิ์อ่าน
 - [ ] รูป Drive ที่ import แล้วยังไม่ถูกส่งเข้า generation จนกด Select
 

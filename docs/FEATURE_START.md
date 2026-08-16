@@ -95,10 +95,12 @@ when a sheet-only client appears there.
 
 The browser calls `/api/mapping-clients`; it never fetches Google directly.
 Questionnaire reads use the Sheets API for the exact `1. Questionnaire` tab.
-The browser sends both the Supabase session token and the short-lived Google
-provider token to the protected endpoint. The Sheet can remain private, but the
-signed-in `@convertcake.com` account must have read access. The configured
-source must be a normal Google Sheet URL, not a Publish to web URL.
+The browser sends only its Supabase session token to the protected endpoint.
+Production and Preview exchange Vercel OIDC through Workload Identity
+Federation, then use narrowly scoped Domain-Wide Delegation to read the Sheet
+as the authenticated `@convertcake.com` user. The Sheet can remain private, but
+that user must have read access. The configured source must be a normal Google
+Sheet URL, not a Publish to web URL.
 
 The separate mapping-client list reader still uses keyless Google authentication:
 Production and Preview use Vercel OIDC through Workload Identity Federation,
@@ -111,8 +113,8 @@ Relevant tests:
 - normal Google Sheet URL and selected `gid` parsing
 - OIDC/ADC authentication selection and key-file rejection
 - Sheets API mapping and extraction summary
-- anonymous read-only extraction from the public Client Portal
-  `1. Questionnaire` tab without creating a Google access token
+- delegated read-only extraction from the private Client Portal
+  `1. Questionnaire` tab without a browser Google access token
 - merge keeps system clients selectable
 - merge adds sheet-only clients as disabled
 - reducer blocks selecting a sheet-only client

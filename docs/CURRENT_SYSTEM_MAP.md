@@ -47,7 +47,7 @@ Async results must continue targeting the run that started the request.
 | Hook Agent playground | `src/features/playground/hook-agent-playground.tsx`, `/playground` |
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
 | Client ingestion and recovery | `src/server/client-ingestion/client-ingestion-harness.ts`, `openai-brand-discovery-search.ts`, `openai-brand-visual-analyzer.ts` |
-| Google Sheet questionnaire extraction | `src/server/google-sheets/mapping-client-sheet.ts`, `questionnaire-extraction-qc-agent.ts` |
+| Google Sheet questionnaire extraction | `src/server/google-sheets/mapping-clients-endpoint.ts`, `mapping-client-sheet.ts`, `questionnaire-extraction-qc-agent.ts` |
 | AI token/image usage ledger | `src/server/shared/ai-usage-recorder.ts`, `moons.ai_usage_events` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
 | GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
@@ -55,7 +55,7 @@ Async results must continue targeting the run that started the request.
 | Stage configuration and labels | `src/features/workflow/config.ts` |
 | Main application composition | `src/app/App.tsx` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
-| Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
+| Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts`, `src/services/google-slides/google-slides-import.ts`, `src/server/google-slides/google-slides-endpoint.ts` |
 
 Hook generation uses `agent_prompt/agent_hook.md` as the single creative-policy
 source of truth. The runtime endpoint adds only changing campaign evidence,

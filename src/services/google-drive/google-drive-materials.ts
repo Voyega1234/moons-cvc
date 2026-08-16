@@ -1,4 +1,7 @@
-import { requireGoogleProviderToken } from "../../lib/google-workspace/provider-token";
+import {
+  clearGoogleProviderToken,
+  requireGoogleProviderToken
+} from "../../lib/google-workspace/provider-token";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
@@ -166,7 +169,15 @@ async function listDriveFolder(
 async function driveError(response: Response, fallback: string): Promise<string> {
   try {
     const payload = (await response.json()) as DriveListResponse;
-    return payload.error?.message?.trim() || fallback;
+    const message = payload.error?.message?.trim() || fallback;
+    if (
+      response.status === 401 ||
+      (response.status === 403 && /authentication|credential|scope/i.test(message))
+    ) {
+      clearGoogleProviderToken();
+      return "Google access is required to browse Drive materials. Reconnect Google and try again.";
+    }
+    return message;
   } catch {
     return fallback;
   }
