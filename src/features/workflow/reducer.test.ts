@@ -194,15 +194,15 @@ describe("workflowReducer", () => {
     expect(state.qaComplete).toBe(false);
   });
 
-  it("defaults image prompt writing to GPT 5.6 and allows OpenRouter Claude", () => {
+  it("keeps the legacy image prompt default and allows an OpenRouter Art Director model", () => {
     expect(initialWorkflowState.imagePromptModel).toBe("gpt-5.6-terra");
 
     const updated = workflowReducer(initialWorkflowState, {
       type: "set-image-prompt-model",
-      model: "anthropic/claude-sonnet-4.6"
+      model: "google/gemini-3.7-flash"
     });
 
-    expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
+    expect(updated.imagePromptModel).toBe("google/gemini-3.7-flash");
   });
 
   it("defaults hook generation to OpenRouter Gemini and allows OpenAI", () => {

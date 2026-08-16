@@ -260,7 +260,7 @@ stays server-side:
 VITE_ARTWORK_GENERATION_ENDPOINT=<backend-artwork-endpoint>
 OPENAI_IMAGE_PROMPT_MODEL=gpt-5.6-terra
 OPENROUTER_API_KEY=<server-side-openrouter-key>
-OPENROUTER_IMAGE_PROMPT_MODEL=anthropic/claude-sonnet-4.6
+OPENROUTER_IMAGE_PROMPT_MODEL=anthropic/claude-sonnet-5
 ```
 
 Alternatively, route artwork generation through n8n. This sends the full
@@ -272,11 +272,12 @@ VITE_ARTWORK_GENERATION_MODE=n8n
 VITE_N8N_ARTWORK_WEBHOOK_URL=<n8n-artwork-webhook-url>
 ```
 
-Users select the image prompt writer in Angles. GPT 5.6 is the default and uses
-`OPENAI_API_KEY`; Claude Sonnet 4.6 uses `OPENROUTER_API_KEY` through
-OpenRouter. Both model environment variables are optional deployment
-overrides. The selected prompt writer creates the actual `gpt-image-2` prompt
-from the hook, brief, brand context, and references. See
+For Art Director mode, users select the OpenRouter model in the artwork
+confirmation step. Claude Sonnet 5 is the default; the listed Claude, Gemini,
+and OpenAI provider models all run through `OPENROUTER_API_KEY`. The selected
+request model wins over `OPENROUTER_IMAGE_PROMPT_MODEL`, which remains a
+fallback. Standard keeps its original OpenAI Terra truth-preflight route with
+no Art Director call. In both modes, `gpt-image-2` creates the final image. See
 `docs/FEATURE_ARTWORK_GENERATION.md` for the full request contract.
 
 Brand kit's "Upload guideline" button analyzes an uploaded PDF or image for

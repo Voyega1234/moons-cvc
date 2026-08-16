@@ -61,7 +61,7 @@ export interface ImagePromptAgentTrace {
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
   mode: ArtworkMode;
-  stage?: "campaign-input-preflight" | "production-brief";
+  stage?: "campaign-input-preflight" | "art-direction" | "production-brief";
   status: "succeeded" | "failed";
   inputText: string;
   responsePrompt?: string;
@@ -101,6 +101,16 @@ export interface CampaignInputPreflight {
     service: string;
     ratio: string;
   };
+}
+
+export interface StandardArtDirection {
+  visualIdea: string;
+  heroVisual: string;
+  visualMechanism: string;
+  compositionIntent: string;
+  informationDensity: "low" | "medium" | "high";
+  supportingTextIndexes: readonly number[];
+  includeCta: boolean;
 }
 
 export type ImagePromptAgentTraceWriter = (
@@ -240,19 +250,26 @@ export async function generateImagePrompt({
 export async function buildStandardImagePrompt(
   input: ImagePromptAgentInput,
   loadAgentImagePrompt: () => Promise<string> = defaultLoadAgentImagePrompt,
-  campaignInput: unknown = buildCompactCampaignInput(input)
+  campaignInput: unknown = buildCompactCampaignInput(input),
+  artDirection?: StandardArtDirection
 ): Promise<string> {
-  return renderStandardPrompt(await loadAgentImagePrompt(), campaignInput);
+  return renderStandardPrompt(
+    await loadAgentImagePrompt(),
+    campaignInput,
+    artDirection
+  );
 }
 
 export async function preflightCampaignInput({
   apiKey,
+  mode = "standard",
   fetchImpl,
   input,
   writeTrace,
   loadPrompt = defaultLoadCampaignInputPreflightPrompt
 }: {
   apiKey: string;
+  mode?: "standard" | "art-director";
   fetchImpl: FetchLike;
   input: ImagePromptAgentInput;
   writeTrace?: ImagePromptAgentTraceWriter;
@@ -309,7 +326,7 @@ export async function preflightCampaignInput({
       provider: "openai",
       endpoint: "/v1/responses",
       model,
-      mode: "standard",
+      mode,
       stage: "campaign-input-preflight",
       status: "succeeded",
       inputText,
@@ -322,8 +339,105 @@ export async function preflightCampaignInput({
       provider: "openai",
       endpoint: "/v1/responses",
       model,
-      mode: "standard",
+      mode,
       stage: "campaign-input-preflight",
+      status: "failed",
+      inputText,
+      error: readableError(error)
+    });
+    throw error;
+  }
+}
+
+export async function generateStandardArtDirection({
+  apiKey,
+  model,
+  fetchImpl,
+  input,
+  campaignInput,
+  writeTrace,
+  loadPrompt = defaultLoadStandardArtDirectorPrompt
+}: {
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+  input: ImagePromptAgentInput;
+  campaignInput: CampaignInputPreflight;
+  writeTrace?: ImagePromptAgentTraceWriter;
+  loadPrompt?: () => Promise<string>;
+}): Promise<StandardArtDirection> {
+  const inputText = [
+    (await loadPrompt()).trim(),
+    "",
+    "AUTHORITATIVE CAMPAIGN TRUTH",
+    JSON.stringify(campaignInput, null, 2)
+  ].join("\n");
+
+  try {
+    const response = await fetchImpl(OPENROUTER_RESPONSES_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        store: false,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: inputText },
+              ...input.referenceImages.map((image) => ({
+                type: "input_image" as const,
+                image_url: image.imageUrl,
+                detail: "high" as const
+              }))
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "moons_standard_art_direction",
+            strict: true,
+            schema: standardArtDirectionSchema
+          }
+        }
+      })
+    });
+    if (!response.ok) {
+      const detail = await readProviderErrorDetail(response);
+      throw new Error(
+        `OpenRouter standard art director failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      );
+    }
+    const payload = await readJsonResponse(
+      response,
+      "OpenRouter standard art director"
+    );
+    const parsed = JSON.parse(extractResponseText(payload)) as unknown;
+    const result = parseStandardArtDirection(parsed, campaignInput);
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider: "openrouter",
+      endpoint: "/api/v1/responses",
+      model,
+      mode: "art-director",
+      stage: "art-direction",
+      status: "succeeded",
+      inputText,
+      responsePrompt: JSON.stringify(result, null, 2)
+    });
+    return result;
+  } catch (error) {
+    await writeTraceSafely(writeTrace, {
+      createdAt: new Date().toISOString(),
+      provider: "openrouter",
+      endpoint: "/api/v1/responses",
+      model,
+      mode: "art-director",
+      stage: "art-direction",
       status: "failed",
       inputText,
       error: readableError(error)
@@ -471,6 +585,13 @@ async function defaultLoadAgentImagePrompt(): Promise<string> {
 async function defaultLoadCampaignInputPreflightPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_campaign_input_preflight.md"),
+    "utf8"
+  );
+}
+
+async function defaultLoadStandardArtDirectorPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_standard_art_director.md"),
     "utf8"
   );
 }
@@ -660,6 +781,79 @@ function parseCampaignInputPreflight(
   return parsed as unknown as CampaignInputPreflight;
 }
 
+function parseStandardArtDirection(
+  parsed: unknown,
+  campaignInput: CampaignInputPreflight
+): StandardArtDirection {
+  if (!isRecord(parsed)) {
+    throw new Error("OpenRouter standard art director returned invalid JSON.");
+  }
+  const textFields = [
+    "visualIdea",
+    "heroVisual",
+    "visualMechanism",
+    "compositionIntent"
+  ] as const;
+  for (const field of textFields) {
+    if (typeof parsed[field] !== "string" || !parsed[field].trim()) {
+      throw new Error(
+        `OpenRouter standard art director returned an empty ${field}.`
+      );
+    }
+  }
+  if (
+    parsed.informationDensity !== "low" &&
+    parsed.informationDensity !== "medium" &&
+    parsed.informationDensity !== "high"
+  ) {
+    throw new Error(
+      "OpenRouter standard art director returned invalid informationDensity."
+    );
+  }
+  if (!Array.isArray(parsed.supportingTextIndexes)) {
+    throw new Error(
+      "OpenRouter standard art director returned invalid supportingTextIndexes."
+    );
+  }
+  const supportingTextIndexes = parsed.supportingTextIndexes.filter(
+    (value): value is number => Number.isInteger(value)
+  );
+  if (
+    supportingTextIndexes.length !== parsed.supportingTextIndexes.length ||
+    new Set(supportingTextIndexes).size !== supportingTextIndexes.length ||
+    supportingTextIndexes.some(
+      (index) => index < 0 || index >= campaignInput.copy.supportingText.length
+    )
+  ) {
+    throw new Error(
+      "OpenRouter standard art director selected an invalid supporting-text index."
+    );
+  }
+  if (
+    campaignInput.output.service === "static" &&
+    supportingTextIndexes.length > 1
+  ) {
+    throw new Error(
+      "OpenRouter standard art director selected more than one supporting text for a static artwork."
+    );
+  }
+  if (typeof parsed.includeCta !== "boolean") {
+    throw new Error(
+      "OpenRouter standard art director returned invalid includeCta."
+    );
+  }
+
+  return {
+    visualIdea: (parsed.visualIdea as string).trim(),
+    heroVisual: (parsed.heroVisual as string).trim(),
+    visualMechanism: (parsed.visualMechanism as string).trim(),
+    compositionIntent: (parsed.compositionIntent as string).trim(),
+    informationDensity: parsed.informationDensity,
+    supportingTextIndexes,
+    includeCta: parsed.includeCta
+  };
+}
+
 function parseCreativeVisualConcept(
   parsed: unknown,
   providerLabel: string
@@ -694,12 +888,47 @@ function compactAgentText(value: string, maxCharacters: number): string {
   return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
 }
 
-function renderStandardPrompt(source: string, campaignInput: unknown): string {
+function renderStandardPrompt(
+  source: string,
+  campaignInput: unknown,
+  artDirection?: StandardArtDirection
+): string {
+  if (!artDirection) {
+    return [
+      source.trim(),
+      "",
+      "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT",
+      JSON.stringify(campaignInput, null, 2)
+    ].join("\n");
+  }
+
+  if (!isRecord(campaignInput) || !isRecord(campaignInput.copy)) {
+    throw new Error(
+      "Standard art direction requires a valid Campaign Input preflight."
+    );
+  }
+  const { copy, ...campaignTruth } =
+    campaignInput as unknown as CampaignInputPreflight;
+  const packet = {
+    artDirection,
+    visibleCopy: {
+      headline: copy.headline,
+      supportingText: artDirection.supportingTextIndexes.map(
+        (index) => copy.supportingText[index]!
+      ),
+      cta: artDirection.includeCta ? copy.cta : ""
+    },
+    campaignTruth
+  };
+
   return [
     source.trim(),
     "",
-    "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT",
-    JSON.stringify(campaignInput, null, 2)
+    "STANDARD MODE EXECUTION CONTRACT",
+    "Follow the Art Direction as the single chosen visual route. Render only strings in visibleCopy as artwork text. Campaign Truth is context for visual accuracy and must not become labels, captions, icons, cards, badges, annotations, or extra copy. The headline must appear exactly once. Each selected supporting line and the CTA may appear at most once. Omit empty visible-copy fields. Never invent or render numbers, measurements, before/after values, QR codes, URLs, handles, phone numbers, prices, promotions, certifications, awards, or claims unless the exact string is present in visibleCopy. Do not fall back to text-left/visual-right, a benefit-icon row, a feature-card grid, a split-screen comparison, or a bottom CTA bar when that structure is not intrinsic to the chosen visual idea.",
+    "",
+    "AUTHORITATIVE ART-DIRECTED CAMPAIGN PACKET",
+    JSON.stringify(packet, null, 2)
   ].join("\n");
 }
 
@@ -1091,6 +1320,35 @@ const standardImagePromptSchema = {
     finalPrompt: { type: "string" }
   },
   required: ["finalPrompt"]
+} as const;
+
+const standardArtDirectionSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    visualIdea: { type: "string" },
+    heroVisual: { type: "string" },
+    visualMechanism: { type: "string" },
+    compositionIntent: { type: "string" },
+    informationDensity: {
+      type: "string",
+      enum: ["low", "medium", "high"]
+    },
+    supportingTextIndexes: {
+      type: "array",
+      items: { type: "integer" }
+    },
+    includeCta: { type: "boolean" }
+  },
+  required: [
+    "visualIdea",
+    "heroVisual",
+    "visualMechanism",
+    "compositionIntent",
+    "informationDensity",
+    "supportingTextIndexes",
+    "includeCta"
+  ]
 } as const;
 
 const campaignInputPreflightSchema = {

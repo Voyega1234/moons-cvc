@@ -162,8 +162,21 @@ Frontend sends:
 ```ts
 type ArtworkGenerationRequest = {
   model: "gpt-image-2";
-  artworkMode: "standard" | "design-system" | "reference-library";
-  imagePromptModel: "gpt-5.6-terra" | "anthropic/claude-sonnet-4.6";
+  artworkMode:
+    | "standard"
+    | "art-director"
+    | "design-system"
+    | "design-system-2026-07-23"
+    | "design-system-new"
+    | "direct-final-artwork"
+    | "reference-library";
+  imagePromptModel:
+    | "gpt-5.6-terra"
+    | "anthropic/claude-sonnet-5"
+    | "google/gemini-3.7-flash"
+    | "google/gemini-3.6-flash"
+    | "openai/gpt-5.6-terra"
+    | "anthropic/claude-sonnet-4.6";
   runId: string;
   brand: {
     id: string;
@@ -253,9 +266,13 @@ Backend flow (as implemented in
 
 1. Receive selected hooks and brief from the frontend.
 2. For each selected hook, resolve the prompt route for the selected
-   `artworkMode`. Standard assembles `agent_image.md` plus Compact Campaign
-   Input locally without a model call. Modes with an upstream creative or
-   prompt agent call that model and fail closed if the required call fails.
+   `artworkMode`. Standard runs the original OpenAI truth preflight and
+   compiles `agent_image.md` with the cleaned Campaign Input. Art Director mode
+   adds an OpenRouter Art Director between those steps, then compiles the
+   chosen visual route, an exact visible-copy allowlist, and context-only
+   campaign truth.
+   Modes with an upstream creative or prompt agent fail closed if the required
+   call fails.
 3. Call OpenAI `gpt-image-2` — `generateImage()` (text-only) or `editImage()`
    (when `referenceImages` is non-empty, via `/v1/images/edits` multipart
    form) in `src/server/artwork-generation/openai-images-client.ts`, using
@@ -333,28 +350,30 @@ hook/concept/visual/caption/brief fields — no model call and no real art
 direction. That fallback has been removed so a prompt-agent failure cannot
 quietly generate artwork from the wrong instructions.
 
-`resolveImagePrompt()` in `artwork-generation-endpoint.ts` selects the route
-once per hook. Standard calls `buildStandardImagePrompt()` to assemble the
-source Markdown and runtime JSON locally. Modes that require an intermediary
-call `generateImagePrompt()` or their mode-specific upstream agents.
+`resolveImagePrompt()` in the artwork-generation pipeline selects the route
+once per hook. Standard calls `preflightCampaignInput()` and then
+`buildStandardImagePrompt()`, preserving the original Standard flow. Art
+Director mode inserts `generateStandardArtDirection()` between those calls.
+Other modes call `generateImagePrompt()` or their mode-specific upstream
+agents.
 
-The three modes intentionally use different input strategies:
+The routes intentionally use different input strategies:
 
 - `standard` loads the complete `agent_prompt/agent_image.md` as the
-  authoritative GPT Image 2 instruction. It then appends one
-  `AUTHORITATIVE COMPACT CAMPAIGN INPUT` JSON object assembled in
-  `image-prompt-agent.ts`. That runtime object includes brand
-  name/category/colors, objective, Angle headline/concept/supporting
-  details/format beats/CTA, compact reference roles, and output service/ratio.
-  It does not append `workingBrief`, brand personality, Caption, visual
-  direction, product library, or repeated runtime blocks. An optional
-  `revisionInstructions` array carries the user-supplied Artwork brief and any
-  regeneration correction, and is omitted when neither exists. This complete
-  string is passed as the `prompt` field of the GPT Image 2 request; there is
-  no `finalPrompt` response envelope and no Responses API call. Standard
-  references and uploaded materials are attached only to GPT Image 2.
-  Standard does not add separate `REFERENCE-INFORMED DESIGN` or
-  `CONCEPT ALIGNMENT` instruction wrappers.
+  authoritative GPT Image 2 instruction. OpenAI Terra normalizes the campaign
+  truth without choosing a visual route, and the cleaned Campaign Input is
+  sent directly to GPT Image 2 with the master prompt.
+- `art-director` starts with the same Standard truth preflight. The OpenRouter
+  Art Director then chooses one visual idea, hero, mechanism, composition intent,
+  information-density ceiling, supporting-copy indexes, and CTA visibility.
+  The server reconstructs approved visible copy verbatim and removes the full
+  copy inventory from the context-only truth block before compiling the final
+  prompt. Static artwork exposes at most one supporting line. Context-only
+  facts must not become labels, icons, cards, badges, or annotations, and GPT
+  Image 2 is explicitly forbidden from inventing quantitative values, QR
+  codes, contact details, prices, promotions, certifications, awards, or
+  claims. Attached references are sent both to the OpenRouter Art Director for
+  role-aware inspection and to GPT Image 2 for final execution.
 - `design-system` reads
   `graphic-ad-design-system/03_MASTER_CREATIVE_DIRECTOR_AGENT.md` and retains
   its `prompt` response field.
@@ -371,32 +390,29 @@ The three modes intentionally use different input strategies:
 
 The prompt Markdown files are bundled into the Vercel function. Artwork
 source image files are not bundled; they are loaded from Supabase Storage.
-Standard-mode reference files are still attached as image inputs, while their
-text metadata is reduced to `{ id, role, fidelity }`. The design-system mode
+Standard and Art Director reference files are still attached as image inputs,
+while their text metadata is reduced to `{ id, role, fidelity }`. The design-system mode
 retains its full authoritative runtime block and keeps the approved Hook fixed
 while evaluating distinct visual executions internally.
 
 For modes that use a prompt-agent call, a failure or timeout makes the endpoint
 fail closed before calling `gpt-image-2`. A sanitized provider response detail
 is recorded in the debug trace and returned as the request error. Standard has
-no prompt-agent call to fail or fall back from.
+one OpenAI truth-preflight call; Art Director mode follows it with the separate
+OpenRouter Art Director call.
 
-For modes that use an image prompt writer, the user chooses its model in the
-artwork confirmation step and the choice persists on the creative run:
+In Art Director mode, the user chooses the OpenRouter model in the
+artwork confirmation step and the choice persists on the creative run. The
+available models are Claude Sonnet 5, Gemini 3.7 Flash, Gemini 3.6 Flash,
+GPT-5.6 Terra through OpenRouter, and legacy Claude Sonnet 4.6. Claude Sonnet 5
+is the fallback when the stored selection is not an OpenRouter model.
+The selected request model takes precedence over
+`OPENROUTER_IMAGE_PROMPT_MODEL`; the environment value is only a fallback for
+an Art Director request whose stored model is not an OpenRouter ID.
 
-- `gpt-5.6-terra` is the default and calls the OpenAI Responses API using
-  `OPENAI_API_KEY`. `OPENAI_IMAGE_PROMPT_MODEL` can override the deployed
-  OpenAI model.
-- `anthropic/claude-sonnet-4.6` calls OpenRouter's OpenAI-compatible Responses
-  API using `OPENROUTER_API_KEY`. `OPENROUTER_IMAGE_PROMPT_MODEL` can override
-  the deployed OpenRouter model while the UI remains the fixed Claude Sonnet
-  4.6 choice.
-
-This selection changes only the model that writes the production prompt for
-the modes that use it. Standard hides the selector and ignores the persisted
-`imagePromptModel`; final artwork goes directly to OpenAI `gpt-image-2`. Older
-saved workspaces and older API requests without `imagePromptModel` still
-default to `gpt-5.6-terra` for compatibility.
+This selection changes the model that creates the Art Director packet;
+the truth preflight remains on OpenAI Terra and final image generation remains
+on OpenAI `gpt-image-2`.
 
 Reference Library strategy enrichment always uses OpenAI `gpt-5.6-luna` through
 the existing `OPENAI_API_KEY`. `OPENAI_CREATIVE_STRATEGY_MODEL` can override the
@@ -434,6 +450,13 @@ are deliberately saved as separate local files only when this opt-in variable
 is set. Prompt-agent failures are logged and stop final image generation.
 Logging is best-effort: a filesystem error emits a warning but does not fail
 the run. The default `logs/` directory is ignored by Git.
+
+Standard mode writes `*-campaign-input-preflight-agent.json` for its OpenAI
+truth pass. Art Director mode writes that file plus
+`*-art-direction-agent.json` for the separate OpenRouter decision. The latter
+records the selected visual idea, hero,
+mechanism, composition intent, information density, supporting-copy indexes,
+and CTA decision before the final GPT Image 2 prompt is compiled.
 
 ## "Use from library" reference picker
 

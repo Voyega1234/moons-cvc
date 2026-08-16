@@ -26,6 +26,8 @@ function artworkModeLabel(mode: ArtworkMode): string {
   switch (mode) {
     case "standard":
       return "Standard";
+    case "art-director":
+      return "Art Director";
     case "design-system":
       return "Design system";
     case "design-system-2026-07-23":

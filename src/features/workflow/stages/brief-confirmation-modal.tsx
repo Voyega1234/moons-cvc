@@ -12,7 +12,11 @@ import type { LibraryItem } from "../../../domain/brand";
 import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
+  defaultOpenRouterImagePromptModel,
+  imagePromptModelLabel,
   inferredReferenceImageRole,
+  isOpenRouterImagePromptModel,
+  openRouterImagePromptModels,
   type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -344,14 +348,43 @@ export function BriefConfirmationModal({
                   dispatch({ type: "set-artwork-mode", mode })
                 }
               />
-              <div className="confirm-generation-setting">
-                <span className="confirm-generation-label">
-                  Generation route
-                </span>
-                <span className="confirm-generation-direct-route">
-                  agent_image.md + Campaign input → GPT Image 2 → Visual QC
-                </span>
-              </div>
+              {artworkMode === "art-director" ? (
+                <label className="confirm-generation-setting">
+                  <span className="confirm-generation-label">
+                    Art Director model · OpenRouter
+                  </span>
+                  <select
+                    aria-label="Art Director model"
+                    value={
+                      isOpenRouterImagePromptModel(state.imagePromptModel)
+                        ? state.imagePromptModel
+                        : defaultOpenRouterImagePromptModel
+                    }
+                    onChange={(event) =>
+                      dispatch({
+                        type: "set-image-prompt-model",
+                        model: event.target
+                          .value as WorkflowState["imagePromptModel"]
+                      })
+                    }
+                  >
+                    {openRouterImagePromptModels.map((model) => (
+                      <option key={model} value={model}>
+                        {imagePromptModelLabel(model)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="confirm-generation-setting">
+                  <span className="confirm-generation-label">
+                    Generation route
+                  </span>
+                  <span className="confirm-generation-direct-route">
+                    agent_image.md + Campaign input → GPT Image 2 → Visual QC
+                  </span>
+                </div>
+              )}
               <label className="confirm-generation-setting">
                 <span className="confirm-generation-label">Output size</span>
                 <select

@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-08-06
+Last verified: 2026-08-16
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -291,16 +291,36 @@ and is checked again before any master or panel asset is persisted; a second
 failure stops Album generation. Slide export places every Album format inside a
 square preview so its native panel ratios are not stretched.
 
-- `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
-  the OpenAI Responses API using
-  `agent_prompt/agent_campaign_input_preflight.md`. Terra organizes product,
-  objective, copy, constraints, product truth, and reference roles; it does
-  not receive `agent_image.md` and does not write a visual route. The final
-  Image API call remains
-  `agent_prompt/agent_image.md + Preflighted Campaign Input + selected image attachments → GPT Image 2`.
-  `buildStandardImagePrompt()` assembles the final text locally. Album service
-  adds only the `ALBUM MASTER GRID` instruction before generating and splitting
-  the master artboard.
+- `standard` preserves the original route: it preflights Campaign Input with
+  `gpt-5.6-terra` through the OpenAI Responses API using
+  `agent_prompt/agent_campaign_input_preflight.md`, then compiles
+  `agent_image.md + preflighted Campaign Input → GPT Image 2` without an Art
+  Director call or model selector.
+- `art-director` starts with the same Campaign Input preflight through the
+  OpenAI Responses API using `agent_prompt/agent_campaign_input_preflight.md`.
+  Terra organizes product, objective, approved copy, constraints, product
+  truth, and reference roles without writing a visual route. A separate
+  OpenRouter Art Director then uses
+  `agent_prompt/agent_standard_art_director.md` to choose one image-native
+  visual idea, hero relationship, mechanism, composition intent, information
+  density, and the approved supporting-copy indexes to expose. Static artwork
+  may expose at most one supporting line. The server reconstructs the exact
+  visible-copy allowlist from the preflight result, keeps the remaining truth
+  context-only, and compiles
+  `agent_image.md + Art Direction + visible copy + context-only truth → GPT Image 2`.
+  The Art Director uses `OPENROUTER_API_KEY`. Art Director mode exposes an
+  OpenRouter model selector in the artwork confirmation step and persists the
+  choice as `imagePromptModel`. When the stored model is the legacy direct
+  OpenAI value, the selector and runtime fall back to
+  `anthropic/claude-sonnet-5`.
+  The selected request model takes precedence over
+  `OPENROUTER_IMAGE_PROMPT_MODEL`; that environment value is retained only as
+  a fallback when the stored Art Director selection is not an OpenRouter
+  model. Final prompting forbids invented numbers, measurements,
+  before/after values, QR codes, URLs, handles, phone numbers, prices,
+  promotions, certifications, awards, and claims outside the visible-copy
+  allowlist. Album service still adds the `ALBUM MASTER GRID` instruction
+  before generating and splitting the master artboard.
 - `design-system` uses the V6.2 Judgment final-art prompt at
   `agent_prompt/versions/2026-07-30-design-system-v6.2-judgment/prompts/03-design-system-v6.2-judgment.md`.
   V6.2 removes fixed visual presets and percentage-based composition rules. It

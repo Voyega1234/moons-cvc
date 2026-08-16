@@ -82,6 +82,7 @@ export function normalizeFormatBeatsForService(
 }
 export const artworkModes = [
   "standard",
+  "art-director",
   "design-system",
   "design-system-2026-07-23",
   "design-system-new",
@@ -95,6 +96,7 @@ export type ArtworkMode = (typeof artworkModes)[number];
 // expose it in every artwork-mode selector again.
 export const userSelectableArtworkModes = [
   "standard",
+  "art-director",
   "design-system",
   "design-system-2026-07-23",
   "design-system-new",
@@ -125,6 +127,7 @@ export const postGenerationVisualQcEnabled = false;
 // capability easy to extend without coupling it to the visible mode buttons.
 export const postGenerationVisualQcModes = [
   "standard",
+  "art-director",
   "design-system-new"
 ] as const satisfies readonly ArtworkMode[];
 
@@ -209,11 +212,32 @@ export function hookGenerationProviderLabel(
   if (isOpenRouterHookGenerationModel(model)) return "OpenRouter";
   return model === "n8n-compass-new" ? "n8n" : "OpenAI";
 }
-export const imagePromptModels = [
-  "gpt-5.6-terra",
+export const openRouterImagePromptModels = [
+  "anthropic/claude-sonnet-5",
+  "google/gemini-3.7-flash",
+  "google/gemini-3.6-flash",
+  "openai/gpt-5.6-terra",
   "anthropic/claude-sonnet-4.6"
 ] as const;
+export const defaultOpenRouterImagePromptModel =
+  "anthropic/claude-sonnet-5" as const;
+export const imagePromptModels = [
+  "gpt-5.6-terra",
+  ...openRouterImagePromptModels
+] as const;
 export type ImagePromptModel = (typeof imagePromptModels)[number];
+
+export function isOpenRouterImagePromptModel(
+  model: ImagePromptModel
+): boolean {
+  return (openRouterImagePromptModels as readonly ImagePromptModel[]).includes(
+    model
+  );
+}
+
+export function imagePromptModelLabel(model: ImagePromptModel): string {
+  return hookGenerationModelLabel(model);
+}
 export const artworkOutputSizes = [
   "1088x1360",
   "1024x1024",

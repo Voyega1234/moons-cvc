@@ -117,6 +117,7 @@ describe("Artwork generation settings", () => {
     expect(
       screen.getByRole("button", { name: "Design system (new)" })
     ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Art Director" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Design system · 23 Jul 2026" })
     ).toBeTruthy();
@@ -348,7 +349,54 @@ describe("Artwork generation settings", () => {
     expect(screen.getByRole("button", { name: "Standard" })).toBeTruthy();
   });
 
-  it("shows Standard as a direct GPT Image 2 route without a concept-model control", () => {
+  it("lets Art Director choose its OpenRouter model", async () => {
+    const user = userEvent.setup();
+    const dispatch = vi.fn();
+    const state = {
+      ...createInitialWorkflowState({
+        id: "run-1",
+        now: "2026-07-10T00:00:00.000Z"
+      }),
+      stage: "directions" as const,
+      artworkMode: "art-director" as const,
+      directions: buildDirectionFixtures("BoneFit")
+    };
+
+    render(
+      <BriefConfirmationModal
+        open
+        state={state}
+        dispatch={dispatch}
+        references={[]}
+        uploadPending={false}
+        uploadError={null}
+        onUploadReference={vi.fn()}
+        materialBrowser={null}
+        onBack={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const artDirectorSelect = screen.getByRole("combobox", {
+      name: "Art Director model"
+    }) as HTMLSelectElement;
+    expect(artDirectorSelect.value).toBe("anthropic/claude-sonnet-5");
+    expect(
+      within(artDirectorSelect).getByRole("option", {
+        name: "Gemini 3.7 Flash"
+      })
+    ).toBeTruthy();
+    await user.selectOptions(artDirectorSelect, "google/gemini-3.7-flash");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-image-prompt-model",
+      model: "google/gemini-3.7-flash"
+    });
+    expect(
+      screen.queryByRole("combobox", { name: "Creative concept model" })
+    ).toBeNull();
+  });
+
+  it("keeps Standard on its original route without an Art Director model", () => {
     const state = {
       ...createInitialWorkflowState({
         id: "run-1",
@@ -380,7 +428,7 @@ describe("Artwork generation settings", () => {
       )
     ).toBeTruthy();
     expect(
-      screen.queryByRole("combobox", { name: "Creative concept model" })
+      screen.queryByRole("combobox", { name: "Art Director model" })
     ).toBeNull();
   });
 

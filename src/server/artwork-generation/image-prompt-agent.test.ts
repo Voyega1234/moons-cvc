@@ -3,6 +3,7 @@ import {
   buildStandardImagePrompt,
   generateImagePrompt,
   generateProductionBrief,
+  generateStandardArtDirection,
   preflightCampaignInput
 } from "./image-prompt-agent";
 
@@ -103,6 +104,124 @@ describe("generateImagePrompt", () => {
     expect(inputText).not.toContain("Visual Mechanism");
     expect(inputText).not.toContain('"workingBrief"');
     expect(inputText).not.toContain('"personality"');
+  });
+
+  it("uses OpenRouter to choose one Standard art direction without rewriting copy", async () => {
+    const campaignInput = {
+      brand: {
+        name: "Flora Daily",
+        category: "Flowers / lifestyle",
+        colors: ["#F6B8C8", "#FFFFFF"]
+      },
+      primaryProductOrService: "Summer bouquet",
+      objective: "Connect the offer to a clear room mood.",
+      targetAudience: "Calm-home shoppers",
+      singleMainMessage: "Flowers make the room feel softer.",
+      concept: "Lead with room mood.",
+      copy: {
+        headline: "Flowers that make the room feel softer",
+        supportingText: ["Fresh-cut daily", "Wrapped by hand"],
+        cta: "Order a bouquet"
+      },
+      requiredElements: ["Summer bouquet"],
+      forbiddenElements: [],
+      references: [],
+      lockedProductFacts: [],
+      excludedInformation: [],
+      albumSequence: [],
+      userInstructions: [],
+      output: { service: "static", ratio: "1:1" }
+    } as const;
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>
+        });
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              visualIdea: "Let the bouquet soften the room around it.",
+              heroVisual: "One bouquet changing a hard-edged room.",
+              visualMechanism: "Environmental transformation",
+              compositionIntent: "Bouquet first, transformed room second, copy last.",
+              informationDensity: "low",
+              supportingTextIndexes: [1],
+              includeCta: true
+            })
+          }),
+          { status: 200 }
+        );
+      }
+    );
+
+    const result = await generateStandardArtDirection({
+      apiKey: "openrouter-key",
+      model: "anthropic/claude-sonnet-5",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      input: baseInput,
+      campaignInput,
+      loadPrompt: async () => "# Standard Art Director"
+    });
+
+    expect(result.supportingTextIndexes).toEqual([1]);
+    expect(calls[0]?.url).toBe("https://openrouter.ai/api/v1/responses");
+    expect(calls[0]?.body.model).toBe("anthropic/claude-sonnet-5");
+    expect(calls[0]?.body.text).toMatchObject({
+      format: {
+        name: "moons_standard_art_direction",
+        strict: true
+      }
+    });
+  });
+
+  it("compiles Standard visible copy separately from context-only truth", async () => {
+    const promptText = await buildStandardImagePrompt(
+      baseInput,
+      async () => "# Image prompt",
+      {
+        brand: {
+          name: "Flora Daily",
+          category: "Flowers / lifestyle",
+          colors: ["#F6B8C8", "#FFFFFF"]
+        },
+        primaryProductOrService: "Summer bouquet",
+        objective: "Connect the offer to a clear room mood.",
+        targetAudience: "Calm-home shoppers",
+        singleMainMessage: "Flowers make the room feel softer.",
+        concept: "Lead with room mood.",
+        copy: {
+          headline: "Flowers that make the room feel softer",
+          supportingText: ["Fresh-cut daily", "Wrapped by hand"],
+          cta: "Order a bouquet"
+        },
+        requiredElements: ["Summer bouquet"],
+        forbiddenElements: [],
+        references: [],
+        lockedProductFacts: [],
+        excludedInformation: [],
+        albumSequence: [],
+        userInstructions: [],
+        output: { service: "static", ratio: "1:1" }
+      },
+      {
+        visualIdea: "Let the bouquet soften the room around it.",
+        heroVisual: "One bouquet changing a hard-edged room.",
+        visualMechanism: "Environmental transformation",
+        compositionIntent: "Bouquet first, transformed room second, copy last.",
+        informationDensity: "low",
+        supportingTextIndexes: [1],
+        includeCta: true
+      }
+    );
+
+    expect(promptText).toContain("STANDARD MODE EXECUTION CONTRACT");
+    expect(promptText).toContain("AUTHORITATIVE ART-DIRECTED CAMPAIGN PACKET");
+    expect(promptText).toContain('"supportingText": [\n      "Wrapped by hand"');
+    expect(promptText).toContain('"cta": "Order a bouquet"');
+    expect(promptText).not.toContain("Fresh-cut daily");
+    expect(promptText).toContain("Campaign Truth is context for visual accuracy");
   });
 
   it("gives Standard style references visual priority and isolates product materials", async () => {

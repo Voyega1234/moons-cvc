@@ -42,7 +42,9 @@ import {
   strategyOptionalCopyCandidates
 } from "./prompt-context.js";
 import {
+  defaultOpenRouterImagePromptModel,
   defaultAlbumFormatPreference,
+  isOpenRouterImagePromptModel,
   outputFormatForService,
   resolveAlbumFormat,
   usesPostGenerationVisualQc,
@@ -59,6 +61,7 @@ import { createAiUsageTrackingFetch } from "../shared/ai-usage-recorder.js";
 import {
   buildStandardImagePrompt,
   generateImagePrompt,
+  generateStandardArtDirection,
   preflightCampaignInput,
   type ImagePromptProvider
 } from "./image-prompt-agent.js";
@@ -237,10 +240,18 @@ export async function handleArtworkGenerationRequest({
 
     if (!input) throw new Error("Invalid artwork generation request.");
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
+    const standardArtDirectorModel =
+      input.artworkMode === "art-director"
+        ? isOpenRouterImagePromptModel(input.imagePromptModel)
+          ? input.imagePromptModel
+          : env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() ||
+            defaultOpenRouterImagePromptModel
+        : undefined;
     const promptProvider: ImagePromptProvider =
-      input.artworkMode !== "standard" &&
-      input.artworkMode !== "design-system-2026-07-23" &&
-      input.imagePromptModel === "anthropic/claude-sonnet-4.6"
+      input.artworkMode === "art-director" ||
+      (input.artworkMode !== "standard" &&
+        input.artworkMode !== "design-system-2026-07-23" &&
+        isOpenRouterImagePromptModel(input.imagePromptModel))
         ? "openrouter"
         : "openai";
     const promptApiKey =
@@ -257,9 +268,11 @@ export async function handleArtworkGenerationRequest({
       );
     }
     const promptModel =
-      promptProvider === "openrouter"
-        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
-        : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
+      standardArtDirectorModel ??
+      (promptProvider === "openrouter"
+        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() ||
+          input.imagePromptModel
+        : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel);
     const creativeStrategyModel =
       promptProvider === "openrouter"
         ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
@@ -596,6 +609,7 @@ async function generateOutputForHook({
       ? await resolveImagePrompt({
           input,
           hook,
+          preflightApiKey: apiKey,
           promptModel,
           promptProvider,
           promptApiKey,
@@ -651,6 +665,7 @@ async function generateOutputForHook({
       : await resolveImagePrompt({
           input,
           hook,
+          preflightApiKey: apiKey,
           promptModel,
           promptProvider,
           promptApiKey,
@@ -896,15 +911,17 @@ async function applyPostGenerationVisualQc({
 }): Promise<GeneratedImage> {
   if (!usesPostGenerationVisualQc(input.artworkMode)) return image;
 
-  // Standard does not use a prompt-writing model, so its QC always runs
-  // directly on OpenAI with the image-generation credential. Other modes keep
-  // their configured provider/model behavior.
+  // Standard and Art Director QC run directly on OpenAI with the
+  // image-generation credential. Other modes keep their configured
+  // provider/model behavior.
+  const usesOpenAiQc =
+    input.artworkMode === "standard" || input.artworkMode === "art-director";
   const visualQcProvider =
-    input.artworkMode === "standard" ? "openai" : promptProvider;
+    usesOpenAiQc ? "openai" : promptProvider;
   const visualQcApiKey =
-    input.artworkMode === "standard" ? apiKey : promptApiKey;
+    usesOpenAiQc ? apiKey : promptApiKey;
   const visualQcModel =
-    input.artworkMode === "standard" ? undefined : promptModel;
+    usesOpenAiQc ? undefined : promptModel;
 
   const sourceBytes = Buffer.from(image.base64, "base64");
   try {
@@ -2064,6 +2081,7 @@ async function mapWithConcurrency<T, R>(
 async function resolveImagePrompt({
   input,
   hook,
+  preflightApiKey,
   promptModel,
   promptProvider,
   promptApiKey,
@@ -2080,6 +2098,7 @@ async function resolveImagePrompt({
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
+  preflightApiKey: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
@@ -2139,6 +2158,45 @@ async function resolveImagePrompt({
       input: imagePromptInput
     });
     return buildStandardImagePrompt(imagePromptInput, undefined, campaignInput);
+  }
+
+  if (input.artworkMode === "art-director") {
+    const campaignInput = await preflightCampaignInput({
+      apiKey: preflightApiKey,
+      mode: "art-director",
+      fetchImpl,
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildImagePromptAgentDebugLog(trace, input.runId, hook.id, [])
+        );
+      },
+      input: imagePromptInput
+    });
+    const artDirection = await generateStandardArtDirection({
+      apiKey: promptApiKey,
+      model: promptModel ?? "anthropic/claude-sonnet-5",
+      fetchImpl,
+      input: imagePromptInput,
+      campaignInput,
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildImagePromptAgentDebugLog(
+            trace,
+            input.runId,
+            hook.id,
+            references
+          )
+        );
+      }
+    });
+    return buildStandardImagePrompt(
+      imagePromptInput,
+      undefined,
+      campaignInput,
+      artDirection
+    );
   }
 
   return generateImagePrompt({

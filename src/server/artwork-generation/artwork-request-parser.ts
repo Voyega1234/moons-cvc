@@ -89,7 +89,7 @@ export function parseRequestBody(value: unknown): ArtworkGenerationRequest {
       : readString(value.artworkMode, "artworkMode");
   if (!artworkModes.includes(artworkMode as (typeof artworkModes)[number])) {
     throw new Error(
-      "artworkMode must be standard, design-system, design-system-2026-07-23, design-system-new, direct-final-artwork, or reference-library."
+      "artworkMode must be standard, art-director, design-system, design-system-2026-07-23, design-system-new, direct-final-artwork, or reference-library."
     );
   }
   const imagePromptModel =

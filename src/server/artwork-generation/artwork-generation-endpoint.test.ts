@@ -133,6 +133,9 @@ function responseForArtworkAgentRequest(init?: RequestInit): Response {
   if (body.text?.format?.name === "moons_album_panel_separation_review") {
     return albumPanelQcPassResponse();
   }
+  if (body.text?.format?.name === "moons_standard_art_direction") {
+    return standardArtDirectionResponse();
+  }
   return body.text?.format?.name === "moons_creative_visual_concept"
     ? creativeGraphicDesignerResponse()
     : strategyAgentResponse();
@@ -262,6 +265,24 @@ function campaignInputPreflightResponse(ratio = "1:1"): Response {
   );
 }
 
+function standardArtDirectionResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        visualIdea: "Let one bouquet visibly soften a rigid room.",
+        heroVisual: "A bouquet transforming the geometry around it.",
+        visualMechanism: "Environmental transformation",
+        compositionIntent:
+          "Read the bouquet first, the softened room second, and the copy last.",
+        informationDensity: "low",
+        supportingTextIndexes: [],
+        includeCta: true
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function standardAgentResponse(init?: RequestInit): Response {
   const body = JSON.parse(String(init?.body)) as {
     input?: { content?: { text?: string }[] }[];
@@ -271,6 +292,9 @@ function standardAgentResponse(init?: RequestInit): Response {
     body.text?.format?.name === "moons_album_panel_separation_review"
   ) {
     return albumPanelQcPassResponse();
+  }
+  if (body.text?.format?.name === "moons_standard_art_direction") {
+    return standardArtDirectionResponse();
   }
   if (body.text?.format?.name !== "moons_campaign_input_preflight") {
     return visualQualityPassResponse();
@@ -516,6 +540,7 @@ async function captureDesignSystemGenerationPrompt(
     }),
     env: {
       OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
       SUPABASE_URL: "https://supabase.example.com",
       SUPABASE_ANON_KEY: "anon-key"
     },
@@ -827,6 +852,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest(),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -896,6 +922,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: revisionRequest,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -998,6 +1025,7 @@ describe("handleArtworkGenerationRequest", () => {
       request,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1053,6 +1081,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
         CREATIVE_LEARNING_CAPTURE_ENABLED: "true",
         SUPABASE_URL: "https://supabase.example.com",
@@ -1108,7 +1137,7 @@ describe("handleArtworkGenerationRequest", () => {
           body: expect.objectContaining({
             model: "gpt-image-2",
             prompt: expect.stringContaining(
-              "สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input"
+              "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT"
             ),
             size: "1024x1024"
           })
@@ -1192,6 +1221,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1269,6 +1299,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1394,6 +1425,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1468,6 +1500,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1550,6 +1583,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1690,6 +1724,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1755,6 +1790,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1871,6 +1907,7 @@ describe("handleArtworkGenerationRequest", () => {
       request,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1983,6 +2020,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
@@ -2101,7 +2139,7 @@ describe("handleArtworkGenerationRequest", () => {
         return new Response("Expired signature", { status: 400 });
       }
       if (href.includes("/v1/responses")) {
-        return promptAgentResponse();
+        return standardAgentResponse(init);
       }
       if (href.includes("/v1/images/edits")) {
         editCalls.push(init?.body as FormData);
@@ -2147,6 +2185,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2203,7 +2242,14 @@ describe("handleArtworkGenerationRequest", () => {
     const { client } = fakeStorage();
 
     const response = await handleArtworkGenerationRequest({
-      request: buildRequest({ authorization: "Bearer user-token" }),
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          imagePromptModel: "google/gemini-3.7-flash"
+        })
+      }),
       env: {
         OPENAI_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
@@ -2225,24 +2271,29 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(generationCalls).toHaveLength(1);
     expect(generationCalls[0]).toContain(
-      "สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input คำสั่งของผู้ใช้ และรูปภาพที่แนบมา"
+      "สร้างภาพโฆษณาจาก Campaign Input, คำสั่งของผู้ใช้ และรูปภาพที่แนบมา"
     );
     expect(generationCalls[0]).toContain(
       "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT"
     );
+    expect(generationCalls[0]).not.toContain("STANDARD MODE EXECUTION CONTRACT");
     expect(generationCalls[0]).toContain(
       '"headline": "Flowers that make the room feel softer"'
     );
     expect(generationCalls[0]).not.toContain("CAMPAIGN INPUT TO PREFLIGHT");
   });
 
-  it("uses Terra on OpenAI for Standard preflight even when Claude is selected elsewhere", async () => {
-    const openRouterCalls: string[] = [];
+  it("uses Terra on OpenAI and the selected OpenRouter model for Art Director mode", async () => {
+    const openRouterCalls: Array<{
+      model: string;
+      authorization: string | null;
+    }> = [];
     const preflightCalls: Array<{
       model: string;
       authorization: string | null;
     }> = [];
     const imageAuthorizations: Array<string | null> = [];
+    const generationPrompts: string[] = [];
     const visualQcAuthorizations: Array<string | null> = [];
     const fetchMock = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
@@ -2254,8 +2305,12 @@ describe("handleArtworkGenerationRequest", () => {
           );
         }
         if (href === "https://openrouter.ai/api/v1/responses") {
-          openRouterCalls.push(href);
-          throw new Error("Standard must not use OpenRouter.");
+          const body = JSON.parse(String(init?.body)) as { model: string };
+          openRouterCalls.push({
+            model: body.model,
+            authorization: new Headers(init?.headers).get("Authorization")
+          });
+          return standardArtDirectionResponse();
         }
         if (href === "https://api.openai.com/v1/responses") {
           const body = JSON.parse(String(init?.body)) as {
@@ -2271,6 +2326,8 @@ describe("handleArtworkGenerationRequest", () => {
           return standardAgentResponse(init);
         }
         if (href.includes("/v1/images/generations")) {
+          const body = JSON.parse(String(init?.body)) as { prompt: string };
+          generationPrompts.push(body.prompt);
           imageAuthorizations.push(
             new Headers(init?.headers).get("Authorization")
           );
@@ -2294,11 +2351,14 @@ describe("handleArtworkGenerationRequest", () => {
         headers: { authorization: "Bearer user-token" },
         body: JSON.stringify({
           ...requestBody,
-          imagePromptModel: "anthropic/claude-sonnet-4.6"
+          artworkMode: "art-director",
+          imagePromptModel: "google/gemini-3.7-flash"
         })
       }),
       env: {
         OPENAI_API_KEY: "openai-image-key",
+        OPENROUTER_API_KEY: "openrouter-art-director-key",
+        OPENROUTER_IMAGE_PROMPT_MODEL: "anthropic/claude-sonnet-5",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2307,7 +2367,12 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(openRouterCalls).toEqual([]);
+    expect(openRouterCalls).toEqual([
+      {
+        model: "google/gemini-3.7-flash",
+        authorization: "Bearer openrouter-art-director-key"
+      }
+    ]);
     expect(preflightCalls).toEqual([
       {
         model: "gpt-5.6-terra",
@@ -2315,6 +2380,10 @@ describe("handleArtworkGenerationRequest", () => {
       }
     ]);
     expect(imageAuthorizations).toEqual(["Bearer openai-image-key"]);
+    expect(generationPrompts[0]).toContain(
+      "AUTHORITATIVE ART-DIRECTED CAMPAIGN PACKET"
+    );
+    expect(generationPrompts[0]).toContain("STANDARD MODE EXECUTION CONTRACT");
     expect(visualQcAuthorizations).toEqual([]);
   });
 
@@ -2491,6 +2560,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2876,6 +2946,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2969,6 +3040,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3084,6 +3156,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3192,6 +3265,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3313,6 +3387,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "openrouter-test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
