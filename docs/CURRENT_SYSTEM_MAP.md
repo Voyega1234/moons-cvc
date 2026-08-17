@@ -271,7 +271,9 @@ image automatically. Legacy saved `referenceImage` values migrate into this
 array. `hook-reference-images.ts` keeps Hooks without their own references on
 the normal artwork batch path, but isolates each referenced Hook into its own
 request so its images cannot influence another Hook. The same images are
-embedded as a thumbnail grid on that Hook's client slide.
+embedded in a dedicated Reference panel below the Creative Draft on that
+Hook's Static or Album client slide. Slides without Hook references retain the
+existing full-height artwork layout unchanged.
 Referenced Hook requests set `referenceLed` and take precedence over the saved
 Artwork mode. They bypass Campaign Input preflight, strategy/concept prompt
 agents, and `agent_image.md`. `reference-interpreter.ts` sends the Primary and

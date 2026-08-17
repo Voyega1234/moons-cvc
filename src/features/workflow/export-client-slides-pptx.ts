@@ -554,6 +554,49 @@ function addHookReferencePreview(
   });
 }
 
+function addHookReferencePanel(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  data: readonly string[],
+  box: { x: number; y: number; w: number; h: number }
+) {
+  if (!data.length) return;
+  slide.addShape(pptx.ShapeType.roundRect, {
+    ...box,
+    rectRadius: 0.16,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText("REFERENCE", {
+    x: box.x + 0.19,
+    y: box.y + 0.15,
+    w: box.w - 0.38,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+
+  const imageWidth = 1.7;
+  const imageHeight = 1.86;
+  const gap = 0.45;
+  const totalWidth = imageWidth * data.length + gap * (data.length - 1);
+  const startX = box.x + (box.w - totalWidth) / 2;
+  data.forEach((image, index) => {
+    slide.addImage({
+      data: image,
+      x: startX + index * (imageWidth + gap),
+      y: box.y + 0.53,
+      w: imageWidth,
+      h: imageHeight,
+      altText: `Hook reference image ${index + 1}`
+    });
+  });
+}
+
 function addUgcClientSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
@@ -881,18 +924,27 @@ function addSinglePageArtworkSlide(
   const { output, direction } = item;
   const albumLayout =
     isAlbumOutput(output) && (Boolean(albumMasterData) || imageData.length > 1);
-  const artworkPanel = albumLayout
-    ? { x: 3.85, y: 0.45, w: 6, h: 6.6 }
-    : { x: 3.85, y: 0.45, w: 4.72, h: 6.6 };
-  const artworkBox = albumLayout
-    ? { x: 4.04, y: 0.68, w: 5.62, h: 6.14 }
-    : { x: 4.04, y: 0.68, w: 4.34, h: 6.14 };
-  const captionPanel = albumLayout
-    ? { x: 10.08, y: 0.45, w: 2.8, h: 6.6 }
-    : { x: 8.8, y: 0.45, w: 4.08, h: 6.6 };
-  const captionBox = albumLayout
-    ? { x: 10.38, y: 0.74, w: 2.2, h: 5.9 }
-    : { x: 9.15, y: 0.74, w: 3.38, h: 5.9 };
+  const hasReferenceLayout = referenceImageData.length > 0;
+  const artworkPanel = hasReferenceLayout
+    ? { x: 3.85, y: 0.45, w: 5.44, h: 4.04 }
+    : albumLayout
+      ? { x: 3.85, y: 0.45, w: 6, h: 6.6 }
+      : { x: 3.85, y: 0.45, w: 4.72, h: 6.6 };
+  const artworkBox = hasReferenceLayout
+    ? { x: 4.04, y: 0.87, w: 5.06, h: 3.45 }
+    : albumLayout
+      ? { x: 4.04, y: 0.68, w: 5.62, h: 6.14 }
+      : { x: 4.04, y: 0.68, w: 4.34, h: 6.14 };
+  const captionPanel = hasReferenceLayout
+    ? { x: 9.52, y: 0.45, w: 3.36, h: 6.6 }
+    : albumLayout
+      ? { x: 10.08, y: 0.45, w: 2.8, h: 6.6 }
+      : { x: 8.8, y: 0.45, w: 4.08, h: 6.6 };
+  const captionBox = hasReferenceLayout
+    ? { x: 9.82, y: 0.74, w: 2.76, h: 5.9 }
+    : albumLayout
+      ? { x: 10.38, y: 0.74, w: 2.2, h: 5.9 }
+      : { x: 9.15, y: 0.74, w: 3.38, h: 5.9 };
   slide.background = { color: COLORS.canvas };
 
   slide.addShape(pptx.ShapeType.line, {
@@ -908,6 +960,20 @@ function addSinglePageArtworkSlide(
     fill: { color: COLORS.paper },
     line: { color: COLORS.line, width: 1 }
   });
+  if (hasReferenceLayout) {
+    slide.addText("CREATIVE DRAFT", {
+      x: artworkPanel.x + 0.19,
+      y: artworkPanel.y + 0.15,
+      w: artworkPanel.w - 0.38,
+      h: 0.18,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 8,
+      bold: true,
+      color: COLORS.muted,
+      charSpacing: 1.1
+    });
+  }
   slide.addShape(pptx.ShapeType.roundRect, {
     ...captionPanel,
     rectRadius: 0.16,
@@ -941,13 +1007,14 @@ function addSinglePageArtworkSlide(
       artworkBox
     );
   }
-  addHookReferencePreview(
-    pptx,
-    slide,
-    referenceImageData,
-    artworkPanel.x + artworkPanel.w - 1.31,
-    artworkPanel.y + artworkPanel.h - 1.42
-  );
+  if (hasReferenceLayout) {
+    addHookReferencePanel(pptx, slide, referenceImageData, {
+      x: 3.85,
+      y: 4.59,
+      w: 5.44,
+      h: 2.76
+    });
+  }
 
   const displayBrandName = brandName.toUpperCase();
   slide.addText(displayBrandName, {

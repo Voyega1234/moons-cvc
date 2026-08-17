@@ -4333,7 +4333,13 @@ describe("redesigned workflow stages", () => {
     const pptx = await buildCreateStageSlidesPptx(state, resolveImage);
     const slides = (
       pptx as unknown as {
-        _slides: Array<{ _slideObjects: Array<{ _type: string }> }>;
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            text?: Array<{ text: string }>;
+            options: { x: number; y: number; w: number; h: number };
+          }>;
+        }>;
       }
     )._slides;
 
@@ -4342,9 +4348,105 @@ describe("redesigned workflow stages", () => {
       "https://example.com/client-reference-2.png"
     );
     expect(resolveImage).toHaveBeenCalledWith(artworkUrl);
-    expect(
-      slides[0]?._slideObjects.filter((object) => object._type === "image")
-    ).toHaveLength(3);
+    const visibleText = slides[0]?._slideObjects
+      .flatMap((object) => object.text?.map((run) => run.text) ?? [])
+      .join("\n");
+    const images = slides[0]?._slideObjects
+      .filter((object) => object._type === "image")
+      .map(({ options }) => ({
+        x: Number(options.x.toFixed(3)),
+        y: Number(options.y.toFixed(3)),
+        w: Number(options.w.toFixed(3)),
+        h: Number(options.h.toFixed(3))
+      }));
+    const referencePanel = slides[0]?._slideObjects.find(
+      ({ options }) => options.x === 3.85 && options.y === 4.59
+    );
+
+    expect(visibleText).toContain("CREATIVE DRAFT");
+    expect(visibleText).toContain("REFERENCE");
+    expect(referencePanel?.options).toMatchObject({
+      x: 3.85,
+      y: 4.59,
+      w: 5.44,
+      h: 2.76
+    });
+    expect(images).toEqual([
+      { x: 5.19, y: 0.87, w: 2.76, h: 3.45 },
+      { x: 4.645, y: 5.12, w: 1.7, h: 1.86 },
+      { x: 6.795, y: 5.12, w: 1.7, h: 1.86 }
+    ]);
+  });
+
+  it("uses the separated Reference panel layout for Album slides", async () => {
+    const base = buildCreativeState();
+    const direction = base.directions[0];
+    const source = base.outputs[0];
+    if (!direction || !source) {
+      throw new Error("Expected Album reference fixtures.");
+    }
+    const referenceUrls = [
+      "https://example.com/album-reference-primary.png",
+      "https://example.com/album-reference-supporting.png"
+    ];
+    const state = {
+      ...base,
+      albumFormat: "three-vertical" as const,
+      directions: base.directions.map((item) =>
+        item.id === direction.id
+          ? {
+              ...item,
+              albumFormat: "three-vertical" as const,
+              referenceImages: referenceUrls.map((url, index) => ({
+                id: `album-hook-reference-${index + 1}`,
+                url,
+                label: index === 0 ? "Primary layout" : "Supporting type",
+                role: "style" as const,
+                primary: index === 0
+              }))
+            }
+          : item
+      ),
+      outputs: [1, 2, 3].map((panel) => ({
+        ...source,
+        id: `${direction.id}-album-${panel}-v1`,
+        directionId: direction.id,
+        format: "Album post",
+        assetUrl: `https://example.com/album-${panel}.png`
+      }))
+    };
+    const imageData =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
+    const pptx = await buildCreateStageSlidesPptx(
+      state,
+      vi.fn().mockResolvedValue(imageData)
+    );
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{
+          _slideObjects: Array<{
+            _type: string;
+            options: { x: number; y: number; w: number; h: number };
+          }>;
+        }>;
+      }
+    )._slides;
+    const images = slides[0]?._slideObjects
+      .filter((object) => object._type === "image")
+      .map(({ options }) => ({
+        x: Number(options.x.toFixed(3)),
+        y: Number(options.y.toFixed(3)),
+        w: Number(options.w.toFixed(3)),
+        h: Number(options.h.toFixed(3))
+      }));
+
+    expect(images).toEqual([
+      { x: 4.845, y: 0.87, w: 1.725, h: 3.45 },
+      { x: 6.57, y: 0.87, w: 1.725, h: 1.725 },
+      { x: 6.57, y: 2.595, w: 1.725, h: 1.725 },
+      { x: 4.645, y: 5.12, w: 1.7, h: 1.86 },
+      { x: 6.795, y: 5.12, w: 1.7, h: 1.86 }
+    ]);
   });
 
   it("groups an album into one Client card and applies decisions to every image", async () => {
