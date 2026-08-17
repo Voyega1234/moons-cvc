@@ -31,6 +31,14 @@ export class CloudFirstWorkspaceRepository implements WorkspaceRepository {
     return this.local.load();
   }
 
+  async loadLatest(): Promise<WorkspaceState | null> {
+    const remoteWorkspace = this.remote.loadLatest
+      ? await this.remote.loadLatest()
+      : await this.remote.load();
+    if (remoteWorkspace) await this.discardLocalCache();
+    return remoteWorkspace;
+  }
+
   async save(workspace: WorkspaceState): Promise<void> {
     await this.remote.save(workspace);
     await this.discardLocalCache();

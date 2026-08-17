@@ -46,6 +46,50 @@ describe("CloudFirstWorkspaceRepository", () => {
     expect(local.load).toHaveBeenCalledOnce();
   });
 
+  it("loads the latest cloud state without falling back to stale local state", async () => {
+    const cached = createInitialWorkspaceState({
+      runId: "cached",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const latest = createInitialWorkspaceState({
+      runId: "latest",
+      now: "2026-07-16T11:00:00Z"
+    });
+    const local = repository(cached);
+    const remote = {
+      ...repository(),
+      loadLatest: vi.fn(async () => latest)
+    };
+
+    const result = await new CloudFirstWorkspaceRepository(
+      local,
+      remote
+    ).loadLatest();
+
+    expect(result?.activeRunId).toBe("latest");
+    expect(remote.loadLatest).toHaveBeenCalledOnce();
+    expect(remote.load).not.toHaveBeenCalled();
+    expect(local.load).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty cloud reload without reopening the local cache", async () => {
+    const local = repository(
+      createInitialWorkspaceState({
+        runId: "cached",
+        now: "2026-07-16T10:00:00Z"
+      })
+    );
+    const remote = repository();
+
+    const result = await new CloudFirstWorkspaceRepository(
+      local,
+      remote
+    ).loadLatest();
+
+    expect(result).toBeNull();
+    expect(local.load).not.toHaveBeenCalled();
+  });
+
   it("does not expose the local cache as editable when cloud state cannot be verified", async () => {
     const cached = createInitialWorkspaceState({
       runId: "cached",

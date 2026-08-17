@@ -45,15 +45,27 @@ export class SupabaseCollaborativeWorkspaceRepository
   ) {}
 
   async load(): Promise<WorkspaceState | null> {
+    return this.loadWorkspace(false);
+  }
+
+  async loadLatest(): Promise<WorkspaceState | null> {
+    return this.loadWorkspace(true);
+  }
+
+  private async loadWorkspace(
+    includeArchived: boolean
+  ): Promise<WorkspaceState | null> {
     const legacyWorkspace = await this.legacy.load();
-    const { data, error } = await this.client
+    let query = this.client
       .schema("moons")
       .from("runs")
       .select("id,workspace_run_id,snapshot,current_owner_user_id,version")
       .not("workspace_run_id", "is", null)
-      .not("snapshot", "is", null)
-      .neq("status", "archived")
-      .order("updated_at", { ascending: false });
+      .not("snapshot", "is", null);
+    if (!includeArchived) query = query.neq("status", "archived");
+    const { data, error } = await query.order("updated_at", {
+      ascending: false
+    });
 
     if (error) throw error;
     const sharedRuns = (data ?? []).flatMap((row) => {
@@ -228,53 +240,57 @@ export class SupabaseCollaborativeWorkspaceRepository
           this.knownRuns.set(run.id, existing);
           return;
         }
-        throw staleLocalProjectError();
+        if (existing.serialized) throw staleLocalProjectError();
+        known = existing;
+        this.knownRuns.set(run.id, existing);
       }
 
-      const snapshot = JSON.parse(serialized) as Json;
-      const { data, error } = await this.client
-        .schema("moons")
-        .from("runs")
-        .insert({
-          owner_user_id: userId,
-          current_owner_user_id: userId,
-          updated_by: userId,
-          client_id: run.brand?.id ?? null,
-          workspace_run_id: run.id,
-          snapshot,
-          status: run.done ? "completed" : "active",
-          version: 1,
-          stage: run.stage,
-          service: run.service,
-          quantity: run.quantity,
-          brief: run.brief,
-          is_pitching: false,
-          completed_at: run.done ? nowIso() : null
-        })
-        .select("id,current_owner_user_id,version")
-        .single();
+      if (!known) {
+        const snapshot = JSON.parse(serialized) as Json;
+        const { data, error } = await this.client
+          .schema("moons")
+          .from("runs")
+          .insert({
+            owner_user_id: userId,
+            current_owner_user_id: userId,
+            updated_by: userId,
+            client_id: run.brand?.id ?? null,
+            workspace_run_id: run.id,
+            snapshot,
+            status: run.done ? "completed" : "active",
+            version: 1,
+            stage: run.stage,
+            service: run.service,
+            quantity: run.quantity,
+            brief: run.brief,
+            is_pitching: false,
+            completed_at: run.done ? nowIso() : null
+          })
+          .select("id,current_owner_user_id,version")
+          .single();
 
-      if (error) {
-        if (!isUniqueViolation(error)) throw error;
-        const conflictingRun = await this.findKnownRun(run.id);
-        if (!conflictingRun) {
-          throw new Error(
-            "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
-          );
+        if (error) {
+          if (!isUniqueViolation(error)) throw error;
+          const conflictingRun = await this.findKnownRun(run.id);
+          if (!conflictingRun) {
+            throw new Error(
+              "This project already exists, but this account cannot access it. Ask the current owner or an admin to check client access."
+            );
+          }
+          if (conflictingRun.serialized === serialized) {
+            this.knownRuns.set(run.id, conflictingRun);
+            return;
+          }
+          throw staleLocalProjectError();
         }
-        if (conflictingRun.serialized === serialized) {
-          this.knownRuns.set(run.id, conflictingRun);
-          return;
-        }
-        throw staleLocalProjectError();
+        this.knownRuns.set(run.id, {
+          databaseId: data.id,
+          currentOwnerUserId: data.current_owner_user_id,
+          version: data.version,
+          serialized
+        });
+        return;
       }
-      this.knownRuns.set(run.id, {
-        databaseId: data.id,
-        currentOwnerUserId: data.current_owner_user_id,
-        version: data.version,
-        serialized
-      });
-      return;
     }
 
     if (known.currentOwnerUserId !== userId) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { WorkspaceState } from "../../features/workflow/model";
 import {
   createInitialWorkspaceState,
   getActiveRun
@@ -47,6 +48,37 @@ describe("mergeCollaborativeWorkspace", () => {
   });
 });
 
+describe("SupabaseCollaborativeWorkspaceRepository.loadLatest", () => {
+  it("includes an archived cloud snapshot when the user explicitly reloads", async () => {
+    const legacy = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const latest = {
+      ...legacy,
+      runsById: {
+        ...legacy.runsById,
+        "run-1": {
+          ...getActiveRun(legacy),
+          brief: "Archived cloud brief"
+        }
+      }
+    };
+    const { client, filters } = createLoadClient([sharedRunRow(latest)]);
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(legacy),
+      client
+    );
+
+    const result = await repository.loadLatest();
+
+    expect(result ? getActiveRun(result).brief : null).toBe(
+      "Archived cloud brief"
+    );
+    expect(filters).not.toContainEqual(["status", "archived"]);
+  });
+});
+
 describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
   it("does not let the legacy full-workspace store block run persistence", async () => {
     const workspace = createInitialWorkspaceState({
@@ -86,6 +118,24 @@ describe("SupabaseCollaborativeWorkspaceRepository.save", () => {
 
     await expect(repository.save(workspace)).resolves.toBeUndefined();
     expect(inserts).toEqual([]);
+  });
+
+  it("fills an existing cloud run that has no snapshot", async () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "run-1",
+      now: "2026-07-16T10:00:00Z"
+    });
+    const blankRun = { ...sharedRunRow(workspace), snapshot: null };
+    const { client, inserts, updates } = createClient({ existingRun: blankRun });
+    const repository = new SupabaseCollaborativeWorkspaceRepository(
+      memoryRepository(),
+      client
+    );
+
+    await expect(repository.save(workspace)).resolves.toBeUndefined();
+
+    expect(inserts).toEqual([]);
+    expect(updates).toHaveLength(1);
   });
 
   it("does not overwrite different cloud state when its base version is unknown", async () => {
@@ -287,14 +337,46 @@ describe("SupabaseCollaborativeWorkspaceRepository recovery points", () => {
   });
 });
 
-function memoryRepository(): WorkspaceRepository {
+function memoryRepository(loaded: WorkspaceState | null = null): WorkspaceRepository {
   return {
     async load() {
-      return null;
+      return loaded;
     },
     async save() {},
     async clear() {}
   };
+}
+
+function createLoadClient(rows: ReturnType<typeof sharedRunRow>[]): {
+  client: SupabaseClient<Database>;
+  filters: unknown[][];
+} {
+  const filters: unknown[][] = [];
+  const client = {
+    schema() {
+      return {
+        from() {
+          const query = {
+            select() {
+              return query;
+            },
+            not() {
+              return query;
+            },
+            neq(...args: unknown[]) {
+              filters.push(args);
+              return query;
+            },
+            async order() {
+              return { data: rows, error: null };
+            }
+          };
+          return query;
+        }
+      };
+    }
+  } as unknown as SupabaseClient<Database>;
+  return { client, filters };
 }
 
 function sharedRunRow(workspace: ReturnType<typeof createInitialWorkspaceState>) {
@@ -331,8 +413,10 @@ function createClient({
 }): {
   client: SupabaseClient<Database>;
   inserts: unknown[];
+  updates: unknown[];
 } {
   const inserts: unknown[] = [];
+  const updates: unknown[] = [];
   const lookups = lookupRuns ?? [existingRun ?? null];
   let lookupIndex = 0;
   const client = {
@@ -375,6 +459,27 @@ function createClient({
                   };
                 }
               };
+            },
+            update(payload: unknown) {
+              updates.push(payload);
+              return {
+                eq() {
+                  return this;
+                },
+                select() {
+                  return this;
+                },
+                async maybeSingle() {
+                  return {
+                    data: {
+                      id: "database-run-1",
+                      current_owner_user_id: "user-1",
+                      version: 2
+                    },
+                    error: null
+                  };
+                }
+              };
             }
           };
           return query;
@@ -382,7 +487,7 @@ function createClient({
       };
     }
   } as unknown as SupabaseClient<Database>;
-  return { client, inserts };
+  return { client, inserts, updates };
 }
 
 function createVersionConflictClient(

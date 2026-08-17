@@ -206,16 +206,15 @@ describe("WorkspaceProvider", () => {
         }
       }
     };
-    const load = vi
-      .fn<() => Promise<WorkspaceState | null>>()
-      .mockResolvedValueOnce(stale)
-      .mockResolvedValueOnce(latest);
+    const load = vi.fn(async () => stale);
+    const loadLatest = vi.fn(async () => latest);
     const save = vi
       .fn<(workspace: WorkspaceState) => Promise<void>>()
       .mockRejectedValueOnce(new Error("Reload the workspace before editing"))
       .mockResolvedValue(undefined);
     const repository: WorkspaceRepository = {
       load,
+      loadLatest,
       save,
       clear: vi.fn(async () => undefined)
     };
@@ -238,7 +237,8 @@ describe("WorkspaceProvider", () => {
         "Latest cloud brief"
       )
     );
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenCalledOnce();
+    expect(loadLatest).toHaveBeenCalledOnce();
     expect(screen.queryByText("Reload the workspace before editing")).toBeNull();
   });
 
@@ -247,12 +247,13 @@ describe("WorkspaceProvider", () => {
       runId: "reload-failure-run",
       now: "2026-07-20T15:00:00.000Z"
     });
-    const load = vi
-      .fn<() => Promise<WorkspaceState | null>>()
-      .mockResolvedValueOnce(stale)
-      .mockRejectedValueOnce(new Error("Cloud reload failed"));
+    const load = vi.fn(async () => stale);
+    const loadLatest = vi.fn(async () => {
+      throw new Error("Cloud reload failed");
+    });
     const repository: WorkspaceRepository = {
       load,
+      loadLatest,
       save: vi.fn(async () => {
         throw new Error("Reload the workspace before editing");
       }),

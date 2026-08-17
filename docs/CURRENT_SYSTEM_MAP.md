@@ -1,6 +1,6 @@
 # Current system map
 
-Last verified: 2026-08-06
+Last verified: 2026-08-17
 
 This is the short routing document for Moons. Read this before opening the
 large workflow implementation. It identifies the current source of truth,
@@ -43,6 +43,9 @@ Async results must continue targeting the run that started the request.
 | State transitions | `src/features/workflow/reducer.ts` |
 | Stage gates and action blockers | `src/features/workflow/rules.ts` |
 | Workspace/run persistence transitions | `src/features/workflow/workspace-reducer.ts` |
+| Workspace persistence UI and cloud reload | `src/app/providers/workspace-provider.tsx`, `src/app/App.tsx` |
+| Cloud-first workspace routing | `src/repositories/workspace/cloud-first-workspace-repository.ts` |
+| Shared run loading and optimistic saves | `src/repositories/workspace/supabase-collaborative-workspace-repository.ts` |
 | Hook generation | `src/features/workflow/use-generate-hooks.ts` |
 | Hook Agent playground | `src/features/playground/hook-agent-playground.tsx`, `/playground` |
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |

@@ -16,6 +16,7 @@ export interface WorkspaceCheckpoint {
 
 export interface WorkspaceRepository {
   load(): Promise<WorkspaceState | null>;
+  loadLatest?(): Promise<WorkspaceState | null>;
   save(workspace: WorkspaceState): Promise<void>;
   clear(): Promise<void>;
   createCheckpoint?(

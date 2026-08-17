@@ -173,7 +173,9 @@ export function WorkspaceProvider({
     setPersistenceStatus("saving");
 
     try {
-      const latest = await repository.load();
+      const latest = repository.loadLatest
+        ? await repository.loadLatest()
+        : await repository.load();
       if (!latest) {
         throw new Error("No saved cloud workspace was found.");
       }
