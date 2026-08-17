@@ -74,6 +74,65 @@ const run: WorkflowState = {
 };
 
 describe("buildArtworkGenerationRequest", () => {
+  it("isolates a Hook reference image from other artwork requests", () => {
+    const requests = buildArtworkGenerationRequests({
+      run: {
+        ...run,
+        creativeMix: [
+          { id: "static", service: "single-static", quantity: 2 }
+        ],
+        quantity: 2,
+        directions: run.directions.map((direction, index) => ({
+          ...direction,
+          selected: true,
+          ...(index === 0
+            ? {
+                referenceImages: [
+                  {
+                    id: "hook-reference-1",
+                    url: "https://example.com/hook-one.jpg",
+                    label: "Hook one moodboard",
+                    role: "style" as const,
+                    primary: true
+                  },
+                  {
+                    id: "hook-reference-2",
+                    url: "https://example.com/hook-one-type.jpg",
+                    label: "Hook one typography",
+                    role: "style" as const,
+                    primary: false
+                  }
+                ]
+              }
+            : {})
+        }))
+      }
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.selectedHooks.map((hook) => hook.id)).toEqual([
+      "hook-1"
+    ]);
+    expect(requests[0]?.referenceLed).toBe(true);
+    expect(requests[0]?.referenceImages).toContainEqual({
+      kind: "url",
+      url: "https://example.com/hook-one.jpg",
+      label: "Primary reference · Style · Hook one moodboard"
+    });
+    expect(requests[0]?.referenceImages).toContainEqual({
+      kind: "url",
+      url: "https://example.com/hook-one-type.jpg",
+      label: "Supporting reference · Style · Hook one typography"
+    });
+    expect(requests[1]?.selectedHooks.map((hook) => hook.id)).toEqual([
+      "hook-2"
+    ]);
+    expect(requests[1]?.referenceLed).toBeUndefined();
+    expect(requests[1]?.referenceImages).not.toContainEqual(
+      expect.objectContaining({ url: "https://example.com/hook-one.jpg" })
+    );
+  });
+
   it("sends only products selected in Product truth", () => {
     const request = buildArtworkGenerationRequest({
       run: {

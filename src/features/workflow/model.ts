@@ -195,6 +195,11 @@ export type WorkflowAction =
   | { type: "replace-directions"; directions: readonly CreativeDirection[] }
   | { type: "set-direction-album-format"; id: string; format: AlbumFormat }
   | {
+      type: "set-direction-reference-images";
+      id: string;
+      images: readonly ReferenceImageSelection[];
+    }
+  | {
       type: "set-direction-export-group";
       id: string;
       group: AngleExportGroup | null;

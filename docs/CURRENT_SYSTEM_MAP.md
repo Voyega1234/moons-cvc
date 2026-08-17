@@ -219,6 +219,7 @@ imports stay stable. Ownership after the first extraction is:
 | Pre-generation confirmation | `stages/brief-confirmation-modal.tsx` |
 | Shared artwork mode selector | `stages/artwork-mode-selector.tsx` |
 | Hook selection | `DirectionsStage`, hook edit/regenerate modals |
+| Per-Hook reference image | `stages/hook-reference-image.tsx`, `hook-reference-images.ts` |
 | Before-build idea checks | `stages/preflight-modal.tsx` |
 | Create | `stages/studio-stage.tsx` |
 | Shared output workspace | `review/output-grid.tsx` |
@@ -262,6 +263,33 @@ the left; the captured 9:16 Create preview in the center; and the four scenes'
 actual Script, Visual, and Text Overlay on the right. Do not add separate
 Creative Direction or Artwork & Caption slides unless the export contract is
 intentionally changed.
+
+Each Hook may store up to two optional `referenceImages`. The Hook card owns
+multi-upload and per-image removal UI. The first image is always normalized as
+Primary and later images as Supporting; removing the Primary promotes the next
+image automatically. Legacy saved `referenceImage` values migrate into this
+array. `hook-reference-images.ts` keeps Hooks without their own references on
+the normal artwork batch path, but isolates each referenced Hook into its own
+request so its images cannot influence another Hook. The same images are
+embedded as a thumbnail grid on that Hook's client slide.
+Referenced Hook requests set `referenceLed` and take precedence over the saved
+Artwork mode. They bypass Campaign Input preflight, strategy/concept prompt
+agents, and `agent_image.md`. `reference-interpreter.ts` sends the Primary and
+Supporting Hook references together to GPT Terra vision using
+`agent_prompt/agent_reference_interpreter.md` and returns structured design
+grammar that separates transferable hierarchy/treatment from source-specific
+people, products, scenes, props, copy, and exact composition. The Primary
+reference controls layout and hierarchy; Supporting references contribute only
+compatible secondary ideas, with conflicts resolved in favor of Primary. All
+Hook style references are also attached to the final GPT Image 2 edit alongside
+official logo, product, and other approved identity assets. Their ordered
+Primary/Supporting labels and the interpreter's design grammar tell GPT Image 2
+to use them as visual evidence without treating the completed advertisements as
+literal edit bases. The final prompt is assembled by
+`reference-led-image-prompt.ts` from the extracted grammar, campaign idea,
+headline, optional single supporting line, CTA, every attachment label, and
+output ratio. Hooks without a per-Hook reference keep the selected Artwork mode
+and its existing pipeline.
 
 ## Artwork prompt pipeline
 

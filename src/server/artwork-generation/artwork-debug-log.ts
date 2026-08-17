@@ -55,7 +55,10 @@ interface ImagePromptAgentDebugLog {
   runId: string;
   directionId: string;
   mode: ArtworkGenerationRequest["artworkMode"];
-  stage?: "campaign-input-preflight" | "production-brief";
+  stage?:
+    | "campaign-input-preflight"
+    | "production-brief"
+    | "reference-interpreter";
   status: "succeeded" | "failed";
   request: {
     endpoint: "/v1/responses" | "/api/v1/responses";
@@ -72,7 +75,8 @@ interface ImagePromptAgentDebugLog {
       name:
         | "moons_image_generation_prompt"
         | "moons_creative_visual_concept"
-        | "moons_campaign_input_preflight";
+        | "moons_campaign_input_preflight"
+        | "moons_reference_design_grammar";
       strict: true;
     };
   };
@@ -380,7 +384,9 @@ export function buildImagePromptAgentDebugLog(
       responseFormat: {
         type: "json_schema",
         name:
-          trace.stage === "campaign-input-preflight"
+          trace.stage === "reference-interpreter"
+            ? "moons_reference_design_grammar"
+            : trace.stage === "campaign-input-preflight"
             ? "moons_campaign_input_preflight"
             : trace.mode === "design-system" ||
                 trace.mode === "design-system-new"

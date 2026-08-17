@@ -505,6 +505,55 @@ function addCapturedUgcPreview(
   });
 }
 
+function addHookReferencePreview(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  data: readonly string[],
+  x: number,
+  y: number
+) {
+  if (!data.length) return;
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x,
+    y,
+    w: 1.16,
+    h: 1.27,
+    rectRadius: 0.08,
+    fill: { color: COLORS.paper, transparency: 3 },
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText("REFERENCE", {
+    x: x + 0.08,
+    y: y + 0.06,
+    w: 1,
+    h: 0.13,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 5.8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 0.7,
+    align: "center"
+  });
+  const columns = data.length === 1 ? 1 : 2;
+  const rows = Math.ceil(data.length / columns);
+  const gap = 0.04;
+  const cellWidth = (1 - gap * (columns - 1)) / columns;
+  const cellHeight = (0.96 - gap * (rows - 1)) / rows;
+  data.forEach((image, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    slide.addImage({
+      data: image,
+      x: x + 0.08 + column * (cellWidth + gap),
+      y: y + 0.23 + row * (cellHeight + gap),
+      w: cellWidth,
+      h: cellHeight,
+      altText: `Hook reference image ${index + 1}`
+    });
+  });
+}
+
 function addUgcClientSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
@@ -512,7 +561,8 @@ function addUgcClientSlide(
   brandName: string,
   slideNumber: number,
   totalSlides: number,
-  previewImage?: string
+  previewImage?: string,
+  referenceImages: readonly string[] = []
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
   slide.background = { color: COLORS.paper };
@@ -545,6 +595,7 @@ function addUgcClientSlide(
   });
 
   addCapturedUgcPreview(slide, brandName, previewImage);
+  addHookReferencePreview(pptx, slide, referenceImages, 5.94, 5.64);
 
   const headline = clampText(direction?.hook, 125);
   slide.addText(
@@ -824,7 +875,8 @@ function addSinglePageArtworkSlide(
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
   imageData: readonly string[],
-  albumMasterData?: string
+  albumMasterData?: string,
+  referenceImageData: readonly string[] = []
 ) {
   const { output, direction } = item;
   const albumLayout =
@@ -889,6 +941,13 @@ function addSinglePageArtworkSlide(
       artworkBox
     );
   }
+  addHookReferencePreview(
+    pptx,
+    slide,
+    referenceImageData,
+    artworkPanel.x + artworkPanel.w - 1.31,
+    artworkPanel.y + artworkPanel.h - 1.42
+  );
 
   const displayBrandName = brandName.toUpperCase();
   slide.addText(displayBrandName, {
@@ -1039,7 +1098,8 @@ function addClientSlide(
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
   imageData: readonly string[] = [],
-  albumMasterData?: string
+  albumMasterData?: string,
+  referenceImageData: readonly string[] = []
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
@@ -1051,7 +1111,8 @@ function addClientSlide(
       brandName,
       slideNumber,
       totalSlides,
-      imageData[0]
+      imageData[0],
+      referenceImageData
     );
     return;
   }
@@ -1065,7 +1126,8 @@ function addClientSlide(
     outputSize,
     albumFormat,
     imageData,
-    albumMasterData
+    albumMasterData,
+    referenceImageData
   );
   return;
 
@@ -1674,6 +1736,11 @@ async function buildClientSlidesPptx(
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
     let albumMasterData: string | undefined;
+    const referenceImageData = await Promise.all(
+      (item.direction?.referenceImages ?? []).map((reference) =>
+        resolveImage(reference.url)
+      )
+    );
     if (isUgcOutput(item.output)) {
       const previewImage = ugcPreviewImages[item.output.id];
       if (!previewImage) {
@@ -1715,7 +1782,8 @@ async function buildClientSlidesPptx(
       state.outputSize,
       albumFormat,
       imageData,
-      albumMasterData
+      albumMasterData,
+      referenceImageData
     );
     slideNumber += 1;
   }

@@ -21,6 +21,7 @@ import {
   selectedUploadedMaterials,
   type WorkflowState
 } from "../../features/workflow/model";
+import { batchHooksByReferenceImage } from "../../features/workflow/hook-reference-images";
 import type {
   ArtworkMode,
   ImagePromptModel
@@ -106,6 +107,7 @@ export interface GenerateArtworkForSelectedHooksInput {
 export interface ArtworkGenerationRequest {
   model: "gpt-image-2";
   artworkMode: ArtworkMode;
+  referenceLed?: boolean;
   imagePromptModel: ImagePromptModel;
   albumFormat?: AlbumFormatPreference;
   runId: string;
@@ -551,47 +553,56 @@ export function buildArtworkGenerationRequests({
     const hooks = selectedHooks
       .filter(({ service }) => service === item.service)
       .slice(0, item.quantity)
-      .map(({ direction: {
-        id,
-        hook,
-        subheadline,
-        concept,
-        why,
-        visual,
-        cta,
-        supportingPoints,
-        formatBeats,
-        albumFormat,
-        ctaActionType,
-        ctaDestination,
-        contactLine,
-        caption
-      } }) => ({
-        id,
-        hook,
-        subheadline,
-        concept,
-        why,
-        visual,
-        cta,
-        supportingPoints,
-        formatBeats,
-        albumFormat,
-        ctaActionType,
-        ctaDestination,
-        contactLine,
-        caption
-      }));
-    return chunk(hooks, ARTWORK_REQUEST_BATCH_SIZE).map((selectedHooks) =>
-          buildArtworkRequest({
-            run,
-            service: item.service,
-            quantity: selectedHooks.length,
-            selectedHooks,
-            textInputs,
-            referenceImages
+      .map(({ direction }) => direction);
+    return batchHooksByReferenceImage(hooks, ARTWORK_REQUEST_BATCH_SIZE).map(
+      (batch) => {
+        const requestHooks = batch.hooks.map(
+          ({
+            id,
+            hook,
+            subheadline,
+            concept,
+            why,
+            visual,
+            cta,
+            supportingPoints,
+            formatBeats,
+            albumFormat,
+            ctaActionType,
+            ctaDestination,
+            contactLine,
+            caption
+          }) => ({
+            id,
+            hook,
+            subheadline,
+            concept,
+            why,
+            visual,
+            cta,
+            supportingPoints,
+            formatBeats,
+            albumFormat,
+            ctaActionType,
+            ctaDestination,
+            contactLine,
+            caption
           })
         );
+        return buildArtworkRequest({
+          run,
+          service: item.service,
+          quantity: requestHooks.length,
+          selectedHooks: requestHooks,
+          textInputs,
+          referenceLed: batch.references.length > 0,
+          referenceImages: [
+            ...referenceImages,
+            ...artworkReferencesFromSelections(batch.references)
+          ]
+        });
+      }
+    );
   });
 }
 
@@ -645,6 +656,7 @@ function buildArtworkRequest({
   quantity,
   selectedHooks,
   textInputs,
+  referenceLed = false,
   referenceImages
 }: {
   run: WorkflowState;
@@ -652,12 +664,14 @@ function buildArtworkRequest({
   quantity: number;
   selectedHooks: ArtworkGenerationRequest["selectedHooks"];
   textInputs: readonly string[];
+  referenceLed?: boolean;
   referenceImages: readonly ArtworkReferenceImage[];
 }): ArtworkGenerationRequest {
 
   return {
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
+    ...(referenceLed ? { referenceLed: true } : {}),
     imagePromptModel: run.imagePromptModel,
     albumFormat: run.albumFormat,
     runId: run.id,
@@ -854,14 +868,6 @@ function compactUnique(values: readonly string[]): readonly string[] {
   return Array.from(
     new Set(values.map((value) => value.trim()).filter(Boolean))
   ).slice(0, 8);
-}
-
-function chunk<T>(items: readonly T[], size: number): readonly T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
 }
 
 async function mapWithConcurrency<Input, Output>(

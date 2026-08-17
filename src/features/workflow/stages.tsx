@@ -107,6 +107,7 @@ import {
   AlbumFormatThumb
 } from "./stages/album-format-modal";
 import { PreflightModal } from "./stages/preflight-modal";
+import { HookReferenceImage } from "./stages/hook-reference-image";
 import { ConfirmationReferenceGrid } from "./stages/brief-confirmation-modal";
 import {
   groupOutputsForReview,
@@ -4393,6 +4394,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               <span className="compass-angle-card-kicker">CTA</span>
               <p className="compass-angle-cta-text">{direction.cta}</p>
             </div>
+            <HookReferenceImage
+              run={state}
+              direction={direction}
+              dispatch={dispatch}
+              disabled={creating || regeneratingAllHooks}
+            />
             {group.service === "album-post" ? (
               <div className="angle-album-format-slot">
                 {direction.selected ? (

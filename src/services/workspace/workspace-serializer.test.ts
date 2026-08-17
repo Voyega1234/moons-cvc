@@ -12,6 +12,129 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("preserves a per-Hook reference image", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "hook-reference-run",
+      now: "2026-08-17T00:00:00.000Z"
+    });
+    const directions = buildDirectionFixtures("Reference brand");
+    const initialRun = workspace.runsById[workspace.activeRunId];
+    if (!initialRun) throw new Error("Expected an initial run.");
+    workspace = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [workspace.activeRunId]: { ...initialRun, directions }
+      }
+    };
+    const directionId = workspace.runsById[workspace.activeRunId]?.directions[0]?.id;
+    if (!directionId) throw new Error("Expected a saved direction.");
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-08-17T00:02:00.000Z",
+      action: {
+        type: "set-direction-reference-images",
+        id: directionId,
+        images: [
+          {
+            id: "hook-reference-1",
+            url: "https://example.com/hook-reference.png",
+            label: "Client reference",
+            role: "style",
+            primary: true
+          },
+          {
+            id: "hook-reference-2",
+            url: "https://example.com/supporting-reference.png",
+            label: "Typography reference",
+            role: "style",
+            primary: false
+          }
+        ]
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-08-17T00:03:00.000Z")
+    );
+
+    expect(
+      restored?.runsById["hook-reference-run"]?.directions[0]?.referenceImages
+    ).toEqual([
+      {
+        id: "hook-reference-1",
+        url: "https://example.com/hook-reference.png",
+        label: "Client reference",
+        role: "style",
+        primary: true
+      },
+      {
+        id: "hook-reference-2",
+        url: "https://example.com/supporting-reference.png",
+        label: "Typography reference",
+        role: "style",
+        primary: false
+      }
+    ]);
+  });
+
+  it("migrates a legacy per-Hook referenceImage into referenceImages", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "legacy-hook-reference-run",
+      now: "2026-08-17T00:00:00.000Z"
+    });
+    const run = workspace.runsById[workspace.activeRunId];
+    if (!run) throw new Error("Expected an initial run.");
+    const snapshot = JSON.parse(
+      serializeWorkspace(
+        {
+          ...workspace,
+          runsById: {
+            ...workspace.runsById,
+            [workspace.activeRunId]: {
+              ...run,
+              directions: buildDirectionFixtures("Legacy reference brand")
+            }
+          }
+        },
+        "2026-08-17T00:01:00.000Z"
+      )
+    ) as {
+      data: {
+        runsById: Record<
+          string,
+          { directions: Array<Record<string, unknown>> }
+        >;
+      };
+    };
+    const direction =
+      snapshot.data.runsById["legacy-hook-reference-run"]?.directions[0];
+    if (!direction) throw new Error("Expected a serialized direction.");
+    direction.referenceImage = {
+      id: "legacy-reference",
+      url: "https://example.com/legacy-reference.png",
+      label: "Legacy reference",
+      role: "style",
+      primary: false
+    };
+
+    const restored = deserializeWorkspace(JSON.stringify(snapshot));
+
+    expect(
+      restored?.runsById["legacy-hook-reference-run"]?.directions[0]
+        ?.referenceImages
+    ).toEqual([
+      {
+        id: "legacy-reference",
+        url: "https://example.com/legacy-reference.png",
+        label: "Legacy reference",
+        role: "style",
+        primary: true
+      }
+    ]);
+  });
+
   it("defaults legacy runs without Idea intent to explore", () => {
     const workspace = createInitialWorkspaceState({
       runId: "legacy-idea-intent",

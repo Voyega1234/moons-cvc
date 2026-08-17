@@ -836,6 +836,149 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(401);
   });
 
+  it("interprets every Hook reference and attaches them to the final GPT Image 2 edit", async () => {
+    let editForm: FormData | undefined;
+    let interpreterBody: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) {
+          return new Response(JSON.stringify({ email: "team@convertcake.com" }), {
+            status: 200
+          });
+        }
+        if (href === "https://example.com/hook-reference.png") {
+          return new Response(Buffer.from("reference-image"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        if (href === "https://example.com/supporting-reference.png") {
+          return new Response(Buffer.from("supporting-reference"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        if (href === "https://example.com/official-logo.png") {
+          return new Response(Buffer.from("official-logo"), {
+            status: 200,
+            headers: { "content-type": "image/png" }
+          });
+        }
+        if (href.includes("/v1/images/edits")) {
+          editForm = init?.body as FormData;
+          return new Response(
+            JSON.stringify({
+              data: [
+                { b64_json: Buffer.from("reference-led-output").toString("base64") }
+              ]
+            }),
+            { status: 200 }
+          );
+        }
+        if (href.includes("/v1/responses")) {
+          interpreterBody = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
+          return new Response(
+            JSON.stringify({
+              output_text: JSON.stringify({
+                compositionGrammar: "Asymmetric editorial grid.",
+                typographyGrammar: "Large Thai display headline.",
+                graphicGrammar: "Rounded green utility shapes.",
+                imageTreatment: "Bright high-key commercial photography.",
+                hierarchyAndDensity: "One dominant headline and one hero.",
+                secondaryAndFooterGrammar: "Grounded green footer zone.",
+                conceptTranslation: "Create a new mattress cutaway hero.",
+                preserve: ["editorial hierarchy", "green footer device"],
+                replace: ["source people", "source cleaning scene"]
+              })
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected fetch: ${href}`);
+      }
+    );
+    const { client } = fakeStorage();
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST",
+        headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({
+          ...requestBody,
+          artworkMode: "design-system-new",
+          referenceLed: true,
+          selectedHooks: [
+            {
+              ...requestBody.selectedHooks[0],
+              subheadline: "One calm supporting line",
+              supportingPoints: [
+                "Do not render point one",
+                "Do not render point two"
+              ]
+            }
+          ],
+          referenceImages: [
+            {
+              kind: "url",
+              url: "https://example.com/official-logo.png",
+              label: "Logo reference · Official identity only"
+            },
+            {
+              kind: "url",
+              url: "https://example.com/hook-reference.png",
+              label: "Primary reference · Style · Client example"
+            },
+            {
+              kind: "url",
+              url: "https://example.com/supporting-reference.png",
+              label: "Supporting reference · Style · Typography example"
+            }
+          ]
+        })
+      }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      writeDebugLog: async () => undefined,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    const prompt = String(editForm?.get("prompt"));
+    expect(prompt).toContain("# DESIGN-GRAMMAR-LED GENERATION");
+    expect(prompt).toContain("Create a new mattress cutaway hero");
+    expect(prompt).toContain("source people");
+    expect(prompt).toContain("One calm supporting line");
+    expect(prompt).not.toContain("Do not render point one");
+    expect(prompt).not.toContain("AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT");
+    expect(prompt).toContain("Primary reference · Style · Client example");
+    expect(prompt).toContain(
+      "Supporting reference · Style · Typography example"
+    );
+    expect(editForm?.getAll("image[]")).toHaveLength(3);
+    expect(JSON.stringify(interpreterBody)).toContain("input_image");
+    expect(JSON.stringify(interpreterBody)).toContain(
+      Buffer.from("reference-image").toString("base64")
+    );
+    expect(JSON.stringify(interpreterBody)).toContain(
+      Buffer.from("supporting-reference").toString("base64")
+    );
+    expect(JSON.stringify(interpreterBody)).not.toContain(
+      Buffer.from("official-logo").toString("base64")
+    );
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/v1/responses")
+      )
+    ).toHaveLength(1);
+  });
+
   it("revises the current image directly without invoking prompt or strategy agents", async () => {
     let editForm: FormData | undefined;
     const fetchMock = vi.fn(

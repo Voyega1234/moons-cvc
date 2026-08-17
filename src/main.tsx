@@ -14,6 +14,7 @@ import "./styles/workflow/brief-confirmation.css";
 import "./styles/workflow/brief-stage.css";
 import "./styles/workflow/hook-album-format.css";
 import "./styles/workflow/hook-model-comparison.css";
+import "./styles/workflow/hook-reference-image.css";
 import "./styles/workflow/preflight.css";
 import "./styles/workflow/create-build.css";
 import "./styles/workflow/ugc-preview.css";

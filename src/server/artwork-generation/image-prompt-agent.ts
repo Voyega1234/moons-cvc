@@ -13,6 +13,7 @@ export type ImagePromptProvider = "openai" | "openrouter";
 
 export interface ImagePromptAgentHook {
   hook: string;
+  subheadline?: string;
   concept: string;
   why: string;
   visual: string;
@@ -61,7 +62,10 @@ export interface ImagePromptAgentTrace {
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
   mode: ArtworkMode;
-  stage?: "campaign-input-preflight" | "production-brief";
+  stage?:
+    | "campaign-input-preflight"
+    | "production-brief"
+    | "reference-interpreter";
   status: "succeeded" | "failed";
   inputText: string;
   responsePrompt?: string;

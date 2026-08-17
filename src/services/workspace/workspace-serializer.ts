@@ -13,10 +13,12 @@ import {
   imagePromptModels,
   isHookGenerationModel,
   MAX_HOOK_GENERATION_MODELS,
+  normalizeHookReferenceImages,
   normalizeFormatBeatsForService,
   referenceImageRoles,
   serviceTypes,
   type CreativeStage,
+  type ReferenceImageSelection,
   type ServiceType,
   type UgcVideoBrief
 } from "../../domain/creative-run";
@@ -538,6 +540,14 @@ function parseReferenceImages(
   return items.every((item) => item !== null) ? items : null;
 }
 
+function parseReferenceImage(
+  value: unknown
+): ReferenceImageSelection | null {
+  if (!isRecord(value)) return null;
+  const [reference] = parseReferenceImages([value]) ?? [];
+  return reference ?? null;
+}
+
 function parseUploadedMaterials(
   value: unknown
 ): WorkflowState["uploadedMaterials"] | null {
@@ -659,6 +669,15 @@ function parseDirections(
       item.albumFormat === undefined
         ? undefined
         : parseMember(item.albumFormat, albumFormats);
+    const referenceImages =
+      item.referenceImages !== undefined
+        ? parseReferenceImages(item.referenceImages)
+        : item.referenceImage !== undefined
+          ? (() => {
+              const legacyReference = parseReferenceImage(item.referenceImage);
+              return legacyReference ? [legacyReference] : null;
+            })()
+          : [];
     const ugcBrief =
       item.ugcBrief === undefined ? undefined : parseUgcVideoBrief(item.ugcBrief);
     const ctaActionType =
@@ -694,6 +713,7 @@ function parseDirections(
       supportingPoints === null ||
       formatBeats === null ||
       (item.albumFormat !== undefined && !albumFormat) ||
+      referenceImages === null ||
       ugcBrief === null ||
       (item.ctaActionType !== undefined && !ctaActionType) ||
       ctaDestination === null ||
@@ -727,6 +747,9 @@ function parseDirections(
         formatBeats
       ),
       albumFormat: albumFormat ?? undefined,
+      referenceImages: referenceImages.length
+        ? normalizeHookReferenceImages(referenceImages)
+        : undefined,
       ugcBrief: ugcBrief ?? undefined,
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,

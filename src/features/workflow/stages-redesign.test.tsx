@@ -2468,6 +2468,81 @@ describe("redesigned workflow stages", () => {
     });
   });
 
+  it("shows and removes a Reference Image scoped to one Hook", () => {
+    const baseState = buildCreativeState();
+    const firstDirection = baseState.directions[0];
+    if (!firstDirection) throw new Error("Expected a direction fixture.");
+    const state = {
+      ...baseState,
+      directions: baseState.directions.map((direction) =>
+        direction.id === firstDirection.id
+          ? {
+              ...direction,
+              referenceImages: [
+                {
+                  id: "hook-reference-1",
+                  url: "https://example.com/reference.jpg",
+                  label:
+                    "725147378_1588477846034577_8905090760599990454_n.jpeg",
+                  role: "style" as const,
+                  primary: true
+                },
+                {
+                  id: "hook-reference-2",
+                  url: "https://example.com/type-reference.jpg",
+                  label: "Typography reference.jpg",
+                  role: "style" as const,
+                  primary: false
+                }
+              ]
+            }
+          : direction
+      )
+    };
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const reference = within(view.container).getByRole("region", {
+      name: `Reference Image for ${firstDirection.hook}`
+    });
+
+    const longFilename =
+      "725147378_1588477846034577_8905090760599990454_n.jpeg";
+    expect(within(reference).getByAltText(longFilename)).toBeTruthy();
+    expect(
+      within(reference)
+        .getByTitle(longFilename)
+        .classList.contains("hook-reference-image-filename")
+    ).toBe(true);
+    expect(
+      within(reference).getByAltText("Typography reference.jpg")
+    ).toBeTruthy();
+    expect(
+      within(reference).queryByText("Add supporting references")
+    ).toBeNull();
+    fireEvent.click(
+      within(reference).getByRole("button", {
+        name: `Remove ${longFilename}`
+      })
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-direction-reference-images",
+      id: firstDirection.id,
+      images: [
+        {
+          id: "hook-reference-2",
+          url: "https://example.com/type-reference.jpg",
+          label: "Typography reference.jpg",
+          role: "style",
+          primary: false
+        }
+      ]
+    });
+  });
+
   it("allows every editable hook text field to be cleared and saved", async () => {
     const user = userEvent.setup();
     const baseState = buildCreativeState();
@@ -4216,6 +4291,60 @@ describe("redesigned workflow stages", () => {
     expect(resolveImage).toHaveBeenCalledTimes(1);
     expect(resolveImage).toHaveBeenCalledWith(masterUrl);
     expect(artwork).toEqual([{ x: 4.04, y: 0.94, w: 5.62, h: 5.62 }]);
+  });
+
+  it("embeds the matching Hook reference image in client slides", async () => {
+    const base = buildCreativeState();
+    const output = base.outputs[0];
+    if (!output) throw new Error("Expected a creative output fixture.");
+    const referenceUrl = "https://example.com/client-reference.png";
+    const artworkUrl = "https://example.com/artwork.png";
+    const state = {
+      ...base,
+      directions: base.directions.map((direction) =>
+        direction.id === output.directionId
+          ? {
+              ...direction,
+              referenceImages: [
+                {
+                  id: "hook-reference-slide",
+                  url: referenceUrl,
+                  label: "Client reference",
+                  role: "style" as const,
+                  primary: true
+                },
+                {
+                  id: "hook-reference-slide-2",
+                  url: "https://example.com/client-reference-2.png",
+                  label: "Typography reference",
+                  role: "style" as const,
+                  primary: false
+                }
+              ]
+            }
+          : direction
+      ),
+      outputs: [{ ...output, assetUrl: artworkUrl }]
+    };
+    const imageData =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
+    const resolveImage = vi.fn().mockResolvedValue(imageData);
+
+    const pptx = await buildCreateStageSlidesPptx(state, resolveImage);
+    const slides = (
+      pptx as unknown as {
+        _slides: Array<{ _slideObjects: Array<{ _type: string }> }>;
+      }
+    )._slides;
+
+    expect(resolveImage).toHaveBeenCalledWith(referenceUrl);
+    expect(resolveImage).toHaveBeenCalledWith(
+      "https://example.com/client-reference-2.png"
+    );
+    expect(resolveImage).toHaveBeenCalledWith(artworkUrl);
+    expect(
+      slides[0]?._slideObjects.filter((object) => object._type === "image")
+    ).toHaveLength(3);
   });
 
   it("groups an album into one Client card and applies decisions to every image", async () => {

@@ -60,6 +60,8 @@ import {
   preflightCampaignInput,
   type ImagePromptProvider
 } from "./image-prompt-agent.js";
+import { buildReferenceLedImagePrompt } from "./reference-led-image-prompt.js";
+import { interpretReferenceDesign } from "./reference-interpreter.js";
 import {
   enrichCreativeStrategy,
   type CreativeStrategyEnrichment
@@ -236,6 +238,7 @@ export async function handleArtworkGenerationRequest({
     if (!input) throw new Error("Invalid artwork generation request.");
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const promptProvider: ImagePromptProvider =
+      !input.referenceLed &&
       input.artworkMode !== "standard" &&
       input.imagePromptModel === "anthropic/claude-sonnet-4.6"
         ? "openrouter"
@@ -245,6 +248,7 @@ export async function handleArtworkGenerationRequest({
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
     const requiresPromptModel =
+      !input.referenceLed &&
       input.artworkMode !== "standard" &&
       input.artworkMode !== "direct-final-artwork";
     if (!promptApiKey && requiresPromptModel) {
@@ -367,7 +371,7 @@ async function generateOutputsForSelectedHooks({
     supabaseUrl
   );
   const designSystemNewFlow =
-    input.artworkMode === "design-system-new"
+    !input.referenceLed && input.artworkMode === "design-system-new"
       ? await prepareDesignSystemNewFlow({
           input,
           references,
@@ -534,12 +538,13 @@ async function generateOutputForHook({
     : input.output.size;
   const canvasRatio = canvasRatioFromSize(generationSize);
   const isDirectFinalArtwork =
-    input.artworkMode === "direct-final-artwork";
+    !input.referenceLed && input.artworkMode === "direct-final-artwork";
   const setDirection = designSystemNewFlow?.setDirection.setDirection;
   const shotOpportunity = designSystemNewFlow?.setDirection.ideas.find(
     (idea) => idea.directionId === hook.id
   )?.shotOpportunity;
   if (
+    !input.referenceLed &&
     input.artworkMode === "design-system-new" &&
     (!setDirection || !shotOpportunity)
   ) {
@@ -549,9 +554,10 @@ async function generateOutputForHook({
   }
   let strategy: CreativeStrategyEnrichment | undefined;
   if (
-    input.artworkMode === "reference-library" ||
-    input.artworkMode === "design-system" ||
-    input.artworkMode === "design-system-new"
+    !input.referenceLed &&
+    (input.artworkMode === "reference-library" ||
+      input.artworkMode === "design-system" ||
+      input.artworkMode === "design-system-new")
   ) {
     try {
       strategy = await resolveCreativeStrategy({
@@ -574,7 +580,7 @@ async function generateOutputForHook({
     }
   }
   const artworkReferences =
-    input.artworkMode === "reference-library"
+    !input.referenceLed && input.artworkMode === "reference-library"
       ? await resolveStoredArtworkReferences({ input, hook, strategy, storage })
       : [];
   const promptReferences = [
@@ -583,8 +589,9 @@ async function generateOutputForHook({
   ];
   const generationReferences = promptReferences;
   const isDesignSystemMode =
-    input.artworkMode === "design-system" ||
-    input.artworkMode === "design-system-new";
+    !input.referenceLed &&
+    (input.artworkMode === "design-system" ||
+      input.artworkMode === "design-system-new");
   const creativeProvocation =
     isDesignSystemMode
       ? await resolveImagePrompt({
@@ -651,7 +658,7 @@ async function generateOutputForHook({
   const promptParts =
     isDirectFinalArtwork || isDesignSystemMode
       ? [prompt]
-      : input.artworkMode === "reference-library"
+      : !input.referenceLed && input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
   if (isAlbum) {
@@ -877,7 +884,9 @@ async function applyPostGenerationVisualQc({
   writeDebugLog: ArtworkGenerationDebugLogger;
   fetchImpl: FetchLike;
 }): Promise<GeneratedImage> {
-  if (!usesPostGenerationVisualQc(input.artworkMode)) return image;
+  if (input.referenceLed || !usesPostGenerationVisualQc(input.artworkMode)) {
+    return image;
+  }
 
   // Standard does not use a prompt-writing model, so its QC always runs
   // directly on OpenAI with the image-generation credential. Other modes keep
@@ -1878,6 +1887,12 @@ async function resolveImagePrompt({
   albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
 }): Promise<string> {
+  const attachedReferences = input.referenceLed
+    ? references.filter((reference) => !isHookStyleReference(reference))
+    : references;
+  const promptReferenceLabels = input.referenceLed
+    ? references
+    : attachedReferences;
   const imagePromptInput = {
     brand: input.brand,
     service: input.service,
@@ -1885,10 +1900,10 @@ async function resolveImagePrompt({
     brief: input.brief,
     hook,
     textInputs: input.textInputs,
-    referenceImageLabels: references.map(
+    referenceImageLabels: promptReferenceLabels.map(
       (reference) => reference.label ?? "Reference image"
     ),
-    referenceImages: references.map((reference, index) => ({
+    referenceImages: attachedReferences.map((reference, index) => ({
       imageUrl:
         artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
         `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
@@ -1909,6 +1924,34 @@ async function resolveImagePrompt({
     },
     selectedProductIds: input.selectedProductIds
   };
+
+  if (input.referenceLed) {
+    const styleReferences = references.filter(isHookStyleReference);
+    const designGrammar = await interpretReferenceDesign({
+      apiKey: promptApiKey,
+      fetchImpl,
+      mode: input.artworkMode,
+      references: styleReferences,
+      campaign: {
+        concept: hook.concept,
+        objective: hook.why,
+        headline: hook.hook,
+        targetRatio: canvasRatio
+      },
+      writeTrace: async (trace) => {
+        await writeDebugLog(
+          debugLogDirectory,
+          buildImagePromptAgentDebugLog(
+            trace,
+            input.runId,
+            hook.id,
+            styleReferences
+          )
+        );
+      }
+    });
+    return buildReferenceLedImagePrompt(imagePromptInput, designGrammar);
+  }
 
   if (input.artworkMode === "standard") {
     const campaignInput = await preflightCampaignInput({
@@ -1944,6 +1987,12 @@ async function resolveImagePrompt({
     },
     input: imagePromptInput
   });
+}
+
+function isHookStyleReference(reference: ReferenceImageInput): boolean {
+  return /^(?:Primary|Supporting) reference\s*·\s*Style\s*·/i.test(
+    reference.label?.trim() ?? ""
+  );
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

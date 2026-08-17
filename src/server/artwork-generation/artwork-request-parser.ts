@@ -140,6 +140,9 @@ export function parseRequestBody(value: unknown): ArtworkGenerationRequest {
   return {
     model: model as ArtworkGenerationRequest["model"],
     artworkMode: artworkMode as ArtworkGenerationRequest["artworkMode"],
+    ...(value.referenceLed === undefined
+      ? {}
+      : { referenceLed: readBoolean(value.referenceLed, "referenceLed") }),
     imagePromptModel:
       imagePromptModel as ArtworkGenerationRequest["imagePromptModel"],
     albumFormat: albumFormat as ArtworkGenerationRequest["albumFormat"],
@@ -252,6 +255,11 @@ function readOptionalStringArray(
 ): readonly string[] {
   if (value === undefined) return [];
   return readStringArray(value, field);
+}
+
+function readBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${field} must be a boolean.`);
+  return value;
 }
 
 function parseSelectedHook(value: unknown, index: number): SelectedHook {

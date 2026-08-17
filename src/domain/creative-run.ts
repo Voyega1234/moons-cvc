@@ -281,6 +281,18 @@ export interface ReferenceImageSelection {
   primary?: boolean;
 }
 
+export const MAX_HOOK_REFERENCE_IMAGES = 2;
+
+export function normalizeHookReferenceImages(
+  references: readonly ReferenceImageSelection[]
+): readonly ReferenceImageSelection[] {
+  return references.slice(0, MAX_HOOK_REFERENCE_IMAGES).map((reference, index) => ({
+    ...reference,
+    role: "style",
+    primary: index === 0
+  }));
+}
+
 export const referenceImageRoles = [
   "product",
   "logo",
@@ -381,6 +393,8 @@ export interface CreativeDirection {
   formatBeats?: readonly string[];
   /** Album layout selected for this idea when the run uses automatic selection. */
   albumFormat?: AlbumFormat;
+  /** User-supplied visual references scoped to this Hook only. */
+  referenceImages?: readonly ReferenceImageSelection[];
   /** Production-ready detail generated only for UGC video directions. */
   ugcBrief?: UgcVideoBrief;
   /** Intended conversion route for the CTA. Optional for saved legacy runs. */

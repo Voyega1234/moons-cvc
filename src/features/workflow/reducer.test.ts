@@ -155,6 +155,63 @@ describe("workflowReducer", () => {
     expect(referenceLibrary.artworkMode).toBe("reference-library");
   });
 
+  it("normalizes, caps, and removes reference images on one Hook only", () => {
+    const directions = buildDirectionFixtures("Reference brand");
+    const state = workflowReducer({
+      ...initialWorkflowState,
+      directions: directions.map((direction, index) => ({
+        ...direction,
+        selected: index === 0
+      }))
+    }, { type: "create-outputs" });
+    const target = directions[0];
+    if (!target) throw new Error("Expected a direction fixture.");
+    const image = {
+      id: "hook-reference-1",
+      url: "https://example.com/reference.jpg",
+      label: "Reference.jpg",
+      role: "style" as const,
+      primary: true
+    };
+
+    const updated = workflowReducer(state, {
+      type: "set-direction-reference-images",
+      id: target.id,
+      images: [image, { ...image, id: "hook-reference-2", primary: true }]
+    });
+
+    expect(updated.directions[0]?.referenceImages).toEqual([
+      image,
+      { ...image, id: "hook-reference-2", primary: false }
+    ]);
+    expect(updated.directions[1]?.referenceImages).toBeUndefined();
+    expect(state.outputs.length).toBeGreaterThan(0);
+    expect(updated.outputs).toEqual([]);
+
+    const capped = workflowReducer(state, {
+      type: "set-direction-reference-images",
+      id: target.id,
+      images: Array.from({ length: 5 }, (_, index) => ({
+        ...image,
+        id: `hook-reference-${index + 1}`,
+        primary: index > 0
+      }))
+    });
+    expect(capped.directions[0]?.referenceImages).toHaveLength(2);
+    expect(
+      capped.directions[0]?.referenceImages?.map((reference) =>
+        Boolean(reference.primary)
+      )
+    ).toEqual([true, false]);
+
+    const removed = workflowReducer(updated, {
+      type: "set-direction-reference-images",
+      id: target.id,
+      images: []
+    });
+    expect(removed.directions[0]?.referenceImages).toEqual([]);
+  });
+
   it("keeps QA incomplete until every regenerated draft has a result", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

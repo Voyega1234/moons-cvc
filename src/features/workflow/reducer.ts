@@ -8,6 +8,7 @@ import {
   emptyApprovalGate,
   inferredReferenceImageRole,
   MAX_HOOK_GENERATION_MODELS,
+  normalizeHookReferenceImages,
   normalizeFormatBeatsForService,
   type ApprovalRole
 } from "../../domain/creative-run";
@@ -727,6 +728,7 @@ export function workflowReducer(
                     action.direction.subheadlineHighlight
                   ),
                   exportGroup: direction.exportGroup ?? null,
+                  referenceImages: direction.referenceImages,
                   selected: direction.selected
                 };
               })()
@@ -762,6 +764,7 @@ export function workflowReducer(
               direction.subheadlineHighlight
             ),
             exportGroup: state.directions[index]?.exportGroup ?? null,
+            referenceImages: state.directions[index]?.referenceImages,
             selected: state.directions[index]?.selected ?? false
           };
         }),
@@ -786,6 +789,23 @@ export function workflowReducer(
         directions: state.directions.map((direction) =>
           direction.id === action.id && direction.service === "album-post"
             ? { ...direction, albumFormat: action.format }
+            : direction
+        ),
+        outputs: [],
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
+      };
+    case "set-direction-reference-images":
+      return {
+        ...state,
+        directions: state.directions.map((direction) =>
+          direction.id === action.id
+            ? {
+                ...direction,
+                referenceImages: normalizeHookReferenceImages(action.images)
+              }
             : direction
         ),
         outputs: [],
