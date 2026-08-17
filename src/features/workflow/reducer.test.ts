@@ -267,6 +267,17 @@ describe("workflowReducer", () => {
     expect(updated.successMetric).toBe("ROAS");
   });
 
+  it("defaults to exploring ideas and stores a run-specific Idea intent", () => {
+    expect(initialWorkflowState.ideaIntent).toBe("explore");
+
+    const updated = workflowReducer(initialWorkflowState, {
+      type: "set-idea-intent",
+      intent: "performance-iteration"
+    });
+
+    expect(updated.ideaIntent).toBe("performance-iteration");
+  });
+
   it("defaults to the fixed Single, Album, and UGC monthly mix", () => {
     expect(initialWorkflowState.creativeMix).toEqual([
       { id: "creative-mix-1", service: "single-static", quantity: 3 },

@@ -8,6 +8,8 @@ import { createInitialWorkflowState } from "./reducer";
 import { buildDirectionFixtures } from "./test-fixtures";
 import {
   buildCreativeMixInstructions,
+  buildHookRegenerationInstructions,
+  buildIdeaIntentInstructions,
   buildSuccessMetricInstructions,
   selectedHookGenerationModels,
   useGenerateMoreHooks
@@ -35,6 +37,48 @@ describe("buildSuccessMetricInstructions", () => {
     expect(buildSuccessMetricInstructions("ROAS")).toBe(
       "Primary success metric: ROAS. Make the angle support this outcome without inventing performance claims."
     );
+  });
+});
+
+describe("buildIdeaIntentInstructions", () => {
+  it("keeps an assigned topic while demanding genuinely different executions", () => {
+    const instructions = buildIdeaIntentInstructions("develop");
+
+    expect(instructions).toContain("Keep the assigned topic");
+    expect(instructions).toContain(
+      "audience tension or insight, product role, and creative mechanism"
+    );
+    expect(instructions).toContain(
+      "A different Hook format or wording alone is not a different idea"
+    );
+  });
+});
+
+describe("buildHookRegenerationInstructions", () => {
+  const direction = buildDirectionFixtures("Improve")[0]!;
+
+  it("keeps the strategic concept when polishing copy", () => {
+    const instructions = buildHookRegenerationInstructions(
+      direction,
+      "Make the Thai wording sound natural.",
+      "polish-copy"
+    );
+
+    expect(instructions).toContain("strategic concept should stay the same");
+    expect(instructions).toContain("Keep the same strategic idea");
+  });
+
+  it("allows the strategic concept to change instead of paraphrasing it", () => {
+    const instructions = buildHookRegenerationInstructions(
+      direction,
+      "The topic misses the brief.",
+      "replace-concept"
+    );
+
+    expect(instructions).toContain("Replace one existing idea");
+    expect(instructions).toContain("Use the original as an anti-reference");
+    expect(instructions).toContain("Do not merely paraphrase");
+    expect(instructions).not.toContain("Keep the same strategic idea");
   });
 });
 

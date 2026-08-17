@@ -12,6 +12,51 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("defaults legacy runs without Idea intent to explore", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "legacy-idea-intent",
+      now: "2026-08-17T00:00:00.000Z"
+    });
+    const snapshot = JSON.parse(
+      serializeWorkspace(workspace, "2026-08-17T00:01:00.000Z")
+    ) as {
+      data: { runsById: Record<string, { ideaIntent?: string }> };
+    };
+    const legacyRun = snapshot.data.runsById["legacy-idea-intent"];
+    if (!legacyRun) throw new Error("Serialized legacy run is missing.");
+    delete legacyRun.ideaIntent;
+
+    const restored = deserializeWorkspace(JSON.stringify(snapshot));
+
+    expect(restored?.runsById["legacy-idea-intent"]?.ideaIntent).toBe(
+      "explore"
+    );
+  });
+
+  it("preserves a selected Idea intent", () => {
+    let workspace = createInitialWorkspaceState({
+      runId: "performance-idea-intent",
+      now: "2026-08-17T00:00:00.000Z"
+    });
+    workspace = workspaceReducer(workspace, {
+      type: "apply-run-action",
+      runId: workspace.activeRunId,
+      now: "2026-08-17T00:01:00.000Z",
+      action: {
+        type: "set-idea-intent",
+        intent: "performance-iteration"
+      }
+    });
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(workspace, "2026-08-17T00:02:00.000Z")
+    );
+
+    expect(
+      restored?.runsById["performance-idea-intent"]?.ideaIntent
+    ).toBe("performance-iteration");
+  });
+
   it("defaults legacy runs without Hook idea mode to fresh research", () => {
     const workspace = createInitialWorkspaceState({
       runId: "legacy-hook-mode",

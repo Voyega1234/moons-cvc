@@ -72,6 +72,16 @@ adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
 in review UI. Missing `subheadline` fields in legacy saved runs still fall back
 to the stored concept.
 
+Each run stores an explicit Idea intent: explore new angles, develop an
+assigned topic, iterate from supplied performance learnings, or build a
+multi-product portfolio. The Brief confirmation modal owns the selector and
+the selected intent is added to Hook generation instructions. Saved runs
+without the field migrate to `explore`. Targeted Idea improvement has two
+modes: copy polish preserves the strategic concept, while concept replacement
+may change the tension, angle, product role, or creative mechanism but keeps
+the content type, verified product truth, campaign constraints, and commercial
+objective.
+
 `/playground` is the internal Hook Agent workbench. It reads the current
 `agent_hook.md` through the authenticated `/api/hook-agent-prompt` endpoint,
 allows a temporary prompt override, previews the exact request payload, and

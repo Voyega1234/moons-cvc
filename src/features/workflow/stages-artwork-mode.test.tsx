@@ -109,6 +109,16 @@ describe("Artwork generation settings", () => {
       />
     );
 
+    const ideaIntent = screen.getByRole("combobox", {
+      name: "Idea intent"
+    }) as HTMLSelectElement;
+    expect(ideaIntent.value).toBe("explore");
+    await user.selectOptions(ideaIntent, "performance-iteration");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "set-idea-intent",
+      intent: "performance-iteration"
+    });
+
     expect(
       screen.getByRole("button", { name: "Design system" }).getAttribute(
         "aria-pressed"

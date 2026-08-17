@@ -11,7 +11,7 @@ describe("agent_hook creative quality contract", () => {
 
     expect(prompt).toContain("Subheadline เป็น Optional มีหรือไม่มีก็ได้");
     expect(prompt).toContain(
-      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น `null`"
+      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น string ว่าง"
     );
     expect(prompt).toContain("ห้ามแต่งประโยคเพิ่มเพียงเพื่อให้ครบช่อง");
   });
@@ -141,7 +141,7 @@ describe("agent_hook creative quality contract", () => {
     );
     expect(prompt).toContain("Headline ต้องยืนได้ด้วยตัวเองเสมอ");
     expect(prompt).toContain(
-      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น `null`"
+      "หาก Headline สมบูรณ์แล้วให้คืน `subheadline` เป็น string ว่าง"
     );
     expect(prompt).toContain("อย่ากำหนดจำนวนคำถาม");
     expect(prompt).toContain(

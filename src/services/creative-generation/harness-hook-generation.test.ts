@@ -57,6 +57,7 @@ const run: WorkflowState = {
   outputSize: "1024x1024",
   quantity: 3,
   successMetric: "CTR",
+  ideaIntent: "explore",
   brief: "Generate hooks for AI SEO webinar.",
   attachments: ["brief.pdf"],
   uploadedMaterials: [

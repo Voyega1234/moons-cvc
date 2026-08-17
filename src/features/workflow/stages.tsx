@@ -92,7 +92,8 @@ import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 import {
   useGenerateMoreHooks,
   useRegenerateAllHooks,
-  useRegenerateHook
+  useRegenerateHook,
+  type HookRegenerationMode
 } from "./use-generate-hooks";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
 import {
@@ -4448,7 +4449,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
                   {regeneratingHookId === direction.id ? <Spinner /> : null}
                   {regeneratingHookId === direction.id
                     ? "Regenerating…"
-                    : "Rewrite hook"}
+                    : "Improve idea"}
                 </button>
                 <button
                   className="btn secondary small compass-angle-delete"
@@ -4519,8 +4520,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           loading={regeneratingHookId === regeneratingDirection.id}
           error={regenerateError}
           onClose={() => setRegeneratingDirectionId(null)}
-          onRegenerate={async (tone) => {
-            const succeeded = await regenerate(regeneratingDirection, tone);
+          onRegenerate={async (mode, feedback) => {
+            const succeeded = await regenerate(
+              regeneratingDirection,
+              feedback,
+              mode
+            );
             if (succeeded) setRegeneratingDirectionId(null);
           }}
         />
@@ -5019,9 +5024,13 @@ function HookRegenerateModal({
   loading: boolean;
   error: string | null;
   onClose: () => void;
-  onRegenerate: (feedback: string) => Promise<void>;
+  onRegenerate: (
+    mode: HookRegenerationMode,
+    feedback: string
+  ) => Promise<void>;
 }) {
   const [feedback, setFeedback] = useState("");
+  const [mode, setMode] = useState<HookRegenerationMode>("polish-copy");
 
   return (
     <div className="output-modal-backdrop" onClick={onClose}>
@@ -5034,8 +5043,8 @@ function HookRegenerateModal({
       >
         <div className="output-modal-head">
           <div>
-            <p className="eyebrow">Rewrite hook</p>
-            <h3 id="hook-regenerate-title">Rewrite this hook</h3>
+            <p className="eyebrow">Improve idea</p>
+            <h3 id="hook-regenerate-title">Improve this idea</h3>
           </div>
           <button
             className="btn ghost"
@@ -5051,18 +5060,37 @@ function HookRegenerateModal({
           <b>{direction.hook}</b>
         </div>
         <label className="output-modal-prompt-label">
+          <span>Change type</span>
+          <select
+            aria-label="Change type"
+            value={mode}
+            disabled={loading}
+            onChange={(event) =>
+              setMode(event.target.value as HookRegenerationMode)
+            }
+          >
+            <option value="polish-copy">Polish wording, keep concept</option>
+            <option value="replace-concept">Replace the concept</option>
+          </select>
+        </label>
+        <label className="output-modal-prompt-label">
           <span>What should change?</span>
           <textarea
             rows={4}
             value={feedback}
             disabled={loading}
-            placeholder="Example: Make it shorter, more product-led, clearer, more emotional, or turn it into a curiosity question."
+            placeholder={
+              mode === "replace-concept"
+                ? "Example: The topic misses the brief. Build a new angle around the customer's hesitation and product proof."
+                : "Example: Make it shorter, more natural, sharper, or closer to the brand's established tone."
+            }
             onChange={(event) => setFeedback(event.target.value)}
           />
         </label>
         <p className="hook-regenerate-note">
-          Only this hook will regenerate. The rest of the angle set will stay
-          untouched.
+          {mode === "replace-concept"
+            ? "This idea may change its tension, angle, product role, and creative mechanism."
+            : "The strategic concept will stay the same while its Hook and supporting copy are polished."}
         </p>
         {error ? <p className="repository-message error">{error}</p> : null}
         <div className="output-modal-actions">
@@ -5078,10 +5106,10 @@ function HookRegenerateModal({
             className="btn primary"
             type="button"
             disabled={loading || !feedback.trim()}
-            onClick={() => void onRegenerate(feedback)}
+            onClick={() => void onRegenerate(mode, feedback)}
           >
             {loading ? <Spinner /> : null}
-            {loading ? "Regenerating…" : "Regenerate hook"}
+            {loading ? "Improving…" : "Improve idea"}
           </button>
         </div>
       </div>

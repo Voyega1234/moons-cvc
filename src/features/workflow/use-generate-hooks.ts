@@ -33,6 +33,24 @@ export function buildSuccessMetricInstructions(
   return `Primary success metric: ${metric}. Make the angle support this outcome without inventing performance claims.`;
 }
 
+export function buildIdeaIntentInstructions(
+  intent: WorkflowState["ideaIntent"]
+): string {
+  const portfolioRule =
+    "Across the returned portfolio, make every direction meaningfully different in audience tension or insight, product role, and creative mechanism. A different Hook format or wording alone is not a different idea.";
+
+  switch (intent) {
+    case "develop":
+      return `IDEA INTENT — Develop the topic already defined in the brief. Keep the assigned topic and commercial objective, then expand it into distinct executions instead of replacing it with unrelated topics. ${portfolioRule}`;
+    case "performance-iteration":
+      return `IDEA INTENT — Performance iteration. Treat any supplied performance topic or learning as the strategic anchor. Explore distinct reasons, objections, proof, and executions without inventing performance data. ${portfolioRule}`;
+    case "multi-product":
+      return `IDEA INTENT — Multi-product portfolio. Cover the selected products deliberately, do not let one product dominate, and do not treat an SKU swap as a different idea. ${portfolioRule}`;
+    case "explore":
+      return `IDEA INTENT — Explore new angles. Discover brand-ownable tensions, use cases, product roles, or creative mechanisms; do not make wording unusual merely to appear fresh. ${portfolioRule}`;
+  }
+}
+
 export function buildCreativeMixInstructions(
   state: Pick<WorkflowState, "creativeMix" | "service" | "quantity">
 ): string {
@@ -47,12 +65,45 @@ function withCreativeMixInstructions(
   state: WorkflowState,
   instructions: string
 ): string {
-  return [buildCreativeMixInstructions(state), instructions]
+  return [
+    buildCreativeMixInstructions(state),
+    buildIdeaIntentInstructions(state.ideaIntent),
+    instructions
+  ]
     .filter(Boolean)
     .join("\n");
 }
 
 const GENERATE_MORE_IDEA_COUNT = 3;
+
+export type HookRegenerationMode = "polish-copy" | "replace-concept";
+
+export function buildHookRegenerationInstructions(
+  direction: WorkflowState["directions"][number],
+  feedback: string,
+  mode: HookRegenerationMode
+): string {
+  const shared = [
+    `Original hook: ${direction.hook}`,
+    `Original concept: ${direction.concept}`,
+    `Improvement feedback: ${feedback}`
+  ];
+
+  return mode === "replace-concept"
+    ? [
+        "Replace one existing idea whose strategic concept is not working.",
+        ...shared,
+        "Use the original as an anti-reference. Change the audience tension or insight, strategic angle, product role, or creative mechanism according to the feedback.",
+        "Keep the content type, verified product truth, campaign constraints, and commercial objective. Do not merely paraphrase the original hook.",
+        "Return the replacement as the first direction."
+      ].join("\n")
+    : [
+        "Polish one existing idea whose strategic concept should stay the same.",
+        ...shared,
+        "Keep the same strategic idea, audience tension, product truth, and CTA intent.",
+        "Apply the feedback to the hook and supporting copy. Return the replacement as the first direction."
+      ].join("\n");
+}
 
 export function selectedHookGenerationModels(
   state: Pick<WorkflowState, "hookGenerationModel" | "hookGenerationModels">
@@ -290,7 +341,11 @@ export function useRegenerateHook(
   const [error, setError] = useState<string | null>(null);
 
   const regenerate = useCallback(
-    async (direction: WorkflowState["directions"][number], feedback: string) => {
+    async (
+      direction: WorkflowState["directions"][number],
+      feedback: string,
+      mode: HookRegenerationMode = "polish-copy"
+    ) => {
       const normalizedFeedback = feedback.trim();
       if (!normalizedFeedback) {
         setError("Add clear rewrite feedback first.");
@@ -319,12 +374,11 @@ export function useRegenerateHook(
       };
 
       const extraInstructions = withCreativeMixInstructions(targetedState, [
-        "Regenerate one existing hook instead of creating an unrelated idea.",
-        `Original hook: ${direction.hook}`,
-        `Original concept: ${direction.concept}`,
-        `Rewrite feedback: ${normalizedFeedback}`,
-        "Keep the same strategic idea, audience tension, product truth, and CTA intent.",
-        "Apply the feedback to the hook and supporting copy. Return the replacement as the first direction."
+        buildHookRegenerationInstructions(
+          direction,
+          normalizedFeedback,
+          mode
+        )
       ].join("\n"));
 
       const generation = generateDirectionsForState(

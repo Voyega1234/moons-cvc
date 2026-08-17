@@ -37,6 +37,15 @@ const confirmationServiceIcons: Partial<Record<ServiceType, string>> = {
   "ugc-video": "UG"
 };
 
+const ideaIntentDescriptions: Record<WorkflowState["ideaIntent"], string> = {
+  explore: "Find new, brand-ownable angles from the brief and research.",
+  develop: "Keep the assigned topic and turn it into distinct executions.",
+  "performance-iteration":
+    "Use supplied performance learnings as the strategic anchor.",
+  "multi-product":
+    "Distribute the idea portfolio deliberately across selected products."
+};
+
 function productInitials(title: string): string {
   return title
     .split(/\s+/)
@@ -248,6 +257,27 @@ export function BriefConfirmationModal({
               </span>
             </header>
             <div className="confirm-brief-copy">{state.brief.trim()}</div>
+            <label className="confirm-idea-intent">
+              <span className="confirm-generation-label">Idea intent</span>
+              <select
+                aria-label="Idea intent"
+                value={state.ideaIntent}
+                onChange={(event) =>
+                  dispatch({
+                    type: "set-idea-intent",
+                    intent: event.target.value as WorkflowState["ideaIntent"]
+                  })
+                }
+              >
+                <option value="explore">Explore new angles</option>
+                <option value="develop">Develop an assigned topic</option>
+                <option value="performance-iteration">
+                  Iterate from performance learnings
+                </option>
+                <option value="multi-product">Build a multi-product mix</option>
+              </select>
+              <small>{ideaIntentDescriptions[state.ideaIntent]}</small>
+            </label>
           </section>
 
           <section className="confirm-section full">

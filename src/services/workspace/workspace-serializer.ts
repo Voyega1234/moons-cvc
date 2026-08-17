@@ -33,7 +33,10 @@ import type {
   WorkspaceState,
   WorkflowState
 } from "../../features/workflow/model";
-import { successMetrics } from "../../features/workflow/model";
+import {
+  ideaIntents,
+  successMetrics
+} from "../../features/workflow/model";
 import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
@@ -183,6 +186,10 @@ function parseRun(value: unknown): WorkflowState | null {
     value.successMetric === undefined
       ? "CVR"
       : parseMember(value.successMetric, successMetrics);
+  const ideaIntent =
+    value.ideaIntent === undefined
+      ? "explore"
+      : parseMember(value.ideaIntent, ideaIntents);
   const brief = parseString(value.brief, true);
   const artworkBrief =
     value.artworkBrief === undefined
@@ -234,6 +241,7 @@ function parseRun(value: unknown): WorkflowState | null {
     !albumFormat ||
     !outputSize ||
     !successMetric ||
+    !ideaIntent ||
     quantity === null ||
     brief === null ||
     artworkBrief === null ||
@@ -321,6 +329,7 @@ function parseRun(value: unknown): WorkflowState | null {
     outputSize,
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
+    ideaIntent,
     brief,
     artworkBrief,
     attachments,

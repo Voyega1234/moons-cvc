@@ -29,6 +29,13 @@ export type AppView = "overview" | "my-work" | "studio";
 
 export const successMetrics = ["CTR", "CVR", "CPA", "ROAS"] as const;
 export type SuccessMetric = (typeof successMetrics)[number];
+export const ideaIntents = [
+  "explore",
+  "develop",
+  "performance-iteration",
+  "multi-product"
+] as const;
+export type IdeaIntent = (typeof ideaIntents)[number];
 export type GenerationStatus = "idle" | "running" | "failed";
 export type IdeaGenerationStatus = GenerationStatus;
 export type ArtworkGenerationStatus = GenerationStatus;
@@ -91,6 +98,7 @@ export interface WorkflowState {
   /** Compatibility alias for the total creative-mix quantity. */
   quantity: number;
   successMetric: SuccessMetric;
+  ideaIntent: IdeaIntent;
   brief: string;
   /** Optional final-art instruction. Non-empty values are mandatory for artwork generation. */
   artworkBrief?: string;
@@ -149,6 +157,7 @@ export type WorkflowAction =
       quantity: number;
     }
   | { type: "set-success-metric"; metric: SuccessMetric }
+  | { type: "set-idea-intent"; intent: IdeaIntent }
   | { type: "set-brief"; brief: string }
   | { type: "set-artwork-brief"; brief: string }
   | { type: "attach-files"; names: readonly string[] }

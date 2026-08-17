@@ -148,6 +148,7 @@ export function createInitialWorkflowState({
     outputSize: defaultArtworkOutputSize,
     quantity: 6,
     successMetric: "CVR",
+    ideaIntent: "explore",
     brief: defaultBrief,
     artworkBrief: "",
     attachments: [],
@@ -559,6 +560,8 @@ export function workflowReducer(
     }
     case "set-success-metric":
       return { ...state, successMetric: action.metric };
+    case "set-idea-intent":
+      return { ...state, ideaIntent: action.intent };
     case "set-brief":
       return { ...state, brief: action.brief };
     case "attach-files":

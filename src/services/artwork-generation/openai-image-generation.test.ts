@@ -35,6 +35,7 @@ const run: WorkflowState = {
   outputSize: "1024x1024",
   quantity: 1,
   successMetric: "CTR",
+  ideaIntent: "explore",
   brief: "Launch a soft summer bouquet offer.",
   attachments: [],
   uploadedMaterials: [],

@@ -2399,8 +2399,8 @@ describe("redesigned workflow stages", () => {
       Array.from(
         angleCards[0]?.querySelectorAll(".compass-angle-card-foot .btn") ?? []
       ).map((button) => button.textContent)
-    ).toEqual(["Rewrite hook", "Delete"]);
-    expect(stage.getAllByRole("button", { name: "Rewrite hook" })).toHaveLength(
+    ).toEqual(["Improve idea", "Delete"]);
+    expect(stage.getAllByRole("button", { name: "Improve idea" })).toHaveLength(
       state.directions.length
     );
     expect(stage.getAllByRole("button", { name: "Delete" })).toHaveLength(
@@ -2411,14 +2411,18 @@ describe("redesigned workflow stages", () => {
 
     await user.click(
       within(angleCards[0] as HTMLElement).getByRole("button", {
-        name: "Rewrite hook"
+        name: "Improve idea"
       })
     );
     const rewriteDialog = stage.getByRole("dialog", {
-      name: "Rewrite this hook"
+      name: "Improve this idea"
     });
     expect(rewriteDialog).toBeTruthy();
     expect(within(rewriteDialog).getByText(state.directions[0]!.hook)).toBeTruthy();
+    expect(stage.getByLabelText("Change type")).toHaveProperty(
+      "value",
+      "polish-copy"
+    );
     expect(stage.getByLabelText("What should change?")).toBeTruthy();
     await user.click(stage.getByRole("button", { name: "Cancel" }));
 
