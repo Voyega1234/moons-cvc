@@ -3205,6 +3205,10 @@ describe("redesigned workflow stages", () => {
     expect(visibleText[0]).toContain(
       "ค้นพบกลิ่นหอมที่ช่วยเติมเต็มทุกพื้นที่"
     );
+    const captionLabel = slides[0]?._slideObjects.find((object) =>
+      object.text?.some((run) => run.text === "CAPTION")
+    );
+    expect(captionLabel?.options.fontSize).toBe(9);
     const captionText = slides[0]?._slideObjects.find(
       (object) =>
         typeof object.options.fontSize === "number" &&
@@ -3212,7 +3216,8 @@ describe("redesigned workflow stages", () => {
         object.text?.some((run) => run.text.includes("Make Time to Let Your Space"))
     );
     expect(captionText).toBeDefined();
-    expect(captionText?.options.fontSize).toBe(11);
+    expect(captionText?.options.fontSize).toBe(9);
+    expect(captionText?.options.lineSpacing).toBe(10.35);
     expect(captionText?.text?.map((run) => run.text).join("")).toBe(
       longCaption
     );

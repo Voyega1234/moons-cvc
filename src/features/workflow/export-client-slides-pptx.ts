@@ -307,7 +307,7 @@ function addCaptionBlock(
     h: 0.2,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
+    fontSize: 9,
     bold: true,
     color: COLORS.muted,
     charSpacing: 1.1
@@ -319,12 +319,12 @@ function addCaptionBlock(
     h: options.h - 0.35,
     margin: 0,
     ...localizedTextStyle(text),
-    fontSize: 11,
+    fontSize: 9,
     color: COLORS.ink,
     breakLine: false,
     valign: "top",
     fit: "shrink",
-    lineSpacing: 15,
+    lineSpacing: 10.35,
     paraSpaceAfter: 4
   });
 }
