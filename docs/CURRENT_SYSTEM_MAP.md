@@ -188,8 +188,11 @@ and continues brand analysis with the other available sources. Found tabs use a
 deterministic heading/placeholder extraction first, followed by one grounded
 GPT Luna QC request. Luna may reassign or omit fields, but every returned value
 is rebuilt server-side from verbatim substrings found in the original Sheet
-cells. Ungrounded evidence, duplicate keys, an unavailable QC provider, or an
-empty reviewed result stops the import instead of persisting unchecked data.
+cells. Ungrounded evidence, duplicate keys, or an unavailable QC provider stops
+the import instead of persisting unchecked data. An empty reviewed result is
+treated as no Questionnaire context so onboarding can continue with the other
+sources. The Questionnaire Google Sheet URL is optional; leaving it blank skips
+Questionnaire import.
 
 ## Current UI ownership
 

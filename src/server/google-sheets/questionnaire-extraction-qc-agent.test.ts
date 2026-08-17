@@ -124,6 +124,10 @@ describe("reviewQuestionnaireExtractionWithLuna", () => {
         output_text: JSON.stringify({
           fields: [
             {
+              key: "brand_name_th",
+              sourceQuotes: []
+            },
+            {
               key: "brand_name_en",
               sourceQuotes: ["Real Brand", "Invented Brand"]
             },
@@ -160,7 +164,7 @@ describe("reviewQuestionnaireExtractionWithLuna", () => {
     ]);
   });
 
-  it("rejects a Luna result with no grounded Sheet evidence", async () => {
+  it("returns no questionnaire fields when Luna finds no grounded answers", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({
         output_text: JSON.stringify({
@@ -181,7 +185,7 @@ describe("reviewQuestionnaireExtractionWithLuna", () => {
         apiKey: "openai-key",
         fetchImpl
       })
-    ).rejects.toThrow("found no grounded answered fields");
+    ).resolves.toEqual([]);
   });
 
   it("surfaces provider failures instead of accepting unchecked extraction", async () => {

@@ -1688,7 +1688,7 @@ describe("redesigned workflow stages", () => {
     ).toBeTruthy();
   });
 
-  it("continues brand analysis without Questionnaire when the Sheet has no supported tab", async () => {
+  it("continues brand analysis when the questionnaire URL is omitted", async () => {
     const user = userEvent.setup();
     const draftBrand = {
       ...brands[0]!,
@@ -1699,8 +1699,7 @@ describe("redesigned workflow stages", () => {
       existsInSystem: true
     };
     const queueExistingClient = vi.fn(async () => ({ jobId: "job-without-questionnaire" }));
-    const questionnaireUrl =
-      "https://docs.google.com/spreadsheets/d/no-questionnaire-tab/edit?gid=0";
+    const readQuestionnaire = vi.fn(async () => null);
     const state = {
       ...createInitialWorkflowState({
         id: "run-without-questionnaire",
@@ -1716,7 +1715,7 @@ describe("redesigned workflow stages", () => {
         }}
         mappingRepository={{
           list: async () => [],
-          readQuestionnaire: async () => null
+          readQuestionnaire
         }}
       >
         <ClientIntakeProvider
@@ -1731,16 +1730,13 @@ describe("redesigned workflow stages", () => {
     const stage = within(view.container);
 
     await user.click(await stage.findByRole("button", { name: "Set up brand" }));
-    await user.type(
-      stage.getByLabelText("Questionnaire Google Sheet URL"),
-      questionnaireUrl
-    );
     await user.click(stage.getByRole("button", { name: "Analyze brand" }));
 
     expect(queueExistingClient).toHaveBeenCalledWith({
       clientId: draftBrand.id,
       facebookUrl: draftBrand.facebookUrl
     });
+    expect(readQuestionnaire).not.toHaveBeenCalled();
     expect(
       await stage.findByRole("dialog", {
         name: "Draft Brand Without Questionnaire is in the queue."

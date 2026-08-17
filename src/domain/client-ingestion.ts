@@ -69,7 +69,7 @@ export function validateQuestionnaireGoogleSheetUrl(
   value: string
 ): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return "Questionnaire Google Sheet URL is required.";
+  if (!trimmed) return null;
 
   let parsed: URL;
   try {

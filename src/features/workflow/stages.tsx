@@ -876,6 +876,7 @@ async function importQuestionnaireFromGoogleSheet(
     sheetUrl: string
   ) => Promise<OnboardingQuestionnaireSource | null>
 ): Promise<OnboardingQuestionnaireSource | null> {
+  if (!sheetUrl.trim()) return null;
   const urlError = validateQuestionnaireGoogleSheetUrl(sheetUrl);
   if (urlError) throw new Error(urlError);
 
@@ -1086,20 +1087,19 @@ function OnboardingQuestionnaireField({
   return (
     <div className="client-onboarding-questionnaire">
       <label>
-        <span>Questionnaire Google Sheet URL</span>
+        <span>Questionnaire Google Sheet URL (optional)</span>
         <input
           aria-label="Questionnaire Google Sheet URL"
           type="url"
           value={value}
           disabled={disabled}
-          required
           placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=..."
           onChange={(event) => onChange(event.target.value)}
         />
         <small>
-          If the Sheet contains a Questionnaire tab (for example 1. Questionnaire
-          or Questionaies), Creative Compass imports it as read-only onboarding
-          context. If not, analysis continues without it.
+          Optional. If the Sheet contains a Questionnaire tab (for example 1.
+          Questionnaire or Questionaies), Creative Compass imports it as read-only
+          onboarding context. Leave blank to continue without it.
         </small>
       </label>
     </div>

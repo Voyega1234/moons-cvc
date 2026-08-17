@@ -30,6 +30,7 @@ interface WorkspaceContextValue {
   persistenceStatus: WorkspacePersistenceStatus;
   lastSavedAt: string | null;
   flush: () => Promise<void>;
+  reloadLatestWorkspace: () => Promise<void>;
   checkpoints: readonly WorkspaceCheckpoint[];
   checkpointError: Error | null;
   checkpointBusy: boolean;
@@ -162,6 +163,37 @@ export function WorkspaceProvider({
     await saveSnapshot(snapshot, version, true);
   }, [saveSnapshot]);
 
+  const reloadLatestWorkspace = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const version = ++saveVersionRef.current;
+    setPersistenceError(null);
+    setPersistenceStatus("saving");
+
+    try {
+      const latest = await repository.load();
+      if (!latest) {
+        throw new Error("No saved cloud workspace was found.");
+      }
+      if (version !== saveVersionRef.current) return;
+
+      workspaceRef.current = latest;
+      setWorkspace(latest);
+      setCheckpoints([]);
+      setCheckpointError(null);
+      setPersistenceStatus("saved");
+      setLastSavedAt(nowIso());
+    } catch (error: unknown) {
+      if (version !== saveVersionRef.current) return;
+      setPersistenceError(
+        toError(error, "Could not load the latest cloud workspace.")
+      );
+      setPersistenceStatus("error");
+    }
+  }, [repository]);
+
   const refreshCheckpoints = useCallback(
     async (runId?: string) => {
       const targetRunId = runId ?? workspaceRef.current?.activeRunId;
@@ -289,6 +321,7 @@ export function WorkspaceProvider({
         persistenceStatus,
         lastSavedAt,
         flush,
+        reloadLatestWorkspace,
         checkpoints,
         checkpointError,
         checkpointBusy,

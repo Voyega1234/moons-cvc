@@ -88,7 +88,8 @@ function WorkflowApp() {
     dispatch: workspaceDispatch,
     persistenceError,
     persistenceStatus,
-    lastSavedAt
+    lastSavedAt,
+    reloadLatestWorkspace
   } = useWorkspace();
   const state = getActiveRun(workspace);
   const collaboration = useRunCollaboration();
@@ -378,6 +379,25 @@ function WorkflowApp() {
             <span className="compass-action-toast-copy">
               <b>{visibleToast.title}</b>
               <span>{visibleToast.message}</span>
+              {persistenceError ? (
+                <button
+                  className="btn secondary small compass-action-toast-reload"
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Load the latest cloud version? Local changes that could not be saved will be replaced."
+                      )
+                    ) {
+                      return;
+                    }
+                    void reloadLatestWorkspace();
+                  }}
+                >
+                  <ArrowClockwise size={13} weight="bold" aria-hidden="true" />
+                  Load latest cloud version
+                </button>
+              ) : null}
             </span>
           </div>
         </div>

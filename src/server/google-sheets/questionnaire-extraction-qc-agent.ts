@@ -198,11 +198,12 @@ function parseGroundedFields(
       throw new Error(`Questionnaire QC fields[${index}].key is invalid.`);
     }
     seen.add(key);
-    if (!Array.isArray(item.sourceQuotes) || !item.sourceQuotes.length) {
+    if (!Array.isArray(item.sourceQuotes)) {
       throw new Error(
-        `Questionnaire QC fields[${index}].sourceQuotes must contain evidence.`
+        `Questionnaire QC fields[${index}].sourceQuotes must be an array.`
       );
     }
+    if (!item.sourceQuotes.length) return [];
     const quotes = item.sourceQuotes.flatMap((quote, quoteIndex) => {
       const value = readString(
         quote,
@@ -223,9 +224,6 @@ function parseGroundedFields(
     ];
   });
 
-  if (!fields.length) {
-    throw new Error("GPT Luna questionnaire QC found no grounded answered fields.");
-  }
   return fields;
 }
 

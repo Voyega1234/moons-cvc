@@ -25,6 +25,7 @@ function WorkspaceProbe() {
     persistenceStatus,
     lastSavedAt,
     flush,
+    reloadLatestWorkspace,
     checkpoints,
     checkpointError,
     createCheckpoint,
@@ -47,6 +48,9 @@ function WorkspaceProbe() {
       </button>
       <button type="button" onClick={() => void flush()}>
         Flush
+      </button>
+      <button type="button" onClick={() => void reloadLatestWorkspace()}>
+        Load latest
       </button>
       <button type="button" onClick={() => void createCheckpoint("regenerate")}>
         Checkpoint
@@ -185,6 +189,92 @@ describe("WorkspaceProvider", () => {
     expect(await screen.findByText("failed-save-run")).toBeTruthy();
     expect(await screen.findByText("error", {}, { timeout: 1_500 })).toBeTruthy();
     expect(screen.getByText("Cloud unavailable")).toBeTruthy();
+  });
+
+  it("replaces stale local state with the latest loaded workspace", async () => {
+    const stale = createInitialWorkspaceState({
+      runId: "reload-run",
+      now: "2026-07-20T15:00:00.000Z"
+    });
+    const latest = {
+      ...stale,
+      runsById: {
+        ...stale.runsById,
+        "reload-run": {
+          ...getActiveRun(stale),
+          brief: "Latest cloud brief"
+        }
+      }
+    };
+    const load = vi
+      .fn<() => Promise<WorkspaceState | null>>()
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce(latest);
+    const save = vi
+      .fn<(workspace: WorkspaceState) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("Reload the workspace before editing"))
+      .mockResolvedValue(undefined);
+    const repository: WorkspaceRepository = {
+      load,
+      save,
+      clear: vi.fn(async () => undefined)
+    };
+
+    render(
+      <WorkspaceProvider repository={repository}>
+        <WorkspaceProbe />
+      </WorkspaceProvider>
+    );
+
+    expect(
+      await screen.findByText("Reload the workspace before editing", {}, {
+        timeout: 1_500
+      })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load latest" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-brief").textContent).toBe(
+        "Latest cloud brief"
+      )
+    );
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Reload the workspace before editing")).toBeNull();
+  });
+
+  it("keeps local state open when loading the latest workspace fails", async () => {
+    const stale = createInitialWorkspaceState({
+      runId: "reload-failure-run",
+      now: "2026-07-20T15:00:00.000Z"
+    });
+    const load = vi
+      .fn<() => Promise<WorkspaceState | null>>()
+      .mockResolvedValueOnce(stale)
+      .mockRejectedValueOnce(new Error("Cloud reload failed"));
+    const repository: WorkspaceRepository = {
+      load,
+      save: vi.fn(async () => {
+        throw new Error("Reload the workspace before editing");
+      }),
+      clear: vi.fn(async () => undefined)
+    };
+
+    render(
+      <WorkspaceProvider repository={repository}>
+        <WorkspaceProbe />
+      </WorkspaceProvider>
+    );
+
+    expect(
+      await screen.findByText("Reload the workspace before editing", {}, {
+        timeout: 1_500
+      })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load latest" }));
+
+    expect(await screen.findByText("Cloud reload failed")).toBeTruthy();
+    expect(screen.getByText("reload-failure-run")).toBeTruthy();
+    expect(screen.getByText("error")).toBeTruthy();
   });
 
   it("shows the message and code from Supabase error objects", async () => {

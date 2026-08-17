@@ -236,11 +236,7 @@ export async function readOnboardingQuestionnaireFromGoogleSheet({
   const extractedFields = reviewExtraction
     ? await reviewExtraction({ rows, extractedFields: deterministicFields })
     : deterministicFields;
-  if (!extractedFields.length) {
-    throw new Error(
-      `No questionnaire fields were found in "${questionnaireSheetTitle}". Expected placeholders such as {{brand_name_en}} or a supported questionnaire heading.`
-    );
-  }
+  if (!extractedFields.length) return null;
   const text = questionnaireFieldsToText(extractedFields, questionnaireSheetTitle);
   const facebookUrls = extractFacebookUrls(extractedFields);
 

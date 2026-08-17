@@ -178,6 +178,39 @@ describe("readOnboardingQuestionnaireFromGoogleSheet", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("returns null when the Questionnaire tab has no reviewed answered fields", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          properties: { title: "Client portal" },
+          sheets: [
+            { properties: { sheetId: 0, title: "1. Questionnaire" } }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [
+            ["{{brand_name_en}}", ""],
+            ["{{brand_description}}", "Please fill out this field"]
+          ]
+        })
+      );
+    const reviewExtraction = vi.fn(async () => []);
+
+    await expect(
+      readOnboardingQuestionnaireFromGoogleSheet({
+        sheetUrl:
+          "https://docs.google.com/spreadsheets/d/empty-questionnaire/edit",
+        accessToken: "google-provider-token",
+        fetchImpl,
+        reviewExtraction
+      })
+    ).resolves.toBeNull();
+    expect(reviewExtraction).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the private "1. Questionnaire" tab with the signed-in Google token', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

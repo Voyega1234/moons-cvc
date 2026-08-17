@@ -40,10 +40,8 @@ describe("client ingestion domain rules", () => {
     );
   });
 
-  it("requires a normal Google Sheet URL for the questionnaire", () => {
-    expect(validateQuestionnaireGoogleSheetUrl("")).toBe(
-      "Questionnaire Google Sheet URL is required."
-    );
+  it("allows an omitted questionnaire URL and validates one when supplied", () => {
+    expect(validateQuestionnaireGoogleSheetUrl("")).toBeNull();
     expect(validateQuestionnaireGoogleSheetUrl("not a url")).toBe(
       "Enter a valid Google Sheet URL."
     );
