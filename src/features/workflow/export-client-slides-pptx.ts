@@ -1116,18 +1116,19 @@ function addUgcClientSlide(
     `${brief.moodAndTone} ${brief.productionStyle}`,
     220
   );
+  const MOOD_TEXT_HEIGHT = 1.1;
   slide.addText(mood, {
     x: UGC_LEFT_COLUMN_X,
     y: moodTextY,
     w: UGC_LEFT_COLUMN_WIDTH,
-    h: 0.82,
+    h: MOOD_TEXT_HEIGHT,
     margin: 0,
     ...localizedTextStyle(mood),
     fontSize: fontSizeForFixedTextBox(
       mood,
       UGC_LEFT_COLUMN_WIDTH,
-      0.82,
-      [9.5, 8.5, 7.5]
+      MOOD_TEXT_HEIGHT,
+      [10.5, 9.5, 8.5]
     ),
     color: COLORS.ink,
     breakLine: false,
