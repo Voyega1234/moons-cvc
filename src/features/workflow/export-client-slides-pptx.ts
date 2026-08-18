@@ -1023,6 +1023,13 @@ function addUgcClientSlide(
   const STORYLINE_TO_DIVIDER_GAP = 0.1;
   const DIVIDER_TO_MOOD_HEADING_GAP = 0.24;
   const MOOD_HEADING_TO_TEXT_GAP = 0.4;
+  // fontSizeForFixedTextBox/estimatedWrappedLines use a 1.28 line-height
+  // factor tuned as a safety margin for picking a font size that fits a
+  // *fixed* box — harmless there since leftover space was never visible.
+  // Reusing that factor to size a *dynamic* box makes the margin visible as
+  // dead space above the next section, so this cascade uses a tighter
+  // factor instead (still >1 to keep some buffer against underestimating).
+  const LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR = 1.15;
 
   addUgcSectionHeading(slide, "Concept Idea:", CONCEPT_HEADING_Y);
   const concept = clampText(direction?.concept, 285);
@@ -1038,7 +1045,7 @@ function addUgcClientSlide(
       0.3,
       (estimatedWrappedLines(concept, UGC_LEFT_COLUMN_WIDTH, conceptFontSize) *
         conceptFontSize *
-        1.28) /
+        LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR) /
         72
     )
   );
@@ -1078,7 +1085,7 @@ function addUgcClientSlide(
   );
   const storylineHeight = Math.max(
     STORYLINE_MIN_HEIGHT,
-    (storylineLines * 9.6 * 1.28) / 72
+    (storylineLines * 9.6 * LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR) / 72
   );
   const storylineDividerY =
     storylineTextY + storylineHeight + STORYLINE_TO_DIVIDER_GAP;
