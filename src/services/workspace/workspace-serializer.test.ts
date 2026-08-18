@@ -863,6 +863,131 @@ describe("workspace serializer", () => {
       visual: "ภาพซีน 1",
       textOverlay: "ข้อความซีน 1"
     });
+    expect(restored?.runsById["ugc-scenes"]?.directions[0]?.ugcScript).toBeUndefined();
+  });
+
+  it("round-trips the rich UGC creator script", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "ugc-script-doc",
+      now: "2026-08-11T10:00:00.000Z"
+    });
+    const run = workspace.runsById[workspace.activeRunId];
+    if (!run) throw new Error("Expected active run.");
+    const withUgcScript = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [run.id]: {
+          ...run,
+          directions: [
+            {
+              id: "ugc-script",
+              service: "ugc-video" as const,
+              hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+              concept: "Creator ทำมื้อเช้าให้ดูจริง",
+              why: "ทำให้เห็นประโยชน์ของสินค้า",
+              visual: "ครัวจริง แสงธรรมชาติ",
+              cta: "เลือก Colormic 24cm",
+              caption: "เช้ารีบก็ยังกินดีได้",
+              selected: false,
+              ugcScript: {
+                directionId: "ugc-script",
+                format: {
+                  duration: "30-35 วินาที",
+                  aspectRatio: "9:16",
+                  style: "Comedic myth-busting"
+                },
+                castDirection: "พนักงาน: energy สูง",
+                beats: [
+                  {
+                    id: "beat-1",
+                    role: "misconception" as const,
+                    title: "Misconception #1",
+                    timecode: "0:05-0:09",
+                    lines: [
+                      {
+                        speaker: "customer" as const,
+                        speakerLabel: "ลูกค้า",
+                        line: "ต้องเปลี่ยนกระทะทั้งชุดใช่ไหม?"
+                      },
+                      {
+                        speaker: "staff" as const,
+                        speakerLabel: "พนักงาน",
+                        line: "เลือกใบเดียวก่อนก็ได้!",
+                        direction: "สวนทันที",
+                        sfx: "pop"
+                      }
+                    ]
+                  }
+                ],
+                shotList: ["Close-up กระทะ"],
+                editingNotes: ["Cut เร็ว"]
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(withUgcScript, "2026-08-11T10:01:00.000Z")
+    );
+
+    const restoredScript =
+      restored?.runsById["ugc-script-doc"]?.directions[0]?.ugcScript;
+    expect(restoredScript?.beats).toHaveLength(1);
+    expect(restoredScript?.beats[0]?.lines).toHaveLength(2);
+    expect(restoredScript?.beats[0]?.lines[1]).toMatchObject({
+      speaker: "staff",
+      line: "เลือกใบเดียวก่อนก็ได้!",
+      direction: "สวนทันที",
+      sfx: "pop"
+    });
+    expect(restoredScript?.shotList).toEqual(["Close-up กระทะ"]);
+  });
+
+  it("still loads a saved direction when its UGC script is corrupted, degrading gracefully", () => {
+    const workspace = createInitialWorkspaceState({
+      runId: "ugc-script-corrupt",
+      now: "2026-08-11T10:00:00.000Z"
+    });
+    const run = workspace.runsById[workspace.activeRunId];
+    if (!run) throw new Error("Expected active run.");
+    const withCorruptScript = {
+      ...workspace,
+      runsById: {
+        ...workspace.runsById,
+        [run.id]: {
+          ...run,
+          directions: [
+            {
+              id: "ugc-corrupt",
+              service: "ugc-video" as const,
+              hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+              concept: "Creator ทำมื้อเช้าให้ดูจริง",
+              why: "ทำให้เห็นประโยชน์ของสินค้า",
+              visual: "ครัวจริง แสงธรรมชาติ",
+              cta: "เลือก Colormic 24cm",
+              caption: "เช้ารีบก็ยังกินดีได้",
+              selected: false,
+              ugcScript: { beats: "not-an-array" }
+            }
+          ]
+        }
+      }
+    };
+
+    const restored = deserializeWorkspace(
+      serializeWorkspace(
+        withCorruptScript as never,
+        "2026-08-11T10:01:00.000Z"
+      )
+    );
+
+    expect(restored?.runsById["ugc-script-corrupt"]?.directions).toHaveLength(1);
+    expect(
+      restored?.runsById["ugc-script-corrupt"]?.directions[0]?.ugcScript
+    ).toBeUndefined();
   });
 
   it("loads older snapshots without a success metric as CVR", () => {

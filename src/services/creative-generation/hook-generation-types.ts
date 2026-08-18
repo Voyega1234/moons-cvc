@@ -9,8 +9,13 @@ import {
   ctaActionTypes,
   normalizeFormatBeatsForService,
   serviceTypes,
+  ugcScriptBeatRoles,
+  ugcScriptSpeakers,
   type CreativeDirection,
   type ServiceType,
+  type UgcScriptBeatRole,
+  type UgcScriptDocument,
+  type UgcScriptSpeaker,
   type UgcVideoBrief
 } from "../../domain/creative-run";
 import type { WorkflowState } from "../../features/workflow/model";
@@ -51,6 +56,7 @@ export interface RawDirection {
   formatBeats?: unknown;
   albumFormat?: unknown;
   ugcBrief?: unknown;
+  ugcScript?: unknown;
   ctaActionType?: unknown;
   ctaDestination?: unknown;
   contactLine?: unknown;
@@ -121,9 +127,14 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
           formatBeats
         })
       : undefined;
+  const id = typeof raw.id === "string" && raw.id ? raw.id : `direction-${index + 1}`;
+  const ugcScript =
+    service === "ugc-video"
+      ? normalizeUgcScriptDocument(raw.ugcScript, id)
+      : undefined;
 
   return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : `direction-${index + 1}`,
+    id,
     service,
     hook: raw.hook,
     subheadline,
@@ -145,6 +156,7 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
     formatBeats,
     ...(albumFormat ? { albumFormat } : {}),
     ...(ugcBrief ? { ugcBrief } : {}),
+    ...(ugcScript ? { ugcScript } : {}),
     ...(typeof raw.ctaActionType === "string" &&
     ctaActionTypes.includes(raw.ctaActionType as (typeof ctaActionTypes)[number])
       ? { ctaActionType: raw.ctaActionType as (typeof ctaActionTypes)[number] }
@@ -271,5 +283,99 @@ function normalizeUgcVideoBrief(
     ),
     referenceDirection: text("referenceDirection", fallback.visual),
     scenes: scenes.length === 4 ? scenes : fallbackScenes
+  };
+}
+
+function normalizeUgcScriptDocument(
+  value: unknown,
+  directionId: string
+): UgcScriptDocument | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.beats)) return undefined;
+
+  const text = (candidate: unknown) =>
+    typeof candidate === "string" ? candidate.trim() : "";
+  const format =
+    record.format && typeof record.format === "object" && !Array.isArray(record.format)
+      ? (record.format as Record<string, unknown>)
+      : {};
+
+  const beats = record.beats.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const beat = item as Record<string, unknown>;
+    const role =
+      typeof beat.role === "string" &&
+      ugcScriptBeatRoles.includes(beat.role as UgcScriptBeatRole)
+        ? (beat.role as UgcScriptBeatRole)
+        : undefined;
+    if (!role) return [];
+
+    const linesSource = Array.isArray(beat.lines) ? beat.lines : [];
+    const lines = linesSource.flatMap((lineItem) => {
+      if (!lineItem || typeof lineItem !== "object" || Array.isArray(lineItem)) {
+        return [];
+      }
+      const lineRecord = lineItem as Record<string, unknown>;
+      const speaker =
+        typeof lineRecord.speaker === "string" &&
+        ugcScriptSpeakers.includes(lineRecord.speaker as UgcScriptSpeaker)
+          ? (lineRecord.speaker as UgcScriptSpeaker)
+          : undefined;
+      const line = text(lineRecord.line);
+      if (!speaker || !line) return [];
+      return [
+        {
+          speaker,
+          line,
+          ...(text(lineRecord.speakerLabel)
+            ? { speakerLabel: text(lineRecord.speakerLabel) }
+            : {}),
+          ...(text(lineRecord.direction)
+            ? { direction: text(lineRecord.direction) }
+            : {}),
+          ...(text(lineRecord.sfx) ? { sfx: text(lineRecord.sfx) } : {})
+        }
+      ];
+    });
+    if (!lines.length) return [];
+
+    return [
+      {
+        id: text(beat.id) || `beat-${index + 1}`,
+        role,
+        title: text(beat.title),
+        timecode: text(beat.timecode),
+        lines,
+        ...(text(beat.cameraNotes) ? { cameraNotes: text(beat.cameraNotes) } : {}),
+        ...(text(beat.editingNotes) ? { editingNotes: text(beat.editingNotes) } : {}),
+        ...(text(beat.legalFlag) ? { legalFlag: text(beat.legalFlag) } : {})
+      }
+    ];
+  });
+  if (!beats.length) return undefined;
+
+  return {
+    directionId,
+    format: {
+      duration: text(format.duration),
+      aspectRatio: text(format.aspectRatio),
+      style: text(format.style)
+    },
+    castDirection: text(record.castDirection),
+    beats,
+    shotList: Array.isArray(record.shotList)
+      ? record.shotList.filter(
+          (item): item is string => typeof item === "string" && item.trim().length > 0
+        )
+      : [],
+    editingNotes: Array.isArray(record.editingNotes)
+      ? record.editingNotes.filter(
+          (item): item is string => typeof item === "string" && item.trim().length > 0
+        )
+      : [],
+    ...(text(record.legalFooter) ? { legalFooter: text(record.legalFooter) } : {})
   };
 }

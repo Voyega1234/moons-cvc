@@ -84,6 +84,24 @@ export interface HookGenerationDebugLog {
       };
     }[];
   };
+  ugcScriptAgent?: {
+    provider: "openai" | "openrouter";
+    model: string;
+    promptSource: "agent_prompt/agent_ugc_script.md";
+    entries: readonly {
+      directionId: string;
+      request: {
+        endpoint: "/v1/responses" | "/api/v1/chat/completions";
+        inputText: string;
+        responseSchema: "moons_ugc_script";
+      };
+      response: {
+        parsed: unknown;
+        raw: unknown;
+        error?: string;
+      };
+    }[];
+  };
   finalResponse: unknown;
 }
 

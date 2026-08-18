@@ -4,6 +4,8 @@ import {
   type AlbumFormat,
   type CreativeDirection,
   type CreativeOutput,
+  type UgcScriptDocument,
+  type UgcScriptSpeaker,
   type UgcVideoBrief,
   type UgcVideoScene
 } from "../../domain/creative-run";
@@ -57,6 +59,15 @@ const UGC_PREVIEW_Y = 1.18;
 const UGC_PREVIEW_WIDTH = 4.24;
 const UGC_PREVIEW_HEIGHT = 5.3;
 const UGC_SCRIPT_BODY_FONT_SIZE = 10;
+const UGC_SCRIPT_COLUMN_X = 7.48;
+const UGC_SCRIPT_COLUMN_WIDTH = 5.45;
+const UGC_SCRIPT_COLUMN_TOP = 1.2;
+const UGC_SCRIPT_COLUMN_BOTTOM = 7.0;
+const UGC_SCRIPT_CONTINUATION_X = 0.54;
+const UGC_SCRIPT_CONTINUATION_WIDTH = 12.26;
+const UGC_SCRIPT_CONTINUATION_TOP = 1.1;
+const UGC_SCRIPT_CONTINUATION_BOTTOM = 7.15;
+const UGC_SCRIPT_LINE_HEIGHT_FACTOR = 1.3;
 
 function localizedTextStyle(value: string) {
   return {
@@ -465,6 +476,272 @@ function addUgcScriptScene(
   );
 }
 
+export interface UgcScriptRow {
+  text: string;
+  fontSize: number;
+  bold: boolean;
+  italic: boolean;
+  color: string;
+  gapBeforeInches: number;
+  isLegalFooter?: boolean;
+}
+
+function defaultUgcSpeakerLabel(speaker: UgcScriptSpeaker): string {
+  switch (speaker) {
+    case "staff":
+      return "พนักงาน";
+    case "customer":
+      return "ลูกค้า";
+    case "narrator":
+      return "เสียงบรรยาย";
+    default:
+      return "ข้อความบนจอ";
+  }
+}
+
+/**
+ * Flattens a rich UGC script into an ordered list of text rows a renderer can
+ * lay out top-to-bottom. Beat/line count is flexible (AI-decided), unlike the
+ * fixed 4-scene ugcBrief fallback, so this feeds a flowing layout rather than
+ * fixed per-scene slots.
+ */
+export function buildUgcScriptRows(script: UgcScriptDocument): readonly UgcScriptRow[] {
+  const rows: UgcScriptRow[] = [];
+  script.beats.forEach((beat) => {
+    const heading = beat.timecode
+      ? `${cleanText(beat.title)} (${beat.timecode})`
+      : cleanText(beat.title);
+    rows.push({
+      text: heading,
+      fontSize: 11,
+      bold: true,
+      italic: false,
+      color: COLORS.violet,
+      gapBeforeInches: rows.length ? 0.14 : 0
+    });
+    beat.lines.forEach((line) => {
+      const label = line.speakerLabel || defaultUgcSpeakerLabel(line.speaker);
+      rows.push({
+        text: `${label}: ${line.line}`,
+        fontSize: 9.5,
+        bold: false,
+        italic: false,
+        color: COLORS.ink,
+        gapBeforeInches: 0.04
+      });
+      const noteParts = [
+        line.direction,
+        line.sfx ? `SFX: ${line.sfx}` : undefined
+      ].filter((part): part is string => Boolean(part));
+      if (noteParts.length) {
+        rows.push({
+          text: noteParts.join(" · "),
+          fontSize: 8,
+          bold: false,
+          italic: true,
+          color: COLORS.muted,
+          gapBeforeInches: 0.01
+        });
+      }
+    });
+    if (beat.cameraNotes) {
+      rows.push({
+        text: `Camera: ${beat.cameraNotes}`,
+        fontSize: 8,
+        bold: false,
+        italic: false,
+        color: COLORS.muted,
+        gapBeforeInches: 0.05
+      });
+    }
+    if (beat.editingNotes) {
+      rows.push({
+        text: `Editing: ${beat.editingNotes}`,
+        fontSize: 8,
+        bold: false,
+        italic: false,
+        color: COLORS.muted,
+        gapBeforeInches: 0.02
+      });
+    }
+    if (beat.legalFlag) {
+      rows.push({
+        text: `Legal review: ${beat.legalFlag}`,
+        fontSize: 8,
+        bold: false,
+        italic: false,
+        color: COLORS.muted,
+        gapBeforeInches: 0.02
+      });
+    }
+  });
+
+  if (script.shotList.length) {
+    rows.push({
+      text: "Shot list",
+      fontSize: 11,
+      bold: true,
+      italic: false,
+      color: COLORS.violet,
+      gapBeforeInches: 0.18
+    });
+    script.shotList.forEach((item) => {
+      rows.push({
+        text: `• ${item}`,
+        fontSize: 9,
+        bold: false,
+        italic: false,
+        color: COLORS.ink,
+        gapBeforeInches: 0.02
+      });
+    });
+  }
+  if (script.editingNotes.length) {
+    rows.push({
+      text: "Editing notes",
+      fontSize: 11,
+      bold: true,
+      italic: false,
+      color: COLORS.violet,
+      gapBeforeInches: 0.18
+    });
+    script.editingNotes.forEach((item) => {
+      rows.push({
+        text: `• ${item}`,
+        fontSize: 9,
+        bold: false,
+        italic: false,
+        color: COLORS.ink,
+        gapBeforeInches: 0.02
+      });
+    });
+  }
+  if (script.legalFooter) {
+    rows.push({
+      text: script.legalFooter,
+      fontSize: 8.5,
+      bold: true,
+      italic: false,
+      color: COLORS.ink,
+      gapBeforeInches: 0.2,
+      isLegalFooter: true
+    });
+  }
+
+  return rows;
+}
+
+function ugcScriptRowLineCount(row: UgcScriptRow, widthInches: number): number {
+  return estimatedWrappedLines(row.text, widthInches, row.fontSize);
+}
+
+function ugcScriptRowHeightInches(lineCount: number, fontSize: number): number {
+  return (lineCount * fontSize * UGC_SCRIPT_LINE_HEIGHT_FACTOR) / 72;
+}
+
+/**
+ * Renders a flexible-length UGC script starting in the slide's script column.
+ * When content would overflow the column, it spills onto a fresh full-width
+ * "Script (cont'd)" slide instead of shrinking or truncating — beat count is
+ * AI-decided per brand, so the layout has to flex rather than the content.
+ */
+export function addUgcScriptRows(
+  pptx: PptxGenJS,
+  firstSlide: PptxGenJS.Slide,
+  rows: readonly UgcScriptRow[],
+  hook: string
+): void {
+  let slide = firstSlide;
+  let columnX = UGC_SCRIPT_COLUMN_X;
+  let columnWidth = UGC_SCRIPT_COLUMN_WIDTH;
+  let bottomLimit = UGC_SCRIPT_COLUMN_BOTTOM;
+  let cursorY = UGC_SCRIPT_COLUMN_TOP;
+
+  const startContinuationSlide = () => {
+    slide = pptx.addSlide();
+    slide.background = { color: COLORS.paper };
+    slide.addShape(pptx.ShapeType.rect, {
+      x: 0.36,
+      y: 0.28,
+      w: 0.08,
+      h: 0.3,
+      fill: { color: COLORS.violet },
+      line: { color: COLORS.violet }
+    });
+    slide.addText("SCRIPT (CONT'D)", {
+      x: 0.54,
+      y: 0.25,
+      w: 8,
+      h: 0.36,
+      margin: 0,
+      fontFace: SLIDE_FONT_FACE,
+      fontSize: 18,
+      bold: true,
+      color: COLORS.ink,
+      breakLine: false
+    });
+    const subtitle = clampText(hook, 140);
+    slide.addText(subtitle, {
+      x: 0.54,
+      y: 0.62,
+      w: UGC_SCRIPT_CONTINUATION_WIDTH,
+      h: 0.24,
+      margin: 0,
+      ...localizedTextStyle(subtitle),
+      fontSize: 10,
+      color: COLORS.muted,
+      breakLine: false
+    });
+    slide.addShape(pptx.ShapeType.line, {
+      x: 0.35,
+      y: 0.94,
+      w: 12.63,
+      h: 0,
+      line: { color: COLORS.line, width: 1 }
+    });
+    columnX = UGC_SCRIPT_CONTINUATION_X;
+    columnWidth = UGC_SCRIPT_CONTINUATION_WIDTH;
+    bottomLimit = UGC_SCRIPT_CONTINUATION_BOTTOM;
+    cursorY = UGC_SCRIPT_CONTINUATION_TOP;
+  };
+
+  for (const row of rows) {
+    let lineCount = ugcScriptRowLineCount(row, columnWidth);
+    let rowHeight = ugcScriptRowHeightInches(lineCount, row.fontSize);
+    if (cursorY + row.gapBeforeInches + rowHeight > bottomLimit) {
+      startContinuationSlide();
+      lineCount = ugcScriptRowLineCount(row, columnWidth);
+      rowHeight = ugcScriptRowHeightInches(lineCount, row.fontSize);
+    }
+    cursorY += row.gapBeforeInches;
+    if (row.isLegalFooter) {
+      slide.addShape(pptx.ShapeType.line, {
+        x: columnX,
+        y: cursorY,
+        w: columnWidth,
+        h: 0,
+        line: { color: COLORS.line, width: 0.75 }
+      });
+      cursorY += 0.07;
+    }
+    slide.addText(row.text, {
+      x: columnX,
+      y: cursorY,
+      w: columnWidth,
+      h: rowHeight,
+      margin: 0,
+      ...localizedTextStyle(row.text),
+      fontSize: row.fontSize,
+      bold: row.bold,
+      italic: row.italic,
+      color: row.color,
+      valign: "top",
+      breakLine: false
+    });
+    cursorY += rowHeight;
+  }
+}
+
 function addUgcSectionHeading(
   slide: PptxGenJS.Slide,
   text: string,
@@ -701,9 +978,11 @@ function addUgcClientSlide(
     line: { color: COLORS.muted, width: 0.8 }
   });
   addUgcSectionHeading(slide, "Storyline:", 3.98);
-  const storyline = brief.scenes
-    .map((scene) => `• ${scene.title}`)
-    .join("\n");
+  const storyline = (
+    direction?.ugcScript?.beats.length
+      ? direction.ugcScript.beats.map((beat) => `• ${beat.title}`)
+      : brief.scenes.map((scene) => `• ${scene.title}`)
+  ).join("\n");
   slide.addText(storyline, {
     x: UGC_LEFT_COLUMN_X + 0.04,
     y: 4.36,
@@ -758,9 +1037,18 @@ function addUgcClientSlide(
     color: COLORS.violet,
     breakLine: false
   });
-  brief.scenes.forEach((scene, index) => {
-    addUgcScriptScene(slide, index + 1, scene, 1.2 + index * 1.44, 1.38);
-  });
+  if (direction?.ugcScript?.beats.length) {
+    addUgcScriptRows(
+      pptx,
+      slide,
+      buildUgcScriptRows(direction.ugcScript),
+      direction.hook
+    );
+  } else {
+    brief.scenes.forEach((scene, index) => {
+      addUgcScriptScene(slide, index + 1, scene, 1.2 + index * 1.44, 1.38);
+    });
+  }
 
   slide.addText("Prepared by Convert Cake", {
     x: 7.48,

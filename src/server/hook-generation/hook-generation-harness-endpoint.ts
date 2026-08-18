@@ -10,12 +10,17 @@ import {
   isHookGenerationModel,
   isOpenRouterHookGenerationModel,
   serviceTypes,
+  ugcScriptBeatRoles,
+  ugcScriptSpeakers,
   type AlbumFormat,
   type AlbumFormatPreference,
   type CtaActionType,
   type HookIdeaMode,
   type HookGenerationModel,
   type ServiceType,
+  type UgcScriptBeatRole,
+  type UgcScriptDocument,
+  type UgcScriptSpeaker,
   type UgcVideoBrief
 } from "../../domain/creative-run.js";
 import type { HookGenerationHarnessRequest } from "../../services/creative-generation/harness-hook-generation.js";
@@ -65,6 +70,7 @@ export interface HookGenerationHarnessEndpointOptions {
   loadAgentHookPrompt?: () => Promise<string>;
   loadHookResearchPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
+  loadUgcScriptPrompt?: () => Promise<string>;
   loadPastPostExamples?: (input: {
     clientId: string;
     env: HookGenerationHarnessEndpointEnv;
@@ -98,6 +104,7 @@ interface GeneratedDirection extends RawDirection {
   formatBeats: readonly string[];
   albumFormat?: AlbumFormat;
   ugcBrief?: UgcVideoBrief;
+  ugcScript?: UgcScriptDocument;
   ctaActionType: CtaActionType;
   ctaDestination: string;
   contactLine: string;
@@ -149,6 +156,7 @@ export async function handleHookGenerationHarnessRequest({
   loadAgentHookPrompt = defaultLoadAgentHookPrompt,
   loadHookResearchPrompt = defaultLoadHookResearchPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
+  loadUgcScriptPrompt = defaultLoadUgcScriptPrompt,
   loadPastPostExamples = defaultLoadPastPostExamples,
   writeDebugLog = writeHookGenerationDebugLog
 }: HookGenerationHarnessEndpointOptions): Promise<Response> {
@@ -281,6 +289,19 @@ export async function handleHookGenerationHarnessRequest({
       prompt: subheadlineHighlightPrompt,
       fetchImpl: providerFetchImpl
     });
+    const ugcScriptPrompt = await loadUgcScriptPrompt();
+    const { directions: finalDirections, traces: ugcScriptTraces } =
+      await runUgcScriptStep({
+        directions: highlightedDirections,
+        input,
+        researchDossier: researchTrace.output,
+        pastPosts,
+        apiKey: generationApiKey,
+        model,
+        provider: generationProvider,
+        prompt: ugcScriptPrompt,
+        fetchImpl: providerFetchImpl
+      });
     const debugDirectory =
       env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim() ||
       hookGenerationDebugLogDirectory(env.VERCEL_ENV);
@@ -294,12 +315,13 @@ export async function handleHookGenerationHarnessRequest({
           researchModel,
           generationProvider,
           generationModel: model,
-          finalDirections: highlightedDirections
+          finalDirections,
+          ugcScriptTraces
         })
       );
     }
 
-    return jsonResponse({ ok: true, directions: highlightedDirections });
+    return jsonResponse({ ok: true, directions: finalDirections });
   } catch (error) {
     return jsonResponse({ ok: false, error: readableError(error) }, 500);
   }
@@ -319,6 +341,13 @@ async function defaultLoadHookResearchPrompt(): Promise<string> {
 async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_hook_highlight.md"),
+    "utf8"
+  );
+}
+
+async function defaultLoadUgcScriptPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_ugc_script.md"),
     "utf8"
   );
 }
@@ -496,7 +525,8 @@ function buildDirectHookGenerationDebugLog({
   researchModel,
   generationProvider,
   generationModel,
-  finalDirections
+  finalDirections,
+  ugcScriptTraces
 }: {
   input: HookGenerationHarnessRequest;
   researchTrace: TracedAgentResult<HookResearchDossier>;
@@ -505,6 +535,7 @@ function buildDirectHookGenerationDebugLog({
   generationProvider: "openai" | "openrouter";
   generationModel: string;
   finalDirections: readonly GeneratedDirection[];
+  ugcScriptTraces: readonly UgcScriptTrace[];
 }): HookGenerationDebugLog {
   const endpoint =
     generationProvider === "openrouter"
@@ -560,6 +591,28 @@ function buildDirectHookGenerationDebugLog({
         }
       }))
     },
+    ...(ugcScriptTraces.length
+      ? {
+          ugcScriptAgent: {
+            provider: generationProvider,
+            model: generationModel,
+            promptSource: "agent_prompt/agent_ugc_script.md" as const,
+            entries: ugcScriptTraces.map((trace) => ({
+              directionId: trace.directionId,
+              request: {
+                endpoint,
+                inputText: trace.inputText,
+                responseSchema: "moons_ugc_script" as const
+              },
+              response: {
+                parsed: trace.ugcScript,
+                raw: trace.rawResponse,
+                ...(trace.error ? { error: trace.error } : {})
+              }
+            }))
+          }
+        }
+      : {}),
     finalResponse: { directions: finalDirections }
   };
 }
@@ -648,6 +701,206 @@ async function runSubheadlineHighlightBatch({
     ...direction,
     subheadlineHighlight: highlights.get(direction.id) ?? ""
   }));
+}
+
+interface UgcScriptTrace {
+  directionId: string;
+  inputText: string;
+  rawResponse: unknown;
+  ugcScript?: UgcScriptDocument;
+  error?: string;
+}
+
+async function runUgcScriptStep({
+  directions,
+  input,
+  researchDossier,
+  pastPosts,
+  apiKey,
+  model,
+  provider,
+  prompt,
+  fetchImpl
+}: {
+  directions: readonly GeneratedDirection[];
+  input: HookGenerationHarnessRequest;
+  researchDossier: HookResearchDossier;
+  pastPosts: readonly PastPostExample[];
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  prompt: string;
+  fetchImpl: FetchLike;
+}): Promise<{
+  directions: readonly GeneratedDirection[];
+  traces: readonly UgcScriptTrace[];
+}> {
+  const ugcDirections = directions.filter(
+    (direction) => direction.service === "ugc-video"
+  );
+  if (!ugcDirections.length) {
+    return { directions, traces: [] };
+  }
+
+  const traces = await mapWithConcurrency(
+    ugcDirections,
+    HOOK_GENERATION_CONCURRENCY,
+    (direction) =>
+      runUgcScriptDirection({
+        direction,
+        ugcScriptPrompt: prompt,
+        researchDossier,
+        pastPosts,
+        input,
+        apiKey,
+        model,
+        provider,
+        fetchImpl
+      })
+  );
+
+  const ugcScriptByDirectionId = new Map(
+    traces
+      .filter(
+        (trace): trace is UgcScriptTrace & { ugcScript: UgcScriptDocument } =>
+          Boolean(trace.ugcScript)
+      )
+      .map((trace) => [trace.directionId, trace.ugcScript])
+  );
+
+  return {
+    directions: directions.map((direction) =>
+      ugcScriptByDirectionId.has(direction.id)
+        ? { ...direction, ugcScript: ugcScriptByDirectionId.get(direction.id) }
+        : direction
+    ),
+    traces
+  };
+}
+
+async function runUgcScriptDirection({
+  direction,
+  ugcScriptPrompt,
+  researchDossier,
+  pastPosts,
+  input,
+  apiKey,
+  model,
+  provider,
+  fetchImpl
+}: {
+  direction: GeneratedDirection;
+  ugcScriptPrompt: string;
+  researchDossier: HookResearchDossier;
+  pastPosts: readonly PastPostExample[];
+  input: HookGenerationHarnessRequest;
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  fetchImpl: FetchLike;
+}): Promise<UgcScriptTrace> {
+  const inputText = buildUgcScriptPrompt(
+    direction,
+    ugcScriptPrompt,
+    researchDossier,
+    pastPosts,
+    input
+  );
+  const requestUgcScript = (requestInputText: string) =>
+    withTransientRetry(() =>
+      callResponsesApi({
+        apiKey,
+        model,
+        fetchImpl,
+        content: [{ type: "input_text", text: requestInputText }],
+        schemaName: "moons_ugc_script",
+        schema: ugcScriptSchema,
+        reasoningEffort:
+          provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
+        provider
+      })
+    );
+
+  // Failures here degrade gracefully: this direction keeps its ugcBrief (slide)
+  // but ships without the richer ugcScript document, instead of failing the run.
+  try {
+    let finalInputText = inputText;
+    let payload = await requestUgcScript(finalInputText);
+    let ugcScript = parseUgcScriptResult(
+      extractResponseText(payload),
+      direction.id
+    );
+
+    if (containsForbiddenThaiFirstPerson(ugcScript)) {
+      finalInputText = buildUgcScriptNaturalnessRetryPrompt(
+        finalInputText,
+        `มีคำว่า "ฉัน"`
+      );
+      payload = await requestUgcScript(finalInputText);
+      ugcScript = parseUgcScriptResult(extractResponseText(payload), direction.id);
+    }
+    assertNoForbiddenThaiFirstPerson(ugcScript, "UGC script");
+
+    return {
+      directionId: direction.id,
+      inputText: finalInputText,
+      rawResponse: payload,
+      ugcScript
+    };
+  } catch (error) {
+    console.warn(
+      `UGC script generation failed for direction ${direction.id}: ${readableError(error)}`
+    );
+    return {
+      directionId: direction.id,
+      inputText,
+      rawResponse: undefined,
+      error: readableError(error)
+    };
+  }
+}
+
+function buildUgcScriptPrompt(
+  direction: GeneratedDirection,
+  ugcScriptPrompt: string,
+  researchDossier: HookResearchDossier,
+  pastPosts: readonly PastPostExample[],
+  input: HookGenerationHarnessRequest
+): string {
+  const pastPostsBlock = buildPastPostsCaptionStyleBlock(pastPosts);
+  return [
+    ugcScriptPrompt,
+    "",
+    "# Runtime contract",
+    "Research และ Direction ถูกเลือกไว้แล้วโดย Hook Agent ห้ามเปลี่ยน Insight หรือมุมขายของ Direction นี้.",
+    "",
+    buildInputBlock(input),
+    "",
+    hookResearchDossierBlock(researchDossier),
+    ...(pastPostsBlock ? ["", pastPostsBlock] : []),
+    "",
+    "# Selected direction",
+    `Hook: ${direction.hook}`,
+    `Concept: ${direction.concept}`,
+    `Why: ${direction.why}`,
+    `CTA: ${direction.cta}`,
+    `Caption: ${direction.caption}`,
+    `Visual: ${direction.visual}`
+  ].join("\n");
+}
+
+function buildUgcScriptNaturalnessRetryPrompt(
+  inputText: string,
+  validationError: string
+): string {
+  return [
+    inputText,
+    "",
+    "# THAI NATURALNESS CORRECTION — REQUIRED",
+    `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
+    "แก้ตามกฎภาษาไทยใน agent_ugc_script.md.",
+    "เขียนใหม่ทั้ง JSON โดยรักษา Beat, Fact และ Schema เดิม."
+  ].join("\n");
 }
 
 export function buildHookGenerationBatches(
@@ -1056,9 +1309,18 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
   const roundInstructions = hookRelevantRoundInstructions(
     input.extraInstructions
   );
-  const brandSystem = input.brandLibrary.brand.map(
-    (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
-  );
+  const brandSystem = brandLibraryItemsBlock(input.brandLibrary.brand);
+  const brandProducts = brandLibraryItemsBlock(input.brandLibrary.products);
+  const brandDocs = brandLibraryItemsBlock(input.brandLibrary.docs);
+  const brandRefs = brandLibraryItemsBlock(input.brandLibrary.refs);
+  const brandMemoryLines = [
+    ...input.brandMemory.working.map(
+      (item) => `- Working: ${cleanHookContextText(item)}`
+    ),
+    ...input.brandMemory.avoid.map(
+      (item) => `- Avoid: ${cleanHookContextText(item)}`
+    )
+  ];
   return [
     "# Questionnaire",
     input.onboardingQuestionnaire || "No questionnaire context supplied.",
@@ -1069,10 +1331,30 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "# Brand system",
     ...(brandSystem.length ? brandSystem : ["No brand system supplied."]),
     "",
+    "# Brand products",
+    ...(brandProducts.length ? brandProducts : ["No brand products supplied."]),
+    "",
+    "# Brand docs",
+    ...(brandDocs.length ? brandDocs : ["No brand docs supplied."]),
+    "",
+    "# Brand references",
+    ...(brandRefs.length ? brandRefs : ["No brand references supplied."]),
+    "",
+    "# Brand memory",
+    ...(brandMemoryLines.length ? brandMemoryLines : ["No brand memory supplied."]),
+    "",
     "# User brief",
     brief,
     ...(roundInstructions ? ["", roundInstructions] : [])
   ].join("\n");
+}
+
+function brandLibraryItemsBlock(
+  items: readonly { title: string; description: string }[]
+): readonly string[] {
+  return items.map(
+    (item) => `- ${item.title}: ${cleanHookContextText(item.description)}`
+  );
 }
 
 function hookRelevantBrief(value: string): string {
@@ -1262,6 +1544,75 @@ const subheadlineHighlightSchema = {
     }
   },
   required: ["items"]
+} as const;
+
+const ugcScriptLineSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    speaker: { type: "string", enum: ugcScriptSpeakers },
+    speakerLabel: { type: ["string", "null"] },
+    line: { type: "string" },
+    direction: { type: ["string", "null"] },
+    sfx: { type: ["string", "null"] }
+  },
+  required: ["speaker", "speakerLabel", "line", "direction", "sfx"]
+} as const;
+
+const ugcScriptSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    format: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        duration: { type: "string" },
+        aspectRatio: { type: "string" },
+        style: { type: "string" }
+      },
+      required: ["duration", "aspectRatio", "style"]
+    },
+    castDirection: { type: "string" },
+    beats: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          role: { type: "string", enum: ugcScriptBeatRoles },
+          title: { type: "string" },
+          timecode: { type: "string" },
+          lines: { type: "array", items: ugcScriptLineSchema },
+          cameraNotes: { type: ["string", "null"] },
+          editingNotes: { type: ["string", "null"] },
+          legalFlag: { type: ["string", "null"] }
+        },
+        required: [
+          "id",
+          "role",
+          "title",
+          "timecode",
+          "lines",
+          "cameraNotes",
+          "editingNotes",
+          "legalFlag"
+        ]
+      }
+    },
+    shotList: stringArraySchema,
+    editingNotes: stringArraySchema,
+    legalFooter: { type: ["string", "null"] }
+  },
+  required: [
+    "format",
+    "castDirection",
+    "beats",
+    "shotList",
+    "editingNotes",
+    "legalFooter"
+  ]
 } as const;
 
 function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
@@ -1648,6 +1999,102 @@ function unwrapJsonCodeFence(text: string): string {
   const trimmed = text.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   return fenced?.[1]?.trim() ?? trimmed;
+}
+
+function parseUgcScriptResult(
+  text: string,
+  directionId: string
+): UgcScriptDocument {
+  const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
+  const value = readRecord(parsed, "ugcScript");
+  const format = readRecord(value.format, "ugcScript.format");
+
+  const beatsValue = value.beats;
+  if (!Array.isArray(beatsValue)) {
+    throw new Error("ugcScript.beats must be an array.");
+  }
+  const beats = beatsValue.map((item, index) => {
+    const beat = readRecord(item, `ugcScript.beats[${index}]`);
+    const linesValue = beat.lines;
+    if (!Array.isArray(linesValue)) {
+      throw new Error(`ugcScript.beats[${index}].lines must be an array.`);
+    }
+    const lines = linesValue.map((lineItem, lineIndex) => {
+      const lineField = `ugcScript.beats[${index}].lines[${lineIndex}]`;
+      const line = readRecord(lineItem, lineField);
+      return {
+        speaker: readUgcScriptSpeaker(line.speaker, `${lineField}.speaker`),
+        ...(typeof line.speakerLabel === "string" && line.speakerLabel.trim()
+          ? { speakerLabel: line.speakerLabel.trim() }
+          : {}),
+        line: readString(line.line, `${lineField}.line`),
+        ...(typeof line.direction === "string" && line.direction.trim()
+          ? { direction: line.direction.trim() }
+          : {}),
+        ...(typeof line.sfx === "string" && line.sfx.trim()
+          ? { sfx: line.sfx.trim() }
+          : {})
+      };
+    });
+    return {
+      id: readString(beat.id, `ugcScript.beats[${index}].id`),
+      role: readUgcScriptBeatRole(beat.role, `ugcScript.beats[${index}].role`),
+      title: readString(beat.title, `ugcScript.beats[${index}].title`),
+      timecode: readString(beat.timecode, `ugcScript.beats[${index}].timecode`),
+      lines,
+      ...(typeof beat.cameraNotes === "string" && beat.cameraNotes.trim()
+        ? { cameraNotes: beat.cameraNotes.trim() }
+        : {}),
+      ...(typeof beat.editingNotes === "string" && beat.editingNotes.trim()
+        ? { editingNotes: beat.editingNotes.trim() }
+        : {}),
+      ...(typeof beat.legalFlag === "string" && beat.legalFlag.trim()
+        ? { legalFlag: beat.legalFlag.trim() }
+        : {})
+    };
+  });
+
+  return {
+    directionId,
+    format: {
+      duration: readString(format.duration, "ugcScript.format.duration"),
+      aspectRatio: readString(
+        format.aspectRatio,
+        "ugcScript.format.aspectRatio"
+      ),
+      style: readString(format.style, "ugcScript.format.style")
+    },
+    castDirection: readString(value.castDirection, "ugcScript.castDirection"),
+    beats,
+    shotList: readStringArray(value.shotList, "ugcScript.shotList"),
+    editingNotes: readStringArray(value.editingNotes, "ugcScript.editingNotes"),
+    ...(typeof value.legalFooter === "string" && value.legalFooter.trim()
+      ? { legalFooter: value.legalFooter.trim() }
+      : {})
+  };
+}
+
+function readUgcScriptSpeaker(value: unknown, field: string): UgcScriptSpeaker {
+  if (
+    typeof value !== "string" ||
+    !ugcScriptSpeakers.includes(value as UgcScriptSpeaker)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as UgcScriptSpeaker;
+}
+
+function readUgcScriptBeatRole(
+  value: unknown,
+  field: string
+): UgcScriptBeatRole {
+  if (
+    typeof value !== "string" ||
+    !ugcScriptBeatRoles.includes(value as UgcScriptBeatRole)
+  ) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return value as UgcScriptBeatRole;
 }
 
 function readGeneratedAlbumFormat(

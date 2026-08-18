@@ -17,9 +17,12 @@ import {
   normalizeFormatBeatsForService,
   referenceImageRoles,
   serviceTypes,
+  ugcScriptBeatRoles,
+  ugcScriptSpeakers,
   type CreativeStage,
   type ReferenceImageSelection,
   type ServiceType,
+  type UgcScriptDocument,
   type UgcVideoBrief
 } from "../../domain/creative-run";
 import type {
@@ -680,6 +683,13 @@ function parseDirections(
           : [];
     const ugcBrief =
       item.ugcBrief === undefined ? undefined : parseUgcVideoBrief(item.ugcBrief);
+    // A malformed ugcScript degrades gracefully (omitted, direction still loads)
+    // rather than invalidating the whole direction like ugcBrief above — it's an
+    // optional enrichment, not core deliverable data.
+    const ugcScript =
+      item.ugcScript === undefined
+        ? undefined
+        : (parseUgcScriptDocument(item.ugcScript, id ?? "") ?? undefined);
     const ctaActionType =
       item.ctaActionType === undefined
         ? undefined
@@ -751,6 +761,7 @@ function parseDirections(
         ? normalizeHookReferenceImages(referenceImages)
         : undefined,
       ugcBrief: ugcBrief ?? undefined,
+      ugcScript,
       ctaActionType: ctaActionType ?? undefined,
       ctaDestination: ctaDestination ?? undefined,
       contactLine: contactLine ?? undefined,
@@ -860,6 +871,140 @@ function parseUgcVideoScenes(value: unknown): UgcVideoBrief["scenes"] | null {
   });
   return scenes.every((scene) => scene !== null)
     ? (scenes as UgcVideoBrief["scenes"])
+    : null;
+}
+
+function parseUgcScriptDocument(
+  value: unknown,
+  directionId: string
+): UgcScriptDocument | null {
+  if (!isRecord(value)) return null;
+  const format = parseUgcScriptFormat(value.format);
+  const castDirection = parseString(value.castDirection, true);
+  const beats = parseUgcScriptBeats(value.beats);
+  const shotList = parseStringArray(value.shotList);
+  const editingNotes = parseStringArray(value.editingNotes);
+  const legalFooter =
+    value.legalFooter === undefined
+      ? undefined
+      : parseString(value.legalFooter, true);
+  if (
+    !format ||
+    castDirection === null ||
+    !beats ||
+    beats.length === 0 ||
+    !shotList ||
+    !editingNotes ||
+    legalFooter === null
+  ) {
+    return null;
+  }
+  return {
+    directionId,
+    format,
+    castDirection,
+    beats,
+    shotList,
+    editingNotes,
+    ...(legalFooter ? { legalFooter } : {})
+  };
+}
+
+function parseUgcScriptFormat(
+  value: unknown
+): UgcScriptDocument["format"] | null {
+  if (!isRecord(value)) return null;
+  const duration = parseString(value.duration, true);
+  const aspectRatio = parseString(value.aspectRatio, true);
+  const style = parseString(value.style, true);
+  if (duration === null || aspectRatio === null || style === null) return null;
+  return { duration, aspectRatio, style };
+}
+
+function parseUgcScriptBeats(
+  value: unknown
+): UgcScriptDocument["beats"] | null {
+  if (!Array.isArray(value)) return null;
+  const beats = value.map((beat) => {
+    if (!isRecord(beat)) return null;
+    const id = parseString(beat.id, true);
+    const role = parseMember(beat.role, ugcScriptBeatRoles);
+    const title = parseString(beat.title, true);
+    const timecode = parseString(beat.timecode, true);
+    const lines = parseUgcScriptLines(beat.lines);
+    const cameraNotes =
+      beat.cameraNotes === undefined
+        ? undefined
+        : parseString(beat.cameraNotes, true);
+    const editingNotes =
+      beat.editingNotes === undefined
+        ? undefined
+        : parseString(beat.editingNotes, true);
+    const legalFlag =
+      beat.legalFlag === undefined ? undefined : parseString(beat.legalFlag, true);
+    if (
+      id === null ||
+      !role ||
+      title === null ||
+      timecode === null ||
+      !lines ||
+      lines.length === 0 ||
+      cameraNotes === null ||
+      editingNotes === null ||
+      legalFlag === null
+    ) {
+      return null;
+    }
+    return {
+      id,
+      role,
+      title,
+      timecode,
+      lines,
+      ...(cameraNotes ? { cameraNotes } : {}),
+      ...(editingNotes ? { editingNotes } : {}),
+      ...(legalFlag ? { legalFlag } : {})
+    };
+  });
+  return beats.every((beat) => beat !== null)
+    ? (beats as UgcScriptDocument["beats"])
+    : null;
+}
+
+function parseUgcScriptLines(
+  value: unknown
+): UgcScriptDocument["beats"][number]["lines"] | null {
+  if (!Array.isArray(value)) return null;
+  const lines = value.map((line) => {
+    if (!isRecord(line)) return null;
+    const speaker = parseMember(line.speaker, ugcScriptSpeakers);
+    const text = parseString(line.line, true);
+    const speakerLabel =
+      line.speakerLabel === undefined
+        ? undefined
+        : parseString(line.speakerLabel, true);
+    const direction =
+      line.direction === undefined ? undefined : parseString(line.direction, true);
+    const sfx = line.sfx === undefined ? undefined : parseString(line.sfx, true);
+    if (
+      !speaker ||
+      text === null ||
+      speakerLabel === null ||
+      direction === null ||
+      sfx === null
+    ) {
+      return null;
+    }
+    return {
+      speaker,
+      line: text,
+      ...(speakerLabel ? { speakerLabel } : {}),
+      ...(direction ? { direction } : {}),
+      ...(sfx ? { sfx } : {})
+    };
+  });
+  return lines.every((line) => line !== null)
+    ? (lines as UgcScriptDocument["beats"][number]["lines"])
     : null;
 }
 

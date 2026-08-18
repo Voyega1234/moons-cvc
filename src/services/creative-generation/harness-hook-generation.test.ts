@@ -449,6 +449,104 @@ describe("buildHookGenerationHarnessRequest", () => {
     vi.stubGlobal("fetch", originalFetch);
   });
 
+  it("preserves the rich UGC script and drops individually malformed lines", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          directions: [
+            {
+              id: "ugc-1",
+              service: "ugc-video",
+              hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+              concept: "Creator สาธิตเมนูเช้าจริงในครัวที่มีเวลาจำกัด",
+              why: "ทำให้ use case ของกระทะเข้าใจได้ทันที",
+              visual: "Natural morning light, native vertical video.",
+              cta: "เลือก Colormic 24cm",
+              caption: "มื้อเช้าที่รีบก็ยังทำให้น่ากินได้",
+              score: 89,
+              ugcScript: {
+                format: {
+                  duration: "30-35 วินาที",
+                  aspectRatio: "9:16",
+                  style: "Comedic myth-busting"
+                },
+                castDirection: "พนักงาน: energy สูง",
+                beats: [
+                  {
+                    id: "beat-1",
+                    role: "misconception",
+                    title: "Misconception #1",
+                    timecode: "0:05-0:09",
+                    lines: [
+                      {
+                        speaker: "customer",
+                        line: "ต้องเปลี่ยนกระทะทั้งชุดใช่ไหม?"
+                      },
+                      {
+                        speaker: "not-a-real-speaker",
+                        line: "บรรทัดนี้ควรถูกทิ้งเพราะ speaker ผิด"
+                      },
+                      {
+                        speaker: "staff",
+                        line: "เลือกใบเดียวก่อนก็ได้!"
+                      }
+                    ]
+                  }
+                ],
+                shotList: ["Close-up กระทะ"],
+                editingNotes: ["Cut เร็ว"]
+              }
+            }
+          ]
+        })
+      )
+    );
+
+    const [direction] = await generateDirectionsWithHarness({
+      run: { ...run, service: "ugc-video" }
+    });
+
+    expect(direction?.ugcScript?.beats).toHaveLength(1);
+    expect(direction?.ugcScript?.beats[0]?.lines).toHaveLength(2);
+    expect(
+      direction?.ugcScript?.beats[0]?.lines.map((line) => line.speaker)
+    ).toEqual(["customer", "staff"]);
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
+  it("omits the UGC script field when hook generation does not return one", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          directions: [
+            {
+              id: "ugc-1",
+              service: "ugc-video",
+              hook: "เช้ารีบแค่ไหน ไข่ข้นก็ยังทัน",
+              concept: "Creator สาธิตเมนูเช้าจริงในครัวที่มีเวลาจำกัด",
+              why: "ทำให้ use case ของกระทะเข้าใจได้ทันที",
+              visual: "Natural morning light, native vertical video.",
+              cta: "เลือก Colormic 24cm",
+              caption: "มื้อเช้าที่รีบก็ยังทำให้น่ากินได้",
+              score: 89
+            }
+          ]
+        })
+      )
+    );
+
+    const [direction] = await generateDirectionsWithHarness({
+      run: { ...run, service: "ugc-video" }
+    });
+
+    expect(direction?.ugcScript).toBeUndefined();
+    vi.stubGlobal("fetch", originalFetch);
+  });
+
   it("requests Research once and reuses its dossier for generation", async () => {
     const originalFetch = globalThis.fetch;
     const dossier = {

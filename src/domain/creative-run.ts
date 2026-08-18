@@ -364,6 +364,68 @@ export interface UgcVideoBrief {
   scenes: readonly UgcVideoScene[];
 }
 
+export const ugcScriptSpeakers = [
+  "staff",
+  "customer",
+  "narrator",
+  "onscreen-text"
+] as const;
+export type UgcScriptSpeaker = (typeof ugcScriptSpeakers)[number];
+
+export interface UgcScriptLine {
+  speaker: UgcScriptSpeaker;
+  /** Display name for the speaker, e.g. "พนักงาน" / "ลูกค้า", when the enum alone isn't enough. */
+  speakerLabel?: string;
+  line: string;
+  /** Delivery/acting/camera note for this line. */
+  direction?: string;
+  /** Optional sound-effect cue, e.g. a pop on a reveal line. */
+  sfx?: string;
+}
+
+export const ugcScriptBeatRoles = [
+  "hook",
+  "product-intro",
+  "eligibility",
+  "misconception",
+  "benefit-stack",
+  "cta"
+] as const;
+export type UgcScriptBeatRole = (typeof ugcScriptBeatRoles)[number];
+
+export interface UgcScriptBeat {
+  id: string;
+  role: UgcScriptBeatRole;
+  title: string;
+  /** Free-text time range, same convention as UgcVideoScene.duration. */
+  timecode: string;
+  lines: readonly UgcScriptLine[];
+  cameraNotes?: string;
+  editingNotes?: string;
+  /** Set when this beat contains a claim that needs legal/compliance review before production. */
+  legalFlag?: string;
+}
+
+/**
+ * Rich, flexible-length two-speaker production script for a UGC video direction.
+ * Additive and separate from UgcVideoBrief, which stays the source of truth for the
+ * fixed 4-scene deck slide — this document has no scene-count limit and is exported
+ * as its own creator brief, not rendered onto the slide.
+ */
+export interface UgcScriptDocument {
+  directionId: string;
+  format: {
+    duration: string;
+    aspectRatio: string;
+    style: string;
+  };
+  castDirection: string;
+  beats: readonly UgcScriptBeat[];
+  shotList: readonly string[];
+  editingNotes: readonly string[];
+  legalFooter?: string;
+}
+
 export interface CreativeDirection {
   id: string;
   /** Model that generated this idea, used to compare concurrent Hook runs. */
@@ -397,6 +459,8 @@ export interface CreativeDirection {
   referenceImages?: readonly ReferenceImageSelection[];
   /** Production-ready detail generated only for UGC video directions. */
   ugcBrief?: UgcVideoBrief;
+  /** Rich, flexible-length two-speaker script generated only for UGC video directions. Additive — ugcBrief stays the source of truth for the deck slide. */
+  ugcScript?: UgcScriptDocument;
   /** Intended conversion route for the CTA. Optional for saved legacy runs. */
   ctaActionType?: CtaActionType;
   /** Verified destination copied from brand context. Never generated from inference. */

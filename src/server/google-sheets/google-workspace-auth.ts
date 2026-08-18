@@ -5,6 +5,12 @@ const CLOUD_PLATFORM_SCOPE =
 const SHEETS_READONLY_SCOPE =
   "https://www.googleapis.com/auth/spreadsheets.readonly";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+// Local ADC uses drive.file instead of the full drive scope: Google classifies
+// drive.file as merely "sensitive" while full drive is "restricted", and
+// Workspace App Access Control commonly blocks restricted scopes for the
+// Google Cloud SDK client. drive.file still covers every Drive call this
+// module makes locally (create a new file, then read/share that same file).
+const LOCAL_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GOOGLE_STS_ENDPOINT = "https://sts.googleapis.com/v1/token";
 const GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -155,7 +161,7 @@ async function defaultSheetsAdcAccessToken(): Promise<string> {
 }
 
 async function defaultDriveAdcAccessToken(): Promise<string> {
-  return defaultAdcAccessToken(DRIVE_SCOPE);
+  return defaultAdcAccessToken(LOCAL_DRIVE_SCOPE);
 }
 
 async function defaultAdcAccessToken(scope: string): Promise<string> {

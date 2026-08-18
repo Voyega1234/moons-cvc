@@ -205,6 +205,52 @@ function openAiUgcDirectionResponse(hook: string) {
   );
 }
 
+function openAiUgcScriptResponse() {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        format: {
+          duration: "30-35 วินาที",
+          aspectRatio: "9:16",
+          style: "Comedic myth-busting, TikTok energy"
+        },
+        castDirection: "พนักงาน: energy สูง / ลูกค้า: reaction ชัด",
+        beats: [
+          {
+            id: "beat-1",
+            role: "misconception",
+            title: "Misconception #1",
+            timecode: "0:05-0:09",
+            lines: [
+              {
+                speaker: "customer",
+                speakerLabel: "ลูกค้า",
+                line: "ต้องเปลี่ยนกระทะทั้งชุดใช่ไหม?",
+                direction: null,
+                sfx: null
+              },
+              {
+                speaker: "staff",
+                speakerLabel: "พนักงาน",
+                line: "เลือกใบเดียวก่อนก็ได้!",
+                direction: "สวนทันที",
+                sfx: "pop"
+              }
+            ],
+            cameraNotes: "Cut กลับพนักงานทันที",
+            editingNotes: null,
+            legalFlag: null
+          }
+        ],
+        shotList: ["Close-up กระทะ", "Reaction ลูกค้า"],
+        editingNotes: ["Cut เร็ว ไม่มี Dead air"],
+        legalFooter: null
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function openAiStaticDirection() {
   return {
     id: "shared-research-hook",
@@ -741,7 +787,8 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
-      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []));
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
+      .mockResolvedValueOnce(openAiUgcScriptResponse());
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -754,7 +801,7 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     const responseBody = await response.clone().json();
     expect(response.status, JSON.stringify(responseBody)).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     const directionRetryBody = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
@@ -767,6 +814,42 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: [expect.objectContaining({ formatBeats: expect.any(Array) })]
     });
     expect((body as { directions: { formatBeats: string[] }[] }).directions[0]?.formatBeats).toHaveLength(4);
+    const ugcScriptRequestBody = JSON.parse(
+      String(fetchMock.mock.calls[4]?.[1]?.body)
+    ) as { input: unknown };
+    expect(JSON.stringify(ugcScriptRequestBody.input)).toContain(
+      "UGC MYTH-BUSTING SCRIPT WRITER"
+    );
+    expect(
+      (body as { directions: { ugcScript?: { beats: unknown[] } }[] })
+        .directions[0]?.ugcScript?.beats
+    ).toHaveLength(1);
+  });
+
+  it("degrades gracefully when the UGC script agent call fails, keeping the slide-ready ugcBrief", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
+      .mockResolvedValueOnce(new Response("Server error", { status: 500 }))
+      .mockResolvedValueOnce(new Response("Server error", { status: 500 }));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleUgcRequestBody)
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    const body = (await response.json()) as {
+      directions: { ugcBrief?: unknown; ugcScript?: unknown }[];
+    };
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.directions[0]?.ugcBrief).toBeTruthy();
+    expect(body.directions[0]?.ugcScript).toBeUndefined();
   });
 
   it("retries album output when formatBeats does not match the selected layout", async () => {
@@ -1032,7 +1115,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(openRouterBody.tool_choice).toBeUndefined();
   });
 
-  it("sends only questionnaire, brand name, brand system, brief, and research context", async () => {
+  it("sends questionnaire, full brand library, brand memory, brief, and research context but not past posts or attachments", async () => {
     const writeDebugLog = vi.fn(
       async (_directory: string, _entry: HookGenerationDebugLog) => undefined
     );
@@ -1097,12 +1180,18 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationPrompt).toContain("Convert Cake");
     expect(generationPrompt).toContain("# Brand system");
     expect(generationPrompt).toContain("Positioning");
+    expect(generationPrompt).toContain("# Brand products");
+    expect(generationPrompt).toContain("AI SEO Strategy Workshop");
+    expect(generationPrompt).toContain("# Brand docs");
+    expect(generationPrompt).toContain("Brand guideline");
+    expect(generationPrompt).toContain("# Brand references");
+    expect(generationPrompt).toContain("Screenshot 2026-08-03.png");
+    expect(generationPrompt).toContain("# Brand memory");
+    expect(generationPrompt).toContain("ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้");
+    expect(generationPrompt).toContain("หลีกเลี่ยงภาพ luxury หรือ warm vintage");
     expect(generationPrompt).toContain("# User brief");
     expect(generationPrompt).toContain("ต้องการ creative เพื่อชวน B2B");
     expect(generationPrompt).toContain("# Dedicated Research Agent dossier");
-    expect(generationPrompt).not.toContain("Brand Memory — What's working:");
-    expect(generationPrompt).not.toContain("Products / offers / benefits");
-    expect(generationPrompt).not.toContain("Documents:");
     expect(generationPrompt).not.toContain("# Past posts");
     expect(generationPrompt).not.toContain("# Past content data");
     expect(generationPrompt).not.toContain("launch-questionnaire.pdf");
