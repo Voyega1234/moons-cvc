@@ -9,10 +9,10 @@ import type { ReferenceImageInput } from "./openai-images-client.js";
 type FetchLike = typeof fetch;
 
 export interface ReferenceDesignGrammar {
+  artworkConcept: string;
+  keyVisualGrammar: string;
   compositionGrammar: string;
-  typographyGrammar: string;
-  graphicGrammar: string;
-  imageTreatment: string;
+  graphicDeviceLogic: string;
   hierarchyAndDensity: string;
   secondaryAndFooterGrammar: string;
   conceptTranslation: string;
@@ -143,10 +143,10 @@ const referenceDesignGrammarSchema = {
   type: "object",
   additionalProperties: false,
   required: [
+    "artworkConcept",
+    "keyVisualGrammar",
     "compositionGrammar",
-    "typographyGrammar",
-    "graphicGrammar",
-    "imageTreatment",
+    "graphicDeviceLogic",
     "hierarchyAndDensity",
     "secondaryAndFooterGrammar",
     "conceptTranslation",
@@ -154,10 +154,10 @@ const referenceDesignGrammarSchema = {
     "replace"
   ],
   properties: {
+    artworkConcept: { type: "string" },
+    keyVisualGrammar: { type: "string" },
     compositionGrammar: { type: "string" },
-    typographyGrammar: { type: "string" },
-    graphicGrammar: { type: "string" },
-    imageTreatment: { type: "string" },
+    graphicDeviceLogic: { type: "string" },
     hierarchyAndDensity: { type: "string" },
     secondaryAndFooterGrammar: { type: "string" },
     conceptTranslation: { type: "string" },
@@ -169,10 +169,10 @@ const referenceDesignGrammarSchema = {
 function parseReferenceDesignGrammar(value: unknown): ReferenceDesignGrammar {
   if (!isRecord(value)) throw new Error("Reference interpreter returned invalid JSON.");
   const fields = [
+    "artworkConcept",
+    "keyVisualGrammar",
     "compositionGrammar",
-    "typographyGrammar",
-    "graphicGrammar",
-    "imageTreatment",
+    "graphicDeviceLogic",
     "hierarchyAndDensity",
     "secondaryAndFooterGrammar",
     "conceptTranslation"

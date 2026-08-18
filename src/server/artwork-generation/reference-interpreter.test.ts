@@ -7,10 +7,10 @@ describe("interpretReferenceDesign", () => {
       new Response(
         JSON.stringify({
           output_text: JSON.stringify({
+            artworkConcept: "Reveal an invisible problem through a cutaway.",
+            keyVisualGrammar: "One physical cutaway is the proof mechanism.",
             compositionGrammar: "Asymmetric editorial grid.",
-            typographyGrammar: "Large Thai display headline.",
-            graphicGrammar: "Rounded green utility shapes.",
-            imageTreatment: "Bright high-key commercial photography.",
+            graphicDeviceLogic: "A footer groups secondary proof.",
             hierarchyAndDensity: "One dominant headline and one hero.",
             secondaryAndFooterGrammar: "Grounded green footer zone.",
             conceptTranslation: "Create a new mattress cutaway hero.",
@@ -45,6 +45,7 @@ describe("interpretReferenceDesign", () => {
     expect(grammar.conceptTranslation).toBe(
       "Create a new mattress cutaway hero."
     );
+    expect(grammar.keyVisualGrammar).toContain("cutaway");
     const body = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
@@ -52,6 +53,8 @@ describe("interpretReferenceDesign", () => {
       text: { format: { name: string } };
     };
     expect(body.text.format.name).toBe("moons_reference_design_grammar");
+    expect(JSON.stringify(body.text)).toContain("keyVisualGrammar");
+    expect(JSON.stringify(body.text)).not.toContain("typographyGrammar");
     expect(body.input[0]?.content).toContainEqual({
       type: "input_image",
       image_url: `data:image/png;base64,${Buffer.from("primary-reference").toString("base64")}`,

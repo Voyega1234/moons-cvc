@@ -31,13 +31,23 @@ describe("buildReferenceLedImagePrompt", () => {
         referenceImageLabels: ["Official logo · De Hygienique"],
         referenceImages: [],
         canvasRatio: "1:1",
-        brandLibrary: { brand: [], products: [], docs: [], refs: [] }
+        brandLibrary: {
+          brand: [
+            {
+              title: "Brand CI Guideline",
+              description: "Use De Hygienique green and the official Thai font. Keep the mood clinical, bright, and reassuring."
+            }
+          ],
+          products: [],
+          docs: [],
+          refs: []
+        }
       },
       {
+        artworkConcept: "Reveal the hidden layer beneath a clean surface.",
+        keyVisualGrammar: "A cutaway makes the invisible problem tangible.",
         compositionGrammar: "Asymmetric editorial grid.",
-        typographyGrammar: "Large Thai display headline.",
-        graphicGrammar: "Rounded green utility shapes.",
-        imageTreatment: "Bright high-key commercial photography.",
+        graphicDeviceLogic: "A functional footer contains secondary proof.",
         hierarchyAndDensity: "One dominant headline and one hero.",
         secondaryAndFooterGrammar: "A grounded green footer zone.",
         conceptTranslation: "Show a new cutaway revealing the mattress layer.",
@@ -50,6 +60,9 @@ describe("buildReferenceLedImagePrompt", () => {
 
     expect(prompt).toContain("DESIGN-GRAMMAR-LED GENERATION");
     expect(prompt).toContain("Show a new cutaway revealing the mattress layer");
+    expect(prompt).toContain("MANDATORY — overrides every conflicting reference trait");
+    expect(prompt).toContain("official Thai font");
+    expect(prompt).toContain('"personality"');
     expect(prompt).toContain('"optionalSupportingLine"');
     expect(prompt).toContain("เปลี่ยนผ้าปู ไม่ได้เปลี่ยนข้างในฟูก");
     expect(prompt).not.toContain("ระบบสั่นสำหรับที่นอน");

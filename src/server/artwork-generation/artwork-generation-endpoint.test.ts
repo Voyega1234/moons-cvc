@@ -905,10 +905,10 @@ describe("handleArtworkGenerationRequest", () => {
           return new Response(
             JSON.stringify({
               output_text: JSON.stringify({
+                artworkConcept: "Reveal an invisible problem through a cutaway.",
+                keyVisualGrammar: "One physical cutaway is the proof mechanism.",
                 compositionGrammar: "Asymmetric editorial grid.",
-                typographyGrammar: "Large Thai display headline.",
-                graphicGrammar: "Rounded green utility shapes.",
-                imageTreatment: "Bright high-key commercial photography.",
+                graphicDeviceLogic: "A footer groups secondary proof.",
                 hierarchyAndDensity: "One dominant headline and one hero.",
                 secondaryAndFooterGrammar: "Grounded green footer zone.",
                 conceptTranslation: "Create a new mattress cutaway hero.",
@@ -973,6 +973,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     const prompt = String(editForm?.get("prompt"));
     expect(prompt).toContain("# DESIGN-GRAMMAR-LED GENERATION");
+    expect(prompt).toContain("AUTHORITY ORDER IS MANDATORY");
+    expect(prompt).toContain("Brand CI wins without compromise");
+    expect(prompt).toContain("key-visual mechanism");
     expect(prompt).toContain("Create a new mattress cutaway hero");
     expect(prompt).toContain("source people");
     expect(prompt).toContain("One calm supporting line");
@@ -984,6 +987,12 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(editForm?.getAll("image[]")).toHaveLength(3);
     expect(JSON.stringify(interpreterBody)).toContain("input_image");
+    expect(JSON.stringify(interpreterBody)).toContain(
+      "REFERENCE SCOPE IS STRICT"
+    );
+    expect(JSON.stringify(interpreterBody)).toContain(
+      "never transfer the reference brand's colors"
+    );
     expect(JSON.stringify(interpreterBody)).toContain(
       Buffer.from("reference-image").toString("base64")
     );
