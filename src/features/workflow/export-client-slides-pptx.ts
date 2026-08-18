@@ -199,6 +199,34 @@ function estimatedWrappedLines(
   }, 0);
 }
 
+/**
+ * estimatedWrappedLines is calibrated for continuous Thai prose (Concept
+ * Idea, Mood and Tone) and assumes Latin characters are roughly as wide as
+ * Thai ones. Storyline bullets mix short English beat titles ("Hook",
+ * "Product Intro", "Misconception #1") with a Thai description, so that
+ * assumption over-counts wraps and inflates the section's height. Use a
+ * narrower per-character width tuned for this Latin-heavy short-line content
+ * instead.
+ */
+function estimatedStorylineLines(
+  value: string,
+  widthInches: number,
+  fontSize: number
+): number {
+  const charactersPerLine = Math.max(
+    18,
+    Math.floor((widthInches * 72) / (fontSize * 0.44))
+  );
+  return value.split("\n").reduce((total, line) => {
+    const weightedLength = Array.from(line).reduce(
+      (length, character) =>
+        length + (THAI_TEXT_PATTERN.test(character) ? 1.08 : 1),
+      0
+    );
+    return total + Math.max(1, Math.ceil(weightedLength / charactersPerLine));
+  }, 0);
+}
+
 function fontSizeForFixedTextBox(
   value: string,
   widthInches: number,
@@ -1043,7 +1071,7 @@ function addUgcClientSlide(
       ? direction.ugcScript.beats.map((beat) => `• ${beat.title}`)
       : brief.scenes.map((scene) => `• ${scene.title}`)
   ).join("\n");
-  const storylineLines = estimatedWrappedLines(
+  const storylineLines = estimatedStorylineLines(
     storyline,
     UGC_LEFT_COLUMN_WIDTH - 0.1,
     9.6
