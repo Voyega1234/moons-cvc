@@ -8,7 +8,7 @@
   ],
   "functions": {
     "api/hook-generation-harness.ts": {
-      "includeFiles": "agent_prompt/agent_hook.md",
+      "includeFiles": "{agent_prompt/agent_hook.md,agent_prompt/agent_hook_research.md,agent_prompt/agent_hook_highlight.md,agent_prompt/agent_ugc_script.md}",
       "maxDuration": 900
     },
     "api/hook-agent-prompt.ts": {
