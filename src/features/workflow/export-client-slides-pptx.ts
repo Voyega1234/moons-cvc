@@ -980,48 +980,69 @@ function addUgcClientSlide(
       breakLine: false
     }
   );
-  addUgcSectionHeading(slide, "Concept Idea:", 2.08);
-  const concept = clampText(direction?.concept, 285);
-  slide.addText(concept, {
-    x: UGC_LEFT_COLUMN_X,
-    y: 2.48,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: 1.12,
-    margin: 0,
-    ...localizedTextStyle(concept),
-    fontSize: fontSizeForFixedTextBox(
-      concept,
-      UGC_LEFT_COLUMN_WIDTH,
-      1.12,
-      [10, 9, 8]
-    ),
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false
-  });
-  slide.addShape(pptx.ShapeType.line, {
-    x: UGC_LEFT_COLUMN_X,
-    y: 3.72,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: 0,
-    line: { color: COLORS.muted, width: 0.8 }
-  });
-  const STORYLINE_Y = 3.98;
-  const STORYLINE_TEXT_Y = 4.36;
+  // The whole left column below the headline flows top-to-bottom: each
+  // section's actual wrapped height (not a size tuned for the old fixed
+  // 4-item Storyline list) pushes the next section's divider/heading/text,
+  // so short content pulls everything up and long content pushes it down —
+  // no fixed y-value can overlap or leave a gap for the section above it.
+  const CONCEPT_HEADING_Y = 2.08;
+  const CONCEPT_TEXT_Y = 2.48;
+  const CONCEPT_TEXT_MAX_HEIGHT = 1.12;
+  const CONCEPT_TO_DIVIDER_GAP = 0.12;
+  const DIVIDER_TO_STORYLINE_HEADING_GAP = 0.26;
+  const STORYLINE_HEADING_TO_TEXT_GAP = 0.38;
   const STORYLINE_MIN_HEIGHT = 0.92;
   const STORYLINE_TO_DIVIDER_GAP = 0.1;
   const DIVIDER_TO_MOOD_HEADING_GAP = 0.24;
   const MOOD_HEADING_TO_TEXT_GAP = 0.4;
 
-  addUgcSectionHeading(slide, "Storyline:", STORYLINE_Y);
+  addUgcSectionHeading(slide, "Concept Idea:", CONCEPT_HEADING_Y);
+  const concept = clampText(direction?.concept, 285);
+  const conceptFontSize = fontSizeForFixedTextBox(
+    concept,
+    UGC_LEFT_COLUMN_WIDTH,
+    CONCEPT_TEXT_MAX_HEIGHT,
+    [10, 9, 8]
+  );
+  const conceptHeight = Math.min(
+    CONCEPT_TEXT_MAX_HEIGHT,
+    Math.max(
+      0.3,
+      (estimatedWrappedLines(concept, UGC_LEFT_COLUMN_WIDTH, conceptFontSize) *
+        conceptFontSize *
+        1.28) /
+        72
+    )
+  );
+  slide.addText(concept, {
+    x: UGC_LEFT_COLUMN_X,
+    y: CONCEPT_TEXT_Y,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: conceptHeight,
+    margin: 0,
+    ...localizedTextStyle(concept),
+    fontSize: conceptFontSize,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false
+  });
+  const conceptDividerY = CONCEPT_TEXT_Y + conceptHeight + CONCEPT_TO_DIVIDER_GAP;
+  slide.addShape(pptx.ShapeType.line, {
+    x: UGC_LEFT_COLUMN_X,
+    y: conceptDividerY,
+    w: UGC_LEFT_COLUMN_WIDTH,
+    h: 0,
+    line: { color: COLORS.muted, width: 0.8 }
+  });
+
+  const storylineHeadingY = conceptDividerY + DIVIDER_TO_STORYLINE_HEADING_GAP;
+  const storylineTextY = storylineHeadingY + STORYLINE_HEADING_TO_TEXT_GAP;
+  addUgcSectionHeading(slide, "Storyline:", storylineHeadingY);
   const storyline = (
     direction?.ugcScript?.beats.length
       ? direction.ugcScript.beats.map((beat) => `• ${beat.title}`)
       : brief.scenes.map((scene) => `• ${scene.title}`)
   ).join("\n");
-  // Beat count/title length is flexible for a rich ugcScript (unlike the
-  // fixed 4-item ugcBrief list), so the rest of the column has to shift down
-  // to match instead of overlapping "Mood and Tone" at a hardcoded position.
   const storylineLines = estimatedWrappedLines(
     storyline,
     UGC_LEFT_COLUMN_WIDTH - 0.1,
@@ -1032,13 +1053,13 @@ function addUgcClientSlide(
     (storylineLines * 9.6 * 1.28) / 72
   );
   const storylineDividerY =
-    STORYLINE_TEXT_Y + storylineHeight + STORYLINE_TO_DIVIDER_GAP;
+    storylineTextY + storylineHeight + STORYLINE_TO_DIVIDER_GAP;
   const moodHeadingY = storylineDividerY + DIVIDER_TO_MOOD_HEADING_GAP;
   const moodTextY = moodHeadingY + MOOD_HEADING_TO_TEXT_GAP;
 
   slide.addText(storyline, {
     x: UGC_LEFT_COLUMN_X + 0.04,
-    y: STORYLINE_TEXT_Y,
+    y: storylineTextY,
     w: UGC_LEFT_COLUMN_WIDTH - 0.1,
     h: storylineHeight,
     margin: 0,
