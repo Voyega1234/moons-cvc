@@ -142,12 +142,8 @@ describe("addUgcScriptRows pagination", () => {
     expect(addSlideSpy).not.toHaveBeenCalled();
   });
 
-  it("spills onto a continuation slide once beats overflow the script column", () => {
-    const pptx = new PptxGenJS();
-    const firstSlide = pptx.addSlide();
-    const addSlideSpy = vi.spyOn(pptx, "addSlide");
-
-    const manyBeats = Array.from({ length: 10 }, (_, index) => ({
+  function longBeats(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
       id: `beat-${index + 1}`,
       role: "misconception" as const,
       title: `Misconception #${index + 1}`,
@@ -163,14 +159,35 @@ describe("addUgcScriptRows pagination", () => {
         }
       ]
     }));
+  }
+
+  it("fills both halves of one continuation slide before starting a second", () => {
+    const pptx = new PptxGenJS();
+    const firstSlide = pptx.addSlide();
+    const addSlideSpy = vi.spyOn(pptx, "addSlide");
 
     addUgcScriptRows(
       pptx,
       firstSlide,
-      buildUgcScriptRows(ugcScript({ beats: manyBeats })),
+      buildUgcScriptRows(ugcScript({ beats: longBeats(6) })),
       "อาชีพอิสระยื่นรีไฟแนนซ์ Isuzu ได้ไหม?"
     );
 
-    expect(addSlideSpy).toHaveBeenCalled();
+    expect(addSlideSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a second continuation slide once both halves of the first are full", () => {
+    const pptx = new PptxGenJS();
+    const firstSlide = pptx.addSlide();
+    const addSlideSpy = vi.spyOn(pptx, "addSlide");
+
+    addUgcScriptRows(
+      pptx,
+      firstSlide,
+      buildUgcScriptRows(ugcScript({ beats: longBeats(18) })),
+      "อาชีพอิสระยื่นรีไฟแนนซ์ Isuzu ได้ไหม?"
+    );
+
+    expect(addSlideSpy).toHaveBeenCalledTimes(2);
   });
 });

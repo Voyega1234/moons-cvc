@@ -67,6 +67,13 @@ const UGC_SCRIPT_CONTINUATION_X = 0.54;
 const UGC_SCRIPT_CONTINUATION_WIDTH = 12.26;
 const UGC_SCRIPT_CONTINUATION_TOP = 1.1;
 const UGC_SCRIPT_CONTINUATION_BOTTOM = 7.15;
+const UGC_SCRIPT_CONTINUATION_COLUMN_GAP = 0.4;
+const UGC_SCRIPT_CONTINUATION_COLUMN_WIDTH =
+  (UGC_SCRIPT_CONTINUATION_WIDTH - UGC_SCRIPT_CONTINUATION_COLUMN_GAP) / 2;
+const UGC_SCRIPT_CONTINUATION_RIGHT_COLUMN_X =
+  UGC_SCRIPT_CONTINUATION_X +
+  UGC_SCRIPT_CONTINUATION_COLUMN_WIDTH +
+  UGC_SCRIPT_CONTINUATION_COLUMN_GAP;
 const UGC_SCRIPT_LINE_HEIGHT_FACTOR = 1.3;
 
 function localizedTextStyle(value: string) {
@@ -639,11 +646,14 @@ function ugcScriptRowHeightInches(lineCount: number, fontSize: number): number {
   return (lineCount * fontSize * UGC_SCRIPT_LINE_HEIGHT_FACTOR) / 72;
 }
 
+type UgcScriptLayoutState = "primary" | "continuation-left" | "continuation-right";
+
 /**
  * Renders a flexible-length UGC script starting in the slide's script column.
- * When content would overflow the column, it spills onto a fresh full-width
- * "Script (cont'd)" slide instead of shrinking or truncating — beat count is
- * AI-decided per brand, so the layout has to flex rather than the content.
+ * When content would overflow, it moves to the right half of a full-width
+ * "Script (cont'd)" slide, and only starts a genuinely new slide once both
+ * halves of that slide are full — beat count is AI-decided per brand, so the
+ * layout has to flex (and use the page efficiently) rather than the content.
  */
 export function addUgcScriptRows(
   pptx: PptxGenJS,
@@ -656,6 +666,7 @@ export function addUgcScriptRows(
   let columnWidth = UGC_SCRIPT_COLUMN_WIDTH;
   let bottomLimit = UGC_SCRIPT_COLUMN_BOTTOM;
   let cursorY = UGC_SCRIPT_COLUMN_TOP;
+  let layoutState: UgcScriptLayoutState = "primary";
 
   const startContinuationSlide = () => {
     slide = pptx.addSlide();
@@ -699,17 +710,35 @@ export function addUgcScriptRows(
       h: 0,
       line: { color: COLORS.line, width: 1 }
     });
+    slide.addShape(pptx.ShapeType.line, {
+      x: UGC_SCRIPT_CONTINUATION_RIGHT_COLUMN_X - UGC_SCRIPT_CONTINUATION_COLUMN_GAP / 2,
+      y: UGC_SCRIPT_CONTINUATION_TOP,
+      w: 0,
+      h: UGC_SCRIPT_CONTINUATION_BOTTOM - UGC_SCRIPT_CONTINUATION_TOP,
+      line: { color: COLORS.line, width: 0.75 }
+    });
     columnX = UGC_SCRIPT_CONTINUATION_X;
-    columnWidth = UGC_SCRIPT_CONTINUATION_WIDTH;
+    columnWidth = UGC_SCRIPT_CONTINUATION_COLUMN_WIDTH;
     bottomLimit = UGC_SCRIPT_CONTINUATION_BOTTOM;
     cursorY = UGC_SCRIPT_CONTINUATION_TOP;
+    layoutState = "continuation-left";
+  };
+
+  const advance = () => {
+    if (layoutState === "continuation-left") {
+      columnX = UGC_SCRIPT_CONTINUATION_RIGHT_COLUMN_X;
+      cursorY = UGC_SCRIPT_CONTINUATION_TOP;
+      layoutState = "continuation-right";
+      return;
+    }
+    startContinuationSlide();
   };
 
   for (const row of rows) {
     let lineCount = ugcScriptRowLineCount(row, columnWidth);
     let rowHeight = ugcScriptRowHeightInches(lineCount, row.fontSize);
     if (cursorY + row.gapBeforeInches + rowHeight > bottomLimit) {
-      startContinuationSlide();
+      advance();
       lineCount = ugcScriptRowLineCount(row, columnWidth);
       rowHeight = ugcScriptRowHeightInches(lineCount, row.fontSize);
     }
