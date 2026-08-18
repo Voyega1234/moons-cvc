@@ -1006,17 +1006,41 @@ function addUgcClientSlide(
     h: 0,
     line: { color: COLORS.muted, width: 0.8 }
   });
-  addUgcSectionHeading(slide, "Storyline:", 3.98);
+  const STORYLINE_Y = 3.98;
+  const STORYLINE_TEXT_Y = 4.36;
+  const STORYLINE_MIN_HEIGHT = 0.92;
+  const STORYLINE_TO_DIVIDER_GAP = 0.1;
+  const DIVIDER_TO_MOOD_HEADING_GAP = 0.24;
+  const MOOD_HEADING_TO_TEXT_GAP = 0.4;
+
+  addUgcSectionHeading(slide, "Storyline:", STORYLINE_Y);
   const storyline = (
     direction?.ugcScript?.beats.length
       ? direction.ugcScript.beats.map((beat) => `• ${beat.title}`)
       : brief.scenes.map((scene) => `• ${scene.title}`)
   ).join("\n");
+  // Beat count/title length is flexible for a rich ugcScript (unlike the
+  // fixed 4-item ugcBrief list), so the rest of the column has to shift down
+  // to match instead of overlapping "Mood and Tone" at a hardcoded position.
+  const storylineLines = estimatedWrappedLines(
+    storyline,
+    UGC_LEFT_COLUMN_WIDTH - 0.1,
+    9.6
+  );
+  const storylineHeight = Math.max(
+    STORYLINE_MIN_HEIGHT,
+    (storylineLines * 9.6 * 1.28) / 72
+  );
+  const storylineDividerY =
+    STORYLINE_TEXT_Y + storylineHeight + STORYLINE_TO_DIVIDER_GAP;
+  const moodHeadingY = storylineDividerY + DIVIDER_TO_MOOD_HEADING_GAP;
+  const moodTextY = moodHeadingY + MOOD_HEADING_TO_TEXT_GAP;
+
   slide.addText(storyline, {
     x: UGC_LEFT_COLUMN_X + 0.04,
-    y: 4.36,
+    y: STORYLINE_TEXT_Y,
     w: UGC_LEFT_COLUMN_WIDTH - 0.1,
-    h: 0.92,
+    h: storylineHeight,
     margin: 0,
     ...localizedTextStyle(storyline),
     fontSize: 9.6,
@@ -1026,19 +1050,19 @@ function addUgcClientSlide(
   });
   slide.addShape(pptx.ShapeType.line, {
     x: UGC_LEFT_COLUMN_X,
-    y: 5.38,
+    y: storylineDividerY,
     w: UGC_LEFT_COLUMN_WIDTH,
     h: 0,
     line: { color: COLORS.muted, width: 0.8 }
   });
-  addUgcSectionHeading(slide, "Mood and Tone:", 5.62);
+  addUgcSectionHeading(slide, "Mood and Tone:", moodHeadingY);
   const mood = clampText(
     `${brief.moodAndTone} ${brief.productionStyle}`,
     220
   );
   slide.addText(mood, {
     x: UGC_LEFT_COLUMN_X,
-    y: 6.02,
+    y: moodTextY,
     w: UGC_LEFT_COLUMN_WIDTH,
     h: 0.82,
     margin: 0,
