@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGoogleSheetsAccessToken } from "./google-workspace-auth";
+import {
+  createGoogleDriveAccessToken,
+  createGoogleSheetsAccessToken
+} from "./google-workspace-auth";
 
 const baseEnv = {
   GOOGLE_CLOUD_PROJECT_NUMBER: "123456789",
@@ -97,6 +100,36 @@ describe("createGoogleSheetsAccessToken", () => {
         oidcToken: "vercel-oidc-token"
       })
     ).rejects.toThrow("GOOGLE_SERVICE_ACCOUNT_EMAIL is required.");
+  });
+});
+
+describe("createGoogleDriveAccessToken", () => {
+  it("uses the service account itself without a delegated user subject", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ access_token: "federated-cloud-token" }))
+      .mockResolvedValueOnce(jsonResponse({ signedJwt: "signed-jwt" }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: "drive-token" }));
+
+    await expect(
+      createGoogleDriveAccessToken({
+        env: { ...baseEnv, VERCEL_ENV: "production" },
+        oidcToken: "vercel-oidc-token",
+        fetchImpl,
+        now: () => 1_700_000_000_000
+      })
+    ).resolves.toBe("drive-token");
+
+    const signJwtBody = JSON.parse(
+      String(fetchImpl.mock.calls[1]?.[1]?.body)
+    ) as { payload: string };
+    expect(JSON.parse(signJwtBody.payload)).toEqual({
+      iss: baseEnv.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      scope: "https://www.googleapis.com/auth/drive",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: 1_700_000_000,
+      exp: 1_700_003_600
+    });
   });
 });
 

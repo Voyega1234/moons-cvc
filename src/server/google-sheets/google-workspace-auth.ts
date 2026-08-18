@@ -4,6 +4,7 @@ const CLOUD_PLATFORM_SCOPE =
   "https://www.googleapis.com/auth/cloud-platform";
 const SHEETS_READONLY_SCOPE =
   "https://www.googleapis.com/auth/spreadsheets.readonly";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const GOOGLE_STS_ENDPOINT = "https://sts.googleapis.com/v1/token";
 const GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -25,12 +26,17 @@ export interface GoogleSheetsAccessTokenOptions {
   now?: () => number;
 }
 
+export type GoogleDriveAccessTokenOptions = Omit<
+  GoogleSheetsAccessTokenOptions,
+  "subjectEmail"
+>;
+
 export async function createGoogleSheetsAccessToken({
   env,
   subjectEmail,
   oidcToken,
   fetchImpl = fetch,
-  adcAccessTokenProvider = defaultAdcAccessToken,
+  adcAccessTokenProvider = defaultSheetsAdcAccessToken,
   now = Date.now
 }: GoogleSheetsAccessTokenOptions): Promise<string> {
   const delegatedSubject = normalizeConvertCakeEmail(subjectEmail);
@@ -48,11 +54,43 @@ export async function createGoogleSheetsAccessToken({
     fetchImpl
   });
   const issuedAt = Math.floor(now() / 1000);
-  const signedJwt = await signDomainWideDelegationJwt({
+  const signedJwt = await signWorkspaceJwt({
     serviceAccountEmail,
     subjectEmail: delegatedSubject,
+    scope: SHEETS_READONLY_SCOPE,
     cloudAccessToken,
     issuedAt,
+    fetchImpl
+  });
+
+  return exchangeSignedJwt(signedJwt, fetchImpl);
+}
+
+export async function createGoogleDriveAccessToken({
+  env,
+  oidcToken,
+  fetchImpl = fetch,
+  adcAccessTokenProvider = defaultDriveAdcAccessToken,
+  now = Date.now
+}: GoogleDriveAccessTokenOptions): Promise<string> {
+  if (!isVercelDeployment(env.VERCEL_ENV)) {
+    return localAdcAccessToken(env, adcAccessTokenProvider);
+  }
+
+  const serviceAccountEmail = required(
+    env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    "GOOGLE_SERVICE_ACCOUNT_EMAIL"
+  );
+  const cloudAccessToken = await exchangeVercelOidcToken({
+    env,
+    oidcToken: required(oidcToken, "Vercel OIDC token"),
+    fetchImpl
+  });
+  const signedJwt = await signWorkspaceJwt({
+    serviceAccountEmail,
+    scope: DRIVE_SCOPE,
+    cloudAccessToken,
+    issuedAt: Math.floor(now() / 1000),
     fetchImpl
   });
 
@@ -112,23 +150,33 @@ async function localAdcAccessToken(
   return required(await provider(), "Application Default Credentials token");
 }
 
-async function defaultAdcAccessToken(): Promise<string> {
-  const auth = new GoogleAuth({ scopes: [SHEETS_READONLY_SCOPE] });
+async function defaultSheetsAdcAccessToken(): Promise<string> {
+  return defaultAdcAccessToken(SHEETS_READONLY_SCOPE);
+}
+
+async function defaultDriveAdcAccessToken(): Promise<string> {
+  return defaultAdcAccessToken(DRIVE_SCOPE);
+}
+
+async function defaultAdcAccessToken(scope: string): Promise<string> {
+  const auth = new GoogleAuth({ scopes: [scope] });
   const client = await auth.getClient();
   const result = await client.getAccessToken();
   const token = typeof result === "string" ? result : result.token;
   return required(token ?? undefined, "Application Default Credentials token");
 }
 
-async function signDomainWideDelegationJwt({
+async function signWorkspaceJwt({
   serviceAccountEmail,
   subjectEmail,
+  scope,
   cloudAccessToken,
   issuedAt,
   fetchImpl
 }: {
   serviceAccountEmail: string;
-  subjectEmail: string;
+  subjectEmail?: string;
+  scope: string;
   cloudAccessToken: string;
   issuedAt: number;
   fetchImpl: typeof fetch;
@@ -144,8 +192,8 @@ async function signDomainWideDelegationJwt({
       body: JSON.stringify({
         payload: JSON.stringify({
           iss: serviceAccountEmail,
-          sub: subjectEmail,
-          scope: SHEETS_READONLY_SCOPE,
+          ...(subjectEmail ? { sub: subjectEmail } : {}),
+          scope,
           aud: GOOGLE_OAUTH_TOKEN_ENDPOINT,
           iat: issuedAt,
           exp: issuedAt + 3600

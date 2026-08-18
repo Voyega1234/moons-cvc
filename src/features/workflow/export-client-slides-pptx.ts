@@ -15,7 +15,6 @@ import {
   type UgcPreviewImageMap
 } from "./review/creative-previews";
 import {
-  requestGoogleDriveAccessToken,
   uploadPptxToGoogleSlides,
   type GoogleSlidesImportResult
 } from "../../services/google-slides/google-slides-import";
@@ -1914,12 +1913,10 @@ async function openPptxInGoogleSlides(
   build: () => Promise<PptxGenJS>,
   name: string
 ): Promise<GoogleSlidesImportResult> {
-  const accessToken = await requestGoogleDriveAccessToken();
   const pptx = await build();
   return uploadPptxToGoogleSlides({
     blob: await pptxBlob(pptx),
-    name,
-    accessToken
+    name
   });
 }
 
