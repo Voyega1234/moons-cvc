@@ -82,6 +82,15 @@ may change the tension, angle, product role, or creative mechanism but keeps
 the content type, verified product truth, campaign constraints, and commercial
 objective.
 
+Generated captions are production-ready plain text: the Hook policy requires
+actual newline characters, blank lines between content blocks, one line per
+bullet and verified contact item, and a final hashtag block. Both direct Hook
+and legacy webhook parsing pass generated captions through
+`src/domain/caption-formatting.ts`, which repairs standalone-dot separators and
+inline list/contact/hashtag blocks without rewriting ordinary punctuation,
+URLs, or existing line breaks. Caption editors and review previews preserve
+the stored whitespace.
+
 `/playground` is the internal Hook Agent workbench. It reads the current
 `agent_hook.md` through the authenticated `/api/hook-agent-prompt` endpoint,
 allows a temporary prompt override, previews the exact request payload, and

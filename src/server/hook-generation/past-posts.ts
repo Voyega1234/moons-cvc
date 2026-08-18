@@ -40,6 +40,7 @@ export function buildPastPostsCaptionStyleBlock(
     "Match the recurring information architecture, such as opener → context/story → benefits or proof → offer → CTA → contact/footer → hashtags. Preserve the structure, not stale facts.",
     "For paid-ad directions, prioritize ad_caption examples. Use organic_post examples only as secondary brand-voice evidence.",
     "Write a new caption in that recurring style. Do not copy an old phrase, idea, offer, claim, hashtag, contact detail, fact, or product detail unless that exact current value is independently verified in the supplied context. Past posts never override the Questionnaire, Brand system, User brief, or verified Research dossier.",
+    "Return production-ready plain text with actual newline characters: keep one blank line between content blocks, one line per bullet and verified contact item, and a final hashtag block. Never use a standalone period as a paragraph separator.",
     JSON.stringify(selected, null, 2)
   ].join("\n");
 }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeGeneratedCaptionFormatting } from "../../domain/caption-formatting.js";
 import {
   albumFormatPreferences,
   albumFormats,
@@ -1546,9 +1547,11 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         `directions[${index}].visual`
       );
       const cta = readString(direction.cta, `directions[${index}].cta`);
-      const caption = readString(
-        direction.caption,
-        `directions[${index}].caption`
+      const caption = normalizeGeneratedCaptionFormatting(
+        readString(
+          direction.caption,
+          `directions[${index}].caption`
+        )
       );
       const albumFormat = readGeneratedAlbumFormat(
         direction.albumFormat,

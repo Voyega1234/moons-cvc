@@ -147,6 +147,8 @@ describe("buildPastPostsCaptionStyleBlock", () => {
     ]);
 
     expect(block).toContain("# Past posts — caption style evidence only");
+    expect(block).toContain("actual newline characters");
+    expect(block).toContain("Never use a standalone period");
     expect(block).toContain(
       "opening pattern, information order, paragraph length, line breaks"
     );

@@ -14,6 +14,7 @@ import {
   type UgcVideoBrief
 } from "../../domain/creative-run";
 import type { WorkflowState } from "../../features/workflow/model";
+import { normalizeGeneratedCaptionFormatting } from "../../domain/caption-formatting";
 import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
 
 export interface HookGenerationInput {
@@ -103,10 +104,11 @@ function toDirection(raw: RawDirection, index: number): CreativeDirection {
       ? raw.why
       : "Works when the audience needs fast clarity.";
   const cta = typeof raw.cta === "string" && raw.cta ? raw.cta : "Learn more";
-  const caption =
+  const caption = normalizeGeneratedCaptionFormatting(
     typeof raw.caption === "string" && raw.caption
       ? raw.caption
-      : `${raw.hook} ${raw.concept}.`;
+      : `${raw.hook} ${raw.concept}.`
+  );
   const ugcBrief =
     service === "ugc-video"
       ? normalizeUgcVideoBrief(raw.ugcBrief, {

@@ -116,6 +116,9 @@ describe("agent_hook creative quality contract", () => {
     expect(prompt).toContain(
       "Paid Ad เรียนรู้จากแคปชั่นโฆษณา"
     );
+    expect(prompt).toContain("พร้อม Copy/Paste ลง Social ได้ทันที");
+    expect(prompt).toContain("ใช้ newline จริงในค่า JSON (`\\n`)");
+    expect(prompt).toContain("ห้ามใช้จุดเดี่ยว `.` คั่น Paragraph");
   });
 
   it("requires commercially direct paid-social hooks", async () => {
