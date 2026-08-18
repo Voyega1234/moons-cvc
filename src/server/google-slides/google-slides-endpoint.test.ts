@@ -34,7 +34,8 @@ describe("handleGoogleSlidesRequest", () => {
     );
     expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({
       Authorization: "Bearer service-account-token",
-      "X-Upload-Content-Length": "42"
+      "X-Upload-Content-Length": "42",
+      Origin: "https://moons.example"
     });
     expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
       name: "Client deck",
@@ -126,7 +127,10 @@ describe("handleGoogleSlidesRequest", () => {
 function postRequest(body: unknown): Request {
   return new Request("https://moons.local/api/google-slides", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://moons.example"
+    },
     body: JSON.stringify(body)
   });
 }

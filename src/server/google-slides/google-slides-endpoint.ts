@@ -63,6 +63,7 @@ export async function handleGoogleSlidesRequest({
         folderId,
         name: readName(body.name),
         size: readSize(body.size),
+        origin: request.headers.get("Origin")?.trim() || undefined,
         fetchImpl
       });
     }
@@ -93,12 +94,14 @@ async function initializeUpload({
   folderId,
   name,
   size,
+  origin,
   fetchImpl
 }: {
   accessToken: string;
   folderId: string;
   name: string;
   size: number;
+  origin?: string;
   fetchImpl: typeof fetch;
 }): Promise<Response> {
   const params = new URLSearchParams({
@@ -112,7 +115,8 @@ async function initializeUpload({
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json; charset=UTF-8",
       "X-Upload-Content-Type": POWERPOINT_MIME_TYPE,
-      "X-Upload-Content-Length": String(size)
+      "X-Upload-Content-Length": String(size),
+      ...(origin ? { Origin: origin } : {})
     },
     body: JSON.stringify({
       name,
