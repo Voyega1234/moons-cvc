@@ -45,7 +45,7 @@ describe("handleGoogleSlidesRequest", () => {
     });
   });
 
-  it("verifies the upload folder and shares the deck with the signed-in user", async () => {
+  it("verifies the upload folder and shares the deck with Convert Cake editors", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({
@@ -76,9 +76,10 @@ describe("handleGoogleSlidesRequest", () => {
       "/files/generated-slide-id/permissions"
     );
     expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
-      type: "user",
+      type: "domain",
       role: "writer",
-      emailAddress: "designer@convertcake.com"
+      domain: "convertcake.com",
+      allowFileDiscovery: false
     });
   });
 

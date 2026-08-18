@@ -10,6 +10,7 @@ const POWERPOINT_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const GOOGLE_SLIDES_MIME_TYPE = "application/vnd.google-apps.presentation";
 const GENERATED_MARKER = "moons-google-slides";
+const SHARING_DOMAIN = "convertcake.com";
 
 export interface GoogleSlidesEndpointEnv extends GoogleWorkspaceAuthEnv {
   SUPABASE_URL?: string;
@@ -72,7 +73,6 @@ export async function handleGoogleSlidesRequest({
         accessToken,
         folderId,
         fileId: readFileId(body.fileId),
-        userEmail: resolveUserEmail(auth.email, env),
         fetchImpl
       });
     }
@@ -135,13 +135,11 @@ async function shareUploadedDeck({
   accessToken,
   folderId,
   fileId,
-  userEmail,
   fetchImpl
 }: {
   accessToken: string;
   folderId: string;
   fileId: string;
-  userEmail: string;
   fetchImpl: typeof fetch;
 }): Promise<Response> {
   const fields = "id,name,mimeType,webViewLink,parents,appProperties";
@@ -170,9 +168,10 @@ async function shareUploadedDeck({
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        type: "user",
+        type: "domain",
         role: "writer",
-        emailAddress: userEmail
+        domain: SHARING_DOMAIN,
+        allowFileDiscovery: false
       })
     }
   );
@@ -212,18 +211,6 @@ function readFileId(value: unknown): string {
     throw new Error("Google Slides file ID is invalid.");
   }
   return value.trim();
-}
-
-function resolveUserEmail(
-  authenticatedEmail: string | null,
-  env: GoogleSlidesEndpointEnv
-): string {
-  const email = authenticatedEmail ?? env.GOOGLE_WORKSPACE_LOCAL_USER;
-  const normalized = email?.trim().toLowerCase() ?? "";
-  if (!/^[^@\s]+@convertcake\.com$/.test(normalized)) {
-    throw new Error("Google Slides sharing requires a @convertcake.com user.");
-  }
-  return normalized;
 }
 
 function isVercelDeployment(value: string | undefined): boolean {

@@ -21,8 +21,6 @@ import {
 
 const PRODUCTION_AUTH_REDIRECT_URL = "https://creative-compass-os.vercel.app/";
 export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/spreadsheets.readonly"
 ].join(" ");
 
@@ -159,7 +157,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           scopes: GOOGLE_WORKSPACE_OAUTH_SCOPES,
           queryParams: {
             hd: "convertcake.com",
-            include_granted_scopes: "true",
+            include_granted_scopes: "false",
             access_type: "offline",
             prompt: "consent"
           }
@@ -238,8 +236,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           <div className="auth-google-access">
             <b>Only @convertcake.com accounts</b>
             <span>
-              Used to create Google Slides in your Drive and read onboarding
-              questionnaire Sheets.
+              Used only to read onboarding questionnaire Google Sheets.
             </span>
           </div>
 
