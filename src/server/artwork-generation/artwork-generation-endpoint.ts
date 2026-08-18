@@ -11,7 +11,8 @@ export {
 export {
   albumCropRegions,
   detectAlbumBoundaries,
-  inspectFourGridMasterAlignment
+  inspectFourGridMasterAlignment,
+  normalizeFourGridMaster
 } from "./album-master.js";
 
 export { normalizeReferenceImageForOpenAI } from "./reference-images.js";

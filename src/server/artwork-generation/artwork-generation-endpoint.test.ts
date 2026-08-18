@@ -6,6 +6,7 @@ import {
   detectAlbumBoundaries,
   handleArtworkGenerationRequest,
   inspectFourGridMasterAlignment,
+  normalizeFourGridMaster,
   normalizeReferenceImageForOpenAI,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
@@ -626,6 +627,26 @@ describe("adaptive album crop detection", () => {
       valid: true,
       verticalPercent: expect.any(Number),
       horizontalPercent: expect.any(Number)
+    });
+  });
+
+  it("normalizes a shifted four-grid master into an exact two-by-two grid", async () => {
+    const shifted = await fourGridMasterPng({
+      vertical: 244,
+      horizontal: 280
+    });
+
+    const normalized = await normalizeFourGridMaster(shifted);
+
+    await expect(inspectFourGridMasterAlignment(normalized)).resolves.toMatchObject({
+      valid: true,
+      verticalPercent: 50,
+      horizontalPercent: 50
+    });
+    await expect(sharp(normalized).metadata()).resolves.toMatchObject({
+      width: 512,
+      height: 512,
+      format: "png"
     });
   });
 
@@ -1465,16 +1486,11 @@ describe("handleArtworkGenerationRequest", () => {
     ).toBe(true);
   });
 
-  it("repairs a shifted four-grid master before saving its panels", async () => {
+  it("normalizes a shifted four-grid master before saving its panels", async () => {
     const shiftedMaster = await fourGridMasterPng({
       vertical: 256,
       horizontal: 280
     });
-    const repairedMaster = await fourGridMasterPng({
-      vertical: 256,
-      horizontal: 256
-    });
-    const editPrompts: string[] = [];
     const uploaded: { path: string; body: Buffer }[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
@@ -1490,15 +1506,6 @@ describe("handleArtworkGenerationRequest", () => {
         return new Response(
           JSON.stringify({
             data: [{ b64_json: shiftedMaster.toString("base64") }]
-          }),
-          { status: 200 }
-        );
-      }
-      if (href.includes("/v1/images/edits")) {
-        editPrompts.push(String((init?.body as FormData).get("prompt")));
-        return new Response(
-          JSON.stringify({
-            data: [{ b64_json: repairedMaster.toString("base64") }]
           }),
           { status: 200 }
         );
@@ -1545,8 +1552,6 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(editPrompts).toHaveLength(1);
-    expect(editPrompts[0]).toContain("exact 50% center lines");
     expect(uploaded.map(({ path }) => path)).toEqual([
       "flora/run-1/outputs/hook-1-album-master-v1.png",
       "flora/run-1/outputs/hook-1-album-1-v1.png",
@@ -1554,6 +1559,9 @@ describe("handleArtworkGenerationRequest", () => {
       "flora/run-1/outputs/hook-1-album-3-v1.png",
       "flora/run-1/outputs/hook-1-album-4-v1.png"
     ]);
+    await expect(
+      inspectFourGridMasterAlignment(uploaded[0]!.body)
+    ).resolves.toMatchObject({ valid: true });
     await Promise.all(
       uploaded.slice(1).map(async ({ body }) => {
         const metadata = await sharp(body).metadata();
@@ -1562,7 +1570,7 @@ describe("handleArtworkGenerationRequest", () => {
     );
   });
 
-  it("does not save a four-grid master when its one repair is still misaligned", async () => {
+  it("persists a normalized four-grid master without an image repair", async () => {
     const shiftedMaster = await fourGridMasterPng({
       vertical: 256,
       horizontal: 280
@@ -1618,13 +1626,8 @@ describe("handleArtworkGenerationRequest", () => {
       createStorageClient: () => client
     });
 
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: false,
-      error:
-        "Album grid alignment is still invalid after one repair. Regenerate the Album before export."
-    });
-    expect(uploads).toHaveLength(0);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(uploads).toHaveLength(5);
   });
 
   it("uses the selected four-panel master layout in Design System mode", async () => {

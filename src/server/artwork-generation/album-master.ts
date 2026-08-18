@@ -69,13 +69,14 @@ interface AlbumCropRegion {
 }
 
 const FOUR_GRID_ALIGNMENT_TOLERANCE = 0.02;
+const FOUR_GRID_ANALYSIS_SIZE = 512;
 
-export async function inspectFourGridMasterAlignment(
-  imageBytes: Buffer
-): Promise<{
-  valid: boolean;
-  verticalPercent: number;
-  horizontalPercent: number;
+async function analyzeFourGridMaster(imageBytes: Buffer): Promise<{
+  left: number;
+  top: number;
+  side: number;
+  vertical: number;
+  horizontal: number;
 }> {
   const metadata = await sharp(imageBytes).metadata();
   if (!metadata.width || !metadata.height) {
@@ -85,31 +86,144 @@ export async function inspectFourGridMasterAlignment(
   const side = Math.min(metadata.width, metadata.height);
   const left = Math.floor((metadata.width - side) / 2);
   const top = Math.floor((metadata.height - side) / 2);
-  const analysisSize = 512;
   const pixels = await sharp(imageBytes)
     .extract({ left, top, width: side, height: side })
-    .resize(analysisSize, analysisSize, { fit: "fill" })
+    .resize(FOUR_GRID_ANALYSIS_SIZE, FOUR_GRID_ANALYSIS_SIZE, { fit: "fill" })
     .greyscale()
     .raw()
     .toBuffer();
   const boundaries = detectAlbumBoundaries({
     pixels,
-    width: analysisSize,
-    height: analysisSize,
+    width: FOUR_GRID_ANALYSIS_SIZE,
+    height: FOUR_GRID_ANALYSIS_SIZE,
     format: "four-grid"
   });
-  const expected = analysisSize / 2;
-  const vertical = boundaries.vertical ?? expected;
-  const horizontal = boundaries.horizontal ?? expected;
-  const tolerance = analysisSize * FOUR_GRID_ALIGNMENT_TOLERANCE;
+  const expected = FOUR_GRID_ANALYSIS_SIZE / 2;
+  const scale = side / FOUR_GRID_ANALYSIS_SIZE;
+
+  return {
+    left,
+    top,
+    side,
+    vertical: Math.round((boundaries.vertical ?? expected) * scale),
+    horizontal: Math.round((boundaries.horizontal ?? expected) * scale)
+  };
+}
+
+export async function inspectFourGridMasterAlignment(
+  imageBytes: Buffer
+): Promise<{
+  valid: boolean;
+  verticalPercent: number;
+  horizontalPercent: number;
+}> {
+  const { side, vertical, horizontal } =
+    await analyzeFourGridMaster(imageBytes);
+  const expected = side / 2;
+  const tolerance = side * FOUR_GRID_ALIGNMENT_TOLERANCE;
 
   return {
     valid:
       Math.abs(vertical - expected) <= tolerance &&
       Math.abs(horizontal - expected) <= tolerance,
-    verticalPercent: Number(((vertical / analysisSize) * 100).toFixed(1)),
-    horizontalPercent: Number(((horizontal / analysisSize) * 100).toFixed(1))
+    verticalPercent: Number(((vertical / side) * 100).toFixed(1)),
+    horizontalPercent: Number(((horizontal / side) * 100).toFixed(1))
   };
+}
+
+export async function normalizeFourGridMaster(
+  imageBytes: Buffer
+): Promise<Buffer> {
+  const { left, top, side, vertical, horizontal } =
+    await analyzeFourGridMaster(imageBytes);
+  const square = await sharp(imageBytes)
+    .extract({ left, top, width: side, height: side })
+    .png()
+    .toBuffer();
+  const gutter = Math.max(1, Math.round(side * 0.004));
+  const safeVertical = Math.min(
+    side - gutter - 1,
+    Math.max(gutter + 1, vertical)
+  );
+  const safeHorizontal = Math.min(
+    side - gutter - 1,
+    Math.max(gutter + 1, horizontal)
+  );
+  const half = Math.floor(side / 2);
+  const farHalf = side - half;
+  const regions = [
+    {
+      left: 0,
+      top: 0,
+      width: safeVertical - gutter,
+      height: safeHorizontal - gutter,
+      targetLeft: 0,
+      targetTop: 0,
+      targetWidth: half,
+      targetHeight: half
+    },
+    {
+      left: safeVertical + gutter,
+      top: 0,
+      width: side - safeVertical - gutter,
+      height: safeHorizontal - gutter,
+      targetLeft: half,
+      targetTop: 0,
+      targetWidth: farHalf,
+      targetHeight: half
+    },
+    {
+      left: 0,
+      top: safeHorizontal + gutter,
+      width: safeVertical - gutter,
+      height: side - safeHorizontal - gutter,
+      targetLeft: 0,
+      targetTop: half,
+      targetWidth: half,
+      targetHeight: farHalf
+    },
+    {
+      left: safeVertical + gutter,
+      top: safeHorizontal + gutter,
+      width: side - safeVertical - gutter,
+      height: side - safeHorizontal - gutter,
+      targetLeft: half,
+      targetTop: half,
+      targetWidth: farHalf,
+      targetHeight: farHalf
+    }
+  ];
+  const panels = await Promise.all(
+    regions.map(async (region) => ({
+      input: await sharp(square)
+        .extract({
+          left: region.left,
+          top: region.top,
+          width: region.width,
+          height: region.height
+        })
+        .resize(region.targetWidth, region.targetHeight, {
+          fit: "cover",
+          position: "centre"
+        })
+        .png()
+        .toBuffer(),
+      left: region.targetLeft,
+      top: region.targetTop
+    }))
+  );
+
+  return sharp({
+    create: {
+      width: side,
+      height: side,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    }
+  })
+    .composite(panels)
+    .png()
+    .toBuffer();
 }
 
 export async function splitAlbumMaster(
