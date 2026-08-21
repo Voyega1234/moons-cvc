@@ -1,11 +1,9 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
-import {
-  artworkReferencesFromSelections,
-  generateArtworkForSelectedHooks
-} from "../../services/artwork-generation/openai-image-generation";
+import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
 import {
   inferredReferenceImageRole,
+  normalizeHookReferenceImages,
   normalizeUserSelectableArtworkMode
 } from "../../domain/creative-run";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
@@ -104,9 +102,34 @@ export function useCreateSelectedHooks(
           artworkMode: normalizeUserSelectableArtworkMode(run.artworkMode)
         };
 
+        if (run.referenceImages.length) {
+          const sharedReferences = run.referenceImages;
+          run = {
+            ...run,
+            directions: run.directions.map((direction) => {
+              if (!direction.selected) return direction;
+              const existing = direction.referenceImages ?? [];
+              const additions = sharedReferences.filter(
+                (reference) =>
+                  !existing.some((item) => item.url === reference.url)
+              );
+              if (!additions.length) return direction;
+              const referenceImages = normalizeHookReferenceImages([
+                ...existing,
+                ...additions
+              ]);
+              dispatch({
+                type: "set-direction-reference-images",
+                id: direction.id,
+                images: referenceImages
+              });
+              return { ...direction, referenceImages };
+            })
+          };
+        }
+
         return generateArtworkForSelectedHooks({
           run,
-          referenceImages: artworkReferencesFromSelections(run.referenceImages),
           onProgress: (completed, total) => setProgress({ completed, total }),
           onBatch: (outputs) =>
             dispatch({ type: "append-artwork-generation-outputs", outputs })
