@@ -8,6 +8,7 @@ import {
   emptyApprovalGate,
   inferredReferenceImageRole,
   MAX_HOOK_GENERATION_MODELS,
+  MAX_HOOK_REFERENCE_IMAGES,
   normalizeHookReferenceImages,
   normalizeFormatBeatsForService,
   syncSharedReferenceImagesIntoDirections,
@@ -28,6 +29,7 @@ import {
   directionServiceAt,
   hookGenerationContentTypeQuotas,
   totalCreativeMixQuantity,
+  ugcVideoDirectionIds,
   type CreativeMixItem,
   type WorkspaceToast,
   type WorkflowAction,
@@ -86,6 +88,9 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
 
 export const defaultBrief =
   "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
+
+export const defaultArtworkBrief =
+  "อยากได้ภาพโฆษณา ไม่ใช่อินโฟกราฟิกที่เต็มไปด้วย text และไม่มี negative spacing Hero Visual ต้องดูสมจริงสมบูรณ์ไม่ดูปลอมหรือ AI Generated จัดวางองค์ประกอบภาพให้ balance กัน ไม่แน่นและไม่โล่งฝั่งใดฝั่งหนึ่ง";
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
@@ -152,7 +157,7 @@ export function createInitialWorkflowState({
     successMetric: "CVR",
     ideaIntent: "explore",
     brief: defaultBrief,
-    artworkBrief: "",
+    artworkBrief: defaultArtworkBrief,
     attachments: [],
     uploadedMaterials: [],
     referenceImages: [],
@@ -650,6 +655,16 @@ export function workflowReducer(
       const exists = state.referenceImages.some(
         (item) => item.id === action.item.id
       );
+      const nonLogoCount = state.referenceImages.filter(
+        (item) => inferredReferenceImageRole(item) !== "logo"
+      ).length;
+      if (
+        !exists &&
+        inferredReferenceImageRole(action.item) !== "logo" &&
+        nonLogoCount >= MAX_HOOK_REFERENCE_IMAGES
+      ) {
+        return state;
+      }
       const referenceImages = exists
         ? state.referenceImages.filter((item) => item.id !== action.item.id)
         : [...state.referenceImages, action.item];
@@ -658,7 +673,8 @@ export function workflowReducer(
         referenceImages,
         directions: syncSharedReferenceImagesIntoDirections(
           state.directions,
-          referenceImages
+          referenceImages,
+          { excludeDirectionIds: ugcVideoDirectionIds(state) }
         )
       };
     }

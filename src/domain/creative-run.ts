@@ -305,16 +305,18 @@ export function normalizeHookReferenceImages(
  * so callers can diff by identity to know what to persist.
  */
 export function syncSharedReferenceImagesIntoDirections<
-  T extends Pick<CreativeDirection, "selected" | "referenceImages">
+  T extends Pick<CreativeDirection, "id" | "selected" | "referenceImages">
 >(
   directions: readonly T[],
-  sharedReferences: readonly ReferenceImageSelection[]
+  sharedReferences: readonly ReferenceImageSelection[],
+  options?: { excludeDirectionIds?: ReadonlySet<string> }
 ): readonly T[] {
   const tagged = sharedReferences
     .filter((reference) => inferredReferenceImageRole(reference) !== "logo")
     .map((reference) => ({ ...reference, fromSharedReference: true as const }));
   return directions.map((direction) => {
     if (!direction.selected) return direction;
+    if (options?.excludeDirectionIds?.has(direction.id)) return direction;
     const existing = direction.referenceImages ?? [];
     const hookOwnReferences = existing.filter(
       (item) => !item.fromSharedReference

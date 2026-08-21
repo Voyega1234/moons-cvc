@@ -13,6 +13,7 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   inferredReferenceImageRole,
+  MAX_HOOK_REFERENCE_IMAGES,
   type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -86,15 +87,24 @@ export function ConfirmationReferenceGrid({
     );
   }
 
+  const atCapacity = selectedReferenceIds.size >= MAX_HOOK_REFERENCE_IMAGES;
+
   return (
     <div className="confirm-reference-grid">
       {availableImageReferences.map((reference) => {
         const selected = selectedReferenceIds.has(reference.id);
+        const disabled = !selected && atCapacity;
         return (
           <button
             className={`confirm-reference ${selected ? "" : "excluded"}`}
             type="button"
             aria-pressed={selected}
+            disabled={disabled}
+            title={
+              disabled
+                ? `Up to ${MAX_HOOK_REFERENCE_IMAGES} references — remove one to add another.`
+                : undefined
+            }
             key={reference.id}
             onClick={() => onToggle(reference)}
           >

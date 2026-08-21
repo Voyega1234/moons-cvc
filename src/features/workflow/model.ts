@@ -390,3 +390,21 @@ export function directionServiceAt(
 ): ServiceType {
   return direction.service ?? creativeMixServiceAt(state, index);
 }
+
+/**
+ * UGC uses the editable 9:16 template rather than image generation, so
+ * reference images never apply to it — used to keep the shared
+ * Confirm-hooks-and-create reference picker from fanning into UGC hooks.
+ */
+export function ugcVideoDirectionIds(
+  state: Pick<WorkflowState, "creativeMix" | "service" | "quantity" | "directions">
+): ReadonlySet<string> {
+  return new Set(
+    state.directions
+      .filter(
+        (direction, index) =>
+          directionServiceAt(state, direction, index) === "ugc-video"
+      )
+      .map((direction) => direction.id)
+  );
+}

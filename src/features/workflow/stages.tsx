@@ -4394,12 +4394,14 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               <span className="compass-angle-card-kicker">CTA</span>
               <p className="compass-angle-cta-text">{direction.cta}</p>
             </div>
-            <HookReferenceImage
-              run={state}
-              direction={direction}
-              dispatch={dispatch}
-              disabled={creating || regeneratingAllHooks}
-            />
+            {group.service !== "ugc-video" ? (
+              <HookReferenceImage
+                run={state}
+                direction={direction}
+                dispatch={dispatch}
+                disabled={creating || regeneratingAllHooks}
+              />
+            ) : null}
             {group.service === "album-post" ? (
               <div className="angle-album-format-slot">
                 {direction.selected ? (

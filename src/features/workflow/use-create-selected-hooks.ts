@@ -10,6 +10,7 @@ import type { BrandMemoryRepository } from "../../ports/brand-memory-repository"
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import {
   defaultArtworkContextSelection,
+  ugcVideoDirectionIds,
   type ArtworkContextSelection,
   type WorkflowAction,
   type WorkflowState
@@ -105,7 +106,8 @@ export function useCreateSelectedHooks(
         {
           const directions = syncSharedReferenceImagesIntoDirections(
             run.directions,
-            run.referenceImages
+            run.referenceImages,
+            { excludeDirectionIds: ugcVideoDirectionIds(run) }
           );
           directions.forEach((direction, index) => {
             if (direction === run.directions[index]) return;

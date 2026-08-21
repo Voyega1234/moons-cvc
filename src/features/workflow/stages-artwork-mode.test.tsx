@@ -10,7 +10,11 @@ import { useReducer } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
 import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-brand-memory-repository";
-import { createInitialWorkflowState, workflowReducer } from "./reducer";
+import {
+  createInitialWorkflowState,
+  defaultArtworkBrief,
+  workflowReducer
+} from "./reducer";
 import { DirectionsStage } from "./stages";
 import { BriefConfirmationModal } from "./stages/brief-confirmation-modal";
 import { HookGenerationModelSelect } from "./stages/shared";
@@ -152,7 +156,7 @@ describe("Artwork generation settings", () => {
     const artworkBrief = screen.getByRole("textbox", {
       name: "Artwork brief"
     }) as HTMLTextAreaElement;
-    expect(artworkBrief.value).toBe("");
+    expect(artworkBrief.value).toBe(defaultArtworkBrief);
     expect(artworkBrief.maxLength).toBe(3000);
     fireEvent.change(
       artworkBrief,

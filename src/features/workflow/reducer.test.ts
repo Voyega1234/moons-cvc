@@ -1242,6 +1242,40 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
+  it("caps shared reference image selection at MAX_HOOK_REFERENCE_IMAGES, ignoring a third pick", () => {
+    const itemA = { id: "ref-a", url: "https://example.com/a.png", label: "Reference A" };
+    const itemB = { id: "ref-b", url: "https://example.com/b.png", label: "Reference B" };
+    const itemC = { id: "ref-c", url: "https://example.com/c.png", label: "Reference C" };
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "toggle-reference-image",
+      item: itemA
+    });
+    state = workflowReducer(state, {
+      type: "toggle-reference-image",
+      item: itemB
+    });
+    expect(state.referenceImages).toEqual([itemA, itemB]);
+
+    state = workflowReducer(state, {
+      type: "toggle-reference-image",
+      item: itemC
+    });
+    expect(state.referenceImages).toEqual([itemA, itemB]);
+
+    state = workflowReducer(state, {
+      type: "toggle-reference-image",
+      item: itemA
+    });
+    expect(state.referenceImages).toEqual([itemB]);
+
+    state = workflowReducer(state, {
+      type: "toggle-reference-image",
+      item: itemC
+    });
+    expect(state.referenceImages).toEqual([itemB, itemC]);
+  });
+
   it("fans a toggled reference image into every selected hook immediately, and removes it again on untoggle", () => {
     const [selectedHook, unselectedHook] = buildDirectionFixtures("Fan-out");
     if (!selectedHook || !unselectedHook) {
@@ -1279,6 +1313,31 @@ describe("workflowReducer", () => {
     expect(
       state2.directions.find((d) => d.id === selectedHook.id)?.referenceImages
     ).toEqual([]);
+  });
+
+  it("never fans a shared reference image into a selected UGC hook", () => {
+    const [ugcHook] = buildDirectionFixtures("UGC fan-out");
+    if (!ugcHook) throw new Error("Expected at least one direction fixture.");
+    const state0 = {
+      ...initialWorkflowState,
+      directions: [
+        { ...ugcHook, selected: true, service: "ugc-video" as const }
+      ]
+    };
+    const item = {
+      id: "shared-1",
+      url: "https://example.com/shared.png",
+      label: "Shared reference"
+    };
+
+    const state1 = workflowReducer(state0, {
+      type: "toggle-reference-image",
+      item
+    });
+    expect(state1.referenceImages).toEqual([item]);
+    expect(
+      state1.directions.find((d) => d.id === ugcHook.id)?.referenceImages
+    ).toBeUndefined();
   });
 
   it("includes every brand product by default and persists explicit product choices", () => {
