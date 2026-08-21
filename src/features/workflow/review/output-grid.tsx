@@ -13,6 +13,7 @@ import {
   reviseOutputImage,
   type ArtworkReferenceImage
 } from "../../../services/artwork-generation/openai-image-generation";
+import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
 import { playGenerationSuccessSound } from "../../../shared/utils/notification-sound";
 import type { WorkflowAction, WorkflowState } from "../model";
 import { isBuildQualityCheckOutput } from "../rules";
@@ -503,37 +504,10 @@ function QualityActionSummary({ text }: { text: string }) {
 
 type OutputReferenceAttachment = {
   name: string;
-  data: string;
+  url: string;
   mediaType: string;
   previewUrl: string;
 };
-
-function readOutputReferenceAttachment(
-  file: File
-): Promise<OutputReferenceAttachment> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read this image."));
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Could not read this image."));
-        return;
-      }
-      const separatorIndex = reader.result.indexOf(",");
-      if (separatorIndex < 0) {
-        reject(new Error("This image format is not supported."));
-        return;
-      }
-      resolve({
-        name: file.name,
-        data: reader.result.slice(separatorIndex + 1),
-        mediaType: file.type || "image/png",
-        previewUrl: reader.result
-      });
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function outputAssetVersions(
   output: CreativeOutput
@@ -619,6 +593,7 @@ function OutputRegenerateModal({
   const [error, setError] = useState<string | null>(null);
   const [referenceAttachment, setReferenceAttachment] =
     useState<OutputReferenceAttachment | null>(null);
+  const [attaching, setAttaching] = useState(false);
   const album = isAlbumOutput(output);
   const busy = phase !== "idle";
   const versions = outputAssetVersions(output);
@@ -643,13 +618,26 @@ function OutputRegenerateModal({
       setError("Choose a PNG, JPEG, or WEBP image.");
       return;
     }
+    setAttaching(true);
+    setError(null);
     try {
-      setError(null);
-      setReferenceAttachment(await readOutputReferenceAttachment(file));
+      const uploaded = await uploadCreativeMaterial({
+        runId: run.id,
+        brandId: run.brand?.id,
+        file
+      });
+      setReferenceAttachment({
+        name: file.name,
+        url: uploaded.url,
+        mediaType: file.type,
+        previewUrl: uploaded.url
+      });
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Could not read this image."
+        caught instanceof Error ? caught.message : "Could not upload this image."
       );
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -666,8 +654,8 @@ function OutputRegenerateModal({
       referenceAttachment
         ? [
             {
-              kind: "base64",
-              data: referenceAttachment.data,
+              kind: "url",
+              url: referenceAttachment.url,
               mediaType: referenceAttachment.mediaType,
               label: `User revision reference — ${referenceAttachment.name}`
             }
@@ -891,11 +879,11 @@ function OutputRegenerateModal({
           />
           <div className="output-chat-actions">
             <label className="output-chat-attach-button" aria-label="Attach image">
-              <Paperclip size={19} weight="bold" />
+              {attaching ? <Spinner /> : <Paperclip size={19} weight="bold" />}
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                disabled={busy}
+                disabled={busy || attaching}
                 onChange={(event) => void handleReferenceAttachment(event)}
               />
             </label>
@@ -903,7 +891,7 @@ function OutputRegenerateModal({
               className="output-chat-send-button"
               type="button"
               aria-label={album ? "Regenerate album" : "Regenerate image"}
-              disabled={busy || !prompt.trim()}
+              disabled={busy || attaching || !prompt.trim()}
               onClick={() => void handleRegenerate()}
             >
               {busy ? <Spinner /> : <ArrowUp size={18} weight="bold" />}
