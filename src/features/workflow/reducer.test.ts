@@ -1242,6 +1242,45 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
+  it("fans a toggled reference image into every selected hook immediately, and removes it again on untoggle", () => {
+    const [selectedHook, unselectedHook] = buildDirectionFixtures("Fan-out");
+    if (!selectedHook || !unselectedHook) {
+      throw new Error("Expected at least two direction fixtures.");
+    }
+    const state0 = {
+      ...initialWorkflowState,
+      directions: [
+        { ...selectedHook, selected: true },
+        { ...unselectedHook, selected: false }
+      ]
+    };
+    const item = {
+      id: "shared-1",
+      url: "https://example.com/shared.png",
+      label: "Shared reference"
+    };
+
+    const state1 = workflowReducer(state0, {
+      type: "toggle-reference-image",
+      item
+    });
+    expect(
+      state1.directions.find((d) => d.id === selectedHook.id)?.referenceImages
+    ).toEqual([expect.objectContaining({ id: "shared-1" })]);
+    expect(
+      state1.directions.find((d) => d.id === unselectedHook.id)
+        ?.referenceImages
+    ).toBeUndefined();
+
+    const state2 = workflowReducer(state1, {
+      type: "toggle-reference-image",
+      item
+    });
+    expect(
+      state2.directions.find((d) => d.id === selectedHook.id)?.referenceImages
+    ).toEqual([]);
+  });
+
   it("includes every brand product by default and persists explicit product choices", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

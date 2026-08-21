@@ -10,6 +10,7 @@ import {
   MAX_HOOK_GENERATION_MODELS,
   normalizeHookReferenceImages,
   normalizeFormatBeatsForService,
+  syncSharedReferenceImagesIntoDirections,
   type ApprovalRole
 } from "../../domain/creative-run";
 import {
@@ -649,11 +650,16 @@ export function workflowReducer(
       const exists = state.referenceImages.some(
         (item) => item.id === action.item.id
       );
+      const referenceImages = exists
+        ? state.referenceImages.filter((item) => item.id !== action.item.id)
+        : [...state.referenceImages, action.item];
       return {
         ...state,
-        referenceImages: exists
-          ? state.referenceImages.filter((item) => item.id !== action.item.id)
-          : [...state.referenceImages, action.item]
+        referenceImages,
+        directions: syncSharedReferenceImagesIntoDirections(
+          state.directions,
+          referenceImages
+        )
       };
     }
     case "set-reference-image-role":

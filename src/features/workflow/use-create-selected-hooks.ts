@@ -3,8 +3,8 @@ import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
 import {
   inferredReferenceImageRole,
-  normalizeHookReferenceImages,
-  normalizeUserSelectableArtworkMode
+  normalizeUserSelectableArtworkMode,
+  syncSharedReferenceImagesIntoDirections
 } from "../../domain/creative-run";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
@@ -102,30 +102,20 @@ export function useCreateSelectedHooks(
           artworkMode: normalizeUserSelectableArtworkMode(run.artworkMode)
         };
 
-        if (run.referenceImages.length) {
-          const sharedReferences = run.referenceImages;
-          run = {
-            ...run,
-            directions: run.directions.map((direction) => {
-              if (!direction.selected) return direction;
-              const existing = direction.referenceImages ?? [];
-              const additions = sharedReferences.filter(
-                (reference) =>
-                  !existing.some((item) => item.url === reference.url)
-              );
-              if (!additions.length) return direction;
-              const referenceImages = normalizeHookReferenceImages([
-                ...existing,
-                ...additions
-              ]);
-              dispatch({
-                type: "set-direction-reference-images",
-                id: direction.id,
-                images: referenceImages
-              });
-              return { ...direction, referenceImages };
-            })
-          };
+        {
+          const directions = syncSharedReferenceImagesIntoDirections(
+            run.directions,
+            run.referenceImages
+          );
+          directions.forEach((direction, index) => {
+            if (direction === run.directions[index]) return;
+            dispatch({
+              type: "set-direction-reference-images",
+              id: direction.id,
+              images: direction.referenceImages ?? []
+            });
+          });
+          run = { ...run, directions };
         }
 
         return generateArtworkForSelectedHooks({

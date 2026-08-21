@@ -279,6 +279,10 @@ export interface ReferenceImageSelection {
   label: string;
   role?: ReferenceImageRole;
   primary?: boolean;
+  /** Set when this entry was fanned out from the shared Confirm-hooks-and-create
+   * reference picker, so a later sync can replace it without touching references
+   * the user attached directly to this hook. */
+  fromSharedReference?: boolean;
 }
 
 export const MAX_HOOK_REFERENCE_IMAGES = 2;
@@ -291,6 +295,42 @@ export function normalizeHookReferenceImages(
     role: "style",
     primary: index === 0
   }));
+}
+
+/**
+ * Fans the shared (Confirm-hooks-and-create) reference picks into every
+ * selected hook's own referenceImages, replacing whatever was fanned in
+ * previously without touching references the user attached directly to
+ * that hook. Returns the same direction reference when nothing changed,
+ * so callers can diff by identity to know what to persist.
+ */
+export function syncSharedReferenceImagesIntoDirections<
+  T extends Pick<CreativeDirection, "selected" | "referenceImages">
+>(
+  directions: readonly T[],
+  sharedReferences: readonly ReferenceImageSelection[]
+): readonly T[] {
+  const tagged = sharedReferences
+    .filter((reference) => inferredReferenceImageRole(reference) !== "logo")
+    .map((reference) => ({ ...reference, fromSharedReference: true as const }));
+  return directions.map((direction) => {
+    if (!direction.selected) return direction;
+    const existing = direction.referenceImages ?? [];
+    const hookOwnReferences = existing.filter(
+      (item) => !item.fromSharedReference
+    );
+    const referenceImages = normalizeHookReferenceImages([
+      ...hookOwnReferences,
+      ...tagged
+    ]);
+    if (
+      referenceImages.length === existing.length &&
+      referenceImages.every((item, index) => item.url === existing[index]?.url)
+    ) {
+      return direction;
+    }
+    return { ...direction, referenceImages };
+  });
 }
 
 export const referenceImageRoles = [

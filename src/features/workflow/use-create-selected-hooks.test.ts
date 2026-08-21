@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
 import { createInitialWorkflowState } from "./reducer";
+import { buildDirectionFixtures } from "./test-fixtures";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 
 vi.mock("../../services/artwork-generation/openai-image-generation", () => ({
@@ -109,5 +110,70 @@ describe("useCreateSelectedHooks", () => {
       type: "sync-brand-rules",
       items: [palette]
     });
+  });
+
+  it("replaces a hook's shared reference instead of piling it on, while keeping its own reference", async () => {
+    vi.mocked(generateArtworkForSelectedHooks).mockResolvedValue([]);
+    const dispatch = vi.fn();
+    const direction = {
+      ...buildDirectionFixtures("Chol")[0]!,
+      selected: true,
+      referenceImages: [
+        {
+          id: "hook-own",
+          url: "https://example.com/hook-own.png",
+          label: "Hook-specific pick",
+          fromSharedReference: false
+        },
+        {
+          id: "shared-stale",
+          url: "https://example.com/shared-old.png",
+          label: "Old shared pick",
+          fromSharedReference: true
+        }
+      ]
+    };
+    const state = {
+      ...createInitialWorkflowState({
+        id: "artwork-run",
+        now: "2026-08-21T00:00:00.000Z"
+      }),
+      directions: [direction],
+      referenceImages: [
+        {
+          id: "shared-new",
+          url: "https://example.com/shared-new.png",
+          label: "New shared pick"
+        }
+      ]
+    };
+
+    const view = renderHook(() => useCreateSelectedHooks(state, dispatch));
+    act(() => view.result.current.create());
+
+    await waitFor(() =>
+      expect(generateArtworkForSelectedHooks).toHaveBeenCalledWith(
+        expect.objectContaining({
+          run: expect.objectContaining({
+            directions: [
+              expect.objectContaining({
+                id: direction.id,
+                referenceImages: [
+                  expect.objectContaining({ id: "hook-own" }),
+                  expect.objectContaining({ id: "shared-new" })
+                ]
+              })
+            ]
+          })
+        })
+      )
+    );
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set-direction-reference-images",
+        id: direction.id
+      })
+    );
   });
 });
