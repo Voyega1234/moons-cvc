@@ -85,7 +85,6 @@ export interface CampaignInputPreflight {
   concept: string;
   copy: {
     headline: string;
-    supportingText: readonly string[];
     cta: string;
   };
   requiredElements: readonly string[];
@@ -1121,10 +1120,9 @@ const campaignInputPreflightSchema = {
       additionalProperties: false,
       properties: {
         headline: { type: "string" },
-        supportingText: { type: "array", items: { type: "string" } },
         cta: { type: "string" }
       },
-      required: ["headline", "supportingText", "cta"]
+      required: ["headline", "cta"]
     },
     requiredElements: { type: "array", items: { type: "string" } },
     forbiddenElements: { type: "array", items: { type: "string" } },
