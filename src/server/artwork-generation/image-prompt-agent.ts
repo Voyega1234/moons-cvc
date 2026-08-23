@@ -83,6 +83,7 @@ export interface CampaignInputPreflight {
   targetAudience: string;
   singleMainMessage: string;
   concept: string;
+  visualMechanism: string;
   copy: {
     headline: string;
     cta: string;
@@ -111,6 +112,7 @@ export type ImagePromptAgentTraceWriter = (
 ) => Promise<void>;
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
+const PREFLIGHT_MODEL = "gpt-5.6-sol";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const OPENROUTER_RESPONSES_ENDPOINT =
   "https://openrouter.ai/api/v1/responses";
@@ -261,7 +263,7 @@ export async function preflightCampaignInput({
   writeTrace?: ImagePromptAgentTraceWriter;
   loadPrompt?: () => Promise<string>;
 }): Promise<CampaignInputPreflight> {
-  const model = DEFAULT_MODEL;
+  const model = PREFLIGHT_MODEL;
   const inputText = [
     (await loadPrompt()).trim(),
     "",
@@ -1115,6 +1117,7 @@ const campaignInputPreflightSchema = {
     targetAudience: { type: "string" },
     singleMainMessage: { type: "string" },
     concept: { type: "string" },
+    visualMechanism: { type: "string" },
     copy: {
       type: "object",
       additionalProperties: false,
@@ -1162,6 +1165,7 @@ const campaignInputPreflightSchema = {
     "targetAudience",
     "singleMainMessage",
     "concept",
+    "visualMechanism",
     "copy",
     "requiredElements",
     "forbiddenElements",

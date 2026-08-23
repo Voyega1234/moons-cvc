@@ -346,10 +346,11 @@ and is checked again before any master or panel asset is persisted; a second
 failure stops Album generation. Slide export places every Album format inside a
 square preview so its native panel ratios are not stretched.
 
-- `standard` preflights only the Campaign Input with `gpt-5.6-terra` through
+- `standard` preflights only the Campaign Input with `gpt-5.6-sol` through
   the OpenAI Responses API using
-  `agent_prompt/agent_campaign_input_preflight.md`. Terra organizes product,
-  objective, copy, constraints, product truth, and reference roles; it does
+  `agent_prompt/agent_campaign_input_preflight.md`. Sol organizes product,
+  objective, copy, constraints, product truth, reference roles, and the
+  forced `visualMechanism` answer; it does
   not receive `agent_image.md` and does not write a visual route. The final
   Image API call remains
   `agent_prompt/agent_image.md + Preflighted Campaign Input + selected image attachments → GPT Image 2`.

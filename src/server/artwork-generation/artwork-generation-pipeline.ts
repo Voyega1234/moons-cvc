@@ -580,10 +580,26 @@ async function generateOutputForHook({
       );
     }
   }
-  const artworkReferences =
-    !input.referenceLed && input.artworkMode === "reference-library"
-      ? await resolveStoredArtworkReferences({ input, hook, strategy, storage })
-      : [];
+  let artworkReferences: readonly StoredArtworkReference[] = [];
+  if (
+    !input.referenceLed &&
+    (input.artworkMode === "reference-library" ||
+      input.artworkMode === "standard")
+  ) {
+    try {
+      artworkReferences = await resolveStoredArtworkReferences({
+        input,
+        hook,
+        strategy,
+        storage
+      });
+    } catch (error) {
+      console.warn(
+        `Artwork reference library lookup failed for "${hook.id}"; continuing without it.`,
+        error
+      );
+    }
+  }
   const promptReferences = [
     ...references,
     ...artworkReferences.map(({ image }) => image)

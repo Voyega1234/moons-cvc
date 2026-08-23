@@ -84,7 +84,7 @@ describe("generateImagePrompt", () => {
     );
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://api.openai.com/v1/responses");
-    expect(calls[0]?.body.model).toBe("gpt-5.6-terra");
+    expect(calls[0]?.body.model).toBe("gpt-5.6-sol");
     expect(calls[0]?.body.store).toBe(false);
     expect(calls[0]?.body.text).toMatchObject({
       format: {

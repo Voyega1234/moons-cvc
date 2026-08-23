@@ -1267,7 +1267,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(debugLogs).toEqual([
       expect.objectContaining({
         kind: "image-prompt-agent",
-        model: "gpt-5.6-terra",
+        model: "gpt-5.6-sol",
         runId: "run-1",
         directionId: "hook-1",
         stage: "campaign-input-preflight"
@@ -2314,7 +2314,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect((editCalls[0]?.get("image[]") as File).type).toBe("image/png");
   });
 
-  it("preflights Campaign Input with Terra, then sends agent_image.md plus the cleaned input to GPT Image 2", async () => {
+  it("preflights Campaign Input with Sol, then sends agent_image.md plus the cleaned input to GPT Image 2", async () => {
     const generationCalls: string[] = [];
     const preflightCalls: Array<{ model: string; inputText: string }> = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -2370,7 +2370,7 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status).toBe(200);
     expect(preflightCalls).toHaveLength(1);
-    expect(preflightCalls[0]?.model).toBe("gpt-5.6-terra");
+    expect(preflightCalls[0]?.model).toBe("gpt-5.6-sol");
     expect(preflightCalls[0]?.inputText).toContain("Campaign Input Preflight");
     expect(preflightCalls[0]?.inputText).toContain(
       '"headline": "Flowers that make the room feel softer"'
@@ -2465,7 +2465,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(openRouterCalls).toEqual([]);
     expect(preflightCalls).toEqual([
       {
-        model: "gpt-5.6-terra",
+        model: "gpt-5.6-sol",
         authorization: "Bearer openai-image-key"
       }
     ]);
