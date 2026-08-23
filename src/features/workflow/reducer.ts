@@ -90,7 +90,7 @@ export const defaultBrief =
   "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
 
 export const defaultArtworkBrief =
-  "อยากได้ภาพโฆษณา ไม่ใช่อินโฟกราฟิกที่เต็มไปด้วย text และไม่มี negative spacing Hero Visual ต้องดูสมจริงสมบูรณ์ไม่ดูปลอมหรือ AI Generated จัดวางองค์ประกอบภาพให้ balance กัน ไม่แน่นและไม่โล่งฝั่งใดฝั่งหนึ่ง";
+  "อยากได้ภาพโฆษณาที่ดูเหมือนงานออกแบบมืออาชีพจริง ไม่ดูปลอมหรือเป็น AI Generated Hero Visual ต้องสมจริงและสมบูรณ์ จัดวางองค์ประกอบให้มี hierarchy ชัดเจนและสมดุล ไม่แน่นหรือโล่งฝั่งใดฝั่งหนึ่งโดยไม่มีเหตุผล ความหนาแน่นของข้อมูล (text, badge, callout) ให้เลือกตามความจำเป็นของงานจริง ไม่ใช่ minimal เป็นค่าเริ่มต้นเสมอ — งาน branding/awareness เรียบได้เต็มที่ ส่วนงานเปรียบเทียบ/technical/multi-benefit มีรายละเอียดเยอะได้ตามข้อมูลจริง";
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
