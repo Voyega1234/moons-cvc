@@ -665,8 +665,7 @@ const albumPanelSeparationReviewSchema = {
     decision: { type: "string", enum: ["pass", "revise"] },
     affectedPanels: {
       type: "array",
-      items: { type: "integer", minimum: 1, maximum: 4 },
-      uniqueItems: true
+      items: { type: "integer", minimum: 1, maximum: 4 }
     },
     issue: { type: "string" },
     revisionInstruction: { type: "string" }
