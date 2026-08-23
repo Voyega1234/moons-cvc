@@ -4186,6 +4186,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           onArtworkModeChange={(mode) =>
             dispatch({ type: "set-artwork-mode", mode })
           }
+          outputSize={state.outputSize}
+          onOutputSizeChange={(size) =>
+            dispatch({ type: "set-output-size", size })
+          }
           visualInputs={{
             referenceCount: preflightReferenceImages.length,
             materialCount: selectedUploadedMaterials(state).length,

@@ -352,7 +352,13 @@ The migration creates:
 - `moons.brand_references`
 - private Supabase Storage bucket `brand-assets`
 - private Supabase Storage bucket `brand-source-assets`
-- private Supabase Storage bucket `artwork-reference-library`
+- private Supabase Storage bucket `artwork-reference-library` (created empty —
+  the migration cannot upload binary files; populate it separately by running
+  `npm run references:upload` with `SUPABASE_URL` and
+  `SUPABASE_SERVICE_ROLE_KEY` set to the target project and the reference
+  source images present locally at `agent_prompt/Images/` (gitignored, not
+  deployed — this step must be run manually against each new Supabase
+  project))
 - service-role RPC `moons.claim_next_brand_analysis_job()`
 - authenticated RPC `moons.queue_brand_analysis(client_id, facebook_url)`
 - service-role access to ingestion and Brand Memory tables used by the worker

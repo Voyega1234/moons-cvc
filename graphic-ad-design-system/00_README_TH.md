@@ -15,7 +15,8 @@
 7. `07_ART_DIRECTOR_QA_PROMPT.md` — Prompt ตรวจคุณภาพงาน
 8. `08_SURGICAL_REVISION_PROMPT.md` — Prompt แก้ภาพเฉพาะจุดโดยลดการ Drift
 9. `09_QUICK_MODE_PROMPT.md` — เวอร์ชันรวดเร็วสำหรับงานประจำวันที่ไม่ต้องการ Workflow เต็ม
-10. `examples/` — ตัวอย่างการใช้งาน 3 รูปแบบ
+10. `10_REFERENCE_LIBRARY_STYLE_GRAMMAR_TH.md` — Grammar ที่สกัดจาก artwork 72 ภาพ พร้อม anti-slop agent instruction และ QA scorecard
+11. `examples/` — ตัวอย่างการใช้งาน 3 รูปแบบ
 
 ## วิธีใช้ที่แนะนำ
 

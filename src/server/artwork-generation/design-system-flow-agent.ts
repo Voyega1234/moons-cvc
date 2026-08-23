@@ -23,6 +23,7 @@ export interface VisualQualityReview {
   decision: "pass" | "revise";
   density: "controlled" | "too-dense" | "too-empty";
   aiAppearance: "credible" | "noticeable" | "obvious";
+  aiLikelihoodPercent: number;
   strengths: readonly string[];
   issues: readonly string[];
   revisionInstruction: string;
@@ -399,6 +400,17 @@ function parseVisualQualityReview(value: unknown): VisualQualityReview {
     ["credible", "noticeable", "obvious"],
     "aiAppearance"
   );
+  const aiLikelihoodPercent = value.aiLikelihoodPercent;
+  if (
+    typeof aiLikelihoodPercent !== "number" ||
+    !Number.isInteger(aiLikelihoodPercent) ||
+    aiLikelihoodPercent < 0 ||
+    aiLikelihoodPercent > 100
+  ) {
+    throw new Error(
+      "Visual QC aiLikelihoodPercent must be an integer between 0 and 100."
+    );
+  }
   const revisionInstruction =
     typeof value.revisionInstruction === "string"
       ? value.revisionInstruction.trim()
@@ -410,6 +422,7 @@ function parseVisualQualityReview(value: unknown): VisualQualityReview {
     decision,
     density,
     aiAppearance,
+    aiLikelihoodPercent,
     strengths: readStringArray(value.strengths, "strengths"),
     issues: readStringArray(value.issues, "issues"),
     revisionInstruction
@@ -629,6 +642,7 @@ const visualQualityReviewSchema = {
       type: "string",
       enum: ["credible", "noticeable", "obvious"]
     },
+    aiLikelihoodPercent: { type: "integer", minimum: 0, maximum: 100 },
     strengths: { type: "array", items: { type: "string" } },
     issues: { type: "array", items: { type: "string" } },
     revisionInstruction: { type: "string" }
@@ -637,6 +651,7 @@ const visualQualityReviewSchema = {
     "decision",
     "density",
     "aiAppearance",
+    "aiLikelihoodPercent",
     "strengths",
     "issues",
     "revisionInstruction"
