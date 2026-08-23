@@ -8,7 +8,10 @@ import {
 import { createPortal } from "react-dom";
 import {
   albumFormatPanelCount,
+  artworkOutputSizeLabel,
+  artworkOutputSizes,
   type ArtworkMode,
+  type ArtworkOutputSize,
   type CreativeDirection,
   type ServiceType
 } from "../../../domain/creative-run";
@@ -192,6 +195,8 @@ export function PreflightModal({
   contextAvailability,
   artworkMode,
   onArtworkModeChange,
+  outputSize,
+  onOutputSizeChange,
   onCancel,
   onContinue,
   runChecks = runIdeaPreflight
@@ -217,6 +222,8 @@ export function PreflightModal({
   };
   artworkMode: ArtworkMode;
   onArtworkModeChange: (mode: ArtworkMode) => void;
+  outputSize: ArtworkOutputSize;
+  onOutputSizeChange: (size: ArtworkOutputSize) => void;
   onCancel: () => void;
   onContinue: () => void;
   runChecks?: typeof runIdeaPreflight;
@@ -644,15 +651,37 @@ export function PreflightModal({
               <header className="preflight-section-head confirm-section-head">
                 <PreflightSectionTitle
                   number={visualInputs ? 4 : 3}
-                  title="Artwork mode"
-                  description="Inherited from Review & continue. Change it here for this build if needed."
+                  title="Artwork settings"
+                  description="Inherited from Review & continue. Change mode or size here for this build if needed."
                 />
               </header>
-              <ArtworkModeSelector
-                className="preflight-artwork-mode-setting"
-                value={artworkMode}
-                onChange={onArtworkModeChange}
-              />
+              <div className="preflight-artwork-settings-grid">
+                <ArtworkModeSelector
+                  className="preflight-artwork-mode-setting"
+                  value={artworkMode}
+                  onChange={onArtworkModeChange}
+                />
+                <label className="confirm-generation-setting preflight-output-size-setting">
+                  <span className="confirm-generation-label">
+                    Output size
+                  </span>
+                  <select
+                    aria-label="Output size"
+                    value={outputSize}
+                    onChange={(event) =>
+                      onOutputSizeChange(
+                        event.target.value as ArtworkOutputSize
+                      )
+                    }
+                  >
+                    {artworkOutputSizes.map((size) => (
+                      <option key={size} value={size}>
+                        {artworkOutputSizeLabel(size)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </section>
 
             <section className="preflight-section confirm-section full">

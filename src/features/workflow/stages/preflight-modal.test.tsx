@@ -48,6 +48,8 @@ describe("PreflightModal", () => {
         }}
         artworkMode="design-system"
         onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
         onCancel={onCancel}
         onContinue={onContinue}
         runChecks={runChecks}
@@ -134,6 +136,8 @@ describe("PreflightModal", () => {
         onArtworkBriefChange={onArtworkBriefChange}
         artworkMode="design-system"
         onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
         onCancel={onCancel}
         onContinue={onContinue}
       />
@@ -196,6 +200,8 @@ describe("PreflightModal", () => {
         onArtworkBriefChange={vi.fn()}
         artworkMode="design-system"
         onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
         onContinue={vi.fn()}
       />
@@ -238,6 +244,8 @@ describe("PreflightModal", () => {
           onArtworkBriefChange={setArtworkBrief}
           artworkMode="design-system"
           onArtworkModeChange={() => undefined}
+          outputSize="1088x1360"
+          onOutputSizeChange={vi.fn()}
           onCancel={() => undefined}
           onContinue={() => undefined}
         />

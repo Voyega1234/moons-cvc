@@ -111,11 +111,31 @@
   min-width: 0;
 }
 
+.preflight-artwork-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
 .preflight-artwork-mode-setting {
   min-height: 0;
   border: 1px solid #dfe3ec;
   border-radius: 13px;
   background: #f7f8fb;
+}
+
+.preflight-output-size-setting {
+  min-height: 0;
+  border: 1px solid #dfe3ec;
+  border-radius: 13px;
+  background: #f7f8fb;
+}
+
+@media (max-width: 900px) {
+  .preflight-artwork-settings-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .preflight-section-head {
