@@ -207,6 +207,7 @@ function visualQualityPassResponse(): Response {
         decision: "pass",
         density: "controlled",
         aiAppearance: "credible",
+        aiLikelihoodPercent: 15,
         strengths: ["Clear hierarchy", "Natural light and shadow"],
         issues: [],
         revisionInstruction: ""
@@ -288,6 +289,7 @@ function visualQualityReviseResponse(): Response {
         decision: "revise",
         density: "too-dense",
         aiAppearance: "noticeable",
+        aiLikelihoodPercent: 70,
         strengths: ["Strong botanical focal idea"],
         issues: ["Crowded lower edge", "Product contact shadow feels detached"],
         revisionInstruction:

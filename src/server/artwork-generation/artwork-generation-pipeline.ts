@@ -932,11 +932,13 @@ async function applyPostGenerationVisualQc({
         );
       }
     });
-    if (review.decision === "pass") return image;
+    const failsAiLikelihoodThreshold = review.aiLikelihoodPercent > 50;
+    if (review.decision === "pass" && !failsAiLikelihoodThreshold) return image;
 
-    const revisionPrompt = buildVisualQcRevisionPrompt(
-      review.revisionInstruction
-    );
+    const revisionInstruction =
+      review.revisionInstruction ||
+      "Reduce the AI-generated appearance: correct unnaturally smooth or waxy skin/material texture, inconsistent lighting or shadow direction, and any warped anatomy or illogical object geometry so the piece reads as authentic photography or human design craft.";
+    const revisionPrompt = buildVisualQcRevisionPrompt(revisionInstruction);
     const sourceReference: ReferenceImageInput = {
       bytes: sourceBytes,
       mimeType: image.mimeType,
