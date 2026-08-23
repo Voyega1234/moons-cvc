@@ -30,6 +30,18 @@ if (!root) {
   throw new Error("Application root was not found.");
 }
 
+// A new deployment changes chunk filenames; a tab left open from before the
+// deploy will fail to fetch the old, now-missing chunk on its next lazy
+// import (e.g. clicking "Export slide"). Reload once to pick up the current
+// build instead of leaving the user stuck on a broken action.
+window.addEventListener("vite:preloadError", (event) => {
+  event.preventDefault();
+  const reloadedKey = "compass-reloaded-after-preload-error";
+  if (sessionStorage.getItem(reloadedKey)) return;
+  sessionStorage.setItem(reloadedKey, "1");
+  window.location.reload();
+});
+
 createRoot(root).render(
   <StrictMode>
     <AuthProvider>
@@ -52,4 +64,11 @@ createRoot(root).render(
       </BrandProvider>
     </AuthProvider>
   </StrictMode>
+);
+
+// This tab is now running the current build; allow a future preload error
+// (e.g. after the next deploy) to trigger another reload.
+setTimeout(
+  () => sessionStorage.removeItem("compass-reloaded-after-preload-error"),
+  10_000
 );
