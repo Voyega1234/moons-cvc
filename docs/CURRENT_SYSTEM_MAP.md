@@ -273,30 +273,38 @@ actual Script, Visual, and Text Overlay on the right. Do not add separate
 Creative Direction or Artwork & Caption slides unless the export contract is
 intentionally changed.
 
-Each Hook may store up to two optional `referenceImages`. The Hook card owns
-multi-upload and per-image removal UI. The first image is always normalized as
-Primary and later images as Supporting; removing the Primary promotes the next
-image automatically. Legacy saved `referenceImage` values migrate into this
-array. `hook-reference-images.ts` keeps Hooks without their own references on
-the normal artwork batch path, but isolates each referenced Hook into its own
+Each Hook may store up to three optional `referenceImages`, each tagged with a
+role via a "Use for" picker — Style, Layout, or Typography — matching
+`referenceBoardRoleOptions` in `domain/creative-run.ts`; picking a role already
+held by another image on the same Hook swaps the two instead of blocking the
+pick. The Hook card owns multi-upload and per-image removal UI. The first
+image is normalized as Primary and later images as Supporting for ordering and
+label text; removing the Primary promotes the next image automatically.
+Legacy saved `referenceImage` values migrate into this array.
+`hook-reference-images.ts` keeps Hooks without their own references on the
+normal artwork batch path, but isolates each referenced Hook into its own
 request so its images cannot influence another Hook. The same images are
 embedded in a dedicated Reference panel below the Creative Draft on that
 Hook's Static or Album client slide. Slides without Hook references retain the
 existing full-height artwork layout unchanged.
 Referenced Hook requests set `referenceLed` and take precedence over the saved
 Artwork mode. They bypass Campaign Input preflight, strategy/concept prompt
-agents, and `agent_image.md`. `reference-interpreter.ts` sends the Primary and
-Supporting Hook references together to GPT Terra vision using
-`agent_prompt/agent_reference_interpreter.md` and returns structured design
-grammar that separates transferable hierarchy/treatment from source-specific
-people, products, scenes, props, copy, and exact composition. The Primary
-reference controls layout and hierarchy; Supporting references contribute only
-compatible secondary ideas, with conflicts resolved in favor of Primary. All
-Hook style references are also attached to the final GPT Image 2 edit alongside
-official logo, product, and other approved identity assets. Their ordered
-Primary/Supporting labels and the interpreter's design grammar tell GPT Image 2
-to use them as visual evidence without treating the completed advertisements as
-literal edit bases. The final prompt is assembled by
+agents, and `agent_image.md`. `reference-interpreter.ts` sends the Style,
+Layout, and Typography-tagged Hook references (falling back to every Hook
+reference if none carry those roles) to GPT Terra vision using
+`agent_prompt/agent_reference_interpreter.md`, which scopes what it extracts
+from each image by its role: a Style reference is the authority for concept,
+key-visual mechanism, and composition (Primary Style wins over Supporting on
+conflict); a Layout reference contributes composition, framing, and spacing
+only; a Typography reference contributes text hierarchy and placement only —
+never font identity. It returns one structured design grammar that separates
+transferable hierarchy/treatment from source-specific people, products,
+scenes, props, copy, and exact composition. Every Hook reference (regardless
+of role) is also attached to the final GPT Image 2 edit alongside official
+logo, product, and other approved identity assets. Their ordered
+Primary/Supporting/role labels and the interpreter's design grammar tell GPT
+Image 2 to use them as visual evidence without treating the completed
+advertisements as literal edit bases. The final prompt is assembled by
 `reference-led-image-prompt.ts` from the extracted grammar, campaign idea,
 headline, optional single supporting line, CTA, every attachment label, and
 output ratio. Hooks without a per-Hook reference keep the selected Artwork mode

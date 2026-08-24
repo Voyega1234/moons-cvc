@@ -993,7 +993,7 @@ describe("handleArtworkGenerationRequest", () => {
       "REFERENCE SCOPE IS STRICT"
     );
     expect(JSON.stringify(interpreterBody)).toContain(
-      "never transfer the reference brand's colors"
+      "never transfer any reference's colors"
     );
     expect(JSON.stringify(interpreterBody)).toContain(
       Buffer.from("reference-image").toString("base64")

@@ -208,7 +208,6 @@ export function PreflightModal({
   visualInputs?: {
     referenceCount: number;
     materialCount: number;
-    referencePreview?: ReactNode;
     referenceEditor: ReactNode;
     materialEditor: ReactNode;
   };
@@ -245,7 +244,6 @@ export function PreflightModal({
   const [visualInputView, setVisualInputView] = useState<
     "reference" | "material"
   >("reference");
-  const [managingReferences, setManagingReferences] = useState(false);
 
   const selectedDirections = useMemo(
     () => directions.filter((direction) => selectedIds.has(direction.id)),
@@ -502,17 +500,6 @@ export function PreflightModal({
                         ? `${visualInputs.referenceCount} references selected`
                         : `${visualInputs.materialCount} materials selected`}
                     </span>
-                    {visualInputView === "reference" ? (
-                      <button
-                        className="btn secondary small"
-                        type="button"
-                        onClick={() =>
-                          setManagingReferences((current) => !current)
-                        }
-                      >
-                        {managingReferences ? "Close library" : "Upload files"}
-                      </button>
-                    ) : null}
                   </div>
                 </header>
                 <div
@@ -544,15 +531,9 @@ export function PreflightModal({
                   </button>
                 </div>
                 {visualInputView === "reference" ? (
-                  <>
-                    {visualInputs.referencePreview ??
-                      visualInputs.referenceEditor}
-                    {managingReferences ? (
-                      <div className="brief-confirm-material-browser preflight-reference-manager">
-                        {visualInputs.referenceEditor}
-                      </div>
-                    ) : null}
-                  </>
+                  <div className="brief-confirm-material-browser preflight-reference-manager">
+                    {visualInputs.referenceEditor}
+                  </div>
                 ) : (
                   <div className="brief-confirm-material-browser preflight-visual-input-editor">
                     {visualInputs.materialEditor}

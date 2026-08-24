@@ -713,7 +713,8 @@ export function buildCompactCampaignInput(input: ImagePromptAgentInput) {
     buildCompactReference(image.label, index)
   );
   const explicitlyPrimaryStyleIndex = classifiedReferences.findIndex(
-    (reference) => reference.role === "primary-style"
+    (reference) =>
+      reference.role === "primary-style" || reference.role === "style"
   );
   const primaryStyleIndex =
     explicitlyPrimaryStyleIndex >= 0
@@ -819,6 +820,31 @@ function buildStandardReference(
     };
   }
 
+  if (reference.role === "primary-layout" || reference.role === "layout") {
+    return {
+      ...base,
+      role: reference.role,
+      use:
+        "Use only for composition and element placement: framing, grid structure, spacing, and where visual elements sit within the canvas.",
+      ignore:
+        "Do not use this image for color palette, lighting, mood, subject matter, or photographic style."
+    };
+  }
+
+  if (
+    reference.role === "primary-typography" ||
+    reference.role === "typography"
+  ) {
+    return {
+      ...base,
+      role: reference.role,
+      use:
+        "Use only for type treatment: font style, letterforms, weight, casing, and how text is set within the layout.",
+      ignore:
+        "Do not use this image for photography style, color palette, composition, or subject matter."
+    };
+  }
+
   return {
     ...base,
     role: reference.role,
@@ -876,7 +902,7 @@ function albumSequenceInput(input: ImagePromptAgentInput) {
 function buildCompactReference(label: string, index: number) {
   const normalized = label.trim().toLowerCase();
   const primary = normalized.includes("primary reference");
-  const explicitRole = /·\s*(product|logo|style|content)\s*·/.exec(
+  const explicitRole = /·\s*(product|logo|style|layout|typography|content)\s*·/.exec(
     normalized
   )?.[1];
   const id =
@@ -901,6 +927,20 @@ function buildCompactReference(label: string, index: number) {
     return {
       id,
       role: primary ? "primary-style" : "style",
+      fidelity: "inspired"
+    };
+  }
+  if (explicitRole === "layout") {
+    return {
+      id,
+      role: primary ? "primary-layout" : "layout",
+      fidelity: "inspired"
+    };
+  }
+  if (explicitRole === "typography") {
+    return {
+      id,
+      role: primary ? "primary-typography" : "typography",
       fidelity: "inspired"
     };
   }
@@ -1044,13 +1084,19 @@ function referenceLibraryRole(label: string): string {
   const normalized = label.toLowerCase();
   const primary = normalized.includes("primary reference");
   const prefix = primary ? "PRIMARY — " : "";
-  const explicitRole = /·\s*(product|logo|style|content)\s*·/.exec(
+  const explicitRole = /·\s*(product|logo|style|layout|typography|content)\s*·/.exec(
     normalized
   )?.[1];
   if (explicitRole === "logo") return `${prefix}official logo — exact`;
   if (explicitRole === "product") return `${prefix}official product — exact`;
   if (explicitRole === "style") {
     return `${prefix}style reference — borrow visual language only; do not copy content`;
+  }
+  if (explicitRole === "layout") {
+    return `${prefix}layout reference — use for composition and element placement only; do not copy palette, lighting, or subject matter`;
+  }
+  if (explicitRole === "typography") {
+    return `${prefix}typography reference — use for type treatment only; do not copy photography style, palette, or composition`;
   }
   if (explicitRole === "content") {
     return `${prefix}content reference — use for supplied facts or copy only`;

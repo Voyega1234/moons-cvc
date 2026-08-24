@@ -3,7 +3,6 @@ import {
   useId,
   useRef,
   useState,
-  type ChangeEvent,
   type Dispatch,
   type ReactNode
 } from "react";
@@ -13,8 +12,6 @@ import {
   artworkOutputSizeLabel,
   artworkOutputSizes,
   inferredReferenceImageRole,
-  MAX_HOOK_REFERENCE_IMAGES,
-  type ReferenceImageSelection,
   type ServiceType
 } from "../../../domain/creative-run";
 import type { WorkflowAction, WorkflowState } from "../model";
@@ -57,80 +54,11 @@ function productInitials(title: string): string {
     .toUpperCase();
 }
 
-export function ConfirmationReferenceGrid({
-  references,
-  selectedReferences,
-  onToggle
-}: {
-  references: readonly ReferenceImageSelection[];
-  selectedReferences: readonly ReferenceImageSelection[];
-  onToggle: (reference: ReferenceImageSelection) => void;
-}) {
-  const availableImageReferences = references.filter(
-    (reference) => inferredReferenceImageRole(reference) !== "logo"
-  );
-  const selectedReferenceIds = new Set(
-    selectedReferences
-      .filter((reference) => inferredReferenceImageRole(reference) !== "logo")
-      .map((reference) => reference.id)
-  );
-
-  if (!availableImageReferences.length) {
-    return (
-      <div className="confirm-empty">
-        <b>No image references</b>
-        <p>
-          Add or select references to guide style and composition. References
-          are not treated as source objects.
-        </p>
-      </div>
-    );
-  }
-
-  const atCapacity = selectedReferenceIds.size >= MAX_HOOK_REFERENCE_IMAGES;
-
-  return (
-    <div className="confirm-reference-grid">
-      {availableImageReferences.map((reference) => {
-        const selected = selectedReferenceIds.has(reference.id);
-        const disabled = !selected && atCapacity;
-        return (
-          <button
-            className={`confirm-reference ${selected ? "" : "excluded"}`}
-            type="button"
-            aria-pressed={selected}
-            disabled={disabled}
-            title={
-              disabled
-                ? `Up to ${MAX_HOOK_REFERENCE_IMAGES} references — remove one to add another.`
-                : undefined
-            }
-            key={reference.id}
-            onClick={() => onToggle(reference)}
-          >
-            <span className="confirm-reference-preview">
-              <img src={reference.url} alt="" />
-            </span>
-            <b>{reference.label}</b>
-            <small>{selected ? "Selected" : "Not used"}</small>
-            <i className="confirm-reference-check">
-              {selected ? "✓" : "−"}
-            </i>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export function BriefConfirmationModal({
   open,
   state,
   dispatch,
-  references,
   uploadPending,
-  uploadError,
-  onUploadReference,
   referenceBrowser,
   materialBrowser,
   onBack,
@@ -139,10 +67,7 @@ export function BriefConfirmationModal({
   open: boolean;
   state: WorkflowState;
   dispatch: Dispatch<WorkflowAction>;
-  references: readonly ReferenceImageSelection[];
   uploadPending: boolean;
-  uploadError: string | null;
-  onUploadReference: (event: ChangeEvent<HTMLInputElement>) => void;
   referenceBrowser?: ReactNode;
   materialBrowser: ReactNode;
   onBack: () => void;
@@ -154,7 +79,6 @@ export function BriefConfirmationModal({
   const [assetView, setAssetView] = useState<"reference" | "material">(
     "reference"
   );
-  const [managingReferences, setManagingReferences] = useState(false);
   const artworkMode = state.artworkMode;
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
@@ -192,10 +116,6 @@ export function BriefConfirmationModal({
       window.clearTimeout(focusTimer);
     };
   }, [open, uploadPending]);
-
-  useEffect(() => {
-    if (!open) setManagingReferences(false);
-  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
   const portalRoot = document.querySelector(".compass-app") ?? document.body;
@@ -457,34 +377,6 @@ export function BriefConfirmationModal({
                     ? `${imageReferences.length} references selected`
                     : `${selectedMaterials.length} materials selected`}
                 </span>
-                {assetView === "reference" && referenceBrowser ? (
-                  <button
-                    className="btn secondary small"
-                    type="button"
-                    aria-expanded={managingReferences}
-                    onClick={() =>
-                      setManagingReferences((current) => !current)
-                    }
-                  >
-                    {managingReferences ? "Close library" : "Upload files"}
-                  </button>
-                ) : assetView === "reference" ? (
-                  <label
-                    className={`btn secondary small ${
-                      uploadPending ? "disabled" : ""
-                    }`}
-                  >
-                    {uploadPending ? "Uploading…" : "Upload files"}
-                    <input
-                      className="file-input"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      aria-label="Upload reference in confirmation"
-                      disabled={uploadPending}
-                      onChange={onUploadReference}
-                    />
-                  </label>
-                ) : null}
               </div>
             </header>
             <div
@@ -513,29 +405,10 @@ export function BriefConfirmationModal({
                 <span>{selectedMaterials.length}</span>
               </button>
             </div>
-            {uploadError ? (
-              <p className="confirm-selection-error" role="alert">
-                {uploadError}
-              </p>
-            ) : null}
             {assetView === "reference" ? (
-              <>
-                <ConfirmationReferenceGrid
-                  references={references}
-                  selectedReferences={imageReferences}
-                  onToggle={(reference) =>
-                    dispatch({
-                      type: "toggle-reference-image",
-                      item: reference
-                    })
-                  }
-                />
-                {managingReferences && referenceBrowser ? (
-                  <div className="brief-confirm-material-browser preflight-reference-manager">
-                    {referenceBrowser}
-                  </div>
-                ) : null}
-              </>
+              <div className="brief-confirm-material-browser">
+                {referenceBrowser}
+              </div>
             ) : (
               <div className="brief-confirm-material-browser">
                 {materialBrowser}

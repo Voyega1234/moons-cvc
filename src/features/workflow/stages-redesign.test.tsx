@@ -1901,9 +1901,6 @@ describe("redesigned workflow stages", () => {
       id: firstProduct.id
     });
 
-    await user.click(
-      within(confirmation).getByRole("button", { name: "Upload files" })
-    );
     expect(within(confirmation).getByLabelText("Upload images")).toBeTruthy();
     await user.click(
       within(confirmation).getByRole("tab", { name: /Materials/ })
@@ -2120,9 +2117,7 @@ describe("redesigned workflow stages", () => {
       within(confirmation).getByText("Selected product info")
     ).toBeTruthy();
     expect(within(confirmation).getByText("Image references")).toBeTruthy();
-    expect(
-      within(confirmation).getByRole("button", { name: "Upload files" })
-    ).toBeTruthy();
+    expect(within(confirmation).getByLabelText("Upload images")).toBeTruthy();
     expect(
       within(confirmation).getByRole("group", { name: "Artwork settings" })
     ).toBeTruthy();
@@ -2491,7 +2486,14 @@ describe("redesigned workflow stages", () => {
                   id: "hook-reference-2",
                   url: "https://example.com/type-reference.jpg",
                   label: "Typography reference.jpg",
-                  role: "style" as const,
+                  role: "typography" as const,
+                  primary: false
+                },
+                {
+                  id: "hook-reference-3",
+                  url: "https://example.com/layout-reference.jpg",
+                  label: "Layout reference.jpg",
+                  role: "layout" as const,
                   primary: false
                 }
               ]
@@ -2536,11 +2538,66 @@ describe("redesigned workflow stages", () => {
           id: "hook-reference-2",
           url: "https://example.com/type-reference.jpg",
           label: "Typography reference.jpg",
-          role: "style",
+          role: "typography",
+          primary: false
+        },
+        {
+          id: "hook-reference-3",
+          url: "https://example.com/layout-reference.jpg",
+          label: "Layout reference.jpg",
+          role: "layout",
           primary: false
         }
       ]
     });
+  });
+
+  it("picks a library image for one Hook only, not the shared reference board", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const firstDirection = state.directions[0];
+    if (!firstDirection) throw new Error("Expected a direction fixture.");
+    const memoryRepository = new MockBrandMemoryRepository();
+    await memoryRepository.createAssetImage({
+      clientId: state.brand?.id ?? "",
+      kind: "reference",
+      file: new File(["ref-bytes"], "Hero shot.png", { type: "image/png" })
+    });
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const reference = within(view.container).getByRole("region", {
+      name: `Reference Image for ${firstDirection.hook}`
+    });
+
+    await user.click(
+      within(reference).getByRole("button", { name: "Pick from library" })
+    );
+    const modal = within(document.body).getByRole("dialog", {
+      name: `Reference for "${firstDirection.hook}"`
+    });
+    const asset = await within(modal).findByRole("img", {
+      name: "Hero shot.png"
+    });
+    const article = asset.closest("article");
+    if (!article) throw new Error("Expected the asset card to render.");
+    await user.click(within(article).getByRole("button", { name: "Select" }));
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set-direction-reference-images",
+        id: firstDirection.id,
+        images: expect.arrayContaining([
+          expect.objectContaining({ label: "Hero shot.png" })
+        ])
+      })
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "toggle-reference-image" })
+    );
   });
 
   it("allows every editable hook text field to be cleared and saved", async () => {

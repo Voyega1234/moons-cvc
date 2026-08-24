@@ -4,7 +4,7 @@ import { ArrowLeft, FolderSimple, ImageBroken, PencilSimple, Trash } from "@phos
 import { type LibraryItem } from "../../../domain/brand";
 import { env } from "../../../config/env";
 import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type BrandPastWorkItem, type BrandProduct } from "../../../domain/brand-memory";
-import { creativeMaterialRoles, inferredReferenceImageRole, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
+import { creativeMaterialRoles, inferredReferenceImageRole, MAX_HOOK_REFERENCE_IMAGES, referenceBoardRoleOptions, referenceHoldingRole, referenceImageRoleLabels, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import { useOptionalAuth } from "../../../app/providers/auth-provider";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
@@ -30,15 +30,19 @@ import {
 export function LibraryEditModal({
   title,
   description,
+  eyebrow = "Manage library",
   busy,
   onClose,
-  children
+  children,
+  className
 }: {
   title: string;
   description?: string;
+  eyebrow?: string;
   busy: boolean;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const titleId = useId();
   useEffect(() => {
@@ -61,7 +65,7 @@ export function LibraryEditModal({
       }}
     >
       <section
-        className="output-modal compass-library-edit-modal"
+        className={`output-modal compass-library-edit-modal ${className ?? ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -69,7 +73,7 @@ export function LibraryEditModal({
       >
         <header className="output-modal-head compass-library-edit-head">
           <div>
-            <p className="eyebrow">Manage library</p>
+            <p className="eyebrow">{eyebrow}</p>
             <h3 id={titleId}>{title}</h3>
             {description ? <p>{description}</p> : null}
           </div>
@@ -233,6 +237,7 @@ function briefSignalValue(
 }
 
 const SIGNAL_PREVIEW_LIMIT = 150;
+const ASSET_IMAGE_PAGE_SIZE = 15;
 
 function compactSignalPreview(value: string): string {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -300,6 +305,7 @@ const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "client-context": "Person / client context"
 };
 
+
 function AssetPreviewImage({
   src,
   alt
@@ -342,9 +348,13 @@ export function CreativeMaterialsEditor({
   dispatch,
   kind = "material",
   legacyReferences = [],
-  onAssetCountChange
+  onAssetCountChange,
+  targetDirectionId
 }: StageProps & {
   kind?: BrandAssetKind;
+  /** When set (reference kind only), selections attach to this Hook's own
+   * referenceImages instead of the shared brief-level reference board. */
+  targetDirectionId?: string;
   legacyReferences?: readonly LibraryItem[];
   onAssetCountChange?: (kind: BrandAssetKind, count: number) => void;
 }) {
@@ -356,12 +366,51 @@ export function CreativeMaterialsEditor({
   const [drivePending, setDrivePending] = useState(false);
   const [googleReconnectPending, setGoogleReconnectPending] = useState(false);
   const assetKind = kind;
+  const targetReferenceImages = targetDirectionId
+    ? (state.directions.find((direction) => direction.id === targetDirectionId)
+        ?.referenceImages ?? [])
+    : state.referenceImages;
+
+  function isReferenceSelected(id: string): boolean {
+    return targetReferenceImages.some((item) => item.id === id);
+  }
+
+  function toggleReferenceSelection(item: ReferenceImageSelection) {
+    if (targetDirectionId) {
+      const exists = targetReferenceImages.some(
+        (existing) => existing.id === item.id
+      );
+      if (!exists && targetReferenceImages.length >= MAX_HOOK_REFERENCE_IMAGES) {
+        setUploadError(
+          `Up to ${MAX_HOOK_REFERENCE_IMAGES} references per hook — remove one to add another.`
+        );
+        return;
+      }
+      setUploadError(null);
+      dispatch({
+        type: "set-direction-reference-images",
+        id: targetDirectionId,
+        images: exists
+          ? targetReferenceImages.filter((existing) => existing.id !== item.id)
+          : [...targetReferenceImages, item]
+      });
+      return;
+    }
+    dispatch({ type: "toggle-reference-image", item });
+  }
+
   const [assetFolders, setAssetFolders] = useState<readonly BrandAssetFolder[]>(
     []
   );
   const [assetImages, setAssetImages] = useState<readonly BrandAssetImage[]>([]);
   const [currentAssetFolderId, setCurrentAssetFolderId] = useState<string | null>(
     null
+  );
+  const [selectedSortSnapshot, setSelectedSortSnapshot] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [visibleImageCount, setVisibleImageCount] = useState(
+    ASSET_IMAGE_PAGE_SIZE
   );
   const [newFolderName, setNewFolderName] = useState("");
   const [assetActionPopup, setAssetActionPopup] = useState<
@@ -384,6 +433,9 @@ export function CreativeMaterialsEditor({
   >({});
   const driveImportIds = useRef(new Set<string>());
   const selectedMaterials = selectedUploadedMaterials(state);
+  const selectedReferenceImagesForRoleEditor = targetReferenceImages.filter(
+    (reference) => inferredReferenceImageRole(reference) !== "logo"
+  );
   const googleReconnectRequired = Boolean(
     uploadError &&
       /Google access|Continue with Google|session has expired/i.test(uploadError)
@@ -448,6 +500,28 @@ export function CreativeMaterialsEditor({
       active = false;
     };
   }, [brandMemoryRepository, state.brand?.id]);
+
+  useEffect(() => {
+    setVisibleImageCount(ASSET_IMAGE_PAGE_SIZE);
+  }, [currentAssetFolderId]);
+
+  useEffect(() => {
+    setSelectedSortSnapshot(
+      new Set(
+        assetImages
+          .filter((image) =>
+            image.kind === "material"
+              ? isBrandAssetSelected(image, state)
+              : isReferenceSelected(`brand-asset-${image.id}`)
+          )
+          .map((image) => image.id)
+      )
+    );
+    // Freezes the "selected first" sort order to whatever was selected when
+    // this list was (re)fetched or the folder changed, so clicking Select on
+    // an image doesn't reshuffle the whole grid under the user mid-click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetImages, assetKind, currentAssetFolderId]);
 
   useEffect(() => {
     if (!assetLibraryReady) return;
@@ -660,11 +734,11 @@ export function CreativeMaterialsEditor({
       }
       return;
     }
-    const reference = state.referenceImages.find(
+    const reference = targetReferenceImages.find(
       (item) => item.id === selectionId
     );
     if (reference) {
-      dispatch({ type: "toggle-reference-image", item: reference });
+      toggleReferenceSelection(reference);
     }
   }
 
@@ -840,7 +914,7 @@ export function CreativeMaterialsEditor({
         label: asset.name,
         role: "style"
       };
-      dispatch({ type: "toggle-reference-image", item });
+      toggleReferenceSelection(item);
       return;
     }
     const id = `brand-asset-${asset.id}`;
@@ -873,14 +947,11 @@ export function CreativeMaterialsEditor({
 
   function selectLegacyReference(item: LibraryItem) {
     if (!item.assetUrl) return;
-    dispatch({
-      type: "toggle-reference-image",
-      item: {
-        id: `brand-library-${item.id}`,
-        url: item.assetUrl,
-        label: item.title,
-        role: "style"
-      }
+    toggleReferenceSelection({
+      id: `brand-library-${item.id}`,
+      url: item.assetUrl,
+      label: item.title,
+      role: "style"
     });
   }
 
@@ -905,11 +976,19 @@ export function CreativeMaterialsEditor({
       folder.kind === assetKind &&
       folder.parentId === (currentAssetFolder?.id ?? null)
   );
-  const visibleAssetImages = assetImages.filter(
-    (image) =>
-      image.kind === assetKind &&
-      image.folderId === (currentAssetFolder?.id ?? null)
-  );
+  const visibleAssetImages = assetImages
+    .filter(
+      (image) =>
+        image.kind === assetKind &&
+        image.folderId === (currentAssetFolder?.id ?? null)
+    )
+    .sort(
+      (a, b) =>
+        Number(selectedSortSnapshot.has(b.id)) -
+        Number(selectedSortSnapshot.has(a.id))
+    );
+  const pagedAssetImages = visibleAssetImages.slice(0, visibleImageCount);
+  const hasMoreAssetImages = visibleAssetImages.length > visibleImageCount;
   const visibleLegacyReferences =
     assetKind === "reference" && !currentAssetFolder
       ? legacyReferences.filter(
@@ -1157,17 +1236,11 @@ export function CreativeMaterialsEditor({
                 <span>Select the images Creative Compass should use</span>
               </div>
               <div className="compass-persistent-asset-grid">
-                {visibleAssetImages.map((asset) => {
+                {pagedAssetImages.map((asset) => {
                   const selected =
                     asset.kind === "material"
-                      ? state.uploadedMaterials.some(
-                          (item) =>
-                            item.id === `brand-asset-${asset.id}` &&
-                            item.selected !== false
-                        )
-                      : state.referenceImages.some(
-                          (item) => item.id === `brand-asset-${asset.id}`
-                        );
+                      ? isBrandAssetSelected(asset, state)
+                      : isReferenceSelected(`brand-asset-${asset.id}`);
                   return (
                     <article key={asset.id}>
                       <AssetPreviewImage src={asset.url} alt={asset.name} />
@@ -1197,9 +1270,7 @@ export function CreativeMaterialsEditor({
                   );
                 })}
                 {visibleLegacyReferences.map((item) => {
-                  const selected = state.referenceImages.some(
-                    (reference) => reference.id === `brand-library-${item.id}`
-                  );
+                  const selected = isReferenceSelected(`brand-library-${item.id}`);
                   return (
                     <article key={`legacy-${item.id}`}>
                       <AssetPreviewImage
@@ -1232,6 +1303,20 @@ export function CreativeMaterialsEditor({
                   );
                 })}
               </div>
+              {hasMoreAssetImages ? (
+                <button
+                  className="btn secondary small compass-asset-see-more"
+                  type="button"
+                  onClick={() =>
+                    setVisibleImageCount(
+                      (count) => count + ASSET_IMAGE_PAGE_SIZE
+                    )
+                  }
+                >
+                  See more ({visibleAssetImages.length - pagedAssetImages.length}{" "}
+                  more)
+                </button>
+              ) : null}
             </>
           ) : null}
           {showAssetSkeletons ? (
@@ -1282,7 +1367,7 @@ export function CreativeMaterialsEditor({
         <span>
           {assetKind === "material"
             ? `${selectedMaterials.length}/8 materials selected`
-            : `${state.referenceImages.length} references selected`}
+            : `${targetReferenceImages.length}/${MAX_HOOK_REFERENCE_IMAGES} references selected`}
         </span>
       </div>
       <p className="compass-creative-material-helper">
@@ -1372,6 +1457,86 @@ export function CreativeMaterialsEditor({
           </div>
         </section>
       ) : null}
+      {assetKind === "reference" && selectedReferenceImagesForRoleEditor.length ? (
+        <section className="compass-selected-materials">
+          <header>
+            <b>Selected for this brief</b>
+            <span>Set what each reference is for before generation.</span>
+          </header>
+          <div className="compass-creative-material-grid">
+            {selectedReferenceImagesForRoleEditor.map((reference) => {
+              return (
+                <article className="compass-creative-material-card selected" key={reference.id}>
+                  <img src={reference.url} alt={reference.label} />
+                  <div className="compass-creative-material-fields">
+                    <div className="compass-creative-material-name">
+                      <b>{reference.label}</b>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${reference.label}`}
+                        onClick={() => toggleReferenceSelection(reference)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <label>
+                      Use for
+                      <select
+                        value={inferredReferenceImageRole(reference)}
+                        onChange={(event) => {
+                          const nextRole = event.target.value as ReferenceImageRole;
+                          const previousRole = inferredReferenceImageRole(reference);
+                          const swapWith = referenceHoldingRole(
+                            selectedReferenceImagesForRoleEditor,
+                            reference.id,
+                            nextRole
+                          );
+                          if (targetDirectionId) {
+                            dispatch({
+                              type: "set-direction-reference-images",
+                              id: targetDirectionId,
+                              images: selectedReferenceImagesForRoleEditor.map(
+                                (item) => {
+                                  if (item.id === reference.id) {
+                                    return { ...item, role: nextRole };
+                                  }
+                                  if (swapWith && item.id === swapWith.id) {
+                                    return { ...item, role: previousRole };
+                                  }
+                                  return item;
+                                }
+                              )
+                            });
+                            return;
+                          }
+                          dispatch({
+                            type: "set-reference-image-role",
+                            id: reference.id,
+                            role: nextRole
+                          });
+                          if (swapWith) {
+                            dispatch({
+                              type: "set-reference-image-role",
+                              id: swapWith.id,
+                              role: previousRole
+                            });
+                          }
+                        }}
+                      >
+                        {referenceBoardRoleOptions.map((role) => (
+                          <option value={role} key={role}>
+                            {referenceImageRoleLabels[role]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
       {editingAssetFolder ? (
         <LibraryEditModal
           title={`Edit ${editingAssetFolder.name}`}
@@ -1428,6 +1593,19 @@ export function CreativeMaterialsEditor({
   );
 }
 
+function isBrandAssetSelected(
+  asset: BrandAssetImage,
+  state: WorkflowState
+): boolean {
+  return asset.kind === "material"
+    ? state.uploadedMaterials.some(
+        (item) => item.id === `brand-asset-${asset.id}` && item.selected !== false
+      )
+    : state.referenceImages.some(
+        (item) => item.id === `brand-asset-${asset.id}`
+      );
+}
+
 function mergeBrandAssetFolders(
   current: readonly BrandAssetFolder[],
   incoming: readonly BrandAssetFolder[]
@@ -1441,9 +1619,12 @@ function mergeBrandAssetImages(
   current: readonly BrandAssetImage[],
   incoming: readonly BrandAssetImage[]
 ): readonly BrandAssetImage[] {
-  const byId = new Map(current.map((image) => [image.id, image]));
-  incoming.forEach((image) => byId.set(image.id, image));
-  return [...byId.values()];
+  const currentIds = new Set(current.map((image) => image.id));
+  const newlyUploaded = incoming.filter((image) => !currentIds.has(image.id));
+  const updatedExisting = current.map(
+    (image) => incoming.find((item) => item.id === image.id) ?? image
+  );
+  return [...newlyUploaded, ...updatedExisting];
 }
 
 function brandAssetFolderPath(
@@ -1590,15 +1771,6 @@ export function BriefStage({ state, dispatch }: StageProps) {
           quantity: 0
         }
     );
-  const confirmationReferences = [
-    ...libraryItemsWithImages(state.brand?.library.refs ?? [], "style"),
-    ...selectedImageReferences.filter(
-      (selected) =>
-        !(state.brand?.library.refs ?? []).some(
-          (reference) => `library-${reference.id}` === selected.id
-        )
-    )
-  ];
   useEffect(() => {
     if (
       state.referenceImages.some(
@@ -1655,10 +1827,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
         open={confirmationOpen}
         state={state}
         dispatch={dispatch}
-        references={confirmationReferences}
         uploadPending={referenceUploadPending}
-        uploadError={referenceUploadError}
-        onUploadReference={handleReferenceUpload}
         referenceBrowser={
           <CreativeMaterialsEditor
             state={{

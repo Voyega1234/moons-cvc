@@ -587,6 +587,7 @@
 }
 
 .preflight-reference-manager {
+  min-width: 0;
   margin-top: 11px;
 }
 

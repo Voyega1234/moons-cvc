@@ -579,7 +579,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .from("brand_assets")
       .select("*")
       .eq("client_id", clientId)
-      .order("created_at");
+      .order("created_at", { ascending: false });
     if (error) throw error;
     return Promise.all(
       data.map(async (row) => {

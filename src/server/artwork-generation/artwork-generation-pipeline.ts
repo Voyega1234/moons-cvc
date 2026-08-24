@@ -1843,7 +1843,7 @@ async function resolveImagePrompt({
   fetchImpl: FetchLike;
 }): Promise<string> {
   const attachedReferences = input.referenceLed
-    ? references.filter((reference) => !isHookStyleReference(reference))
+    ? references.filter((reference) => !isHookDesignReference(reference))
     : references;
   const promptReferenceLabels = input.referenceLed
     ? references
@@ -1881,12 +1881,14 @@ async function resolveImagePrompt({
   };
 
   if (input.referenceLed) {
-    const styleReferences = references.filter(isHookStyleReference);
+    const designReferences = references.filter(isHookDesignReference);
+    const interpreterReferences =
+      designReferences.length > 0 ? designReferences : references;
     const designGrammar = await interpretReferenceDesign({
       apiKey: promptApiKey,
       fetchImpl,
       mode: input.artworkMode,
-      references: styleReferences,
+      references: interpreterReferences,
       campaign: {
         concept: hook.concept,
         objective: hook.why,
@@ -1900,7 +1902,7 @@ async function resolveImagePrompt({
             trace,
             input.runId,
             hook.id,
-            styleReferences
+            interpreterReferences
           )
         );
       }
@@ -1944,8 +1946,8 @@ async function resolveImagePrompt({
   });
 }
 
-function isHookStyleReference(reference: ReferenceImageInput): boolean {
-  return /^(?:Primary|Supporting) reference\s*·\s*Style\s*·/i.test(
+function isHookDesignReference(reference: ReferenceImageInput): boolean {
+  return /^(?:Primary|Supporting) reference\s*·\s*(?:Style|Layout|Typography)\s*·/i.test(
     reference.label?.trim() ?? ""
   );
 }

@@ -678,13 +678,20 @@ export function workflowReducer(
         )
       };
     }
-    case "set-reference-image-role":
+    case "set-reference-image-role": {
+      const referenceImages = state.referenceImages.map((item) =>
+        item.id === action.id ? { ...item, role: action.role } : item
+      );
       return {
         ...state,
-        referenceImages: state.referenceImages.map((item) =>
-          item.id === action.id ? { ...item, role: action.role } : item
+        referenceImages,
+        directions: syncSharedReferenceImagesIntoDirections(
+          state.directions,
+          referenceImages,
+          { excludeDirectionIds: ugcVideoDirectionIds(state) }
         )
       };
+    }
     case "set-primary-reference-image":
       return {
         ...state,

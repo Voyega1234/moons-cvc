@@ -267,7 +267,7 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
   }
 
   async listAssetImages(clientId: string): Promise<readonly BrandAssetImage[]> {
-    return this.assetImagesByClient.get(clientId) ?? [];
+    return [...(this.assetImagesByClient.get(clientId) ?? [])].reverse();
   }
 
   async createAssetFolder(

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { brands } from "../../data/mock-brands";
+import { MAX_HOOK_REFERENCE_IMAGES } from "../../domain/creative-run";
 import {
   createInitialWorkflowState,
   initialWorkflowState,
@@ -197,12 +198,14 @@ describe("workflowReducer", () => {
         primary: index > 0
       }))
     });
-    expect(capped.directions[0]?.referenceImages).toHaveLength(2);
+    expect(capped.directions[0]?.referenceImages).toHaveLength(
+      MAX_HOOK_REFERENCE_IMAGES
+    );
     expect(
       capped.directions[0]?.referenceImages?.map((reference) =>
         Boolean(reference.primary)
       )
-    ).toEqual([true, false]);
+    ).toEqual([true, ...Array(MAX_HOOK_REFERENCE_IMAGES - 1).fill(false)]);
 
     const removed = workflowReducer(updated, {
       type: "set-direction-reference-images",
@@ -1242,38 +1245,40 @@ describe("workflowReducer", () => {
     expect(state.referenceImages).toEqual([]);
   });
 
-  it("caps shared reference image selection at MAX_HOOK_REFERENCE_IMAGES, ignoring a third pick", () => {
-    const itemA = { id: "ref-a", url: "https://example.com/a.png", label: "Reference A" };
-    const itemB = { id: "ref-b", url: "https://example.com/b.png", label: "Reference B" };
-    const itemC = { id: "ref-c", url: "https://example.com/c.png", label: "Reference C" };
+  it("caps shared reference image selection at MAX_HOOK_REFERENCE_IMAGES, ignoring the pick past the cap", () => {
+    const items = Array.from({ length: MAX_HOOK_REFERENCE_IMAGES + 1 }, (_, index) => ({
+      id: `ref-${index}`,
+      url: `https://example.com/${index}.png`,
+      label: `Reference ${index}`
+    }));
+    const atCap = items.slice(0, MAX_HOOK_REFERENCE_IMAGES);
+    const overCap = items[MAX_HOOK_REFERENCE_IMAGES]!;
 
-    let state = workflowReducer(initialWorkflowState, {
-      type: "toggle-reference-image",
-      item: itemA
-    });
-    state = workflowReducer(state, {
-      type: "toggle-reference-image",
-      item: itemB
-    });
-    expect(state.referenceImages).toEqual([itemA, itemB]);
-
-    state = workflowReducer(state, {
-      type: "toggle-reference-image",
-      item: itemC
-    });
-    expect(state.referenceImages).toEqual([itemA, itemB]);
+    let state = atCap.reduce(
+      (current, item) =>
+        workflowReducer(current, { type: "toggle-reference-image", item }),
+      initialWorkflowState
+    );
+    expect(state.referenceImages).toEqual(atCap);
 
     state = workflowReducer(state, {
       type: "toggle-reference-image",
-      item: itemA
+      item: overCap
     });
-    expect(state.referenceImages).toEqual([itemB]);
+    expect(state.referenceImages).toEqual(atCap);
+
+    const [first, ...rest] = atCap;
+    state = workflowReducer(state, {
+      type: "toggle-reference-image",
+      item: first!
+    });
+    expect(state.referenceImages).toEqual(rest);
 
     state = workflowReducer(state, {
       type: "toggle-reference-image",
-      item: itemC
+      item: overCap
     });
-    expect(state.referenceImages).toEqual([itemB, itemC]);
+    expect(state.referenceImages).toEqual([...rest, overCap]);
   });
 
   it("fans a toggled reference image into every selected hook immediately, and removes it again on untoggle", () => {

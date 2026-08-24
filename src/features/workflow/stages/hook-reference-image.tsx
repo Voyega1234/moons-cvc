@@ -1,46 +1,16 @@
-import { CaretDown, ImageSquare, Trash, UploadSimple } from "@phosphor-icons/react";
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type Dispatch
-} from "react";
+import { ImageSquare, Trash, UploadSimple } from "@phosphor-icons/react";
+import { useId, useState, type ChangeEvent, type Dispatch } from "react";
 import {
   inferredReferenceImageRole,
   MAX_HOOK_REFERENCE_IMAGES,
-  type ReferenceImageSelection
+  referenceBoardRoleOptions,
+  referenceHoldingRole,
+  referenceImageRoleLabels,
+  type ReferenceImageRole
 } from "../../../domain/creative-run";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
 import type { WorkflowAction, WorkflowState } from "../model";
-
-function availableSharedReferenceImages(
-  run: Pick<WorkflowState, "brand" | "referenceImages">
-): readonly ReferenceImageSelection[] {
-  const nonLogo = run.referenceImages.filter(
-    (reference) => inferredReferenceImageRole(reference) !== "logo"
-  );
-  const libraryRefs = run.brand?.library.refs ?? [];
-  const fromLibrary = libraryRefs
-    .filter((item) => item.assetUrl)
-    .map((item) => {
-      const picked = nonLogo.find((reference) => reference.url === item.assetUrl);
-      return (
-        picked ?? {
-          id: `library-${item.id}`,
-          url: item.assetUrl as string,
-          label: item.title || "Untitled",
-          role: "style" as const
-        }
-      );
-    })
-    .filter((reference) => inferredReferenceImageRole(reference) !== "logo");
-  const adHoc = nonLogo.filter(
-    (reference) => !libraryRefs.some((item) => item.assetUrl === reference.url)
-  );
-  return [...fromLibrary, ...adHoc];
-}
+import { CreativeMaterialsEditor, LibraryEditModal } from "./brief-stage";
 
 export function HookReferenceImage({
   run,
@@ -48,7 +18,7 @@ export function HookReferenceImage({
   dispatch,
   disabled = false
 }: {
-  run: Pick<WorkflowState, "id" | "brand" | "referenceImages">;
+  run: WorkflowState;
   direction: WorkflowState["directions"][number];
   dispatch: Dispatch<WorkflowAction>;
   disabled?: boolean;
@@ -56,26 +26,7 @@ export function HookReferenceImage({
   const inputId = useId();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const libraryRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!libraryOpen) return;
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!libraryRef.current?.contains(event.target as Node)) {
-        setLibraryOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLibraryOpen(false);
-    };
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [libraryOpen]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const available = Math.max(
@@ -123,18 +74,6 @@ export function HookReferenceImage({
 
   const references = direction.referenceImages ?? [];
   const canAdd = references.length < MAX_HOOK_REFERENCE_IMAGES;
-  const libraryOptions = availableSharedReferenceImages(run).filter(
-    (reference) => !references.some((item) => item.url === reference.url)
-  );
-
-  function handlePickFromLibrary(reference: ReferenceImageSelection) {
-    dispatch({
-      type: "set-direction-reference-images",
-      id: direction.id,
-      images: [...references, reference]
-    });
-    setLibraryOpen(false);
-  }
 
   return (
     <section
@@ -146,43 +85,78 @@ export function HookReferenceImage({
           <ImageSquare aria-hidden="true" size={15} />
           Reference Image
         </span>
-        <small>
-          {references.length}/{MAX_HOOK_REFERENCE_IMAGES} · First image is Primary
-        </small>
+        <small>{references.length}/{MAX_HOOK_REFERENCE_IMAGES} references</small>
       </div>
       {references.length ? (
         <div className="hook-reference-image-grid">
-          {references.map((reference, index) => (
+          {references.map((reference) => {
+            return (
             <article className="hook-reference-image-preview" key={reference.id}>
-              <img src={reference.url} alt={reference.label} />
+              <div className="hook-reference-image-thumb">
+                <img src={reference.url} alt={reference.label} />
+                <button
+                  className="hook-reference-image-action remove"
+                  type="button"
+                  disabled={disabled || uploading}
+                  onClick={() =>
+                    dispatch({
+                      type: "set-direction-reference-images",
+                      id: direction.id,
+                      images: references.filter(
+                        (item) => item.id !== reference.id
+                      )
+                    })
+                  }
+                  aria-label={`Remove ${reference.label}`}
+                >
+                  <Trash aria-hidden="true" size={13} />
+                </button>
+              </div>
               <div className="hook-reference-image-meta">
-                <strong>{index === 0 ? "Primary" : `Supporting ${index}`}</strong>
                 <span
                   className="hook-reference-image-filename"
                   title={reference.label}
                 >
                   {reference.label}
                 </span>
+                <select
+                  className="hook-reference-image-role"
+                  aria-label={`Use ${reference.label} for`}
+                  value={inferredReferenceImageRole(reference)}
+                  disabled={disabled || uploading}
+                  onChange={(event) => {
+                    const nextRole = event.target.value as ReferenceImageRole;
+                    const previousRole = inferredReferenceImageRole(reference);
+                    const swapWith = referenceHoldingRole(
+                      references,
+                      reference.id,
+                      nextRole
+                    );
+                    dispatch({
+                      type: "set-direction-reference-images",
+                      id: direction.id,
+                      images: references.map((item) => {
+                        if (item.id === reference.id) {
+                          return { ...item, role: nextRole };
+                        }
+                        if (swapWith && item.id === swapWith.id) {
+                          return { ...item, role: previousRole };
+                        }
+                        return item;
+                      })
+                    });
+                  }}
+                >
+                  {referenceBoardRoleOptions.map((role) => (
+                    <option value={role} key={role}>
+                      {referenceImageRoleLabels[role]}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <button
-                className="hook-reference-image-action remove"
-                type="button"
-                disabled={disabled || uploading}
-                onClick={() =>
-                  dispatch({
-                    type: "set-direction-reference-images",
-                    id: direction.id,
-                    images: references.filter(
-                      (item) => item.id !== reference.id
-                    )
-                  })
-                }
-                aria-label={`Remove ${reference.label}`}
-              >
-                <Trash aria-hidden="true" size={13} />
-              </button>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : null}
       {canAdd ? (
@@ -195,37 +169,33 @@ export function HookReferenceImage({
                 ? "Add supporting references"
                 : "Add reference images"}
           </label>
-          {libraryOptions.length ? (
-            <div className="hook-reference-image-library" ref={libraryRef}>
-              <button
-                className="hook-reference-image-library-toggle"
-                type="button"
-                disabled={disabled || uploading}
-                aria-expanded={libraryOpen}
-                onClick={() => setLibraryOpen((open) => !open)}
-              >
-                Pick from library
-                <CaretDown aria-hidden="true" size={11} />
-              </button>
-              {libraryOpen ? (
-                <div className="hook-reference-image-library-menu" role="menu">
-                  {libraryOptions.map((reference) => (
-                    <button
-                      key={reference.id}
-                      className="hook-reference-image-library-item"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => handlePickFromLibrary(reference)}
-                    >
-                      <img src={reference.url} alt="" />
-                      <span title={reference.label}>{reference.label}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <button
+            className="hook-reference-image-library-toggle"
+            type="button"
+            disabled={disabled || uploading}
+            onClick={() => setPickerOpen(true)}
+          >
+            Pick from library
+          </button>
         </div>
+      ) : null}
+      {pickerOpen ? (
+        <LibraryEditModal
+          title={`Reference for "${direction.hook}"`}
+          description="Browse or upload an image and select it to attach it to this Hook."
+          eyebrow="Hook reference"
+          busy={false}
+          onClose={() => setPickerOpen(false)}
+          className="compass-hook-reference-picker-modal"
+        >
+          <CreativeMaterialsEditor
+            state={run}
+            dispatch={dispatch}
+            kind="reference"
+            targetDirectionId={direction.id}
+            legacyReferences={run.brand?.library.refs ?? []}
+          />
+        </LibraryEditModal>
       ) : null}
       <input
         id={inputId}

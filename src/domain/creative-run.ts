@@ -285,14 +285,14 @@ export interface ReferenceImageSelection {
   fromSharedReference?: boolean;
 }
 
-export const MAX_HOOK_REFERENCE_IMAGES = 2;
+export const MAX_HOOK_REFERENCE_IMAGES = 3;
 
 export function normalizeHookReferenceImages(
   references: readonly ReferenceImageSelection[]
 ): readonly ReferenceImageSelection[] {
   return references.slice(0, MAX_HOOK_REFERENCE_IMAGES).map((reference, index) => ({
     ...reference,
-    role: "style",
+    role: reference.role ?? "style",
     primary: index === 0
   }));
 }
@@ -327,7 +327,11 @@ export function syncSharedReferenceImagesIntoDirections<
     ]);
     if (
       referenceImages.length === existing.length &&
-      referenceImages.every((item, index) => item.url === existing[index]?.url)
+      referenceImages.every(
+        (item, index) =>
+          item.url === existing[index]?.url &&
+          item.role === existing[index]?.role
+      )
     ) {
       return direction;
     }
@@ -339,14 +343,45 @@ export const referenceImageRoles = [
   "product",
   "logo",
   "style",
+  "layout",
+  "typography",
   "content"
 ] as const;
 export type ReferenceImageRole = (typeof referenceImageRoles)[number];
+
+/** The roles a user can pick for a mood/style reference image, shown as
+ * "Use for" in the reference board and per-hook reference picker. Excludes
+ * product/logo/content, which are set through their own dedicated flows. */
+export const referenceBoardRoleOptions: readonly ReferenceImageRole[] = [
+  "style",
+  "layout",
+  "typography"
+];
+
+/** Finds the other reference in the list already holding `nextRole`, if any.
+ * A "Use for" picker uses this to swap that reference onto the role being
+ * vacated instead of just blocking the pick, so two references can always
+ * trade roles in a single click without a role ever going unassigned. */
+export function referenceHoldingRole<
+  T extends Pick<ReferenceImageSelection, "id" | "label" | "role">
+>(
+  references: readonly T[],
+  excludeId: string,
+  nextRole: ReferenceImageRole
+): T | undefined {
+  return references.find(
+    (reference) =>
+      reference.id !== excludeId &&
+      inferredReferenceImageRole(reference) === nextRole
+  );
+}
 
 export const referenceImageRoleLabels: Record<ReferenceImageRole, string> = {
   product: "Product",
   logo: "Logo",
   style: "Style",
+  layout: "Layout",
+  typography: "Typography",
   content: "Content"
 };
 

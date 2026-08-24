@@ -2475,6 +2475,10 @@
   box-shadow: 0 26px 80px rgba(28, 35, 52, 0.22);
 }
 
+.compass-hook-reference-picker-modal {
+  max-width: min(1100px, calc(100vw - 28px));
+}
+
 .compass-library-edit-head {
   margin: 0;
   padding: 18px 20px 16px;
@@ -4450,6 +4454,11 @@
   gap: 10px;
 }
 
+.compass-app .compass-asset-see-more {
+  margin-top: 12px;
+  align-self: flex-start;
+}
+
 .compass-app .compass-persistent-asset-grid article {
   min-width: 0;
   display: grid;
@@ -4851,6 +4860,7 @@
 }
 
 .compass-app .compass-creative-material-name {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;

@@ -103,10 +103,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={dispatch}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
@@ -233,10 +230,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={dispatch}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
@@ -268,10 +262,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={dispatch}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
@@ -343,10 +334,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={vi.fn()}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
@@ -375,10 +363,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={vi.fn()}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
@@ -411,10 +396,7 @@ describe("Artwork generation settings", () => {
         open
         state={state}
         dispatch={vi.fn()}
-        references={[]}
         uploadPending={false}
-        uploadError={null}
-        onUploadReference={vi.fn()}
         materialBrowser={null}
         onBack={vi.fn()}
         onConfirm={vi.fn()}
