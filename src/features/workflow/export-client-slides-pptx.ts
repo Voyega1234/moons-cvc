@@ -935,8 +935,6 @@ function addUgcClientSlide(
   slide: PptxGenJS.Slide,
   direction: CreativeDirection | undefined,
   brandName: string,
-  slideNumber: number,
-  totalSlides: number,
   previewImage?: string,
   referenceImages: readonly string[] = []
 ) {
@@ -1171,17 +1169,6 @@ function addUgcClientSlide(
     bold: true,
     color: COLORS.muted
   });
-  slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: 12.25,
-    y: 7.12,
-    w: 0.7,
-    h: 0.14,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.8,
-    color: COLORS.muted,
-    align: "right"
-  });
   slide.addNotes(
     `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual reference: UGC preview captured from the Create stage and embedded as one PNG image.`
   );
@@ -1310,8 +1297,6 @@ function addSinglePageArtworkSlide(
   slide: PptxGenJS.Slide,
   item: ClientSlideItem,
   brandName: string,
-  slideNumber: number,
-  totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
   imageData: readonly string[],
@@ -1537,17 +1522,6 @@ function addSinglePageArtworkSlide(
     h: 0,
     line: { color: COLORS.line, width: 1 }
   });
-  slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: captionPanel.x + captionPanel.w - 1.03,
-    y: 6.78,
-    w: 0.68,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
-    color: COLORS.muted,
-    align: "right"
-  });
   slide.addNotes(
     `[Sources]\n- Headline, sub-headline, creative concept, CTA, and caption: confirmed workflow data for ${brandName}.\n- Artwork: generated creative asset attached to this output.`
   );
@@ -1557,8 +1531,6 @@ function addClientSlide(
   pptx: PptxGenJS,
   item: ClientSlideItem,
   brandName: string,
-  slideNumber: number,
-  totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
   imageData: readonly string[] = [],
@@ -1573,8 +1545,6 @@ function addClientSlide(
       slide,
       direction,
       brandName,
-      slideNumber,
-      totalSlides,
       imageData[0],
       referenceImageData
     );
@@ -1585,8 +1555,6 @@ function addClientSlide(
     slide,
     item,
     brandName,
-    slideNumber,
-    totalSlides,
     outputSize,
     albumFormat,
     imageData,
@@ -1932,17 +1900,6 @@ function addClientSlide(
     bold: true,
     color: COLORS.muted
   });
-  slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: 12.02,
-    y: 6.88,
-    w: 0.68,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
-    color: COLORS.muted,
-    align: "right"
-  });
   slide.addNotes(
     `[Sources]\n- Concept, key message, visual direction, and CTA: confirmed workflow data for ${brandName}.\n- Creative draft: generated artwork attached to this output.`
   );
@@ -1953,10 +1910,6 @@ function addCaptionSlide(
   item: ClientSlideItem,
   brandName: string,
   captionChunk: string,
-  chunkIndex: number,
-  chunkCount: number,
-  slideNumber: number,
-  totalSlides: number,
   outputSize: WorkflowState["outputSize"],
   albumFormat: AlbumFormat,
   imageData: readonly string[] = []
@@ -2032,11 +1985,7 @@ function addCaptionSlide(
     color: COLORS.violet,
     charSpacing: 1.2
   });
-  const pageLabel =
-    chunkCount > 1
-      ? `ARTWORK & CAPTION · ${chunkIndex + 1}/${chunkCount}`
-      : "ARTWORK & CAPTION";
-  slide.addText(pageLabel, {
+  slide.addText("ARTWORK & CAPTION", {
     x: 10.4,
     y: 0.48,
     w: 2.4,
@@ -2114,17 +2063,6 @@ function addCaptionSlide(
     color: COLORS.muted,
     breakLine: false
   });
-  slide.addText(`${slideNumber} / ${totalSlides}`, {
-    x: 12.02,
-    y: 6.76,
-    w: 0.68,
-    h: 0.2,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 8,
-    color: COLORS.muted,
-    align: "right"
-  });
   slide.addNotes(
     `[Sources]\n- Full caption and CTA: confirmed workflow data for ${brandName}.\n- Visual: generated creative asset or selected UGC reference attached to this output.`
   );
@@ -2194,9 +2132,6 @@ async function buildClientSlidesPptx(
     headFontFace: SLIDE_FONT_FACE,
     bodyFontFace: SLIDE_FONT_FACE
   };
-  const totalSlides = items.length;
-  let slideNumber = 1;
-
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
     let albumMasterData: string | undefined;
@@ -2241,15 +2176,12 @@ async function buildClientSlidesPptx(
       pptx,
       item,
       brandName,
-      slideNumber,
-      totalSlides,
       state.outputSize,
       albumFormat,
       imageData,
       albumMasterData,
       referenceImageData
     );
-    slideNumber += 1;
   }
 
   return pptx;
