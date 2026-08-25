@@ -126,6 +126,20 @@ function validHookResearchDossier() {
   };
 }
 
+function validHookTopicShortlistResponse() {
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        topics: [
+          { topic: "หัวข้อทดสอบ 1", why: "เหตุผลทดสอบ 1" },
+          { topic: "หัวข้อทดสอบ 2", why: "เหตุผลทดสอบ 2" }
+        ]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function openRouterResearchResponse(
   directions: readonly unknown[],
   citationUrls: readonly string[] = []
@@ -396,6 +410,7 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("reuses a supplied Research dossier without starting another search", async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(openAiStaticDirectionResponse())
       .mockResolvedValueOnce(
         highlightResponse("shared-research-hook", ["visibility"])
@@ -416,7 +431,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(loadHookResearchPrompt).not.toHaveBeenCalled();
   });
 
@@ -439,6 +454,7 @@ describe("handleHookGenerationHarnessRequest", () => {
           { status: 200 }
         )
       )
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -491,7 +507,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const responseBody = await response.clone().json();
     expect(response.status, JSON.stringify(responseBody)).toBe(200);
     expect(responseBody.directions[0]).not.toHaveProperty("albumFormat");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
@@ -509,7 +525,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(researchBody.text.format.name).toBe("moons_hook_research");
 
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as {
       tools?: unknown[];
       reasoning?: { effort?: string };
@@ -550,7 +566,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(directionSchema.properties)).toContain("textOverlay");
 
     const supportBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as { reasoning?: unknown; input?: unknown };
     expect(supportBody.reasoning).toBeUndefined();
     expect(JSON.stringify(supportBody.input)).toContain(
@@ -588,6 +604,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -608,7 +625,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(await response.json()).toMatchObject({
       directions: [
         expect.objectContaining({
@@ -630,6 +647,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -671,7 +689,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
@@ -686,7 +704,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(researchBody.tool_choice).toBe("required");
     expect(researchBody.text.format.name).toBe("moons_hook_research");
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { tools?: unknown[]; input: unknown; text: { format: { name: string } } };
     expect(generationBody.tools).toBeUndefined();
     expect(generationBody.text.format.name).toBe("moons_hook_generation");
@@ -700,6 +718,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -757,7 +776,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     ]);
     expect(generationBody.tool_choice).toBe("required");
     const hookBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as {
       tools?: unknown[];
       input: unknown;
@@ -785,6 +804,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
@@ -801,9 +821,9 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     const responseBody = await response.clone().json();
     expect(response.status, JSON.stringify(responseBody)).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     const directionRetryBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as { input: unknown };
     expect(JSON.stringify(directionRetryBody.input)).toContain(
       "THAI NATURALNESS CORRECTION"
@@ -815,7 +835,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
     expect((body as { directions: { formatBeats: string[] }[] }).directions[0]?.formatBeats).toHaveLength(4);
     const ugcScriptRequestBody = JSON.parse(
-      String(fetchMock.mock.calls[4]?.[1]?.body)
+      String(fetchMock.mock.calls[5]?.[1]?.body)
     ) as { input: unknown };
     expect(JSON.stringify(ugcScriptRequestBody.input)).toContain(
       "UGC MYTH-BUSTING SCRIPT WRITER"
@@ -830,6 +850,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
       .mockResolvedValueOnce(new Response("Server error", { status: 500 }))
@@ -856,6 +877,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(["Panel 2", "Panel 3"])
       )
@@ -881,9 +903,9 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     const retryBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as { input: unknown; reasoning?: { effort?: string } };
     const retryPrompt = JSON.stringify(retryBody.input);
     expect(retryPrompt).toContain("ALBUM PANEL COUNT CORRECTION");
@@ -901,6 +923,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(
           ["Panel 2", "Panel 3"],
@@ -924,7 +947,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const payload = (await response.json()) as {
       directions: { albumFormat: string; formatBeats: string[] }[];
     };
@@ -942,6 +965,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         openRouterResearchResponse([
           {
@@ -980,6 +1004,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status).toBe(200);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "https://api.openai.com/v1/responses",
+      "https://api.openai.com/v1/responses",
       "https://openrouter.ai/api/v1/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions"
     ]);
@@ -987,7 +1012,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
     ).toBe("Bearer openai-key");
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as {
       model: string;
       messages: readonly {
@@ -1043,7 +1068,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationBody.plugins).toBeUndefined();
     expect(generationBody.provider).toEqual({ require_parameters: true });
     const highlightBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as {
       response_format: {
         json_schema: { schema: unknown };
@@ -1073,6 +1098,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1108,7 +1134,7 @@ describe("handleHookGenerationHarnessRequest", () => {
         "OpenRouter hook harness failed: 400 — Unable to download the selected material image."
     });
     const openRouterBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { plugins?: unknown; tools?: unknown; tool_choice?: unknown };
     expect(openRouterBody.plugins).toBeUndefined();
     expect(openRouterBody.tools).toBeUndefined();
@@ -1122,6 +1148,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1169,9 +1196,9 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     expect(response.status).toBe(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("# Questionnaire");
@@ -1192,6 +1219,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationPrompt).toContain("# User brief");
     expect(generationPrompt).toContain("ต้องการ creative เพื่อชวน B2B");
     expect(generationPrompt).toContain("# Dedicated Research Agent dossier");
+    expect(generationPrompt).toContain("# Topic Agent shortlist");
     expect(generationPrompt).not.toContain("# Past posts");
     expect(generationPrompt).not.toContain("# Past content data");
     expect(generationPrompt).not.toContain("launch-questionnaire.pdf");
@@ -1215,6 +1243,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({
         output_text: JSON.stringify({
           directions: [
@@ -1251,7 +1280,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       (JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { input: unknown }).input
     );
     const generationPrompt = JSON.stringify(
-      (JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { input: unknown }).input
+      (JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)) as { input: unknown }).input
     );
     expect(researchPrompt).not.toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
     expect(generationPrompt).toContain(
@@ -1294,6 +1323,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1346,7 +1376,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(payload.directions[0]?.subheadlineHighlight).toBe("");
 
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { input: unknown };
     const generationPrompt = JSON.stringify(generationBody.input);
     expect(generationPrompt).toContain("เน้นกลุ่มเจ้าของธุรกิจขนาดเล็กรอบนี้");

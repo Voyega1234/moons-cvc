@@ -247,6 +247,28 @@ OpenRouter requests use Chat Completions with `plugins: [{ id: "web" }]`,
 evidence policy remains owned by `agent_prompt/agent_hook.md`; runtime only
 announces whether Research is available for the current request.
 
+## Topic Agent (pain-point shortlist)
+
+Before Hook generation, a dedicated Topic Agent reads the completed Research
+dossier plus the same business-context blocks the Hook Agent receives, and
+returns a shortlist of 12–15 short pain points / angles with a one-line
+`why` for each. Its stable role and rules live only in:
+
+- `agent_prompt/agent_hook_topics.md`
+
+The goal is to widen the idea pool beyond the static onboarding pain-point
+bullets by prioritizing fresh Research insights and forcing spread across
+the same angle categories `agent_hook.md` already defines (problem/symptom,
+product+benefit, feature/number/offer, how-to/question, seasonal/occasion,
+lifestyle/identity). The shortlist is appended to the Hook Agent's prompt as
+an expanded idea pool, not a checklist — the Hook Agent is not required to
+use every topic and may still find a stronger angle outside the list.
+
+Output is intentionally minimal JSON (`{ topics: [{ topic, why }] }`), not
+the full `hookGenerationSchema`. The step runs once per request (shared
+across all generation batches) and is skipped for `researchOnly` requests,
+the same way past posts are skipped there.
+
 ## Caption grounding in real past posts
 
 `fetchPastPostExamples()` (`src/server/hook-generation/past-posts.ts`) queries
@@ -334,5 +356,6 @@ logging at the API boundary.
 - `src/services/creative-generation/hook-generation-types.ts`
 - `src/server/hook-generation/hook-generation-harness-endpoint.ts`
 - `src/server/hook-generation/hook-generation-debug-log.ts`
+- `src/server/hook-generation/hook-topic-agent.ts`
 - `src/server/hook-generation/past-posts.ts`
 - `api/hook-generation-harness.ts`

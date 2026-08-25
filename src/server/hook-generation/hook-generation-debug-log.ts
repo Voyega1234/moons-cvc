@@ -41,6 +41,21 @@ export interface HookGenerationDebugLog {
       };
     };
   };
+  topicAgent: {
+    provider: "openai" | "openrouter";
+    model: string;
+    promptSource: "agent_prompt/agent_hook_topics.md";
+    request: {
+      endpoint: "/v1/responses" | "/api/v1/chat/completions";
+      inputText: string;
+      reasoningEffort?: "medium" | "high";
+      responseSchema: "moons_hook_topics";
+    };
+    response: {
+      parsed: unknown;
+      raw: unknown;
+    };
+  };
   hookAgent: {
     provider: "openai" | "openrouter";
     model: string;

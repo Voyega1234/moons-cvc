@@ -38,6 +38,20 @@ describe("dedicated Hook Research Agent pipeline", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
+          topics: [
+            {
+              topic: "เจ้าของธุรกิจไม่รู้ว่า AI แนะนำคู่แข่งแทนแบรนด์ตัวเองเมื่อไหร่",
+              why: "เชื่อมกับ insight เรื่องการค้นหาที่เปลี่ยนไปแต่การวัดผลยังเป็นแบบเดิม"
+            },
+            {
+              topic: "ตรวจ AI visibility ก่อนเสียโอกาสให้คู่แข่ง",
+              why: "ทำให้ความเสี่ยงที่มองไม่เห็นกลายเป็นสิ่งที่ตรวจสอบได้จริง"
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
           directions: [
             {
               id: "hook-01",
@@ -100,12 +114,13 @@ describe("dedicated Hook Research Agent pipeline", () => {
       fetchImpl: fetchMock as unknown as typeof fetch,
       loadAgentHookPrompt: async () => "# HOOK AGENT",
       loadHookResearchPrompt: async () => "# RESEARCH ONLY",
+      loadHookTopicsPrompt: async () => "# TOPICS ONLY",
       loadSubheadlineHighlightPrompt: async () => "# HIGHLIGHT",
       writeDebugLog
     });
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
@@ -116,8 +131,15 @@ describe("dedicated Hook Research Agent pipeline", () => {
     expect(researchBody.tool_choice).toBe("required");
     expect(researchBody.text.format.name).toBe("moons_hook_research");
 
-    const hookBody = JSON.parse(
+    const topicBody = JSON.parse(
       String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { tools?: unknown[]; input: unknown; text: { format: { name: string } } };
+    expect(topicBody.tools).toBeUndefined();
+    expect(topicBody.text.format.name).toBe("moons_hook_topics");
+    expect(JSON.stringify(topicBody.input)).toContain(sourceUrl);
+
+    const hookBody = JSON.parse(
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { tools?: unknown[]; input: unknown; text: { format: { name: string } } };
     expect(hookBody.tools).toBeUndefined();
     expect(hookBody.text.format.name).toBe("moons_hook_generation");
@@ -131,11 +153,18 @@ describe("dedicated Hook Research Agent pipeline", () => {
     expect(JSON.stringify(hookBody.input)).toContain(
       "Dedicated Research Agent dossier"
     );
+    expect(JSON.stringify(hookBody.input)).toContain("Topic Agent shortlist");
+    expect(JSON.stringify(hookBody.input)).toContain(
+      "เจ้าของธุรกิจไม่รู้ว่า AI แนะนำคู่แข่งแทนแบรนด์ตัวเองเมื่อไหร่"
+    );
 
     expect(writeDebugLog).toHaveBeenCalledTimes(1);
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
     expect(debugEntry?.researchAgent.request.responseSchema).toBe(
       "moons_hook_research"
+    );
+    expect(debugEntry?.topicAgent.request.responseSchema).toBe(
+      "moons_hook_topics"
     );
     expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([]);
   });

@@ -43,6 +43,13 @@ import {
   type HookResearchDossier
 } from "./hook-research-agent.js";
 import {
+  buildHookTopicsPrompt,
+  hookTopicShortlistBlock,
+  hookTopicsSchema,
+  parseHookTopicShortlist,
+  type HookTopicShortlist
+} from "./hook-topic-agent.js";
+import {
   buildPastPostsCaptionStyleBlock,
   fetchPastPostExamples,
   type PastPostExample,
@@ -69,6 +76,7 @@ export interface HookGenerationHarnessEndpointOptions {
   fetchImpl?: FetchLike;
   loadAgentHookPrompt?: () => Promise<string>;
   loadHookResearchPrompt?: () => Promise<string>;
+  loadHookTopicsPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
   loadUgcScriptPrompt?: () => Promise<string>;
   loadPastPostExamples?: (input: {
@@ -155,6 +163,7 @@ export async function handleHookGenerationHarnessRequest({
   fetchImpl = fetch,
   loadAgentHookPrompt = defaultLoadAgentHookPrompt,
   loadHookResearchPrompt = defaultLoadHookResearchPrompt,
+  loadHookTopicsPrompt = defaultLoadHookTopicsPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
   loadUgcScriptPrompt = defaultLoadUgcScriptPrompt,
   loadPastPostExamples = defaultLoadPastPostExamples,
@@ -245,6 +254,17 @@ export async function handleHookGenerationHarnessRequest({
         })
       : [];
 
+    const topicTrace = await withTransientRetry(async () =>
+      runHookTopicStep({
+        input,
+        policyPrompt: await loadHookTopicsPrompt(),
+        researchDossier: researchTrace.output,
+        apiKey: openAiApiKey,
+        model: researchModel,
+        fetchImpl: providerFetchImpl
+      })
+    );
+
     const agentHookPrompt =
       input.agentHookPrompt?.trim() || (await loadAgentHookPrompt());
     const subheadlineHighlightPrompt =
@@ -259,6 +279,7 @@ export async function handleHookGenerationHarnessRequest({
             input: batch,
             agentHookPrompt,
             researchDossier: researchTrace.output,
+            topicShortlist: topicTrace.output,
             pastPosts,
             apiKey: generationApiKey,
             model,
@@ -311,6 +332,7 @@ export async function handleHookGenerationHarnessRequest({
         buildDirectHookGenerationDebugLog({
           input,
           researchTrace,
+          topicTrace,
           directTraces,
           researchModel,
           generationProvider,
@@ -334,6 +356,13 @@ async function defaultLoadAgentHookPrompt(): Promise<string> {
 async function defaultLoadHookResearchPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_hook_research.md"),
+    "utf8"
+  );
+}
+
+async function defaultLoadHookTopicsPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_hook_topics.md"),
     "utf8"
   );
 }
@@ -379,6 +408,7 @@ async function runGenerationStep({
   input,
   agentHookPrompt,
   researchDossier,
+  topicShortlist,
   pastPosts,
   apiKey,
   model,
@@ -388,6 +418,7 @@ async function runGenerationStep({
   input: HookGenerationHarnessRequest;
   agentHookPrompt: string;
   researchDossier: HookResearchDossier;
+  topicShortlist: HookTopicShortlist;
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
@@ -398,6 +429,7 @@ async function runGenerationStep({
     input,
     agentHookPrompt,
     researchDossier,
+    topicShortlist,
     pastPosts
   );
   const requestDirections = (requestInputText: string) =>
@@ -504,6 +536,44 @@ async function runHookResearchStep({
   };
 }
 
+async function runHookTopicStep({
+  input,
+  policyPrompt,
+  researchDossier,
+  apiKey,
+  model,
+  fetchImpl
+}: {
+  input: HookGenerationHarnessRequest;
+  policyPrompt: string;
+  researchDossier: HookResearchDossier;
+  apiKey: string;
+  model: string;
+  fetchImpl: FetchLike;
+}): Promise<TracedAgentResult<HookTopicShortlist>> {
+  const inputText = buildHookTopicsPrompt(
+    policyPrompt,
+    buildInputBlock(input),
+    researchDossier
+  );
+  const payload = await callResponsesApi({
+    apiKey,
+    model,
+    fetchImpl,
+    content: [{ type: "input_text", text: inputText }],
+    schemaName: "moons_hook_topics",
+    schema: hookTopicsSchema,
+    reasoningEffort: "medium",
+    provider: "openai"
+  });
+  return {
+    inputText,
+    output: parseHookTopicShortlist(extractResponseText(payload)),
+    rawResponse: payload,
+    researchAudit: extractResearchAudit(payload)
+  };
+}
+
 function reusedResearchTrace(
   dossier: HookResearchDossier
 ): TracedAgentResult<HookResearchDossier> {
@@ -521,6 +591,7 @@ function reusedResearchTrace(
 function buildDirectHookGenerationDebugLog({
   input,
   researchTrace,
+  topicTrace,
   directTraces,
   researchModel,
   generationProvider,
@@ -530,6 +601,7 @@ function buildDirectHookGenerationDebugLog({
 }: {
   input: HookGenerationHarnessRequest;
   researchTrace: TracedAgentResult<HookResearchDossier>;
+  topicTrace: TracedAgentResult<HookTopicShortlist>;
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
   researchModel: string;
   generationProvider: "openai" | "openrouter";
@@ -563,6 +635,21 @@ function buildDirectHookGenerationDebugLog({
         parsed: researchTrace.output,
         raw: researchTrace.rawResponse,
         researchAudit: researchTrace.researchAudit
+      }
+    },
+    topicAgent: {
+      provider: "openai",
+      model: researchModel,
+      promptSource: "agent_prompt/agent_hook_topics.md",
+      request: {
+        endpoint: "/v1/responses",
+        inputText: topicTrace.inputText,
+        reasoningEffort: "medium" as const,
+        responseSchema: "moons_hook_topics" as const
+      },
+      response: {
+        parsed: topicTrace.output,
+        raw: topicTrace.rawResponse
       }
     },
     hookAgent: {
@@ -1272,6 +1359,7 @@ function buildDirectHookGenerationPrompt(
   input: HookGenerationHarnessRequest,
   agentHookPrompt: string,
   researchDossier: HookResearchDossier,
+  topicShortlist: HookTopicShortlist,
   pastPosts: readonly PastPostExample[]
 ): string {
   const pastPostsBlock = buildPastPostsCaptionStyleBlock(pastPosts);
@@ -1284,6 +1372,8 @@ function buildDirectHookGenerationPrompt(
     buildInputBlock(input),
     "",
     hookResearchDossierBlock(researchDossier),
+    "",
+    hookTopicShortlistBlock(topicShortlist),
     ...(pastPostsBlock ? ["", pastPostsBlock] : []),
     "",
     "# Required output mix",
