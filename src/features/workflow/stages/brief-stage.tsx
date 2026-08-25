@@ -371,14 +371,16 @@ export function CreativeMaterialsEditor({
         ?.referenceImages ?? [])
     : state.referenceImages;
 
-  function isReferenceSelected(id: string): boolean {
-    return targetReferenceImages.some((item) => item.id === id);
+  function isReferenceSelected(id: string, url?: string): boolean {
+    return targetReferenceImages.some(
+      (item) => item.id === id || (url !== undefined && item.url === url)
+    );
   }
 
   function toggleReferenceSelection(item: ReferenceImageSelection) {
     if (targetDirectionId) {
       const exists = targetReferenceImages.some(
-        (existing) => existing.id === item.id
+        (existing) => existing.id === item.id || existing.url === item.url
       );
       if (!exists && targetReferenceImages.length >= MAX_HOOK_REFERENCE_IMAGES) {
         setUploadError(
@@ -391,7 +393,9 @@ export function CreativeMaterialsEditor({
         type: "set-direction-reference-images",
         id: targetDirectionId,
         images: exists
-          ? targetReferenceImages.filter((existing) => existing.id !== item.id)
+          ? targetReferenceImages.filter(
+              (existing) => existing.id !== item.id && existing.url !== item.url
+            )
           : [...targetReferenceImages, item]
       });
       return;
@@ -512,7 +516,7 @@ export function CreativeMaterialsEditor({
           .filter((image) =>
             image.kind === "material"
               ? isBrandAssetSelected(image, state)
-              : isReferenceSelected(`brand-asset-${image.id}`)
+              : isReferenceSelected(`brand-asset-${image.id}`, image.url)
           )
           .map((image) => image.id)
       )
@@ -1240,7 +1244,7 @@ export function CreativeMaterialsEditor({
                   const selected =
                     asset.kind === "material"
                       ? isBrandAssetSelected(asset, state)
-                      : isReferenceSelected(`brand-asset-${asset.id}`);
+                      : isReferenceSelected(`brand-asset-${asset.id}`, asset.url);
                   return (
                     <article key={asset.id}>
                       <AssetPreviewImage src={asset.url} alt={asset.name} />
@@ -1270,7 +1274,10 @@ export function CreativeMaterialsEditor({
                   );
                 })}
                 {visibleLegacyReferences.map((item) => {
-                  const selected = isReferenceSelected(`brand-library-${item.id}`);
+                  const selected = isReferenceSelected(
+                    `brand-library-${item.id}`,
+                    item.assetUrl
+                  );
                   return (
                     <article key={`legacy-${item.id}`}>
                       <AssetPreviewImage

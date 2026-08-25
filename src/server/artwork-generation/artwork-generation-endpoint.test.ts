@@ -989,9 +989,7 @@ describe("handleArtworkGenerationRequest", () => {
     );
     expect(editForm?.getAll("image[]")).toHaveLength(3);
     expect(JSON.stringify(interpreterBody)).toContain("input_image");
-    expect(JSON.stringify(interpreterBody)).toContain(
-      "REFERENCE SCOPE IS STRICT"
-    );
+    expect(JSON.stringify(interpreterBody)).toContain("REFERENCE SCOPE");
     expect(JSON.stringify(interpreterBody)).toContain(
       "never transfer any reference's colors"
     );

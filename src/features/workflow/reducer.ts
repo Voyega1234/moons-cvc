@@ -90,7 +90,7 @@ export const defaultBrief =
   "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
 
 export const defaultArtworkBrief =
-  "อยากได้ภาพโฆษณาที่ดูเหมือนงานออกแบบมืออาชีพจริง ไม่ดูปลอมหรือเป็น AI Generated Hero Visual ต้องสมจริงและสมบูรณ์ จัดวางองค์ประกอบให้มี hierarchy ชัดเจนและสมดุล ไม่แน่นหรือโล่งฝั่งใดฝั่งหนึ่งโดยไม่มีเหตุผล ความหนาแน่นของข้อมูล (text, badge, callout) ให้เลือกตามความจำเป็นของงานจริง ไม่ใช่ minimal เป็นค่าเริ่มต้นเสมอ — งาน branding/awareness เรียบได้เต็มที่ ส่วนงานเปรียบเทียบ/technical/multi-benefit มีรายละเอียดเยอะได้ตามข้อมูลจริง";
+  "อยากได้ภาพโฆษณาที่ดูเหมือนงานออกแบบมืออาชีพจริง ไม่ดูปลอมหรือเป็น AI Generated เลือกวิธีทำภาพ (ภาพถ่ายจริง, graphic-composite บนพื้นสี, หรือภาพประกอบ/3D-CGI) ให้เหมาะกับตัวตนแบรนด์และประเภทธุรกิจ ไม่ต้อง default ไปทางใดทางหนึ่งเสมอ ไม่ว่าจะเลือกแบบไหน Hero Visual ต้องสมจริงและสมบูรณ์ในแบบที่เลือก ห้ามสร้างวัตถุหรือสถาปัตยกรรมขนาดยักษ์ที่ไม่มีอยู่จริงขึ้นมาเพื่อความยิ่งใหญ่แบบไม่มีเหตุผลรองรับ เว้นแต่ประเภทธุรกิจหรือ concept นั้นต้องการจริงๆ งานต้องมี Art Direction ที่มีวินัย ใช้สี Typography และ Spacing อย่างตั้งใจ ไม่ใช่ Generic Graphic Elements หรือ Template Ads ที่ดูราคาถูก จัดวางองค์ประกอบให้มี hierarchy ชัดเจนและสมดุล ไม่แน่นหรือโล่งฝั่งใดฝั่งหนึ่งโดยไม่มีเหตุผล ความหนาแน่นของข้อมูล (text, badge, callout) ให้เลือกตามความจำเป็นของงานจริง — งาน branding/awareness ให้ยกระดับเป็น Premium/Campaign/Editorial โทนเรียบมีสไตล์ หลีกเลี่ยง badge ใหญ่ สีจัด glow หนัก ไม่แปะข้อมูลทับ key visual โดยไม่จำเป็น ส่วนงานโปรโมชั่น/ราคา/เปรียบเทียบ/technical ที่ต้องมีป้ายราคา ส่วนลด หรือรายละเอียดสนับสนุน ให้ใส่ได้ตามความจำเป็นจริง แต่จัดวางให้เป็นระเบียบแยกโซนชัดเจน ไม่รกจนแย่งความสนใจจาก key visual";
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
@@ -653,7 +653,7 @@ export function workflowReducer(
     }
     case "toggle-reference-image": {
       const exists = state.referenceImages.some(
-        (item) => item.id === action.item.id
+        (item) => item.id === action.item.id || item.url === action.item.url
       );
       const nonLogoCount = state.referenceImages.filter(
         (item) => inferredReferenceImageRole(item) !== "logo"
@@ -666,7 +666,9 @@ export function workflowReducer(
         return state;
       }
       const referenceImages = exists
-        ? state.referenceImages.filter((item) => item.id !== action.item.id)
+        ? state.referenceImages.filter(
+            (item) => item.id !== action.item.id && item.url !== action.item.url
+          )
         : [...state.referenceImages, action.item];
       return {
         ...state,

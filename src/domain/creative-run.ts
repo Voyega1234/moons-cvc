@@ -290,7 +290,12 @@ export const MAX_HOOK_REFERENCE_IMAGES = 3;
 export function normalizeHookReferenceImages(
   references: readonly ReferenceImageSelection[]
 ): readonly ReferenceImageSelection[] {
-  return references.slice(0, MAX_HOOK_REFERENCE_IMAGES).map((reference, index) => ({
+  const deduped: ReferenceImageSelection[] = [];
+  for (const reference of references) {
+    if (deduped.some((item) => item.url === reference.url)) continue;
+    deduped.push(reference);
+  }
+  return deduped.slice(0, MAX_HOOK_REFERENCE_IMAGES).map((reference, index) => ({
     ...reference,
     role: reference.role ?? "style",
     primary: index === 0

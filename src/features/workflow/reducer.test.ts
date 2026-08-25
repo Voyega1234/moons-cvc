@@ -175,15 +175,22 @@ describe("workflowReducer", () => {
       primary: true
     };
 
+    const secondImage = {
+      ...image,
+      id: "hook-reference-2",
+      url: "https://example.com/reference-2.jpg",
+      primary: true
+    };
+
     const updated = workflowReducer(state, {
       type: "set-direction-reference-images",
       id: target.id,
-      images: [image, { ...image, id: "hook-reference-2", primary: true }]
+      images: [image, secondImage]
     });
 
     expect(updated.directions[0]?.referenceImages).toEqual([
       image,
-      { ...image, id: "hook-reference-2", primary: false }
+      { ...secondImage, primary: false }
     ]);
     expect(updated.directions[1]?.referenceImages).toBeUndefined();
     expect(state.outputs.length).toBeGreaterThan(0);
@@ -195,6 +202,7 @@ describe("workflowReducer", () => {
       images: Array.from({ length: 5 }, (_, index) => ({
         ...image,
         id: `hook-reference-${index + 1}`,
+        url: `https://example.com/reference-${index + 1}.jpg`,
         primary: index > 0
       }))
     });
