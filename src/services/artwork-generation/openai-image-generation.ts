@@ -11,7 +11,8 @@ import {
   type ArtworkOutputSize,
   type CreativeDirection,
   type CreativeOutput,
-  type ReferenceImageSelection
+  type ReferenceImageSelection,
+  type UploadedCreativeMaterial
 } from "../../domain/creative-run";
 import {
   creativeMixItems,
@@ -599,7 +600,8 @@ export function buildArtworkGenerationRequests({
           referenceImages: [
             ...referenceImages,
             ...artworkReferencesFromSelections(batch.references)
-          ]
+          ],
+          materials: batch.materials
         });
       }
     );
@@ -657,7 +659,8 @@ function buildArtworkRequest({
   selectedHooks,
   textInputs,
   referenceLed = false,
-  referenceImages
+  referenceImages,
+  materials = []
 }: {
   run: WorkflowState;
   service: WorkflowState["service"];
@@ -666,6 +669,7 @@ function buildArtworkRequest({
   textInputs: readonly string[];
   referenceLed?: boolean;
   referenceImages: readonly ArtworkReferenceImage[];
+  materials?: readonly UploadedCreativeMaterial[];
 }): ArtworkGenerationRequest {
 
   return {
@@ -686,7 +690,7 @@ function buildArtworkRequest({
       ...brandLogoReferences(run),
       ...withoutLogoReferences(referenceImages),
       ...brandGuidelineReferences(run),
-      ...creativeMaterialReferences(run)
+      ...creativeMaterialReferences(run, materials)
     ],
     ...buildBrandContext(run),
     output: {
@@ -708,9 +712,15 @@ function nextArtworkAssetVersion(run: WorkflowState): number {
 }
 
 function creativeMaterialReferences(
-  run: WorkflowState
+  run: WorkflowState,
+  extraMaterials: readonly UploadedCreativeMaterial[] = []
 ): readonly ArtworkReferenceImage[] {
-  return selectedUploadedMaterials(run).map((material) => {
+  const materials = [...selectedUploadedMaterials(run)];
+  for (const material of extraMaterials) {
+    if (materials.some((item) => item.url === material.url)) continue;
+    materials.push(material);
+  }
+  return materials.map((material) => {
     const role = creativeMaterialRoleLabel(material.role);
     const label = [
       `Uploaded ${role}: ${material.name}`,

@@ -108,6 +108,7 @@ import {
 } from "./stages/album-format-modal";
 import { PreflightModal } from "./stages/preflight-modal";
 import { HookReferenceImage } from "./stages/hook-reference-image";
+import { HookMaterialImage } from "./stages/hook-material-image";
 import {
   groupOutputsForReview,
   isAlbumOutput,
@@ -4361,6 +4362,14 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             </div>
             {group.service !== "ugc-video" ? (
               <HookReferenceImage
+                run={state}
+                direction={direction}
+                dispatch={dispatch}
+                disabled={creating || regeneratingAllHooks}
+              />
+            ) : null}
+            {group.service !== "ugc-video" ? (
+              <HookMaterialImage
                 run={state}
                 direction={direction}
                 dispatch={dispatch}

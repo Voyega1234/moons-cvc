@@ -200,6 +200,11 @@ export type WorkflowAction =
       images: readonly ReferenceImageSelection[];
     }
   | {
+      type: "set-direction-uploaded-materials";
+      id: string;
+      materials: readonly UploadedCreativeMaterial[];
+    }
+  | {
       type: "set-direction-export-group";
       id: string;
       group: AngleExportGroup | null;

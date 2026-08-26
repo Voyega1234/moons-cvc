@@ -4,7 +4,7 @@ import { ArrowLeft, FolderSimple, ImageBroken, PencilSimple, Trash } from "@phos
 import { type LibraryItem } from "../../../domain/brand";
 import { env } from "../../../config/env";
 import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type BrandPastWorkItem, type BrandProduct } from "../../../domain/brand-memory";
-import { creativeMaterialRoles, inferredReferenceImageRole, MAX_HOOK_REFERENCE_IMAGES, referenceBoardRoleOptions, referenceHoldingRole, referenceImageRoleLabels, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
+import { creativeMaterialRoles, inferredReferenceImageRole, MAX_HOOK_MATERIALS, MAX_HOOK_REFERENCE_IMAGES, referenceBoardRoleOptions, referenceHoldingRole, referenceImageRoleLabels, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import { useOptionalAuth } from "../../../app/providers/auth-provider";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
@@ -298,7 +298,7 @@ const briefServiceIcons: Partial<Record<ServiceType, string>> = {
   "ugc-video": "UG"
 };
 
-const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
+export const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = {
   "main-object": "Main object",
   product: "Product",
   "supporting-component": "Supporting component",
@@ -352,8 +352,8 @@ export function CreativeMaterialsEditor({
   targetDirectionId
 }: StageProps & {
   kind?: BrandAssetKind;
-  /** When set (reference kind only), selections attach to this Hook's own
-   * referenceImages instead of the shared brief-level reference board. */
+  /** When set, selections attach to this Hook's own referenceImages/
+   * uploadedMaterials instead of the shared brief-level board. */
   targetDirectionId?: string;
   legacyReferences?: readonly LibraryItem[];
   onAssetCountChange?: (kind: BrandAssetKind, count: number) => void;
@@ -370,6 +370,34 @@ export function CreativeMaterialsEditor({
     ? (state.directions.find((direction) => direction.id === targetDirectionId)
         ?.referenceImages ?? [])
     : state.referenceImages;
+  const targetUploadedMaterials = targetDirectionId
+    ? (state.directions.find((direction) => direction.id === targetDirectionId)
+        ?.uploadedMaterials ?? [])
+    : undefined;
+
+  function toggleMaterialSelection(material: UploadedCreativeMaterial) {
+    if (!targetDirectionId || !targetUploadedMaterials) return;
+    const exists = targetUploadedMaterials.some(
+      (existing) => existing.id === material.id || existing.url === material.url
+    );
+    if (!exists && targetUploadedMaterials.length >= MAX_HOOK_MATERIALS) {
+      setUploadError(
+        `Up to ${MAX_HOOK_MATERIALS} materials per hook — remove one to add another.`
+      );
+      return;
+    }
+    setUploadError(null);
+    dispatch({
+      type: "set-direction-uploaded-materials",
+      id: targetDirectionId,
+      materials: exists
+        ? targetUploadedMaterials.filter(
+            (existing) =>
+              existing.id !== material.id && existing.url !== material.url
+          )
+        : [...targetUploadedMaterials, material]
+    });
+  }
 
   function isReferenceSelected(id: string, url?: string): boolean {
     return targetReferenceImages.some(
@@ -515,7 +543,7 @@ export function CreativeMaterialsEditor({
         assetImages
           .filter((image) =>
             image.kind === "material"
-              ? isBrandAssetSelected(image, state)
+              ? isBrandAssetSelected(image, state, targetDirectionId)
               : isReferenceSelected(`brand-asset-${image.id}`, image.url)
           )
           .map((image) => image.id)
@@ -574,7 +602,15 @@ export function CreativeMaterialsEditor({
             })
           )
         );
-        dispatch({ type: "add-uploaded-materials", items });
+        if (targetDirectionId && targetUploadedMaterials) {
+          dispatch({
+            type: "set-direction-uploaded-materials",
+            id: targetDirectionId,
+            materials: [...targetUploadedMaterials, ...items]
+          });
+        } else {
+          dispatch({ type: "add-uploaded-materials", items });
+        }
       }
     } catch (caught) {
       setUploadError(
@@ -733,6 +769,13 @@ export function CreativeMaterialsEditor({
   function removeAssetFromBrief(asset: BrandAssetImage): void {
     const selectionId = `brand-asset-${asset.id}`;
     if (asset.kind === "material") {
+      if (targetDirectionId && targetUploadedMaterials) {
+        const material = targetUploadedMaterials.find(
+          (item) => item.id === selectionId
+        );
+        if (material) toggleMaterialSelection(material);
+        return;
+      }
       if (state.uploadedMaterials.some((item) => item.id === selectionId)) {
         dispatch({ type: "remove-uploaded-material", id: selectionId });
       }
@@ -922,6 +965,19 @@ export function CreativeMaterialsEditor({
       return;
     }
     const id = `brand-asset-${asset.id}`;
+    if (targetDirectionId) {
+      toggleMaterialSelection({
+        id,
+        name: asset.name,
+        mediaType: asset.mimeType,
+        role: "main-object",
+        description: "",
+        url: asset.url,
+        storagePath: asset.storagePath,
+        storageBucket: env.brandAssetsBucket
+      });
+      return;
+    }
     const existing = state.uploadedMaterials.find((item) => item.id === id);
     if (existing) {
       toggleMaterial(existing);
@@ -1243,7 +1299,7 @@ export function CreativeMaterialsEditor({
                 {pagedAssetImages.map((asset) => {
                   const selected =
                     asset.kind === "material"
-                      ? isBrandAssetSelected(asset, state)
+                      ? isBrandAssetSelected(asset, state, targetDirectionId)
                       : isReferenceSelected(`brand-asset-${asset.id}`, asset.url);
                   return (
                     <article key={asset.id}>
@@ -1373,7 +1429,9 @@ export function CreativeMaterialsEditor({
       <div className="compass-creative-material-upload-row">
         <span>
           {assetKind === "material"
-            ? `${selectedMaterials.length}/8 materials selected`
+            ? targetDirectionId && targetUploadedMaterials
+              ? `${targetUploadedMaterials.length}/${MAX_HOOK_MATERIALS} materials selected`
+              : `${selectedMaterials.length}/8 materials selected`
             : `${targetReferenceImages.length}/${MAX_HOOK_REFERENCE_IMAGES} references selected`}
         </span>
       </div>
@@ -1382,17 +1440,25 @@ export function CreativeMaterialsEditor({
           ? "Only materials you mark Selected are sent to the Hook Agent and Image Agent."
           : "Only references you mark Selected are used as style and composition context."}
       </p>
-      {assetKind === "material" && state.uploadedMaterials.length ? (
+      {assetKind === "material" &&
+      (targetDirectionId
+        ? (targetUploadedMaterials?.length ?? 0)
+        : state.uploadedMaterials.length) ? (
         <section className="compass-selected-materials">
           <header>
             <b>Selected for this brief</b>
             <span>Set each image role before generation.</span>
           </header>
           <div className="compass-creative-material-grid">
-            {state.uploadedMaterials.map((material) => (
+            {(targetDirectionId
+              ? (targetUploadedMaterials ?? [])
+              : state.uploadedMaterials
+            ).map((material) => (
             <article
               className={`compass-creative-material-card ${
-                material.selected !== false ? "selected" : ""
+                targetDirectionId || material.selected !== false
+                  ? "selected"
+                  : ""
               }`}
               key={material.id}
             >
@@ -1404,36 +1470,49 @@ export function CreativeMaterialsEditor({
                     type="button"
                     aria-label={`Remove ${material.name}`}
                     onClick={() =>
-                      dispatch({
-                        type: "remove-uploaded-material",
-                        id: material.id
-                      })
+                      targetDirectionId
+                        ? toggleMaterialSelection(material)
+                        : dispatch({
+                            type: "remove-uploaded-material",
+                            id: material.id
+                          })
                     }
                   >
                     ×
                   </button>
                 </div>
-                <button
-                  className="compass-material-select"
-                  type="button"
-                  aria-pressed={material.selected !== false}
-                  onClick={() => toggleMaterial(material)}
-                >
-                  {material.selected !== false ? "Selected" : "Select"}
-                </button>
+                {targetDirectionId ? null : (
+                  <button
+                    className="compass-material-select"
+                    type="button"
+                    aria-pressed={material.selected !== false}
+                    onClick={() => toggleMaterial(material)}
+                  >
+                    {material.selected !== false ? "Selected" : "Select"}
+                  </button>
+                )}
                 <label>
                   Use as
                   <select
                     value={material.role}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const role = event.target.value as CreativeMaterialRole;
+                      if (targetDirectionId && targetUploadedMaterials) {
+                        dispatch({
+                          type: "set-direction-uploaded-materials",
+                          id: targetDirectionId,
+                          materials: targetUploadedMaterials.map((item) =>
+                            item.id === material.id ? { ...item, role } : item
+                          )
+                        });
+                        return;
+                      }
                       dispatch({
                         type: "update-uploaded-material",
                         id: material.id,
-                        changes: {
-                          role: event.target.value as CreativeMaterialRole
-                        }
-                      })
-                    }
+                        changes: { role }
+                      });
+                    }}
                   >
                     {creativeMaterialRoles.map((role) => (
                       <option value={role} key={role}>
@@ -1447,15 +1526,26 @@ export function CreativeMaterialsEditor({
                   <input
                     value={material.description}
                     placeholder="e.g. Keep this bottle as the hero object"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const description = event.target.value;
+                      if (targetDirectionId && targetUploadedMaterials) {
+                        dispatch({
+                          type: "set-direction-uploaded-materials",
+                          id: targetDirectionId,
+                          materials: targetUploadedMaterials.map((item) =>
+                            item.id === material.id
+                              ? { ...item, description }
+                              : item
+                          )
+                        });
+                        return;
+                      }
                       dispatch({
                         type: "update-uploaded-material",
                         id: material.id,
-                        changes: {
-                          description: event.target.value
-                        }
-                      })
-                    }
+                        changes: { description }
+                      });
+                    }}
                   />
                 </label>
               </div>
@@ -1602,15 +1692,25 @@ export function CreativeMaterialsEditor({
 
 function isBrandAssetSelected(
   asset: BrandAssetImage,
-  state: WorkflowState
+  state: WorkflowState,
+  targetDirectionId?: string
 ): boolean {
-  return asset.kind === "material"
-    ? state.uploadedMaterials.some(
-        (item) => item.id === `brand-asset-${asset.id}` && item.selected !== false
-      )
-    : state.referenceImages.some(
-        (item) => item.id === `brand-asset-${asset.id}`
+  if (asset.kind === "material") {
+    if (targetDirectionId) {
+      const direction = state.directions.find(
+        (candidate) => candidate.id === targetDirectionId
       );
+      return (direction?.uploadedMaterials ?? []).some(
+        (item) => item.id === `brand-asset-${asset.id}` || item.url === asset.url
+      );
+    }
+    return state.uploadedMaterials.some(
+      (item) => item.id === `brand-asset-${asset.id}` && item.selected !== false
+    );
+  }
+  return state.referenceImages.some(
+    (item) => item.id === `brand-asset-${asset.id}`
+  );
 }
 
 function mergeBrandAssetFolders(

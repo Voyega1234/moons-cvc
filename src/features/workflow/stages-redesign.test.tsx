@@ -2600,6 +2600,54 @@ describe("redesigned workflow stages", () => {
     );
   });
 
+  it("picks a library image as a material for one Hook only, not the shared materials board", async () => {
+    const user = userEvent.setup();
+    const state = buildCreativeState();
+    const firstDirection = state.directions[0];
+    if (!firstDirection) throw new Error("Expected a direction fixture.");
+    const memoryRepository = new MockBrandMemoryRepository();
+    await memoryRepository.createAssetImage({
+      clientId: state.brand?.id ?? "",
+      kind: "material",
+      file: new File(["material-bytes"], "Bottle shot.png", { type: "image/png" })
+    });
+    const dispatch = vi.fn();
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <DirectionsStage state={state} dispatch={dispatch} />
+      </BrandMemoryProvider>
+    );
+    const materials = within(view.container).getByRole("region", {
+      name: `Materials for ${firstDirection.hook}`
+    });
+
+    await user.click(
+      within(materials).getByRole("button", { name: "Pick from library" })
+    );
+    const modal = within(document.body).getByRole("dialog", {
+      name: `Materials for "${firstDirection.hook}"`
+    });
+    const asset = await within(modal).findByRole("img", {
+      name: "Bottle shot.png"
+    });
+    const article = asset.closest("article");
+    if (!article) throw new Error("Expected the asset card to render.");
+    await user.click(within(article).getByRole("button", { name: "Select" }));
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set-direction-uploaded-materials",
+        id: firstDirection.id,
+        materials: expect.arrayContaining([
+          expect.objectContaining({ name: "Bottle shot.png" })
+        ])
+      })
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "add-uploaded-materials" })
+    );
+  });
+
   it("allows every editable hook text field to be cleared and saved", async () => {
     const user = userEvent.setup();
     const baseState = buildCreativeState();

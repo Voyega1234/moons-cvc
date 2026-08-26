@@ -428,6 +428,19 @@ export interface UploadedCreativeMaterial {
   storageBucket?: string;
 }
 
+export const MAX_HOOK_MATERIALS = 4;
+
+export function normalizeHookUploadedMaterials(
+  materials: readonly UploadedCreativeMaterial[]
+): readonly UploadedCreativeMaterial[] {
+  const deduped: UploadedCreativeMaterial[] = [];
+  for (const material of materials) {
+    if (deduped.some((item) => item.url === material.url)) continue;
+    deduped.push(material);
+  }
+  return deduped.slice(0, MAX_HOOK_MATERIALS);
+}
+
 export interface UgcVideoScene {
   title: string;
   duration: string;
@@ -539,6 +552,8 @@ export interface CreativeDirection {
   albumFormat?: AlbumFormat;
   /** User-supplied visual references scoped to this Hook only. */
   referenceImages?: readonly ReferenceImageSelection[];
+  /** User-supplied creative materials (product shots, etc.) scoped to this Hook only. */
+  uploadedMaterials?: readonly UploadedCreativeMaterial[];
   /** Production-ready detail generated only for UGC video directions. */
   ugcBrief?: UgcVideoBrief;
   /** Rich, flexible-length two-speaker script generated only for UGC video directions. Additive — ugcBrief stays the source of truth for the deck slide. */

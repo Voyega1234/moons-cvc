@@ -10,6 +10,7 @@ import {
   MAX_HOOK_GENERATION_MODELS,
   MAX_HOOK_REFERENCE_IMAGES,
   normalizeHookReferenceImages,
+  normalizeHookUploadedMaterials,
   normalizeFormatBeatsForService,
   syncSharedReferenceImagesIntoDirections,
   type ApprovalRole
@@ -760,6 +761,7 @@ export function workflowReducer(
                   ),
                   exportGroup: direction.exportGroup ?? null,
                   referenceImages: direction.referenceImages,
+                  uploadedMaterials: direction.uploadedMaterials,
                   selected: direction.selected
                 };
               })()
@@ -796,6 +798,7 @@ export function workflowReducer(
             ),
             exportGroup: state.directions[index]?.exportGroup ?? null,
             referenceImages: state.directions[index]?.referenceImages,
+            uploadedMaterials: state.directions[index]?.uploadedMaterials,
             selected: state.directions[index]?.selected ?? false
           };
         }),
@@ -836,6 +839,25 @@ export function workflowReducer(
             ? {
                 ...direction,
                 referenceImages: normalizeHookReferenceImages(action.images)
+              }
+            : direction
+        ),
+        outputs: [],
+        qaComplete: false,
+        approved: false,
+        clientSent: false,
+        done: false
+      };
+    case "set-direction-uploaded-materials":
+      return {
+        ...state,
+        directions: state.directions.map((direction) =>
+          direction.id === action.id
+            ? {
+                ...direction,
+                uploadedMaterials: normalizeHookUploadedMaterials(
+                  action.materials
+                )
               }
             : direction
         ),
