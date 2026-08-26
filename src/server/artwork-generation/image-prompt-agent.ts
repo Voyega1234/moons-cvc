@@ -839,7 +839,7 @@ function buildStandardReference(
       ...base,
       role: reference.role,
       use:
-        "Use only for type treatment: font style, letterforms, weight, casing, and how text is set within the layout.",
+        "Use for type treatment: font style, letterforms, weight, casing, and how text is set within the layout. This reference's type identity takes priority over the brand's default typeface for this artwork.",
       ignore:
         "Do not use this image for photography style, color palette, composition, or subject matter."
     };
@@ -1096,7 +1096,7 @@ function referenceLibraryRole(label: string): string {
     return `${prefix}layout reference — use for composition and element placement only; do not copy palette, lighting, or subject matter`;
   }
   if (explicitRole === "typography") {
-    return `${prefix}typography reference — use for type treatment only; do not copy photography style, palette, or composition`;
+    return `${prefix}typography reference — use for type treatment and font identity (typeface character, weight, case, spacing); this overrides the brand's default type style for this artwork; do not copy photography style, palette, or composition`;
   }
   if (explicitRole === "content") {
     return `${prefix}content reference — use for supplied facts or copy only`;

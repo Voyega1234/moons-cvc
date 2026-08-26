@@ -386,7 +386,7 @@ export const referenceImageRoleLabels: Record<ReferenceImageRole, string> = {
   logo: "Logo",
   style: "Style",
   layout: "Layout",
-  typography: "Typography",
+  typography: "Fonts",
   content: "Content"
 };
 
