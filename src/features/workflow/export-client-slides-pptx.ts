@@ -13,10 +13,6 @@ import { directionSubheadline } from "../../domain/subheadline-highlight";
 import type { WorkflowState } from "./model";
 import { approvalRolesForOutput } from "./rules";
 import {
-  captureUgcTemplatePreviewImages,
-  type UgcPreviewImageMap
-} from "./review/creative-previews";
-import {
   uploadPptxToGoogleSlides,
   type GoogleSlidesImportResult
 } from "../../services/google-slides/google-slides-import";
@@ -54,10 +50,12 @@ const THAI_TEXT_PATTERN = /[\u0E00-\u0E7F]/;
 const SLIDE_FONT_FACE = "Sarabun";
 const UGC_LEFT_COLUMN_X = 0.38;
 const UGC_LEFT_COLUMN_WIDTH = 2.52;
-const UGC_PREVIEW_X = 3.02;
-const UGC_PREVIEW_Y = 1.18;
-const UGC_PREVIEW_WIDTH = 4.24;
-const UGC_PREVIEW_HEIGHT = 5.3;
+const UGC_IMAGE_X = 3.02;
+const UGC_IMAGE_Y = 1.18;
+const UGC_IMAGE_WIDTH = 4.24;
+const UGC_IMAGE_HEIGHT = 5.3;
+const UGC_IMAGE_PLACEHOLDER =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iMTAwMCIgdmlld0JveD0iMCAwIDgwMCAxMDAwIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjEwMDAiIHJ4PSIyNCIgZmlsbD0iI0Y1RjZGQSIvPjxyZWN0IHg9IjI0IiB5PSIyNCIgd2lkdGg9Ijc1MiIgaGVpZ2h0PSI5NTIiIHJ4PSIxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjI1QkZGIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1kYXNoYXJyYXk9IjE4IDE0Ii8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjI1QkZGIiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjI5MCIgeT0iMzEwIiB3aWR0aD0iMjIwIiBoZWlnaHQ9IjE4MCIgcng9IjE2Ii8+PHBhdGggZD0iTTMxMCA0NTRsNjItNjQgNDggNDQgMzgtMzQgMzIgMzAiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIzNjAiIHI9IjE4Ii8+PC9nPjx0ZXh0IHg9IjQwMCIgeT0iNTgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxOTFCMjciPlJFUExBQ0UgSU1BR0U8L3RleHQ+PHRleHQgeD0iNDAwIiB5PSI2MzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzcwNzQ4NyI+UmlnaHQtY2xpY2sg4oaSIFJlcGxhY2UgaW1hZ2U8L3RleHQ+PHRleHQgeD0iNDAwIiB5PSI2NzUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMiIgZmlsbD0iIzcwNzQ4NyI+VUdDIMK3IDQ6NSBwbGFjZWhvbGRlcjwvdGV4dD48L3N2Zz4=";
 const UGC_SCRIPT_BODY_FONT_SIZE = 10;
 const UGC_SCRIPT_COLUMN_X = 7.48;
 const UGC_SCRIPT_COLUMN_WIDTH = 5.45;
@@ -818,23 +816,17 @@ function addUgcSectionHeading(
   });
 }
 
-function addCapturedUgcPreview(
+function addUgcImagePlaceholder(
   slide: PptxGenJS.Slide,
-  brandName: string,
-  previewImage: string | undefined
+  brandName: string
 ) {
-  if (!previewImage) {
-    throw new Error(
-      "The UGC preview image was not captured from Create. Keep the Create page open and retry."
-    );
-  }
   slide.addImage({
-    data: previewImage,
-    x: UGC_PREVIEW_X,
-    y: UGC_PREVIEW_Y,
-    w: UGC_PREVIEW_WIDTH,
-    h: UGC_PREVIEW_HEIGHT,
-    altText: `${brandName} UGC preview captured from Create`
+    data: UGC_IMAGE_PLACEHOLDER,
+    x: UGC_IMAGE_X,
+    y: UGC_IMAGE_Y,
+    w: UGC_IMAGE_WIDTH,
+    h: UGC_IMAGE_HEIGHT,
+    altText: `${brandName} UGC image placeholder — replace this image in the slide`
   });
 }
 
@@ -935,7 +927,6 @@ function addUgcClientSlide(
   slide: PptxGenJS.Slide,
   direction: CreativeDirection | undefined,
   brandName: string,
-  previewImage?: string,
   referenceImages: readonly string[] = []
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
@@ -968,7 +959,7 @@ function addUgcClientSlide(
     line: { color: COLORS.line, width: 1 }
   });
 
-  addCapturedUgcPreview(slide, brandName, previewImage);
+  addUgcImagePlaceholder(slide, brandName);
   addHookReferencePreview(pptx, slide, referenceImages, 5.94, 5.64);
 
   const headline = clampText(direction?.hook, 125);
@@ -1170,7 +1161,7 @@ function addUgcClientSlide(
     color: COLORS.muted
   });
   slide.addNotes(
-    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual reference: UGC preview captured from the Create stage and embedded as one PNG image.`
+    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual: editable UGC image placeholder. Replace the placeholder image directly in the slide.`
   );
 }
 
@@ -1545,7 +1536,6 @@ function addClientSlide(
       slide,
       direction,
       brandName,
-      imageData[0],
       referenceImageData
     );
     return;
@@ -2074,8 +2064,7 @@ void addCaptionSlide;
 
 export async function buildPmApprovedClientSlidesPptx(
   state: ClientSlidesState,
-  resolveImage: ClientSlideImageResolver = fetchClientSlideImage,
-  ugcPreviewImages: UgcPreviewImageMap = {}
+  resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
   const items = pmApprovedClientSlideItems(state);
   if (!items.length) {
@@ -2087,15 +2076,13 @@ export async function buildPmApprovedClientSlidesPptx(
     items,
     resolveImage,
     "approved creative concepts",
-    "client slides",
-    ugcPreviewImages
+    "client slides"
   );
 }
 
 export async function buildCreateStageSlidesPptx(
   state: ClientSlidesState,
-  resolveImage: ClientSlideImageResolver = fetchClientSlideImage,
-  ugcPreviewImages: UgcPreviewImageMap = {}
+  resolveImage: ClientSlideImageResolver = fetchClientSlideImage
 ): Promise<PptxGenJS> {
   const items = createStageClientSlideItems(state);
   if (!items.length) {
@@ -2107,8 +2094,7 @@ export async function buildCreateStageSlidesPptx(
     items,
     resolveImage,
     "creative concepts",
-    "creative slides",
-    ugcPreviewImages
+    "creative slides"
   );
 }
 
@@ -2117,8 +2103,7 @@ async function buildClientSlidesPptx(
   items: readonly ClientSlideItem[],
   resolveImage: ClientSlideImageResolver,
   subject: string,
-  title: string,
-  ugcPreviewImages: UgcPreviewImageMap
+  title: string
 ): Promise<PptxGenJS> {
   const { default: PptxGenJSConstructor } = await import("pptxgenjs");
   const pptx = new PptxGenJSConstructor();
@@ -2140,15 +2125,7 @@ async function buildClientSlidesPptx(
         resolveImage(reference.url)
       )
     );
-    if (isUgcOutput(item.output)) {
-      const previewImage = ugcPreviewImages[item.output.id];
-      if (!previewImage) {
-        throw new Error(
-          `The UGC preview for creative ${index + 1} was not captured from Create. Keep the page open and retry.`
-        );
-      }
-      imageData = [previewImage];
-    } else if (!isUgcOutput(item.output)) {
+    if (!isUgcOutput(item.output)) {
       const albumMasterUrl = isAlbumOutput(item.output)
         ? item.outputs.find((output) => output.albumMasterAssetUrl)
             ?.albumMasterAssetUrl
@@ -2187,27 +2164,10 @@ async function buildClientSlidesPptx(
   return pptx;
 }
 
-async function captureClientUgcPreviewImages(
-  items: readonly ClientSlideItem[]
-): Promise<UgcPreviewImageMap> {
-  return captureUgcTemplatePreviewImages(
-    items
-      .filter((item) => isUgcOutput(item.output))
-      .map((item) => item.output.id)
-  );
-}
-
 export async function downloadCreateStageSlides(
   state: ClientSlidesState
 ): Promise<void> {
-  const ugcPreviewImages = await captureClientUgcPreviewImages(
-    createStageClientSlideItems(state)
-  );
-  const pptx = await buildCreateStageSlidesPptx(
-    state,
-    fetchClientSlideImage,
-    ugcPreviewImages
-  );
+  const pptx = await buildCreateStageSlidesPptx(state);
   await pptx.writeFile({
     fileName: `${fileSlug(state.brand?.name ?? "creative")}-creative-slides.pptx`,
     compression: true
@@ -2217,14 +2177,7 @@ export async function downloadCreateStageSlides(
 export async function downloadPmApprovedClientSlides(
   state: ClientSlidesState
 ): Promise<void> {
-  const ugcPreviewImages = await captureClientUgcPreviewImages(
-    pmApprovedClientSlideItems(state)
-  );
-  const pptx = await buildPmApprovedClientSlidesPptx(
-    state,
-    fetchClientSlideImage,
-    ugcPreviewImages
-  );
+  const pptx = await buildPmApprovedClientSlidesPptx(state);
   await pptx.writeFile({
     fileName: `${fileSlug(state.brand?.name ?? "client")}-client-slides.pptx`,
     compression: true
@@ -2253,16 +2206,8 @@ async function openPptxInGoogleSlides(
 export async function openCreateStageSlidesInGoogleSlides(
   state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
-  const ugcPreviewImages = await captureClientUgcPreviewImages(
-    createStageClientSlideItems(state)
-  );
   return openPptxInGoogleSlides(
-    () =>
-      buildCreateStageSlidesPptx(
-        state,
-        fetchClientSlideImage,
-        ugcPreviewImages
-      ),
+    () => buildCreateStageSlidesPptx(state),
     `${fileSlug(state.brand?.name ?? "creative")}-creative-slides`
   );
 }
@@ -2270,16 +2215,8 @@ export async function openCreateStageSlidesInGoogleSlides(
 export async function openPmApprovedClientSlidesInGoogleSlides(
   state: ClientSlidesState
 ): Promise<GoogleSlidesImportResult> {
-  const ugcPreviewImages = await captureClientUgcPreviewImages(
-    pmApprovedClientSlideItems(state)
-  );
   return openPptxInGoogleSlides(
-    () =>
-      buildPmApprovedClientSlidesPptx(
-        state,
-        fetchClientSlideImage,
-        ugcPreviewImages
-      ),
+    () => buildPmApprovedClientSlidesPptx(state),
     `${fileSlug(state.brand?.name ?? "client")}-client-slides`
   );
 }

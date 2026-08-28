@@ -3132,13 +3132,7 @@ describe("redesigned workflow stages", () => {
 
     const pptx = await buildCreateStageSlidesPptx(
       state,
-      async (url) => `data:image/png;base64,${btoa(url)}`,
-      Object.fromEntries(
-        state.outputs.map((output) => [
-          output.id,
-          `data:image/png;base64,${btoa(output.id)}`
-        ])
-      )
+      async (url) => `data:image/png;base64,${btoa(url)}`
     );
     expect(
       (
@@ -3338,7 +3332,7 @@ describe("redesigned workflow stages", () => {
     expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
-  it("exports the Create UGC preview as one image with production-ready scene scripts", async () => {
+  it("exports an editable UGC image placeholder with production-ready scene scripts", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -3414,12 +3408,10 @@ describe("redesigned workflow stages", () => {
       ]
     };
 
-    const previewImage =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
     const pptx = await buildCreateStageSlidesPptx(
       state,
-      async () => previewImage,
-      { [firstOutput.id]: previewImage }
+      async () =>
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
     );
     const [storyboardSlide, ...extraSlides] = (
       pptx as unknown as {
@@ -3433,6 +3425,7 @@ describe("redesigned workflow stages", () => {
               w?: number;
               h?: number;
               fontSize?: number;
+              altText?: string;
             };
           }>;
         }>;
@@ -3472,7 +3465,8 @@ describe("redesigned workflow stages", () => {
       x: 3.02,
       y: 1.18,
       w: 4.24,
-      h: 5.3
+      h: 5.3,
+      altText: "BoneFit UGC image placeholder — replace this image in the slide"
     });
     expect(
       Number(preview?.options?.w) / Number(preview?.options?.h)
@@ -3491,6 +3485,11 @@ describe("redesigned workflow stages", () => {
     expect(
       scriptBodyObjects?.every((object) => object.options?.fontSize === 10)
     ).toBe(true);
+    const exportedDeck = await pptx.write({
+      outputType: "uint8array",
+      compression: true
+    });
+    expect(exportedDeck).toBeInstanceOf(Uint8Array);
   });
 
   it("groups three album panels into one review card and shows the saved master", async () => {
