@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent, type Dispatch, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent, type Dispatch, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, FolderSimple, ImageBroken, PencilSimple, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, FolderSimple, ImageBroken, PencilSimple, Trash, UploadSimple } from "@phosphor-icons/react";
 import { type LibraryItem } from "../../../domain/brand";
 import { env } from "../../../config/env";
 import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type BrandPastWorkItem, type BrandProduct } from "../../../domain/brand-memory";
@@ -343,6 +343,176 @@ function AssetPreviewImage({
   );
 }
 
+type AssetContextMenuState =
+  | { type: "background"; x: number; y: number }
+  | {
+      type: "folder";
+      x: number;
+      y: number;
+      folder: BrandAssetFolder;
+      selection: AssetDragSelection;
+    }
+  | {
+      type: "image";
+      x: number;
+      y: number;
+      image: BrandAssetImage;
+      selection: AssetDragSelection;
+    };
+
+const ASSET_SELECTION_DATA_TYPE = "application/x-brand-asset-selection";
+
+function isAssetOrganizerDrag(dataTransfer: DataTransfer): boolean {
+  return (
+    dataTransfer.types.includes(ASSET_SELECTION_DATA_TYPE) ||
+    dataTransfer.types.includes("application/x-brand-asset-image") ||
+    dataTransfer.types.includes("application/x-brand-asset-folder")
+  );
+}
+
+function assetSelectionKey(
+  type: "folder" | "image",
+  id: string
+): string {
+  return `${type}:${id}`;
+}
+
+interface AssetDragSelection {
+  folderIds: readonly string[];
+  imageIds: readonly string[];
+}
+
+interface AssetMoveUndo {
+  label: string;
+  folders: readonly { id: string; parentId: string | null }[];
+  images: readonly { id: string; folderId: string | null }[];
+}
+
+function AssetContextMenu({
+  menu,
+  onClose,
+  onNewFolder,
+  onUploadFiles,
+  onUploadFolder,
+  onOpenFolder,
+  onMoveSelection,
+  onRenameFolder,
+  onDeleteFolder
+}: {
+  menu: AssetContextMenuState;
+  onClose: () => void;
+  onNewFolder: () => void;
+  onUploadFiles: () => void;
+  onUploadFolder: () => void;
+  onOpenFolder: (folder: BrandAssetFolder) => void;
+  onMoveSelection: (selection: AssetDragSelection) => void;
+  onRenameFolder: (folder: BrandAssetFolder) => void;
+  onDeleteFolder: (folder: BrandAssetFolder) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    menuRef.current?.querySelector("button")?.focus();
+  }, []);
+
+  if (typeof document === "undefined") return null;
+  const left = Math.max(8, Math.min(menu.x, window.innerWidth - 188));
+  const top = Math.max(8, Math.min(menu.y, window.innerHeight - 132));
+
+  function runAndClose(action: () => void) {
+    action();
+    onClose();
+  }
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="compass-asset-context-menu"
+      role="menu"
+      style={{ top, left }}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {menu.type === "background" ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(onNewFolder)}
+          >
+            <FolderSimple aria-hidden="true" size={15} weight="bold" />
+            New folder
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(onUploadFiles)}
+          >
+            <UploadSimple aria-hidden="true" size={15} weight="bold" />
+            Upload files
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(onUploadFolder)}
+          >
+            <UploadSimple aria-hidden="true" size={15} weight="bold" />
+            Upload folder
+          </button>
+        </>
+      ) : menu.type === "folder" ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(() => onOpenFolder(menu.folder))}
+          >
+            <FolderSimple aria-hidden="true" size={15} weight="bold" />
+            Open
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() =>
+              runAndClose(() => onMoveSelection(menu.selection))
+            }
+          >
+            <FolderSimple aria-hidden="true" size={15} weight="bold" />
+            Move to…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(() => onRenameFolder(menu.folder))}
+          >
+            <PencilSimple aria-hidden="true" size={15} weight="bold" />
+            Rename
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => runAndClose(() => onDeleteFolder(menu.folder))}
+          >
+            <Trash aria-hidden="true" size={15} weight="bold" />
+            Delete
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => runAndClose(() => onMoveSelection(menu.selection))}
+        >
+          <FolderSimple aria-hidden="true" size={15} weight="bold" />
+          Move to…
+        </button>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 export function CreativeMaterialsEditor({
   state,
   dispatch,
@@ -464,6 +634,39 @@ export function CreativeMaterialsEditor({
     Readonly<Record<string, "pending" | "imported" | "failed">>
   >({});
   const driveImportIds = useRef(new Set<string>());
+  const hiddenFileInputRef = useRef<HTMLInputElement | null>(null);
+  const hiddenFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const [assetContextMenu, setAssetContextMenu] =
+    useState<AssetContextMenuState | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(
+    null
+  );
+  const [dragOverBreadcrumbKey, setDragOverBreadcrumbKey] = useState<
+    string | null
+  >(null);
+  const [draggingAssetKeys, setDraggingAssetKeys] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [assetMoveUndo, setAssetMoveUndo] = useState<AssetMoveUndo | null>(null);
+  const [moveDialogSelection, setMoveDialogSelection] =
+    useState<AssetDragSelection | null>(null);
+  const [assetMovePending, setAssetMovePending] = useState(false);
+  const assetBrowserRef = useRef<HTMLDivElement | null>(null);
+  const marqueeStartRef = useRef<{
+    x: number;
+    y: number;
+    additive: boolean;
+    initialSelection: ReadonlySet<string>;
+  } | null>(null);
+  const [assetOrganizerSelection, setAssetOrganizerSelection] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [marqueeRect, setMarqueeRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const selectedMaterials = selectedUploadedMaterials(state);
   const selectedReferenceImagesForRoleEditor = targetReferenceImages.filter(
     (reference) => inferredReferenceImageRole(reference) !== "logo"
@@ -535,7 +738,8 @@ export function CreativeMaterialsEditor({
 
   useEffect(() => {
     setVisibleImageCount(ASSET_IMAGE_PAGE_SIZE);
-  }, [currentAssetFolderId]);
+    setAssetOrganizerSelection(new Set());
+  }, [assetKind, currentAssetFolderId]);
 
   useEffect(() => {
     setSelectedSortSnapshot(
@@ -567,6 +771,88 @@ export function CreativeMaterialsEditor({
     assetLibraryReady,
     onAssetCountChange
   ]);
+
+  useEffect(() => {
+    if (!assetContextMenu) return;
+    function close() {
+      setAssetContextMenu(null);
+    }
+    function closeFromOutside(event: globalThis.MouseEvent) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(".compass-asset-context-menu")
+      ) {
+        return;
+      }
+      close();
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") close();
+    }
+    window.addEventListener("mousedown", closeFromOutside);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("mousedown", closeFromOutside);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [assetContextMenu]);
+
+  useEffect(() => {
+    if (!assetMoveUndo) return;
+    const timeout = window.setTimeout(() => setAssetMoveUndo(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [assetMoveUndo]);
+
+  useEffect(() => {
+    function updateMarquee(event: globalThis.MouseEvent): void {
+      const start = marqueeStartRef.current;
+      if (!start) return;
+      const left = Math.min(start.x, event.clientX);
+      const top = Math.min(start.y, event.clientY);
+      const right = Math.max(start.x, event.clientX);
+      const bottom = Math.max(start.y, event.clientY);
+      setMarqueeRect({
+        left,
+        top,
+        width: right - left,
+        height: bottom - top
+      });
+
+      const next = new Set(start.additive ? start.initialSelection : []);
+      assetBrowserRef.current
+        ?.querySelectorAll<HTMLElement>("[data-asset-selection-key]")
+        .forEach((element) => {
+          const key = element.dataset.assetSelectionKey;
+          if (!key) return;
+          const bounds = element.getBoundingClientRect();
+          if (
+            bounds.right >= left &&
+            bounds.left <= right &&
+            bounds.bottom >= top &&
+            bounds.top <= bottom
+          ) {
+            next.add(key);
+          }
+        });
+      setAssetOrganizerSelection(next);
+    }
+
+    function finishMarquee(): void {
+      if (!marqueeStartRef.current) return;
+      marqueeStartRef.current = null;
+      setMarqueeRect(null);
+    }
+
+    window.addEventListener("mousemove", updateMarquee);
+    window.addEventListener("mouseup", finishMarquee);
+    return () => {
+      window.removeEventListener("mousemove", updateMarquee);
+      window.removeEventListener("mouseup", finishMarquee);
+    };
+  }, []);
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -615,6 +901,86 @@ export function CreativeMaterialsEditor({
     } catch (caught) {
       setUploadError(
         caught instanceof Error ? caught.message : "Could not upload the image."
+      );
+    } finally {
+      setUploadPending(false);
+    }
+  }
+
+  async function handleFolderUpload(event: ChangeEvent<HTMLInputElement>) {
+    const allFiles = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!allFiles.length) return;
+    const files = allFiles.filter((file) =>
+      /^image\/(png|jpeg|webp)$/.test(file.type)
+    );
+    if (!files.length) {
+      setUploadError("No supported images (PNG, JPEG, WebP) found in that folder.");
+      return;
+    }
+    if (files.length > 200) {
+      setUploadError("Upload up to 200 images at a time.");
+      return;
+    }
+    const clientId = state.brand?.id;
+    if (!clientId) {
+      setUploadError("Choose a brand before uploading a folder.");
+      return;
+    }
+
+    setUploadPending(true);
+    setUploadError(null);
+    try {
+      const relativePathOf = (file: File) =>
+        (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+        file.name;
+      const dirPaths = new Set<string>();
+      files.forEach((file) => {
+        const segments = relativePathOf(file).split("/").slice(0, -1);
+        for (let depth = 1; depth <= segments.length; depth += 1) {
+          dirPaths.add(segments.slice(0, depth).join("/"));
+        }
+      });
+      const orderedPaths = [...dirPaths].sort(
+        (a, b) => a.split("/").length - b.split("/").length
+      );
+      const folderIdByPath = new Map<string, string>();
+      const newFolders: BrandAssetFolder[] = [];
+      for (const path of orderedPaths) {
+        const segments = path.split("/");
+        const parentPath = segments.slice(0, -1).join("/");
+        const parentId = parentPath
+          ? folderIdByPath.get(parentPath)
+          : (currentAssetFolderId ?? undefined);
+        const folder = await brandMemoryRepository.createAssetFolder({
+          clientId,
+          kind: assetKind,
+          name: segments[segments.length - 1] ?? path,
+          parentId
+        });
+        folderIdByPath.set(path, folder.id);
+        newFolders.push(folder);
+      }
+      setAssetFolders((folders) => mergeBrandAssetFolders(folders, newFolders));
+
+      const newImages = await Promise.all(
+        files.map((file) => {
+          const dirPath = relativePathOf(file).split("/").slice(0, -1).join("/");
+          const folderId = dirPath
+            ? folderIdByPath.get(dirPath)
+            : (currentAssetFolderId ?? undefined);
+          return brandMemoryRepository.createAssetImage({
+            clientId,
+            kind: assetKind,
+            folderId,
+            file
+          });
+        })
+      );
+      setAssetImages((current) => mergeBrandAssetImages(current, newImages));
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not upload the folder."
       );
     } finally {
       setUploadPending(false);
@@ -817,9 +1183,10 @@ export function CreativeMaterialsEditor({
     }
   }
 
-  async function deleteAssetFolder(): Promise<void> {
-    const folder = editingAssetFolder;
-    if (!folder || folderMutationPending) return;
+  async function performDeleteAssetFolder(
+    folder: BrandAssetFolder
+  ): Promise<void> {
+    if (folderMutationPending) return;
     if (
       !window.confirm(
         `Delete “${folder.name}” and every nested folder and image inside it?`
@@ -843,6 +1210,18 @@ export function CreativeMaterialsEditor({
           (image) => !image.folderId || !deletedFolderIds.has(image.folderId)
         )
       );
+      const deletedImageIds = new Set(deletedImages.map((image) => image.id));
+      setAssetOrganizerSelection(
+        (selection) =>
+          new Set(
+            [...selection].filter((key) => {
+              if (key.startsWith("folder:")) {
+                return !deletedFolderIds.has(key.slice("folder:".length));
+              }
+              return !deletedImageIds.has(key.slice("image:".length));
+            })
+          )
+      );
       deletedImages.forEach(removeAssetFromBrief);
       if (
         currentAssetFolderId &&
@@ -860,6 +1239,363 @@ export function CreativeMaterialsEditor({
     }
   }
 
+  async function deleteAssetFolder(): Promise<void> {
+    if (!editingAssetFolder) return;
+    await performDeleteAssetFolder(editingAssetFolder);
+  }
+
+  async function moveImageToFolder(
+    asset: BrandAssetImage,
+    folderId: string | null
+  ): Promise<boolean> {
+    if (asset.folderId === folderId) return false;
+    setUploadError(null);
+    try {
+      const updated = await brandMemoryRepository.moveAssetImage({
+        id: asset.id,
+        folderId
+      });
+      setAssetImages((images) => mergeBrandAssetImages(images, [updated]));
+      return true;
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not move the image."
+      );
+      return false;
+    }
+  }
+
+  async function moveFolderToFolder(
+    folder: BrandAssetFolder,
+    parentId: string | null
+  ): Promise<boolean> {
+    if (folder.id === parentId || folder.parentId === parentId) return false;
+    const descendantIds = brandAssetFolderSubtreeIds(folder.id, assetFolders);
+    if (parentId && descendantIds.has(parentId)) {
+      setUploadError("Can't move a folder into its own subfolder.");
+      return false;
+    }
+    setUploadError(null);
+    try {
+      const updated = await brandMemoryRepository.moveAssetFolder({
+        id: folder.id,
+        parentId
+      });
+      setAssetFolders((folders) => mergeBrandAssetFolders(folders, [updated]));
+      return true;
+    } catch (caught) {
+      setUploadError(
+        caught instanceof Error ? caught.message : "Could not move the folder."
+      );
+      return false;
+    }
+  }
+
+  function assetDragSelectionFromKeys(
+    keys: ReadonlySet<string>
+  ): AssetDragSelection {
+    return {
+      folderIds: [...keys].flatMap((key) =>
+        key.startsWith("folder:") ? [key.slice("folder:".length)] : []
+      ),
+      imageIds: [...keys].flatMap((key) =>
+        key.startsWith("image:") ? [key.slice("image:".length)] : []
+      )
+    };
+  }
+
+  function selectedAssetsForDrag(
+    type: "folder" | "image",
+    id: string
+  ): AssetDragSelection {
+    const draggedKey = assetSelectionKey(type, id);
+    const keys = assetOrganizerSelection.has(draggedKey)
+      ? assetOrganizerSelection
+      : new Set([draggedKey]);
+    if (!assetOrganizerSelection.has(draggedKey)) {
+      setAssetOrganizerSelection(keys);
+    }
+    return assetDragSelectionFromKeys(keys);
+  }
+
+  function prepareAssetDrag(
+    event: DragEvent<HTMLElement>,
+    type: "folder" | "image",
+    id: string
+  ): void {
+    const selection = selectedAssetsForDrag(type, id);
+    setDraggingAssetKeys(
+      new Set([
+        ...selection.folderIds.map((folderId) =>
+          assetSelectionKey("folder", folderId)
+        ),
+        ...selection.imageIds.map((imageId) =>
+          assetSelectionKey("image", imageId)
+        )
+      ])
+    );
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(
+      ASSET_SELECTION_DATA_TYPE,
+      JSON.stringify(selection)
+    );
+    event.dataTransfer.setData(
+      type === "folder"
+        ? "application/x-brand-asset-folder"
+        : "application/x-brand-asset-image",
+      id
+    );
+    if (typeof event.dataTransfer.setDragImage === "function") {
+      const source = event.currentTarget;
+      const preview = source.cloneNode(true) as HTMLElement;
+      const itemCount = selection.folderIds.length + selection.imageIds.length;
+      const sourceWidth = source.getBoundingClientRect().width;
+      preview.classList.remove("compass-asset-organizer-selected");
+      preview.classList.add("compass-asset-drag-preview");
+      preview.removeAttribute("data-asset-selection-key");
+      preview.style.width = `${Math.max(160, Math.min(sourceWidth || 210, 240))}px`;
+      preview.setAttribute("aria-hidden", "true");
+      if (itemCount > 1) {
+        const count = document.createElement("span");
+        count.className = "compass-asset-drag-preview-count";
+        count.textContent = String(itemCount);
+        preview.appendChild(count);
+      }
+      (source.closest(".compass-app") ?? document.body).appendChild(preview);
+      event.dataTransfer.setDragImage(preview, 24, 24);
+      window.setTimeout(() => preview.remove(), 0);
+    }
+  }
+
+  function readAssetDragSelection(dataTransfer: DataTransfer): AssetDragSelection {
+    const serialized = dataTransfer.getData(ASSET_SELECTION_DATA_TYPE);
+    if (serialized) {
+      try {
+        const parsed = JSON.parse(serialized) as Partial<AssetDragSelection>;
+        return {
+          folderIds: Array.isArray(parsed.folderIds)
+            ? parsed.folderIds.filter(
+                (id): id is string => typeof id === "string"
+              )
+            : [],
+          imageIds: Array.isArray(parsed.imageIds)
+            ? parsed.imageIds.filter(
+                (id): id is string => typeof id === "string"
+              )
+            : []
+        };
+      } catch {
+        // Fall through to the single-item drag formats used by older clients.
+      }
+    }
+    const imageId = dataTransfer.getData("application/x-brand-asset-image");
+    const folderId = dataTransfer.getData("application/x-brand-asset-folder");
+    return {
+      folderIds: folderId ? [folderId] : [],
+      imageIds: imageId ? [imageId] : []
+    };
+  }
+
+  async function moveAssetSelectionToFolder(
+    selection: AssetDragSelection,
+    targetFolderId: string | null
+  ): Promise<boolean> {
+    if (assetMovePending) return false;
+    const images = selection.imageIds.flatMap((id) => {
+      const image = assetImages.find((candidate) => candidate.id === id);
+      return image && image.folderId !== targetFolderId ? [image] : [];
+    });
+    const folders = selection.folderIds.flatMap((id) => {
+      if (id === targetFolderId) return [];
+      const folder = assetFolders.find((candidate) => candidate.id === id);
+      return folder && folder.parentId !== targetFolderId ? [folder] : [];
+    });
+    if (!images.length && !folders.length) return false;
+
+    setAssetMovePending(true);
+    try {
+      const [movedImages, movedFolders] = await Promise.all([
+        Promise.all(
+          images.map((image) => moveImageToFolder(image, targetFolderId))
+        ),
+        Promise.all(
+          folders.map((folder) => moveFolderToFolder(folder, targetFolderId))
+        )
+      ]);
+      const undoImages = images
+        .filter((_, index) => movedImages[index])
+        .map((image) => ({ id: image.id, folderId: image.folderId }));
+      const undoFolders = folders
+        .filter((_, index) => movedFolders[index])
+        .map((folder) => ({ id: folder.id, parentId: folder.parentId }));
+      const movedCount = undoImages.length + undoFolders.length;
+      if (movedCount) {
+        const targetName = targetFolderId
+          ? (assetFolders.find((folder) => folder.id === targetFolderId)?.name ??
+            "folder")
+          : "Root";
+        setAssetMoveUndo({
+          label: `Moved ${movedCount} ${pluralize(movedCount, "item")} to ${targetName}`,
+          images: undoImages,
+          folders: undoFolders
+        });
+      }
+      setAssetOrganizerSelection(new Set());
+      return movedCount > 0;
+    } finally {
+      setAssetMovePending(false);
+    }
+  }
+
+  async function undoLastAssetMove(): Promise<void> {
+    const undo = assetMoveUndo;
+    if (!undo || assetMovePending) return;
+    setAssetMovePending(true);
+    try {
+      await Promise.all([
+        ...undo.images.map(async ({ id, folderId }) => {
+          const image = assetImages.find((candidate) => candidate.id === id);
+          if (image) await moveImageToFolder(image, folderId);
+        }),
+        ...undo.folders.map(async ({ id, parentId }) => {
+          const folder = assetFolders.find((candidate) => candidate.id === id);
+          if (folder) await moveFolderToFolder(folder, parentId);
+        })
+      ]);
+      setAssetMoveUndo(null);
+    } finally {
+      setAssetMovePending(false);
+    }
+  }
+
+  function clearAssetDragTargets(): void {
+    setDragOverFolderId(null);
+    setDragOverBreadcrumbKey(null);
+    setDraggingAssetKeys(new Set());
+  }
+
+  function markAssetFolderDropTarget(
+    event: DragEvent<HTMLElement>,
+    folder: BrandAssetFolder
+  ): void {
+    const selection = readAssetDragSelection(event.dataTransfer);
+    const invalidTarget = selection.folderIds.some((folderId) =>
+      brandAssetFolderSubtreeIds(folderId, assetFolders).has(folder.id)
+    );
+    setDragOverFolderId(invalidTarget ? null : folder.id);
+  }
+
+  function handleAssetDrop(
+    event: DragEvent<HTMLElement>,
+    targetFolderId: string | null
+  ): void {
+    event.preventDefault();
+    event.stopPropagation();
+    clearAssetDragTargets();
+    void moveAssetSelectionToFolder(
+      readAssetDragSelection(event.dataTransfer),
+      targetFolderId
+    );
+  }
+
+  function handleAssetBrowserMouseDown(
+    event: ReactMouseEvent<HTMLDivElement>
+  ): void {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, label, form, [role='menu']")) return;
+    const item = target.closest<HTMLElement>("[data-asset-selection-key]");
+    if (item?.dataset.assetSelectionKey) {
+      const key = item.dataset.assetSelectionKey;
+      setAssetOrganizerSelection((current) => {
+        if (event.metaKey || event.ctrlKey) {
+          const next = new Set(current);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
+          return next;
+        }
+        return current.has(key) ? current : new Set([key]);
+      });
+      return;
+    }
+    if (target.closest("article")) return;
+    const additive = event.metaKey || event.ctrlKey;
+    marqueeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      additive,
+      initialSelection: assetOrganizerSelection
+    };
+    if (!additive) setAssetOrganizerSelection(new Set());
+    setMarqueeRect({
+      left: event.clientX,
+      top: event.clientY,
+      width: 0,
+      height: 0
+    });
+    event.preventDefault();
+  }
+
+  function openAssetContextMenu(
+    event: ReactMouseEvent<HTMLDivElement>
+  ): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.target;
+    const folderId =
+      target instanceof Element
+        ? target.closest<HTMLElement>("[data-asset-folder-id]")?.dataset
+            .assetFolderId
+        : undefined;
+    const imageId =
+      target instanceof Element
+        ? target.closest<HTMLElement>("[data-asset-image-id]")?.dataset
+            .assetImageId
+        : undefined;
+    const folder = folderId
+      ? assetFolders.find((candidate) => candidate.id === folderId)
+      : undefined;
+    const image = imageId
+      ? assetImages.find((candidate) => candidate.id === imageId)
+      : undefined;
+    if (folder) {
+      const key = assetSelectionKey("folder", folder.id);
+      const keys = assetOrganizerSelection.has(key)
+        ? assetOrganizerSelection
+        : new Set([key]);
+      if (!assetOrganizerSelection.has(key)) setAssetOrganizerSelection(keys);
+      setAssetContextMenu({
+        type: "folder",
+        x: event.clientX,
+        y: event.clientY,
+        folder,
+        selection: assetDragSelectionFromKeys(keys)
+      });
+      return;
+    }
+    if (image) {
+      const key = assetSelectionKey("image", image.id);
+      const keys = assetOrganizerSelection.has(key)
+        ? assetOrganizerSelection
+        : new Set([key]);
+      if (!assetOrganizerSelection.has(key)) setAssetOrganizerSelection(keys);
+      setAssetContextMenu({
+        type: "image",
+        x: event.clientX,
+        y: event.clientY,
+        image,
+        selection: assetDragSelectionFromKeys(keys)
+      });
+      return;
+    }
+    setAssetOrganizerSelection(new Set());
+    setAssetContextMenu({
+      type: "background",
+      x: event.clientX,
+      y: event.clientY
+    });
+  }
+
   async function deleteAssetImage(asset: BrandAssetImage): Promise<void> {
     if (deletingAssetImageId) return;
     if (!window.confirm(`Delete “${asset.name}” from the library?`)) return;
@@ -870,6 +1606,11 @@ export function CreativeMaterialsEditor({
       setAssetImages((images) =>
         images.filter((candidate) => candidate.id !== asset.id)
       );
+      setAssetOrganizerSelection((selection) => {
+        const next = new Set(selection);
+        next.delete(assetSelectionKey("image", asset.id));
+        return next;
+      });
       removeAssetFromBrief(asset);
     } catch (caught) {
       setUploadError(
@@ -1031,6 +1772,12 @@ export function CreativeMaterialsEditor({
 
   const currentAssetFolder =
     assetFolders.find((folder) => folder.id === currentAssetFolderId) ?? null;
+  const currentAssetFolderTrail = currentAssetFolder
+    ? brandAssetFolderTrail(currentAssetFolder, assetFolders)
+    : [];
+  const parentDropKey = currentAssetFolder?.parentId
+    ? `folder:${currentAssetFolder.parentId}`
+    : "root";
   const visibleAssetFolders = assetFolders.filter(
     (folder) =>
       folder.kind === assetKind &&
@@ -1068,29 +1815,181 @@ export function CreativeMaterialsEditor({
       pendingDriveImports > 0) &&
     !visibleAssetFolders.length &&
     visibleAssetCount === 0;
+  const dragDestinationLabel = dragOverFolderId
+    ? assetFolders.find((folder) => folder.id === dragOverFolderId)?.name
+    : dragOverBreadcrumbKey === "root"
+      ? "Root"
+      : dragOverBreadcrumbKey?.startsWith("folder:")
+        ? assetFolders.find(
+            (folder) =>
+              folder.id === dragOverBreadcrumbKey.slice("folder:".length)
+          )?.name
+        : undefined;
+  const invalidMoveTargetIds = new Set<string>();
+  moveDialogSelection?.folderIds.forEach((folderId) => {
+    brandAssetFolderSubtreeIds(folderId, assetFolders).forEach((id) =>
+      invalidMoveTargetIds.add(id)
+    );
+  });
+  const moveDialogTargets = assetFolders
+    .filter(
+      (folder) =>
+        folder.kind === assetKind && !invalidMoveTargetIds.has(folder.id)
+    )
+    .slice()
+    .sort((left, right) =>
+      brandAssetFolderPath(left, assetFolders).localeCompare(
+        brandAssetFolderPath(right, assetFolders)
+      )
+    );
 
   return (
     <div className="compass-creative-material-editor">
       {state.brand ? (
-        <div className="compass-asset-library-browser">
+        <div
+          ref={assetBrowserRef}
+          className="compass-asset-library-browser"
+          onMouseDown={handleAssetBrowserMouseDown}
+          onContextMenuCapture={openAssetContextMenu}
+          onDragOver={(event) => {
+            if (!isAssetOrganizerDrag(event.dataTransfer)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest(
+                "[data-asset-folder-id], .compass-asset-breadcrumbs, .compass-asset-parent-folder"
+              )
+            ) {
+              return;
+            }
+            setDragOverBreadcrumbKey(
+              currentAssetFolder ? `folder:${currentAssetFolder.id}` : "root"
+            );
+          }}
+          onDrop={(event) => {
+            if (!isAssetOrganizerDrag(event.dataTransfer)) return;
+            handleAssetDrop(event, currentAssetFolder?.id ?? null);
+          }}
+        >
+          <input
+            ref={hiddenFileInputRef}
+            className="file-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            aria-hidden="true"
+            tabIndex={-1}
+            style={{ display: "none" }}
+            onChange={handleUpload}
+          />
+          <input
+            ref={hiddenFolderInputRef}
+            className="file-input"
+            type="file"
+            multiple
+            aria-hidden="true"
+            tabIndex={-1}
+            style={{ display: "none" }}
+            onChange={handleFolderUpload}
+            {...({ webkitdirectory: "", directory: "" } as Record<
+              string,
+              string
+            >)}
+          />
           <nav aria-label={`${assetKind} library folder path`}>
             <button
+              className={`compass-asset-parent-folder${
+                dragOverBreadcrumbKey === parentDropKey
+                  ? " compass-asset-parent-drop-target"
+                  : ""
+              }`}
               type="button"
               aria-label="Go to parent folder"
+              title={
+                currentAssetFolder
+                  ? "Drop here to move the selection out of this folder"
+                  : undefined
+              }
               disabled={!currentAssetFolder}
               onClick={() =>
                 setCurrentAssetFolderId(currentAssetFolder?.parentId ?? null)
               }
+              onDragOver={(event) => {
+                if (!currentAssetFolder) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDragEnter={() => {
+                if (currentAssetFolder) {
+                  setDragOverBreadcrumbKey(parentDropKey);
+                }
+              }}
+              onDragLeave={() => setDragOverBreadcrumbKey(null)}
+              onDrop={(event) => {
+                if (!currentAssetFolder) return;
+                handleAssetDrop(event, currentAssetFolder.parentId);
+              }}
             >
               <ArrowLeft aria-hidden="true" size={15} weight="bold" />
+              <span>
+                {dragOverBreadcrumbKey === parentDropKey ? "Move out" : "Back"}
+              </span>
             </button>
-            <b>
-              {currentAssetFolder
-                ? brandAssetFolderPath(currentAssetFolder, assetFolders)
-                : `${state.brand.name} / ${
-                    assetKind === "material" ? "Materials" : "References"
-                  }`}
-            </b>
+            <div className="compass-asset-breadcrumbs">
+              <button
+                className={
+                  dragOverBreadcrumbKey === "root"
+                    ? "compass-asset-breadcrumb-drop-target"
+                    : undefined
+                }
+                type="button"
+                aria-label={`Open ${assetKind} library root`}
+                aria-current={!currentAssetFolder ? "page" : undefined}
+                onClick={() => setCurrentAssetFolderId(null)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDragEnter={() => setDragOverBreadcrumbKey("root")}
+                onDragLeave={() => setDragOverBreadcrumbKey(null)}
+                onDrop={(event) => handleAssetDrop(event, null)}
+              >
+                {state.brand.name} /{" "}
+                {assetKind === "material" ? "Materials" : "References"}
+              </button>
+              {currentAssetFolderTrail.map((folder) => {
+                const dropKey = `folder:${folder.id}`;
+                return (
+                  <span key={folder.id}>
+                    <i aria-hidden="true">/</i>
+                    <button
+                      className={
+                        dragOverBreadcrumbKey === dropKey
+                          ? "compass-asset-breadcrumb-drop-target"
+                          : undefined
+                      }
+                      type="button"
+                      aria-label={`Open folder ${folder.name}`}
+                      aria-current={
+                        folder.id === currentAssetFolder?.id ? "page" : undefined
+                      }
+                      onClick={() => setCurrentAssetFolderId(folder.id)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDragEnter={() => setDragOverBreadcrumbKey(dropKey)}
+                      onDragLeave={() => setDragOverBreadcrumbKey(null)}
+                      onDrop={(event) => handleAssetDrop(event, folder.id)}
+                    >
+                      {folder.name}
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
             <span>
               {visibleAssetFolders.length} folders ·{" "}
               {visibleAssetCount} images
@@ -1145,6 +2044,37 @@ export function CreativeMaterialsEditor({
               </button>
             </div>
           </nav>
+          {assetOrganizerSelection.size ? (
+            <div className="compass-asset-organizer-selection" role="status">
+              <b>
+                {assetOrganizerSelection.size}{" "}
+                {pluralize(assetOrganizerSelection.size, "item")} selected
+              </b>
+              <span>
+                {dragDestinationLabel
+                  ? `Release to move to ${dragDestinationLabel}`
+                  : "Drag onto a folder or breadcrumb to move the selection."}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAssetOrganizerSelection(new Set())}
+              >
+                Clear selection
+              </button>
+            </div>
+          ) : null}
+          {assetMoveUndo ? (
+            <div className="compass-asset-move-undo" role="status">
+              <span>{assetMoveUndo.label}</span>
+              <button
+                type="button"
+                disabled={assetMovePending}
+                onClick={() => void undoLastAssetMove()}
+              >
+                Undo
+              </button>
+            </div>
+          ) : null}
           {assetActionPopup === "folder" ? (
             <form
               className="compass-asset-action-popover"
@@ -1256,7 +2186,61 @@ export function CreativeMaterialsEditor({
               </div>
               <div className="compass-drive-subfolder-grid">
                 {visibleAssetFolders.map((folder) => (
-                  <article key={folder.id}>
+                  <article
+                    key={folder.id}
+                    className={[
+                      dragOverFolderId === folder.id
+                        ? "compass-asset-drop-target"
+                        : "",
+                      assetOrganizerSelection.has(
+                        assetSelectionKey("folder", folder.id)
+                      )
+                        ? "compass-asset-organizer-selected"
+                        : "",
+                      draggingAssetKeys.has(
+                        assetSelectionKey("folder", folder.id)
+                      )
+                        ? "compass-asset-drag-source"
+                        : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    data-asset-selection-key={assetSelectionKey(
+                      "folder",
+                      folder.id
+                    )}
+                    data-asset-folder-id={folder.id}
+                    aria-selected={assetOrganizerSelection.has(
+                      assetSelectionKey("folder", folder.id)
+                    )}
+                    draggable
+                    onDragStart={(event) => {
+                      prepareAssetDrag(event, "folder", folder.id);
+                    }}
+                    onDragEnd={clearAssetDragTargets}
+                    onDragOver={(event) => {
+                      if (isAssetOrganizerDrag(event.dataTransfer)) {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDragEnter={(event) =>
+                      markAssetFolderDropTarget(event, folder)
+                    }
+                    onDragLeave={(event) => {
+                      const nextTarget = event.relatedTarget;
+                      if (
+                        nextTarget instanceof Node &&
+                        event.currentTarget.contains(nextTarget)
+                      ) {
+                        return;
+                      }
+                      setDragOverFolderId((current) =>
+                        current === folder.id ? null : current
+                      );
+                    }}
+                    onDrop={(event) => handleAssetDrop(event, folder.id)}
+                  >
                     <button
                       className="compass-folder-open"
                       type="button"
@@ -1302,7 +2286,36 @@ export function CreativeMaterialsEditor({
                       ? isBrandAssetSelected(asset, state, targetDirectionId)
                       : isReferenceSelected(`brand-asset-${asset.id}`, asset.url);
                   return (
-                    <article key={asset.id}>
+                    <article
+                      key={asset.id}
+                      className={[
+                        assetOrganizerSelection.has(
+                          assetSelectionKey("image", asset.id)
+                        )
+                          ? "compass-asset-organizer-selected"
+                          : "",
+                        draggingAssetKeys.has(
+                          assetSelectionKey("image", asset.id)
+                        )
+                          ? "compass-asset-drag-source"
+                          : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      data-asset-selection-key={assetSelectionKey(
+                        "image",
+                        asset.id
+                      )}
+                      data-asset-image-id={asset.id}
+                      aria-selected={assetOrganizerSelection.has(
+                        assetSelectionKey("image", asset.id)
+                      )}
+                      draggable
+                      onDragStart={(event) => {
+                        prepareAssetDrag(event, "image", asset.id);
+                      }}
+                      onDragEnd={clearAssetDragTargets}
+                    >
                       <AssetPreviewImage src={asset.url} alt={asset.name} />
                       <b>{asset.name}</b>
                       <div className="compass-persistent-asset-actions">
@@ -1686,6 +2699,79 @@ export function CreativeMaterialsEditor({
           </div>
         </LibraryEditModal>
       ) : null}
+      {moveDialogSelection ? (
+        <LibraryEditModal
+          title="Move to…"
+          description="Choose Root or another folder. Folders cannot be moved into themselves or their descendants."
+          busy={assetMovePending}
+          onClose={() => setMoveDialogSelection(null)}
+          className="compass-asset-move-dialog"
+        >
+          <div className="compass-asset-move-destinations">
+            <button
+              type="button"
+              disabled={assetMovePending}
+              onClick={() => {
+                void moveAssetSelectionToFolder(moveDialogSelection, null).then(
+                  (moved) => {
+                    if (moved) setMoveDialogSelection(null);
+                  }
+                );
+              }}
+            >
+              <FolderSimple aria-hidden="true" size={17} weight="duotone" />
+              <span>
+                <b>Root</b>
+                <small>
+                  {state.brand?.name} /{" "}
+                  {assetKind === "material" ? "Materials" : "References"}
+                </small>
+              </span>
+            </button>
+            {moveDialogTargets.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                disabled={assetMovePending}
+                onClick={() => {
+                  void moveAssetSelectionToFolder(
+                    moveDialogSelection,
+                    folder.id
+                  ).then((moved) => {
+                    if (moved) setMoveDialogSelection(null);
+                  });
+                }}
+              >
+                <FolderSimple aria-hidden="true" size={17} weight="duotone" />
+                <span>
+                  <b>{folder.name}</b>
+                  <small>{brandAssetFolderPath(folder, assetFolders)}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </LibraryEditModal>
+      ) : null}
+      {assetContextMenu ? (
+        <AssetContextMenu
+          menu={assetContextMenu}
+          onClose={() => setAssetContextMenu(null)}
+          onNewFolder={() => setAssetActionPopup("folder")}
+          onUploadFiles={() => hiddenFileInputRef.current?.click()}
+          onUploadFolder={() => hiddenFolderInputRef.current?.click()}
+          onOpenFolder={(folder) => void openSavedAssetFolder(folder)}
+          onMoveSelection={setMoveDialogSelection}
+          onRenameFolder={openAssetFolderEditor}
+          onDeleteFolder={(folder) => void performDeleteAssetFolder(folder)}
+        />
+      ) : null}
+      {marqueeRect ? (
+        <div
+          className="compass-asset-selection-marquee"
+          aria-hidden="true"
+          style={marqueeRect}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1738,15 +2824,24 @@ function brandAssetFolderPath(
   folder: BrandAssetFolder,
   folders: readonly BrandAssetFolder[]
 ): string {
-  const names = [folder.name];
+  return brandAssetFolderTrail(folder, folders)
+    .map((item) => item.name)
+    .join(" / ");
+}
+
+function brandAssetFolderTrail(
+  folder: BrandAssetFolder,
+  folders: readonly BrandAssetFolder[]
+): readonly BrandAssetFolder[] {
+  const trail = [folder];
   let current = folder;
   while (current.parentId) {
     const parent = folders.find((candidate) => candidate.id === current.parentId);
     if (!parent) break;
-    names.unshift(parent.name);
+    trail.unshift(parent);
     current = parent;
   }
-  return names.join(" / ");
+  return trail;
 }
 
 function brandAssetFolderSubtreeIds(

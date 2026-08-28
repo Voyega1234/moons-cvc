@@ -28,6 +28,8 @@ import type {
   CreateLearningEntryInput,
   CreateReferenceImageInput,
   GuidelineAnalysisResult,
+  MoveBrandAssetFolderInput,
+  MoveBrandAssetImageInput,
   SaveBrandProductInput,
   SaveBrandRuleInput,
   SaveGuidelineInput,
@@ -648,6 +650,59 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     return mapAssetFolder(data);
   }
 
+  async moveAssetFolder(
+    input: MoveBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    if (input.parentId === input.id) {
+      throw new Error("Can't move a folder into itself.");
+    }
+    const client = getSupabaseClient();
+    if (input.parentId) {
+      const folder = await client
+        .schema("moons")
+        .from("brand_asset_folders")
+        .select("client_id")
+        .eq("id", input.id)
+        .maybeSingle();
+      if (folder.error) throw folder.error;
+      if (folder.data) {
+        const siblings = await client
+          .schema("moons")
+          .from("brand_asset_folders")
+          .select("id,parent_id")
+          .eq("client_id", folder.data.client_id);
+        if (siblings.error) throw siblings.error;
+        const descendantIds = new Set([input.id]);
+        let foundDescendant = true;
+        while (foundDescendant) {
+          foundDescendant = false;
+          siblings.data.forEach((candidate) => {
+            if (
+              candidate.parent_id &&
+              descendantIds.has(candidate.parent_id) &&
+              !descendantIds.has(candidate.id)
+            ) {
+              descendantIds.add(candidate.id);
+              foundDescendant = true;
+            }
+          });
+        }
+        if (descendantIds.has(input.parentId)) {
+          throw new Error("Can't move a folder into its own subfolder.");
+        }
+      }
+    }
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_asset_folders")
+      .update({ parent_id: input.parentId })
+      .eq("id", input.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapAssetFolder(data);
+  }
+
   async deleteAssetFolder(id: string): Promise<void> {
     const client = getSupabaseClient();
     const folder = await client
@@ -774,6 +829,25 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
     if (signed.error) throw signed.error;
     return mapAssetImage(inserted.data, signed.data.signedUrl);
+  }
+
+  async moveAssetImage(
+    input: MoveBrandAssetImageInput
+  ): Promise<BrandAssetImage> {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .schema("moons")
+      .from("brand_assets")
+      .update({ folder_id: input.folderId })
+      .eq("id", input.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    const signed = await client.storage
+      .from(env.brandAssetsBucket)
+      .createSignedUrl(data.storage_path, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
+    if (signed.error) throw signed.error;
+    return mapAssetImage(data, signed.data.signedUrl);
   }
 
   async deleteAssetImage(id: string): Promise<void> {

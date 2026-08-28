@@ -4296,6 +4296,7 @@
 }
 
 .compass-app .compass-asset-library-browser {
+  position: relative;
   display: grid;
   gap: 9px;
   padding: 10px;
@@ -4320,6 +4321,81 @@
 .compass-app .compass-asset-library-browser > nav button:disabled {
   color: var(--line2);
   cursor: default;
+}
+
+.compass-app
+  .compass-asset-library-browser
+  > nav
+  button.compass-asset-parent-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.compass-app
+  .compass-asset-library-browser
+  > nav
+  button.compass-asset-parent-drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface2));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.compass-app .compass-asset-breadcrumbs {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.compass-app .compass-asset-breadcrumbs > span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.compass-app .compass-asset-breadcrumbs i {
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.compass-app .compass-asset-library-browser > nav .compass-asset-breadcrumbs button {
+  max-width: 190px;
+  min-height: 26px;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app
+  .compass-asset-library-browser
+  > nav
+  .compass-asset-breadcrumbs
+  button[aria-current="page"] {
+  background: var(--surface2);
+}
+
+.compass-app
+  .compass-asset-library-browser
+  > nav
+  .compass-asset-breadcrumbs
+  button.compass-asset-breadcrumb-drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface2));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .compass-app .compass-asset-library-browser > nav b {
@@ -4360,8 +4436,12 @@
 }
 
 .compass-app .compass-asset-action-popover {
-  width: min(520px, 100%);
-  justify-self: end;
+  position: absolute;
+  top: 48px;
+  right: 10px;
+  z-index: 30;
+  width: min(520px, calc(100% - 20px));
+  max-height: min(420px, calc(100dvh - 140px));
   display: grid;
   gap: 13px;
   padding: 15px;
@@ -4369,6 +4449,7 @@
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 16px 38px rgba(31, 40, 61, 0.14);
+  overflow-y: auto;
 }
 
 .compass-app .compass-asset-action-popover > header,
@@ -4657,6 +4738,256 @@
 .compass-app .compass-drive-subfolder-grid small {
   color: var(--muted);
   font-size: 8.5px;
+}
+
+.compass-app .compass-drive-subfolder-grid > article,
+.compass-app .compass-persistent-asset-grid > article {
+  cursor: grab;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+  user-select: none;
+}
+
+.compass-app .compass-drive-subfolder-grid > article.compass-asset-drag-source,
+.compass-app .compass-persistent-asset-grid > article.compass-asset-drag-source {
+  opacity: 0.38;
+  transform: scale(0.98);
+}
+
+.compass-app .compass-asset-drag-preview {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  z-index: 9999;
+  min-width: 160px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--line));
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 20%, transparent);
+  pointer-events: none;
+  transform: rotate(-1.5deg) scale(1.02);
+}
+
+.compass-app .compass-asset-drag-preview .compass-persistent-asset-actions,
+.compass-app .compass-asset-drag-preview .compass-folder-edit {
+  display: none;
+}
+
+.compass-app .compass-asset-drag-preview .compass-folder-open {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.compass-app .compass-asset-drag-preview .compass-folder-open > svg {
+  grid-row: 1 / span 2;
+  color: var(--accent);
+}
+
+.compass-app .compass-asset-drag-preview > b,
+.compass-app .compass-asset-drag-preview .compass-folder-open b {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-asset-drag-preview .compass-folder-open small {
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.compass-app .compass-asset-drag-preview-count {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0 6px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.compass-app
+  .compass-drive-subfolder-grid
+  > article.compass-asset-organizer-selected,
+.compass-app
+  .compass-persistent-asset-grid
+  > article.compass-asset-organizer-selected {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, #fff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.compass-app .compass-drive-subfolder-grid > article.compass-asset-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface2));
+}
+
+.compass-app .compass-asset-organizer-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, #fff);
+  color: var(--ink);
+  font-size: 9px;
+}
+
+.compass-app .compass-asset-organizer-selection b {
+  white-space: nowrap;
+}
+
+.compass-app .compass-asset-organizer-selection span {
+  flex: 1;
+  color: var(--muted);
+}
+
+.compass-app .compass-asset-organizer-selection button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compass-app .compass-asset-move-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 7%, #fff);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.compass-app .compass-asset-move-undo button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.compass-app .compass-asset-move-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.compass-app .compass-asset-move-destinations {
+  display: grid;
+  gap: 7px;
+  max-height: min(430px, 55vh);
+  overflow-y: auto;
+}
+
+.compass-app .compass-asset-move-destinations > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.compass-app .compass-asset-move-destinations > button:hover {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, #fff);
+}
+
+.compass-app .compass-asset-move-destinations > button > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.compass-app .compass-asset-move-destinations b,
+.compass-app .compass-asset-move-destinations small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-app .compass-asset-move-destinations small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compass-asset-selection-marquee {
+  position: fixed;
+  z-index: 1190;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 78%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.compass-asset-context-menu {
+  position: fixed;
+  z-index: 10000;
+  display: grid;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--line, rgba(23, 25, 31, 0.085));
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(31, 40, 61, 0.14);
+}
+
+.compass-asset-context-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink, #17191f);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compass-asset-context-menu > button:hover {
+  background: var(--surface2, #fbfcfd);
+}
+
+.compass-asset-context-menu > button.danger {
+  color: var(--danger, #c63c38);
 }
 
 .compass-app .compass-drive-empty {

@@ -97,6 +97,16 @@ export interface UpdateBrandAssetFolderInput {
   name: string;
 }
 
+export interface MoveBrandAssetFolderInput {
+  id: string;
+  parentId: string | null;
+}
+
+export interface MoveBrandAssetImageInput {
+  id: string;
+  folderId: string | null;
+}
+
 export interface SaveOnboardingQuestionnaireInput {
   clientId: string;
   text: string;
@@ -143,8 +153,10 @@ export interface BrandMemoryRepository {
   updateAssetFolder(
     input: UpdateBrandAssetFolderInput
   ): Promise<BrandAssetFolder>;
+  moveAssetFolder(input: MoveBrandAssetFolderInput): Promise<BrandAssetFolder>;
   deleteAssetFolder(id: string): Promise<void>;
   createAssetImage(input: CreateBrandAssetImageInput): Promise<BrandAssetImage>;
+  moveAssetImage(input: MoveBrandAssetImageInput): Promise<BrandAssetImage>;
   deleteAssetImage(id: string): Promise<void>;
   saveOnboardingQuestionnaire(
     input: SaveOnboardingQuestionnaireInput

@@ -75,6 +75,55 @@ function openBriefAssetManager(
   return within(confirmation);
 }
 
+function createDragDataTransfer(): DataTransfer {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  return {
+    dropEffect: "none",
+    effectAllowed: "all",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types,
+    clearData(type?: string) {
+      if (type) {
+        values.delete(type);
+        const index = types.indexOf(type);
+        if (index >= 0) types.splice(index, 1);
+        return;
+      }
+      values.clear();
+      types.splice(0);
+    },
+    getData(type: string) {
+      return values.get(type) ?? "";
+    },
+    setData(type: string, value: string) {
+      values.set(type, value);
+      if (!types.includes(type)) types.push(type);
+    },
+    setDragImage: vi.fn()
+  } as DataTransfer;
+}
+
+function domRect(
+  left: number,
+  top: number,
+  width: number,
+  height: number
+): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({})
+  } as DOMRect;
+}
+
 function qualityReport(passed: boolean, score: number): CreativeQualityReport {
   const criterion = (label: string) => ({
     criterion: label,
@@ -927,6 +976,467 @@ describe("redesigned workflow stages", () => {
     await waitFor(async () =>
       expect(await memoryRepository.listAssetFolders(clientId)).toHaveLength(0)
     );
+    view.unmount();
+  });
+
+  it("drives New folder, Upload files, and Upload folder from the right-click context menu", async () => {
+    const user = userEvent.setup();
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const dialog = openBriefAssetManager(stage);
+
+    fireEvent.contextMenu(dialog.getByRole("navigation"));
+    const newFolderMenu = within(document.body).getByRole("menu");
+    await user.click(
+      within(newFolderMenu).getByRole("menuitem", { name: "New folder" })
+    );
+    await user.type(dialog.getByLabelText("New folder name"), "Lifestyle");
+    await user.click(dialog.getByRole("button", { name: "Create" }));
+    expect(
+      await dialog.findByRole("button", { name: "Lifestyle Open folder" })
+    ).toBeTruthy();
+
+    const assetBrowser = dialog
+      .getByRole("navigation")
+      .closest(".compass-asset-library-browser");
+    if (!assetBrowser) {
+      throw new Error("Expected the asset browser element.");
+    }
+    const [fileInput, folderInput] = Array.from(
+      assetBrowser.querySelectorAll<HTMLInputElement>(
+        'input[type="file"][aria-hidden="true"]'
+      )
+    );
+    if (!fileInput || !folderInput) {
+      throw new Error("Expected the hidden upload inputs.");
+    }
+    expect(folderInput.hasAttribute("webkitdirectory")).toBe(true);
+    const fileClickSpy = vi.spyOn(fileInput, "click");
+    const folderClickSpy = vi.spyOn(folderInput, "click");
+
+    fireEvent.contextMenu(dialog.getByRole("navigation"));
+    const uploadFilesMenu = within(document.body).getByRole("menu");
+    await user.click(
+      within(uploadFilesMenu).getByRole("menuitem", { name: "Upload files" })
+    );
+    expect(fileClickSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.contextMenu(dialog.getByRole("navigation"));
+    const uploadFolderMenu = within(document.body).getByRole("menu");
+    await user.click(
+      within(uploadFolderMenu).getByRole("menuitem", { name: "Upload folder" })
+    );
+    expect(folderClickSpy).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it("keeps an uploaded folder's nested image hierarchy", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    const assetBrowser = dialog
+      .getByRole("navigation")
+      .closest(".compass-asset-library-browser");
+    const folderInput = assetBrowser?.querySelectorAll<HTMLInputElement>(
+      'input[type="file"][aria-hidden="true"]'
+    )[1];
+    if (!folderInput) throw new Error("Expected the folder upload input.");
+    const hero = new File(["hero"], "Hero.png", { type: "image/png" });
+    const product = new File(["product"], "Product.png", {
+      type: "image/png"
+    });
+    Object.defineProperty(hero, "webkitRelativePath", {
+      value: "Campaign/Hero.png"
+    });
+    Object.defineProperty(product, "webkitRelativePath", {
+      value: "Campaign/Packshots/Product.png"
+    });
+
+    fireEvent.change(folderInput, { target: { files: [hero, product] } });
+
+    await waitFor(async () => {
+      const folders = await memoryRepository.listAssetFolders(clientId);
+      const campaign = folders.find((folder) => folder.name === "Campaign");
+      const packshots = folders.find((folder) => folder.name === "Packshots");
+      expect(campaign?.parentId).toBeNull();
+      expect(packshots?.parentId).toBe(campaign?.id);
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((image) => image.name === "Hero.png")?.folderId).toBe(
+        campaign?.id
+      );
+      expect(
+        images.find((image) => image.name === "Product.png")?.folderId
+      ).toBe(packshots?.id);
+    });
+    view.unmount();
+  });
+
+  it("deletes a folder from its right-click context menu", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Old campaign"
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const dialog = openBriefAssetManager(stage);
+    const folderCard = (
+      await dialog.findByRole("button", { name: "Old campaign Open folder" })
+    ).closest("article");
+    if (!folderCard) throw new Error("Expected the folder card element.");
+
+    fireEvent.contextMenu(folderCard);
+    const menu = within(document.body).getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+
+    await waitFor(async () =>
+      expect(await memoryRepository.listAssetFolders(clientId)).toHaveLength(0)
+    );
+    view.unmount();
+  });
+
+  it("moves an image into a folder by dragging it there", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const folder = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Packshots"
+    });
+    const image = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const dialog = openBriefAssetManager(stage);
+
+    const imageCard = (
+      await dialog.findByRole("img", { name: "Bottle.png" })
+    ).closest("article");
+    const folderCard = (
+      await dialog.findByRole("button", { name: "Packshots Open folder" })
+    ).closest("article");
+    if (!imageCard || !folderCard) {
+      throw new Error("Expected the image and folder card elements.");
+    }
+
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(imageCard, { dataTransfer });
+    fireEvent.drop(folderCard, { dataTransfer });
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBe(
+        folder.id
+      );
+    });
+    view.unmount();
+  });
+
+  it("moves an image out to the parent folder by dropping it on Back", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const folder = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Packshots"
+    });
+    const image = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      folderId: folder.id,
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    await userEvent.click(
+      await dialog.findByRole("button", { name: "Packshots Open folder" })
+    );
+    const imageCard = (
+      await dialog.findByRole("img", { name: "Bottle.png" })
+    ).closest("article");
+    const backButton = dialog.getByRole("button", {
+      name: "Go to parent folder"
+    });
+    if (!imageCard) throw new Error("Expected the image card.");
+
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(imageCard, { dataTransfer });
+    fireEvent.dragEnter(backButton, { dataTransfer });
+    expect(backButton.classList.contains("compass-asset-parent-drop-target")).toBe(
+      true
+    );
+    fireEvent.dragOver(backButton, { dataTransfer });
+    fireEvent.drop(backButton, { dataTransfer });
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBeNull();
+    });
+    view.unmount();
+  });
+
+  it("drops on any breadcrumb ancestor and can undo the move", async () => {
+    const user = userEvent.setup();
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const campaign = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Campaign"
+    });
+    const packshots = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Packshots",
+      parentId: campaign.id
+    });
+    const image = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      folderId: packshots.id,
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    await user.click(
+      await dialog.findByRole("button", { name: "Campaign Open folder" })
+    );
+    await user.click(
+      await dialog.findByRole("button", { name: "Packshots Open folder" })
+    );
+    const imageCard = (
+      await dialog.findByRole("img", { name: "Bottle.png" })
+    ).closest("article");
+    const rootBreadcrumb = dialog.getByRole("button", {
+      name: "Open material library root"
+    });
+    if (!imageCard) throw new Error("Expected the image card.");
+
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(imageCard, { dataTransfer });
+    fireEvent.dragEnter(rootBreadcrumb, { dataTransfer });
+    expect(dialog.getByText("Release to move to Root")).toBeTruthy();
+    fireEvent.drop(rootBreadcrumb, { dataTransfer });
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBeNull();
+    });
+    expect(dialog.getByText("Moved 1 item to Root")).toBeTruthy();
+    await user.click(dialog.getByRole("button", { name: "Undo" }));
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBe(
+        packshots.id
+      );
+    });
+    view.unmount();
+  });
+
+  it("keeps a hovered folder closed and drops the dragged image into it", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const campaign = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Campaign"
+    });
+    const image = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    const imageCard = (
+      await dialog.findByRole("img", { name: "Bottle.png" })
+    ).closest("article");
+    const folderCard = (
+      await dialog.findByRole("button", { name: "Campaign Open folder" })
+    ).closest("article");
+    if (!imageCard || !folderCard) {
+      throw new Error("Expected the image and folder cards.");
+    }
+
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(imageCard, { dataTransfer });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+    fireEvent.dragEnter(folderCard, { dataTransfer });
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    expect(
+      dialog
+        .getByRole("button", { name: "Open material library root" })
+        .getAttribute("aria-current")
+    ).toBe("page");
+    expect(
+      dialog.getByRole("button", { name: "Campaign Open folder" })
+    ).toBeTruthy();
+    fireEvent.drop(folderCard, { dataTransfer });
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBe(
+        campaign.id
+      );
+    });
+    view.unmount();
+  });
+
+  it("moves a right-clicked image with Move to…", async () => {
+    const user = userEvent.setup();
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const campaign = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Campaign"
+    });
+    const image = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      file: new File(["image"], "Bottle.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    const imageCard = (
+      await dialog.findByRole("img", { name: "Bottle.png" })
+    ).closest("article");
+    if (!imageCard) throw new Error("Expected the image card.");
+
+    fireEvent.contextMenu(imageCard);
+    const menu = within(document.body).getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: "Move to…" }));
+    const moveDialog = within(document.body).getByRole("dialog", {
+      name: "Move to…"
+    });
+    await user.click(
+      within(moveDialog).getByRole("button", { name: /Campaign/ })
+    );
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === image.id)?.folderId).toBe(
+        campaign.id
+      );
+    });
+    view.unmount();
+  });
+
+  it("marquee-selects multiple images and moves the whole selection into a folder", async () => {
+    const state = { ...buildCreativeState(), stage: "brief" as const };
+    const memoryRepository = new MockBrandMemoryRepository();
+    const clientId = state.brand?.id ?? "";
+    const folder = await memoryRepository.createAssetFolder({
+      clientId,
+      kind: "material",
+      name: "Campaign"
+    });
+    const firstImage = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      file: new File(["first"], "First.png", { type: "image/png" })
+    });
+    const secondImage = await memoryRepository.createAssetImage({
+      clientId,
+      kind: "material",
+      file: new File(["second"], "Second.png", { type: "image/png" })
+    });
+    const view = render(
+      <BrandMemoryProvider repository={memoryRepository}>
+        <BriefStage state={state} dispatch={vi.fn()} />
+      </BrandMemoryProvider>
+    );
+    const dialog = openBriefAssetManager(within(view.container));
+    const firstCard = (
+      await dialog.findByRole("img", { name: "First.png" })
+    ).closest("article");
+    const secondCard = (
+      await dialog.findByRole("img", { name: "Second.png" })
+    ).closest("article");
+    const folderCard = (
+      await dialog.findByRole("button", { name: "Campaign Open folder" })
+    ).closest("article");
+    const imageGrid = firstCard?.parentElement;
+    if (!firstCard || !secondCard || !folderCard || !imageGrid) {
+      throw new Error("Expected the asset cards and image grid.");
+    }
+    vi.spyOn(firstCard, "getBoundingClientRect").mockReturnValue(
+      domRect(20, 20, 80, 80)
+    );
+    vi.spyOn(secondCard, "getBoundingClientRect").mockReturnValue(
+      domRect(120, 20, 80, 80)
+    );
+    vi.spyOn(folderCard, "getBoundingClientRect").mockReturnValue(
+      domRect(400, 20, 80, 80)
+    );
+
+    fireEvent.mouseDown(imageGrid, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.mouseMove(window, { clientX: 220, clientY: 120 });
+    expect(dialog.getByText("2 items selected")).toBeTruthy();
+    fireEvent.mouseUp(window);
+
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(firstCard, { dataTransfer });
+    fireEvent.drop(folderCard, { dataTransfer });
+
+    await waitFor(async () => {
+      const images = await memoryRepository.listAssetImages(clientId);
+      expect(images.find((item) => item.id === firstImage.id)?.folderId).toBe(
+        folder.id
+      );
+      expect(images.find((item) => item.id === secondImage.id)?.folderId).toBe(
+        folder.id
+      );
+    });
     view.unmount();
   });
 

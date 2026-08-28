@@ -18,6 +18,8 @@ import type {
   CreateLearningEntryInput,
   CreateReferenceImageInput,
   GuidelineAnalysisResult,
+  MoveBrandAssetFolderInput,
+  MoveBrandAssetImageInput,
   SaveBrandRuleInput,
   SaveGuidelineInput,
   SaveBrandProductInput,
@@ -313,6 +315,45 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     throw new Error("Asset folder not found.");
   }
 
+  async moveAssetFolder(
+    input: MoveBrandAssetFolderInput
+  ): Promise<BrandAssetFolder> {
+    for (const [clientId, folders] of this.assetFoldersByClient) {
+      const existing = folders.find((folder) => folder.id === input.id);
+      if (!existing) continue;
+      if (input.parentId === input.id) {
+        throw new Error("Can't move a folder into itself.");
+      }
+      if (input.parentId) {
+        const descendantIds = new Set([existing.id]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          folders.forEach((folder) => {
+            if (
+              folder.parentId &&
+              descendantIds.has(folder.parentId) &&
+              !descendantIds.has(folder.id)
+            ) {
+              descendantIds.add(folder.id);
+              changed = true;
+            }
+          });
+        }
+        if (descendantIds.has(input.parentId)) {
+          throw new Error("Can't move a folder into its own subfolder.");
+        }
+      }
+      const updated = { ...existing, parentId: input.parentId };
+      this.assetFoldersByClient.set(
+        clientId,
+        folders.map((folder) => (folder.id === input.id ? updated : folder))
+      );
+      return updated;
+    }
+    throw new Error("Asset folder not found.");
+  }
+
   async deleteAssetFolder(id: string): Promise<void> {
     for (const [clientId, folders] of this.assetFoldersByClient) {
       if (!folders.some((folder) => folder.id === id)) continue;
@@ -369,6 +410,22 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     };
     this.assetImagesByClient.set(input.clientId, [...images, image]);
     return image;
+  }
+
+  async moveAssetImage(
+    input: MoveBrandAssetImageInput
+  ): Promise<BrandAssetImage> {
+    for (const [clientId, images] of this.assetImagesByClient) {
+      const existing = images.find((image) => image.id === input.id);
+      if (!existing) continue;
+      const updated = { ...existing, folderId: input.folderId };
+      this.assetImagesByClient.set(
+        clientId,
+        images.map((image) => (image.id === input.id ? updated : image))
+      );
+      return updated;
+    }
+    throw new Error("Asset image not found.");
   }
 
   async deleteAssetImage(id: string): Promise<void> {
