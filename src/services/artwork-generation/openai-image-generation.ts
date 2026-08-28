@@ -1,4 +1,5 @@
 import { env } from "../../config/env";
+import { activeBrandKitItems } from "../../domain/brand";
 import {
   defaultArtworkOutputSize,
   emptyApprovalComments,
@@ -824,16 +825,17 @@ function buildBrandIdentity(
   brand: WorkflowState["brand"]
 ): ArtworkGenerationRequest["brand"] {
   if (!brand) return null;
+  const brandKit = activeBrandKitItems(brand.library.brand);
 
   return {
     id: brand.id,
     name: brand.name,
     category: brand.category,
     personality: extractBrandRuleValues(
-      brand.library.brand,
+      brandKit,
       /personality|tone|voice|words|guideline|บุคลิก|น้ำเสียง/i
     ),
-    colors: extractBrandPaletteColors(brand.library.brand)
+    colors: extractBrandPaletteColors(brandKit)
   };
 }
 
@@ -921,7 +923,9 @@ function buildBrandContext(run: WorkflowState): Pick<
       ? {}
       : { selectedProductIds: run.selectedProductIds }),
     brandLibrary: {
-      brand: compactLibraryItems(brand?.library.brand ?? []),
+      brand: compactLibraryItems(
+        activeBrandKitItems(brand?.library.brand ?? [])
+      ),
       products: compactLibraryItems(selectedBrandProducts(run)),
       docs: compactLibraryItems(brand?.library.docs ?? []),
       refs: compactLibraryItems(brand?.library.refs ?? [])

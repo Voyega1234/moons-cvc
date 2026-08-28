@@ -1,4 +1,5 @@
 import { env } from "../../config/env";
+import { activeBrandKitItems } from "../../domain/brand";
 import type {
   AlbumFormatPreference,
   CreativeDirection,
@@ -51,10 +52,6 @@ export interface HookGenerationHarnessRequest {
     UploadedCreativeMaterial,
     "id" | "name" | "mediaType" | "role" | "description" | "url"
   >[];
-  brandMemory: {
-    working: readonly string[];
-    avoid: readonly string[];
-  };
   brandLibrary: {
     brand: readonly { title: string; description: string }[];
     products: readonly { title: string; description: string }[];
@@ -204,12 +201,10 @@ export function buildHookGenerationHarnessRequest({
         url
       })
     ),
-    brandMemory: {
-      working: brand?.memory.working ?? [],
-      avoid: brand?.memory.avoid ?? []
-    },
     brandLibrary: {
-      brand: compactLibraryItems(brand?.library.brand ?? []),
+      brand: compactLibraryItems(
+        activeBrandKitItems(brand?.library.brand ?? [])
+      ),
       products: compactLibraryItems(selectedBrandProducts(run)),
       docs: compactLibraryItems(brand?.library.docs ?? []),
       refs: compactLibraryItems(brand?.library.refs ?? [])

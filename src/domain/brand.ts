@@ -7,6 +7,32 @@ export interface LibraryItem {
   assetUrl?: string;
 }
 
+/**
+ * Retained in persistence for possible future use, but intentionally hidden
+ * from the product and excluded from every agent input.
+ */
+export function isActiveBrandKitItem(
+  item: Pick<LibraryItem, "title">
+): boolean {
+  const normalizedTitle = item.title
+    .trim()
+    .toLowerCase()
+    .replace(/[:：]\s*$/u, "");
+  return normalizedTitle !== "visual guidance";
+}
+
+export function activeBrandKitItems<T extends Pick<LibraryItem, "title">>(
+  items: readonly T[]
+): readonly T[] {
+  return items.filter(isActiveBrandKitItem);
+}
+
+export function isBrandPolicyItem(
+  item: Pick<LibraryItem, "title">
+): boolean {
+  return /(^|[^a-z])policy([^a-z]|$)/i.test(item.title.trim());
+}
+
 export interface BrandLibrary {
   brand: readonly LibraryItem[];
   products: readonly LibraryItem[];

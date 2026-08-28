@@ -1,4 +1,8 @@
 import { env } from "../../config/env";
+import {
+  activeBrandKitItems,
+  isActiveBrandKitItem
+} from "../../domain/brand";
 import type { CreativeQualityReport } from "../../domain/quality-check";
 import {
   selectedBrandProducts,
@@ -38,7 +42,9 @@ export async function runQualityCheck(
       ? {
           name: run.brand.name,
           category: run.brand.category,
-          brandKit: run.brand.library.brand.map(formatLibraryItem),
+          brandKit: activeBrandKitItems(run.brand.library.brand).map(
+            formatLibraryItem
+          ),
           products: selectedBrandProducts(run).map(formatLibraryItem),
           documents: run.brand.library.docs.map(formatLibraryItem),
           working: run.brand.memory.working,
@@ -116,6 +122,7 @@ function collectQualityReferences(run: WorkflowState): readonly {
   }[] = [];
 
   for (const item of run.brand?.library.brand ?? []) {
+    if (!isActiveBrandKitItem(item)) continue;
     if (!item.assetUrl || seen.has(item.assetUrl)) continue;
     seen.add(item.assetUrl);
     references.push({

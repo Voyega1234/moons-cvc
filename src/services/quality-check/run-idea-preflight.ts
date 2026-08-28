@@ -9,6 +9,7 @@ export interface IdeaPreflightContext {
   brandContext: {
     name: string;
     category: string;
+    policies: readonly string[];
     products: readonly string[];
     documents: readonly string[];
     working: readonly string[];

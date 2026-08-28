@@ -1172,6 +1172,11 @@ describe("redesigned workflow stages", () => {
       title: "Colors",
       description: "#FFFFFF, #E7CEB5, #006072, #A38D5C"
     });
+    await memoryRepository.createBrandRule({
+      clientId: state.brand!.id,
+      title: "Visual guidance",
+      description: "INACTIVE VISUAL GUIDANCE"
+    });
     const dispatch = vi.fn();
 
     const view = render(
@@ -1207,6 +1212,7 @@ describe("redesigned workflow stages", () => {
         ])
       })
     );
+    expect(view.container.textContent).not.toContain("INACTIVE VISUAL GUIDANCE");
   });
 
   it("syncs all persisted products back into the active workflow brand", async () => {

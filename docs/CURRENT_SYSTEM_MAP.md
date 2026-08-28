@@ -154,14 +154,19 @@ originating model. Normal workflow and Playground comparisons both share one
 validated dossier across models. A non-JSON 500 from the serverless boundary is
 retried only once; ordinary JSON errors and known 504 timeouts are not replayed.
 The OpenAI and n8n Hook routes remain user-selectable for compatibility.
-The business context sent to Research is intentionally limited to Questionnaire,
-Brand name, Brand system, and User brief. The Hook Agent receives that same
-context plus the Research dossier and up to six recent Past Posts (prefer four
-paid-ad captions and two organic posts) as caption-style evidence only. Past
-Posts must not supply ideas, offers, claims, facts, or product details. Brand
-Memory, Products, Documents, References, attachment names, and uploaded images
-are not included in Hook generation. Runtime quota, format, and JSON transport
-instructions are still appended so the workflow contract remains enforceable.
+The business context sent to Research and the Topic Agent includes Questionnaire,
+Brand name, Brand system, selected Products, Documents, References, and User
+brief. The Hook Agent receives that same context plus the Research dossier,
+Topic shortlist, and up to six recent Past Posts (prefer four paid-ad captions
+and two organic posts) as caption-style evidence only. Past Posts must not supply
+ideas, offers, claims, facts, or product details. Brand Memory/Learning,
+attachment names, and uploaded images are not included in Hook generation.
+Runtime quota, format, and JSON transport instructions are still appended so
+the workflow contract remains enforceable.
+The persisted Brand Kit row titled `Visual guidance` is also inactive across
+the product: it remains in storage for possible future use but is hidden from
+UI counts/lists and filtered at Hook, Artwork, and Quality Check agent
+boundaries.
 Hook requests intentionally do not send the run's existing Hook history to
 either the direct Hook Agent or either n8n route. A targeted regeneration still
 includes only the specific original Hook and concept inside its explicit rewrite
@@ -241,6 +246,12 @@ imports stay stable. Ownership after the first extraction is:
 | Learn | `SummaryStage`, `LearningSuggestionsPanel` |
 | Overview | `Overview`, workboard helpers |
 | My Work | `src/features/workflow/my-work.tsx`, live run assignments and queue state |
+
+The before-build Policy checker keeps its shared claim-risk rules and adds any
+active Brand System rows whose title contains the standalone word `Policy`
+(for example, `Policy (Strictly apply)`) as brand-specific constraints. Those
+rows are included in the GPT Luna prompt only when the Policy check is enabled;
+legacy requests without brand policies remain valid.
 
 `StartStage`, `DirectionsStage`, `ClientStage`, `SummaryStage`, and `Overview`
 still live in the monolith. Structural moves preserve exports so

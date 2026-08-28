@@ -22,6 +22,7 @@ interface IdeaPreflightRequest {
   brandContext: {
     name: string;
     category: string;
+    policies: readonly string[];
     products: readonly string[];
     documents: readonly string[];
     working: readonly string[];
@@ -178,7 +179,11 @@ function buildPrompt(input: IdeaPreflightRequest): string {
     enabled.has("policy")
       ? [
           "POLICY — ตรวจความเสี่ยงจากคำรับประกันผลลัพธ์ คำกล่าวอ้างเด็ดขาด การเป็นอันดับหนึ่ง และ superlative ที่ไม่มีหลักฐาน",
-          "ถ้าหลักฐานยังไม่พอ ให้เสนอถ้อยคำที่ปลอดภัยกว่า"
+          "ถ้าหลักฐานยังไม่พอ ให้เสนอถ้อยคำที่ปลอดภัยกว่า",
+          "ตรวจตาม Brand-specific policy ต่อไปนี้เป็นข้อกำหนดเพิ่มเติมด้วย และ flag เฉพาะการฝ่าฝืนที่พิสูจน์ได้จากข้อความของ idea:",
+          ...(input.brandContext?.policies.length
+            ? input.brandContext.policies.map((policy) => `- ${policy}`)
+            : ["- No brand-specific policy supplied."])
         ].join("\n")
       : "POLICY — disabled; ห้ามคืน finding ประเภท policy",
     "",
@@ -396,6 +401,10 @@ function parseBrandContext(
   return {
     name: readString(context.name, "brandContext.name"),
     category: readString(context.category, "brandContext.category"),
+    policies:
+      context.policies === undefined
+        ? []
+        : readStringArray(context.policies, "brandContext.policies"),
     products: readStringArray(context.products, "brandContext.products"),
     documents: readStringArray(context.documents, "brandContext.documents"),
     working: readStringArray(context.working, "brandContext.working"),

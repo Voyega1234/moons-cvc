@@ -39,10 +39,6 @@ const requestBody = {
       url: "https://example.com/hero-bottle.png"
     }
   ],
-  brandMemory: {
-    working: ["ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้"],
-    avoid: ["หลีกเลี่ยงภาพ luxury หรือ warm vintage"]
-  },
   brandLibrary: {
     brand: [
       {
@@ -1141,7 +1137,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(openRouterBody.tool_choice).toBeUndefined();
   });
 
-  it("sends questionnaire, full brand library, brand memory, brief, and research context but not past posts or attachments", async () => {
+  it("sends questionnaire, full brand library, brief, and research context but not brand memory, past posts, or attachments", async () => {
     const writeDebugLog = vi.fn(
       async (_directory: string, _entry: HookGenerationDebugLog) => undefined
     );
@@ -1184,7 +1180,13 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify(singleStaticRequestBody)
+        body: JSON.stringify({
+          ...singleStaticRequestBody,
+          brandMemory: {
+            working: ["ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้"],
+            avoid: ["หลีกเลี่ยงภาพ luxury หรือ warm vintage"]
+          }
+        })
       }),
       env: {
         OPENAI_API_KEY: "test-key",
@@ -1207,15 +1209,17 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationPrompt).toContain("Convert Cake");
     expect(generationPrompt).toContain("# Brand system");
     expect(generationPrompt).toContain("Positioning");
+    expect(generationPrompt).not.toContain("Visual guidance");
+    expect(generationPrompt).not.toContain("blue gradient");
     expect(generationPrompt).toContain("# Brand products");
     expect(generationPrompt).toContain("AI SEO Strategy Workshop");
     expect(generationPrompt).toContain("# Brand docs");
     expect(generationPrompt).toContain("Brand guideline");
     expect(generationPrompt).toContain("# Brand references");
     expect(generationPrompt).toContain("Screenshot 2026-08-03.png");
-    expect(generationPrompt).toContain("# Brand memory");
-    expect(generationPrompt).toContain("ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้");
-    expect(generationPrompt).toContain("หลีกเลี่ยงภาพ luxury หรือ warm vintage");
+    expect(generationPrompt).not.toContain("# Brand memory");
+    expect(generationPrompt).not.toContain("ใช้ภาษาไทยตรง ชัด และโยงกับยอดขายได้");
+    expect(generationPrompt).not.toContain("หลีกเลี่ยงภาพ luxury หรือ warm vintage");
     expect(generationPrompt).toContain("# User brief");
     expect(generationPrompt).toContain("ต้องการ creative เพื่อชวน B2B");
     expect(generationPrompt).toContain("# Dedicated Research Agent dossier");

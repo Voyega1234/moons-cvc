@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleIdeaPreflightRequest } from "./idea-preflight-endpoint";
 
-function ideaRequest() {
+function ideaRequest(
+  checks: readonly ("quality" | "spelling" | "policy")[] = [
+    "quality",
+    "spelling"
+  ]
+) {
   return new Request("https://moons.local/api/idea-preflight", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -11,12 +16,15 @@ function ideaRequest() {
       brandContext: {
         name: "Power Art Material",
         category: "Flooring",
+        policies: [
+          "Policy (Strictly apply): Do not promise guaranteed installation times."
+        ],
         products: ["SPC flooring: Waterproof and easy to clean."],
         documents: [],
         working: ["Use before-and-after comparisons."],
         avoid: ["Do not promise impossible installation times."]
       },
-      checks: ["quality", "spelling"],
+      checks,
       directions: [
         {
           id: "direction-1",
@@ -51,6 +59,9 @@ describe("handleIdeaPreflightRequest", () => {
       );
       expect(requestBody.input[0]?.content[0]?.text).toContain(
         "การเว้นวรรคภาษาไทยผิดตำแหน่ง"
+      );
+      expect(requestBody.input[0]?.content[0]?.text).not.toContain(
+        "Do not promise guaranteed installation times."
       );
       expect(JSON.stringify(requestBody.text.format.schema)).not.toContain(
         "maxItems"
@@ -104,5 +115,37 @@ describe("handleIdeaPreflightRequest", () => {
         ]
       }
     ]);
+  });
+
+  it("adds Brand System Policy items when the policy checker is enabled", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        const requestBody = JSON.parse(String(init?.body)) as {
+          input: readonly { content: readonly { text: string }[] }[];
+        };
+        const prompt = requestBody.input[0]?.content[0]?.text ?? "";
+        expect(prompt).toContain("Brand-specific policy");
+        expect(prompt).toContain(
+          "Policy (Strictly apply): Do not promise guaranteed installation times."
+        );
+
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              results: [{ directionId: "direction-1", findings: [] }]
+            })
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    );
+
+    const response = await handleIdeaPreflightRequest({
+      request: ideaRequest(["policy"]),
+      env: { OPENAI_API_KEY: "test-openai-key" },
+      fetchImpl: fetchImpl as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
   });
 });

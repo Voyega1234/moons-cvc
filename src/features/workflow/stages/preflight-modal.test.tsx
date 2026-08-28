@@ -40,6 +40,7 @@ describe("PreflightModal", () => {
           brandContext: {
             name: "Compass",
             category: "Test",
+            policies: ["Policy: Do not promise guaranteed results."],
             products: ["Compass product: Confirmed product proof."],
             documents: [],
             working: [],

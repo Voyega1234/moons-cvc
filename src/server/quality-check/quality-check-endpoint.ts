@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { isActiveBrandKitItem } from "../../domain/brand.js";
 import {
   CREATIVE_STRATEGIST_AGENT_NAME,
   CS_QUALITY_CHECKLIST,
@@ -597,7 +598,10 @@ function parseBrandContext(value: unknown): QualityCheckBrandContext | null {
   return {
     name: readOptionalString(record.name),
     category: readOptionalString(record.category),
-    brandKit: readStringArray(record.brandKit, "brandContext.brandKit"),
+    brandKit: readStringArray(record.brandKit, "brandContext.brandKit").filter(
+      (item) =>
+        isActiveBrandKitItem({ title: item.split(":", 1)[0] ?? item })
+    ),
     products: readStringArray(record.products, "brandContext.products"),
     documents: readStringArray(record.documents, "brandContext.documents"),
     working: readStringArray(record.working, "brandContext.working"),

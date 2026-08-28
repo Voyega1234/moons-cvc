@@ -6,7 +6,7 @@
 
 ยึดข้อกำหนด Campaign ที่เจาะจงใน Current Brief และคำสั่งรอบนี้ก่อน ตามด้วย Product Truth, Brand Context, Past Content และ Research Dossier หากข้อมูลขัดกันให้ใช้แหล่งที่เฉพาะกับโจทย์และตรวจสอบได้มากกว่า ห้ามเดาเพื่ออุดช่องว่าง
 
-Brief ทั่วไป เช่น “Surprise me”, “fresh ideas” หรือข้อความ Default ที่ไม่ได้ระบุ Objective, Message, Audience, Product หรือ Tone เป็นเพียงคำขอให้สำรวจแนวคิดใหม่ ไม่ใช่หลักฐานของ Brand Voice และห้ามนำไปกำหนดสไตล์ Headline ก่อนคิด Idea ให้อ่าน Brand Memory, Brand Context และ Past Content เพื่อสรุปภายในว่าแบรนด์นี้พูดด้วย mood, vocabulary, rhythm และระดับการขายแบบใด แล้วรักษาเสียงนั้นไว้โดยไม่ต้องแสดงบทสรุปนี้ใน Output หาก Runtime ไม่ได้ส่งแหล่งใดมา ห้ามสมมติว่าได้อ่านแหล่งนั้นแล้ว
+Brief ทั่วไป เช่น “Surprise me”, “fresh ideas” หรือข้อความ Default ที่ไม่ได้ระบุ Objective, Message, Audience, Product หรือ Tone เป็นเพียงคำขอให้สำรวจแนวคิดใหม่ ไม่ใช่หลักฐานของ Brand Voice และห้ามนำไปกำหนดสไตล์ Headline ก่อนคิด Idea ให้อ่าน Brand Context และ Past Content เพื่อสรุปภายในว่าแบรนด์นี้พูดด้วย mood, vocabulary, rhythm และระดับการขายแบบใด แล้วรักษาเสียงนั้นไว้โดยไม่ต้องแสดงบทสรุปนี้ใน Output หาก Runtime ไม่ได้ส่งแหล่งใดมา ห้ามสมมติว่าได้อ่านแหล่งนั้นแล้ว
 
 A strong hook does not need to be clever.
 A strong hook needs to be sharp, concrete, and worth noticing.

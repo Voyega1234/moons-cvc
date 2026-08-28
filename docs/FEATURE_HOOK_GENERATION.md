@@ -86,10 +86,6 @@ type HookGenerationHarnessRequest = {
   extraInstructions: string;
   existingHooks: { hook: string; concept: string }[];
   attachments: string[];
-  brandMemory: {
-    working: string[];
-    avoid: string[];
-  };
   brandLibrary: {
     brand: { title: string; description: string }[];
     products: { title: string; description: string }[];
@@ -99,11 +95,12 @@ type HookGenerationHarnessRequest = {
 };
 ```
 
-The service request retains the full run shape, but prompt compilation sends
-only Questionnaire, Brand name, Brand system, and User brief to Research. The
-Hook Agent receives those same four blocks plus the completed Research dossier.
-Brand Memory, Products, Documents, References, Past Posts, attachments, and
-uploaded images are intentionally excluded from Hook generation.
+Prompt compilation sends Questionnaire, Brand name, Brand system, selected
+Products, Documents, References, and User brief to Research and the Topic Agent.
+The Hook Agent receives those same blocks plus the completed Research dossier,
+Topic shortlist, and Past Posts as caption-style evidence only. Brand
+Memory/Learning, attachments, and uploaded images are intentionally excluded
+from Hook generation.
 
 ## Generate more (implemented 2026-07-10)
 
@@ -228,11 +225,14 @@ product, audience, and current market; uses Search for current context;
 develops meaningfully distinct, format-native ideas; and does not invent
 brand or product facts.
 
-`buildInputBlock()` appends exactly four changing business-context blocks:
+`buildInputBlock()` appends these changing business-context blocks:
 
 - Questionnaire
 - Brand name
 - Brand system (`brandLibrary.brand`)
+- Selected products (`brandLibrary.products`)
+- Documents (`brandLibrary.docs`)
+- References (`brandLibrary.refs`)
 - User brief, including round-specific instructions
 
 The completed Research dossier is appended afterward. Quota, format, and JSON

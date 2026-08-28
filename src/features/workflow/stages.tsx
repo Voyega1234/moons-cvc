@@ -19,8 +19,11 @@ import {
   X
 } from "@phosphor-icons/react";
 import {
+  activeBrandKitItems,
   canSelectBrand,
   canStartBrandIngestion,
+  isActiveBrandKitItem,
+  isBrandPolicyItem,
   type Brand,
   type LibraryItem,
   type OnboardingQuestionnaireSource
@@ -549,7 +552,11 @@ function BrandMaterialsSummary({
 }) {
   const brand = state.brand;
   const rows: readonly [string, number, BrandProfileSection][] = [
-    ["CI", brand?.library.brand.length ?? 0, "brand"],
+    [
+      "CI",
+      activeBrandKitItems(brand?.library.brand ?? []).length,
+      "brand"
+    ],
     ["Guideline", brand?.library.docs.length ?? 0, "docs"],
     [
       "Reference style",
@@ -1455,7 +1462,7 @@ function BrandProfilePanel({
   ).slice(0, 6);
   const snapshotItems = brandSnapshotItems({
     brand,
-    brandRules,
+    brandRules: activeBrandKitItems(brandRules),
     products,
     section: activeSection
   });
@@ -1812,7 +1819,7 @@ function BrandLibraryModal({
   if (!brand) return null;
 
   const counts: Record<BrandProfileSection, number> = {
-    brand: brand.library.brand.length,
+    brand: activeBrandKitItems(brand.library.brand).length,
     products: brand.library.products.length,
     docs: brand.library.docs.length,
     refs: brand.library.refs.length + assetCounts.reference,
@@ -2759,7 +2766,10 @@ function BrandKitMemoryList({
   );
   const otherItems = items.filter(
     (item) =>
-      item !== logoItem && item !== colorsItem && item !== secondaryColorsItem
+      item !== logoItem &&
+      item !== colorsItem &&
+      item !== secondaryColorsItem &&
+      isActiveBrandKitItem(item)
   );
   const missingIdentityInputs = missingBrandIdentityInputs(
     items,
@@ -3935,6 +3945,13 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       ? {
           name: state.brand.name,
           category: state.brand.category,
+          policies: activeBrandKitItems(state.brand.library.brand)
+            .filter(isBrandPolicyItem)
+            .map((item) =>
+              item.description.trim()
+                ? `${item.title}: ${item.description}`
+                : item.title
+            ),
           products: selectedBrandProducts(state).map((item) =>
             item.description.trim()
               ? `${item.title}: ${item.description}`
@@ -4139,9 +4156,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           contextAvailability={{
             brandCiCount:
               (state.brand?.library.docs.length ?? 0) +
-              (state.brand?.library.brand.filter((item) =>
-                isCiOrGuidelineTitle(item.title)
-              ).length ?? 0),
+              activeBrandKitItems(state.brand?.library.brand ?? []).filter(
+                (item) => isCiOrGuidelineTitle(item.title)
+              ).length,
             brandColorCount: Array.from(
               new Set([
                 ...extractColorSwatches(

@@ -19,7 +19,14 @@ const run: WorkflowState = {
     category: "AI marketing agency",
     initials: "CC",
     library: {
-      brand: [{ id: "b1", title: "Positioning", description: "AI marketing" }],
+      brand: [
+        { id: "b1", title: "Positioning", description: "AI marketing" },
+        {
+          id: "visual-guidance",
+          title: "Visual guidance",
+          description: "Legacy visual analysis"
+        }
+      ],
       products: [
         {
           id: "p1",
@@ -84,7 +91,7 @@ const run: WorkflowState = {
 };
 
 describe("buildHookGenerationHarnessRequest", () => {
-  it("passes brief, brand memory, products, and attachments to the backend contract", () => {
+  it("passes brief, products, and attachments to the backend contract", () => {
     const request = buildHookGenerationHarnessRequest({ run });
 
     expect(request.brand?.name).toBe("Convert Cake");
@@ -96,7 +103,10 @@ describe("buildHookGenerationHarnessRequest", () => {
       "Onboarding questionnaire — historical onboarding context only; not the current campaign brief.\n\n" +
         "Onboarding answer: B2B owners need practical AI guidance."
     );
-    expect(request.brandMemory.working).toEqual(["Thai B2B examples work well."]);
+    expect(request).not.toHaveProperty("brandMemory");
+    expect(request.brandLibrary.brand).toEqual([
+      { title: "Positioning", description: "AI marketing" }
+    ]);
     expect(request.brandLibrary.products[0]).toMatchObject({
       title: "AI SEO Workshop"
     });

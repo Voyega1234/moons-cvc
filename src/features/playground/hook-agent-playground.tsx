@@ -15,7 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { useBrands } from "../../app/providers/brand-provider";
 import { env } from "../../config/env";
-import type { Brand } from "../../domain/brand";
+import { activeBrandKitItems, type Brand } from "../../domain/brand";
 import {
   defaultHookGenerationModels,
   hookGenerationModelLabel,
@@ -137,6 +137,7 @@ export function HookAgentPlayground() {
   const systemBrands = useMemo(() => filterSystemBrands(brands), [brands]);
   const brand =
     systemBrands.find((candidate) => candidate.id === brandId) ?? null;
+  const brandSystemItems = activeBrandKitItems(brand?.library.brand ?? []);
   const filteredBrands = useMemo(
     () => filterPlaygroundBrands(systemBrands, brandQuery, brand?.name),
     [brand?.name, brandQuery, systemBrands]
@@ -620,14 +621,14 @@ export function HookAgentPlayground() {
                   type="button"
                   className="playground-optional-source-toggle"
                   aria-expanded={showOptionalSources}
-                  disabled={!brand?.library.brand.length}
+                  disabled={!brandSystemItems.length}
                   onClick={() => setShowOptionalSources((current) => !current)}
                 >
                   <span>
                     <b>Optional sources</b>
                     <small>
-                      {brand?.library.brand.length
-                        ? `${brand.library.brand.length} brand system items`
+                      {brandSystemItems.length
+                        ? `${brandSystemItems.length} brand system items`
                         : "No additional sources"}
                     </small>
                   </span>
@@ -635,7 +636,7 @@ export function HookAgentPlayground() {
                 </button>
                 {showOptionalSources ? (
                   <div className="playground-optional-sources">
-                    {brand?.library.brand.map((item) => (
+                    {brandSystemItems.map((item) => (
                       <SourceToggle
                         key={item.id}
                         checked={selectedBrandItemIds.has(item.id)}
@@ -1173,8 +1174,9 @@ export function buildPlaygroundRequest({
   prompt: string;
   generationModel: string;
 }) {
-  const selectedBrandSystem =
-    brand?.library.brand.filter((item) => selectedBrandItemIds.has(item.id)) ?? [];
+  const selectedBrandSystem = activeBrandKitItems(
+    brand?.library.brand ?? []
+  ).filter((item) => selectedBrandItemIds.has(item.id));
   return {
     runId: "playground-preview",
     hookIdeaMode: "fresh-research" as const,
@@ -1195,7 +1197,6 @@ export function buildPlaygroundRequest({
     extraInstructions: "",
     attachments: [] as readonly string[],
     uploadedMaterials: [] as readonly unknown[],
-    brandMemory: { working: [] as readonly string[], avoid: [] as readonly string[] },
     brandLibrary: {
       brand: selectedBrandSystem.map(({ title, description }) => ({
         title,

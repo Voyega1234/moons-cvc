@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeGeneratedCaptionFormatting } from "../../domain/caption-formatting.js";
+import { activeBrandKitItems } from "../../domain/brand.js";
 import {
   albumFormatPreferences,
   albumFormats,
@@ -1403,14 +1404,6 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
   const brandProducts = brandLibraryItemsBlock(input.brandLibrary.products);
   const brandDocs = brandLibraryItemsBlock(input.brandLibrary.docs);
   const brandRefs = brandLibraryItemsBlock(input.brandLibrary.refs);
-  const brandMemoryLines = [
-    ...input.brandMemory.working.map(
-      (item) => `- Working: ${cleanHookContextText(item)}`
-    ),
-    ...input.brandMemory.avoid.map(
-      (item) => `- Avoid: ${cleanHookContextText(item)}`
-    )
-  ];
   return [
     "# Questionnaire",
     input.onboardingQuestionnaire || "No questionnaire context supplied.",
@@ -1429,9 +1422,6 @@ function buildInputBlock(input: HookGenerationHarnessRequest): string {
     "",
     "# Brand references",
     ...(brandRefs.length ? brandRefs : ["No brand references supplied."]),
-    "",
-    "# Brand memory",
-    ...(brandMemoryLines.length ? brandMemoryLines : ["No brand memory supplied."]),
     "",
     "# User brief",
     brief,
@@ -1714,7 +1704,6 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   const brief = readString(value.brief, "brief");
   const attachments = readStringArray(value.attachments, "attachments");
   const uploadedMaterials = readUploadedMaterials(value.uploadedMaterials);
-  const brandMemory = readRecord(value.brandMemory, "brandMemory");
   const brandLibrary = readRecord(value.brandLibrary, "brandLibrary");
 
   const contentTypeQuotas = readContentTypeQuotas(
@@ -1746,12 +1735,10 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
         : "",
     attachments,
     uploadedMaterials,
-    brandMemory: {
-      working: readStringArray(brandMemory.working, "brandMemory.working"),
-      avoid: readStringArray(brandMemory.avoid, "brandMemory.avoid")
-    },
     brandLibrary: {
-      brand: readLibraryItems(brandLibrary.brand, "brandLibrary.brand"),
+      brand: activeBrandKitItems(
+        readLibraryItems(brandLibrary.brand, "brandLibrary.brand")
+      ),
       products: readLibraryItems(
         brandLibrary.products,
         "brandLibrary.products"

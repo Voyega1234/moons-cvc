@@ -1,6 +1,7 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
+import { activeBrandKitItems } from "../../domain/brand";
 import {
   inferredReferenceImageRole,
   normalizeUserSelectableArtworkMode,
@@ -32,7 +33,7 @@ function applyArtworkContextSelection(
           : { working: [], avoid: [] },
         library: {
           ...run.brand.library,
-          brand: run.brand.library.brand.filter((item) => {
+          brand: activeBrandKitItems(run.brand.library.brand).filter((item) => {
             const colorRule = isBrandColorRule(item.title);
             if (!selection.brandColors && colorRule) return false;
             if (!selection.brandCi && !colorRule) return false;

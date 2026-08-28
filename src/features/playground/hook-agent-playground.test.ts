@@ -45,6 +45,36 @@ describe("buildPlaygroundRequest", () => {
     expect(request.brandLibrary.products).toEqual([]);
     expect(request.agentHookPrompt).toBe("Test prompt");
   });
+
+  it("does not restore Visual guidance into experiment input", () => {
+    const source = brands[0]!;
+    const visualGuidance = {
+      id: "visual-guidance",
+      title: "Visual guidance",
+      description: "Legacy visual analysis"
+    };
+    const brand = {
+      ...source,
+      library: {
+        ...source.library,
+        brand: [...source.library.brand, visualGuidance]
+      }
+    };
+
+    const request = buildPlaygroundRequest({
+      brand,
+      selectedBrandItemIds: new Set([visualGuidance.id]),
+      includeQuestionnaire: false,
+      includeBrief: true,
+      brief: "Campaign brief",
+      service: "single-static",
+      quantity: 1,
+      prompt: "Test prompt",
+      generationModel: "google/gemini-3.6-flash"
+    });
+
+    expect(request.brandLibrary.brand).toEqual([]);
+  });
 });
 
 describe("buildPlaygroundModelRequest", () => {

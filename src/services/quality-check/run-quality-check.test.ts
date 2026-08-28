@@ -22,11 +22,19 @@ describe("runQualityCheck", () => {
       ...sourceBrand,
       library: {
         ...sourceBrand.library,
-        brand: sourceBrand.library.brand.map((item, index) =>
-          index === 0
-            ? { ...item, assetUrl: "https://example.com/logo.png" }
-            : item
-        )
+        brand: [
+          ...sourceBrand.library.brand.map((item, index) =>
+            index === 0
+              ? { ...item, assetUrl: "https://example.com/logo.png" }
+              : item
+          ),
+          {
+            id: "visual-guidance",
+            title: "Visual guidance",
+            description: "Legacy visual analysis",
+            assetUrl: "https://example.com/visual-guidance.png"
+          }
+        ]
       }
     };
     const direction = buildDirectionFixtures(brand.name)[0];
@@ -108,7 +116,7 @@ describe("runQualityCheck", () => {
     const request = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
-      brandContext: { name: string; products: string[] };
+      brandContext: { name: string; brandKit: string[]; products: string[] };
       referenceImages: { label: string; url: string; kind: string }[];
       outputs: {
         subheadline: string;
@@ -118,6 +126,9 @@ describe("runQualityCheck", () => {
       }[];
     };
     expect(request.brandContext.name).toBe("BoneFit");
+    expect(request.brandContext.brandKit).not.toContain(
+      "Visual guidance: Legacy visual analysis"
+    );
     expect(request.brandContext.products).toHaveLength(1);
     expect(request.brandContext.products[0]).toContain("Posture support");
     expect(request.referenceImages).toEqual([

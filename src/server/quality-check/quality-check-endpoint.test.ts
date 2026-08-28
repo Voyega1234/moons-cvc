@@ -8,7 +8,10 @@ const requestBody = {
   brandContext: {
     name: "Petal House",
     category: "Florist",
-    brandKit: ["Logo: green wordmark"],
+    brandKit: [
+      "Logo: green wordmark",
+      "Visual guidance: Legacy visual analysis"
+    ],
     products: ["Summer bouquet: THB 990"],
     documents: ["Campaign brief: summer launch"],
     working: ["Natural light"],
@@ -225,6 +228,7 @@ describe("handleQualityCheckRequest", () => {
     expect(prompt).toContain("ภาพนี้ดีพอให้กลุ่มเป้าหมายหยุดดู");
     expect(prompt).toContain("Stop-scroll verdict: Strong");
     expect(prompt).toContain("Brand perception: Risk");
+    expect(prompt).not.toContain("Legacy visual analysis");
     expect(prompt).toContain("Hierarchy, Emphasis, Dominance & Movement");
     expect(prompt).toContain("Lighting, Shadow & Material Realism");
     expect(prompt).toContain("งานนี้ดูออกว่าทำจาก AI หรือไม่?");

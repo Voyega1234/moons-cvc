@@ -594,6 +594,9 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.brand).not.toHaveProperty("mustAvoid");
     expect(request.brand?.colors).not.toContain("warm blue");
     expect(request.brand?.colors).not.toContain("#111111");
+    expect(request.brandLibrary.brand).not.toContainEqual(
+      expect.objectContaining({ title: "Visual guidance" })
+    );
   });
 
   it("passes design-system mode without changing the provider contract", () => {

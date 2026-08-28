@@ -27,7 +27,7 @@ import {
   SignOut,
   X
 } from "@phosphor-icons/react";
-import type { Brand } from "../domain/brand";
+import { activeBrandKitItems, type Brand } from "../domain/brand";
 import { BrandLogo } from "../shared/components/brand-logo";
 import {
   useBrands,
@@ -1104,7 +1104,8 @@ function MemoryRibbon({ state }: { state: WorkflowState }) {
         </div>
         <div className="ribbon-chips">
           <span className="rchip">
-            Brand kit <b>{state.brand.library.brand.length}</b>
+            Brand kit{" "}
+            <b>{activeBrandKitItems(state.brand.library.brand).length}</b>
           </span>
           <span className="rchip">
             Products <b>{state.brand.library.products.length}</b>

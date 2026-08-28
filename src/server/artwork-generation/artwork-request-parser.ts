@@ -11,6 +11,7 @@ import {
   type ArtworkOutputSize,
   type CtaActionType
 } from "../../domain/creative-run.js";
+import { activeBrandKitItems } from "../../domain/brand.js";
 import type {
   ArtworkGenerationRequest,
   ArtworkRevisionRequest
@@ -214,7 +215,7 @@ function parseBrandLibrary(
     return { brand: [], products: [], docs: [], refs: [] };
   }
   return {
-    brand: parseLibraryItems(value.brand),
+    brand: activeBrandKitItems(parseLibraryItems(value.brand)),
     products: parseLibraryItems(value.products),
     docs: parseLibraryItems(value.docs),
     refs: parseLibraryItems(value.refs)
