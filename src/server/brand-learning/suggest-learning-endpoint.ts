@@ -6,6 +6,8 @@ type ReviewDecision = "approved" | "rejected" | null;
 export interface SuggestLearningEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_BRAND_LEARNING_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_BRAND_LEARNING_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -43,6 +45,7 @@ interface LearningSuggestion {
 
 const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 
 export async function handleSuggestLearningRequest({
   request,
@@ -54,10 +57,23 @@ export async function handleSuggestLearningRequest({
   }
 
   try {
-    const apiKey = env.OPENAI_API_KEY?.trim();
+    const openRouterModel = env.OPENROUTER_BRAND_LEARNING_MODEL?.trim();
+    const provider = openRouterModel && env.OPENROUTER_API_KEY?.trim()
+      ? "openrouter"
+      : "openai";
+    const apiKey =
+      provider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            provider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -68,9 +84,13 @@ export async function handleSuggestLearningRequest({
     }
 
     const input = parseRequestBody(await request.json());
-    const model = env.OPENAI_BRAND_LEARNING_MODEL?.trim() || DEFAULT_MODEL;
+    const model =
+      provider === "openrouter"
+        ? openRouterModel!
+        : env.OPENAI_BRAND_LEARNING_MODEL?.trim() || DEFAULT_MODEL;
 
     const payload = await callResponsesApi({
+      provider,
       apiKey,
       model,
       fetchImpl,
@@ -85,17 +105,24 @@ export async function handleSuggestLearningRequest({
 }
 
 async function callResponsesApi({
+  provider,
   apiKey,
   model,
   fetchImpl,
   prompt
 }: {
+  provider: "openai" | "openrouter";
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
   prompt: string;
 }): Promise<unknown> {
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -122,10 +149,10 @@ async function callResponsesApi({
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI brand learning suggestion failed: ${response.status}`);
+    throw new Error(`${providerLabel} brand learning suggestion failed: ${response.status}`);
   }
 
-  return readJsonResponse(response, "OpenAI brand learning suggestion");
+  return readJsonResponse(response, `${providerLabel} brand learning suggestion`);
 }
 
 function buildPrompt(input: SuggestLearningRequest): string {

@@ -6,6 +6,8 @@ type CheckId = "quality" | "spelling" | "policy";
 export interface IdeaPreflightEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_IDEA_PREFLIGHT_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_IDEA_PREFLIGHT_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -45,6 +47,7 @@ interface IdeaPreflightRequest {
 
 const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 const CHECK_IDS = new Set<CheckId>(["quality", "spelling", "policy"]);
 
 export async function handleIdeaPreflightRequest({
@@ -57,10 +60,23 @@ export async function handleIdeaPreflightRequest({
   }
 
   try {
-    const apiKey = env.OPENAI_API_KEY?.trim();
+    const openRouterModel = env.OPENROUTER_IDEA_PREFLIGHT_MODEL?.trim();
+    const provider = openRouterModel && env.OPENROUTER_API_KEY?.trim()
+      ? "openrouter"
+      : "openai";
+    const apiKey =
+      provider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            provider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -81,8 +97,12 @@ export async function handleIdeaPreflightRequest({
       );
     }
 
-    const model = env.OPENAI_IDEA_PREFLIGHT_MODEL?.trim() || DEFAULT_MODEL;
+    const model =
+      provider === "openrouter"
+        ? openRouterModel!
+        : env.OPENAI_IDEA_PREFLIGHT_MODEL?.trim() || DEFAULT_MODEL;
     const payload = await callResponsesApi({
+      provider,
       apiKey,
       model,
       fetchImpl,
@@ -101,17 +121,24 @@ export async function handleIdeaPreflightRequest({
 }
 
 async function callResponsesApi({
+  provider,
   apiKey,
   model,
   fetchImpl,
   prompt
 }: {
+  provider: "openai" | "openrouter";
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
   prompt: string;
 }): Promise<unknown> {
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "GPT Luna";
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -140,11 +167,11 @@ async function callResponsesApi({
   if (!response.ok) {
     const detail = await readProviderErrorDetail(response);
     throw new Error(
-      `GPT Luna idea preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      `${providerLabel} idea preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
     );
   }
 
-  return readJsonResponse(response, "GPT Luna idea preflight");
+  return readJsonResponse(response, `${providerLabel} idea preflight`);
 }
 
 function buildPrompt(input: IdeaPreflightRequest): string {

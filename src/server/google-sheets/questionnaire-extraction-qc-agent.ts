@@ -11,11 +11,13 @@ export interface QuestionnaireExtractionQcOptions
   extends QuestionnaireExtractionReviewInput {
   apiKey: string;
   model?: string;
+  provider?: "openai" | "openrouter";
   fetchImpl?: FetchLike;
 }
 
 const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 const MAX_RAW_SHEET_CHARACTERS = 60_000;
 const PLACEHOLDER_PATTERN = /^\{\{([a-z0-9_]+)\}\}$/i;
 
@@ -24,14 +26,24 @@ export async function reviewQuestionnaireExtractionWithLuna({
   extractedFields,
   apiKey,
   model = DEFAULT_MODEL,
+  provider = "openai",
   fetchImpl = fetch
 }: QuestionnaireExtractionQcOptions): Promise<
   readonly QuestionnaireExtractedField[]
 > {
   const normalizedApiKey = apiKey.trim();
   if (!normalizedApiKey) {
-    throw new Error("OPENAI_API_KEY is required for questionnaire QC.");
+    throw new Error(
+      provider === "openrouter"
+        ? "OPENROUTER_API_KEY is required for questionnaire QC."
+        : "OPENAI_API_KEY is required for questionnaire QC."
+    );
   }
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "GPT Luna";
 
   const sourceCells = collectSourceCells(rows);
   const rawSheet = sourceCells
@@ -55,7 +67,7 @@ export async function reviewQuestionnaireExtractionWithLuna({
       )
     ])
   ].sort();
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -89,7 +101,7 @@ export async function reviewQuestionnaireExtractionWithLuna({
   if (!response.ok) {
     const detail = await readProviderErrorDetail(response);
     throw new Error(
-      `GPT Luna questionnaire QC failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      `${providerLabel} questionnaire QC failed: ${response.status}${detail ? ` — ${detail}` : ""}`
     );
   }
 

@@ -18,6 +18,8 @@ export interface MappingClientsEndpointEnv
   GOOGLE_WORKSPACE_LOCAL_USER?: string;
   OPENAI_API_KEY?: string;
   OPENAI_QUESTIONNAIRE_QC_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_QUESTIONNAIRE_QC_MODEL?: string;
 }
 
 export interface MappingClientsEndpointOptions {
@@ -63,6 +65,11 @@ export async function handleMappingClientsRequest({
           403
         );
       }
+      const openRouterModel = env.OPENROUTER_QUESTIONNAIRE_QC_MODEL?.trim();
+      const provider =
+        openRouterModel && env.OPENROUTER_API_KEY?.trim()
+          ? "openrouter"
+          : "openai";
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
         accessToken: googleAccessToken,
@@ -71,11 +78,18 @@ export async function handleMappingClientsRequest({
           reviewQuestionnaireExtraction({
             rows,
             extractedFields,
-            apiKey: required(
-              env.OPENAI_API_KEY,
-              "OPENAI_API_KEY for questionnaire QC"
-            ),
-            model: env.OPENAI_QUESTIONNAIRE_QC_MODEL,
+            provider,
+            apiKey:
+              provider === "openrouter"
+                ? required(
+                    env.OPENROUTER_API_KEY,
+                    "OPENROUTER_API_KEY for questionnaire QC"
+                  )
+                : required(
+                    env.OPENAI_API_KEY,
+                    "OPENAI_API_KEY for questionnaire QC"
+                  ),
+            model: provider === "openrouter" ? openRouterModel : env.OPENAI_QUESTIONNAIRE_QC_MODEL,
             fetchImpl
           })
       });

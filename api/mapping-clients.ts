@@ -40,6 +40,9 @@ export default async function handler(
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       OPENAI_QUESTIONNAIRE_QC_MODEL:
         process.env.OPENAI_QUESTIONNAIRE_QC_MODEL,
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      OPENROUTER_QUESTIONNAIRE_QC_MODEL:
+        process.env.OPENROUTER_QUESTIONNAIRE_QC_MODEL,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     },

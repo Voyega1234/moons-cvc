@@ -21,9 +21,13 @@ export interface ClientIngestionWorkerEnv {
   APIFY_TOKEN?: string;
   OPENAI_API_KEY?: string;
   OPENAI_BRAND_ANALYSIS_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_BRAND_ANALYSIS_MODEL?: string;
   GEMINI_API_KEY?: string;
   GEMINI_GROUNDING_MODEL?: string;
 }
+
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 
 export interface ClientIngestionWorkerOptions {
   env: ClientIngestionWorkerEnv;
@@ -60,6 +64,20 @@ export function buildClientIngestionWorkerDependencies({
   const requiredEnv = readRequiredClientIngestionWorkerEnv(env);
 
   const geminiApiKey = env.GEMINI_API_KEY?.trim();
+  const openRouterVisualAnalysisModel =
+    env.OPENROUTER_BRAND_ANALYSIS_MODEL?.trim();
+  const openRouterApiKey = env.OPENROUTER_API_KEY?.trim();
+  const visualAnalyzerConfig =
+    openRouterVisualAnalysisModel && openRouterApiKey
+      ? {
+          apiKey: openRouterApiKey,
+          model: openRouterVisualAnalysisModel,
+          endpoint: OPENROUTER_RESPONSES_ENDPOINT
+        }
+      : {
+          apiKey: requiredEnv.OPENAI_API_KEY,
+          model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL
+        };
 
   return {
     queue: new SupabaseClientIngestionJobQueue(supabase),
@@ -73,8 +91,7 @@ export function buildClientIngestionWorkerDependencies({
       fetchImpl
     }),
     visualAnalyzer: new OpenAiBrandVisualAnalyzer({
-      apiKey: requiredEnv.OPENAI_API_KEY,
-      model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL,
+      ...visualAnalyzerConfig,
       fetchImpl
     }),
     brandDiscoverySearch: new OpenAiBrandDiscoverySearch({

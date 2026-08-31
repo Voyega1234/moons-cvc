@@ -25,6 +25,9 @@ export default async function handler(
     env: {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       OPENAI_IDEA_PREFLIGHT_MODEL: process.env.OPENAI_IDEA_PREFLIGHT_MODEL,
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      OPENROUTER_IDEA_PREFLIGHT_MODEL:
+        process.env.OPENROUTER_IDEA_PREFLIGHT_MODEL,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
     }

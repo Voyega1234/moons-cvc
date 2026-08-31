@@ -17,6 +17,8 @@ type ResponseContent =
 export interface QualityCheckEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_QUALITY_CHECK_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_QUALITY_CHECK_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -76,6 +78,7 @@ interface QualityCheckResult {
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 
 export async function handleQualityCheckRequest({
   request,
@@ -87,10 +90,23 @@ export async function handleQualityCheckRequest({
   }
 
   try {
-    const apiKey = env.OPENAI_API_KEY?.trim();
+    const openRouterModel = env.OPENROUTER_QUALITY_CHECK_MODEL?.trim();
+    const provider = openRouterModel && env.OPENROUTER_API_KEY?.trim()
+      ? "openrouter"
+      : "openai";
+    const apiKey =
+      provider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            provider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -105,8 +121,12 @@ export async function handleQualityCheckRequest({
       return jsonResponse({ ok: true, results: [] });
     }
 
-    const model = env.OPENAI_QUALITY_CHECK_MODEL?.trim() || DEFAULT_MODEL;
+    const model =
+      provider === "openrouter"
+        ? openRouterModel!
+        : env.OPENAI_QUALITY_CHECK_MODEL?.trim() || DEFAULT_MODEL;
     const payload = await callResponsesApi({
+      provider,
       apiKey,
       model,
       fetchImpl,
@@ -121,17 +141,24 @@ export async function handleQualityCheckRequest({
 }
 
 async function callResponsesApi({
+  provider,
   apiKey,
   model,
   fetchImpl,
   content
 }: {
+  provider: "openai" | "openrouter";
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
   content: readonly ResponseContent[];
 }): Promise<unknown> {
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -155,11 +182,11 @@ async function callResponsesApi({
   if (!response.ok) {
     const detail = await readProviderErrorDetail(response);
     throw new Error(
-      `OpenAI quality check failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+      `${providerLabel} quality check failed: ${response.status}${detail ? ` — ${detail}` : ""}`
     );
   }
 
-  return readJsonResponse(response, "OpenAI quality check");
+  return readJsonResponse(response, `${providerLabel} quality check`);
 }
 
 async function buildContent(

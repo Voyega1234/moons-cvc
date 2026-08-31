@@ -20,11 +20,14 @@ export interface ReferenceDesignGrammar {
   replace: readonly string[];
 }
 
-const MODEL = "gpt-5.6-terra";
-const ENDPOINT = "https://api.openai.com/v1/responses";
+const DEFAULT_MODEL = "gpt-5.6-terra";
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 
 export async function interpretReferenceDesign({
   apiKey,
+  model = DEFAULT_MODEL,
+  provider = "openai",
   fetchImpl,
   mode,
   references,
@@ -33,6 +36,8 @@ export async function interpretReferenceDesign({
   loadPrompt = defaultLoadPrompt
 }: {
   apiKey: string;
+  model?: string;
+  provider?: ImagePromptProvider;
   fetchImpl: FetchLike;
   mode: Parameters<NonNullable<ImagePromptAgentTraceWriter>>[0]["mode"];
   references: readonly ReferenceImageInput[];
@@ -48,6 +53,8 @@ export async function interpretReferenceDesign({
   if (!references.length) {
     throw new Error("Reference-led generation requires at least one Hook reference.");
   }
+  const endpoint = provider === "openrouter" ? OPENROUTER_ENDPOINT : OPENAI_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
 
   const inputText = [
     (await loadPrompt()).trim(),
@@ -67,14 +74,14 @@ export async function interpretReferenceDesign({
   ].join("\n");
 
   try {
-    const response = await fetchImpl(ENDPOINT, {
+    const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         store: false,
         input: [
           {
@@ -103,7 +110,7 @@ export async function interpretReferenceDesign({
 
     if (!response.ok) {
       throw new Error(
-        `OpenAI reference interpreter failed: ${response.status}${await responseDetail(response)}`
+        `${providerLabel} reference interpreter failed: ${response.status}${await responseDetail(response)}`
       );
     }
 
@@ -113,9 +120,9 @@ export async function interpretReferenceDesign({
     );
     await writeTrace?.({
       createdAt: new Date().toISOString(),
-      provider: "openai" satisfies ImagePromptProvider,
-      endpoint: "/v1/responses",
-      model: MODEL,
+      provider,
+      endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
+      model,
       mode,
       stage: "reference-interpreter",
       status: "succeeded",
@@ -126,9 +133,9 @@ export async function interpretReferenceDesign({
   } catch (error) {
     await writeTrace?.({
       createdAt: new Date().toISOString(),
-      provider: "openai",
-      endpoint: "/v1/responses",
-      model: MODEL,
+      provider,
+      endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
+      model,
       mode,
       stage: "reference-interpreter",
       status: "failed",

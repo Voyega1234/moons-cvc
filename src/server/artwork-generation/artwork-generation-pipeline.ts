@@ -128,6 +128,7 @@ export interface ArtworkGenerationEndpointEnv {
   OPENAI_CREATIVE_STRATEGY_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
+  OPENROUTER_REFERENCE_INTERPRETER_MODEL?: string;
   ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
   CREATIVE_LEARNING_CAPTURE_ENABLED?: string;
   SUPABASE_URL?: string;
@@ -266,6 +267,16 @@ export async function handleArtworkGenerationRequest({
       promptProvider === "openrouter"
         ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
         : env.OPENAI_CREATIVE_STRATEGY_MODEL?.trim() || undefined;
+    const referenceInterpreterModel =
+      env.OPENROUTER_REFERENCE_INTERPRETER_MODEL?.trim();
+    const referenceInterpreterProvider: ImagePromptProvider =
+      referenceInterpreterModel && env.OPENROUTER_API_KEY?.trim()
+        ? "openrouter"
+        : "openai";
+    const referenceInterpreterApiKey =
+      referenceInterpreterProvider === "openrouter"
+        ? env.OPENROUTER_API_KEY!.trim()
+        : apiKey;
 
     const outputs = await generateOutputsForSelectedHooks({
       input,
@@ -275,6 +286,9 @@ export async function handleArtworkGenerationRequest({
       promptProvider,
       promptApiKey: promptApiKey ?? apiKey,
       creativeStrategyModel,
+      referenceInterpreterApiKey,
+      referenceInterpreterModel,
+      referenceInterpreterProvider,
       debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),
       writeDebugLog,
       storage,
@@ -346,6 +360,9 @@ async function generateOutputsForSelectedHooks({
   promptProvider,
   promptApiKey,
   creativeStrategyModel,
+  referenceInterpreterApiKey,
+  referenceInterpreterModel,
+  referenceInterpreterProvider,
   debugLogDirectory,
   writeDebugLog,
   storage,
@@ -359,6 +376,9 @@ async function generateOutputsForSelectedHooks({
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
   creativeStrategyModel?: string;
+  referenceInterpreterApiKey: string;
+  referenceInterpreterModel?: string;
+  referenceInterpreterProvider: ImagePromptProvider;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   storage: ArtworkStorageClient;
@@ -399,6 +419,9 @@ async function generateOutputsForSelectedHooks({
         promptProvider,
         promptApiKey,
         creativeStrategyModel,
+        referenceInterpreterApiKey,
+        referenceInterpreterModel,
+        referenceInterpreterProvider,
         debugLogDirectory,
         writeDebugLog,
         references,
@@ -505,6 +528,9 @@ async function generateOutputForHook({
   promptProvider,
   promptApiKey,
   creativeStrategyModel,
+  referenceInterpreterApiKey,
+  referenceInterpreterModel,
+  referenceInterpreterProvider,
   debugLogDirectory,
   writeDebugLog,
   references,
@@ -521,6 +547,9 @@ async function generateOutputForHook({
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
   creativeStrategyModel?: string;
+  referenceInterpreterApiKey: string;
+  referenceInterpreterModel?: string;
+  referenceInterpreterProvider: ImagePromptProvider;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
@@ -617,6 +646,9 @@ async function generateOutputForHook({
           promptModel,
           promptProvider,
           promptApiKey,
+          referenceInterpreterApiKey,
+          referenceInterpreterModel,
+          referenceInterpreterProvider,
           debugLogDirectory,
           writeDebugLog,
           references: promptReferences,
@@ -661,6 +693,9 @@ async function generateOutputForHook({
           promptModel,
           promptProvider,
           promptApiKey,
+          referenceInterpreterApiKey,
+          referenceInterpreterModel,
+          referenceInterpreterProvider,
           debugLogDirectory,
           writeDebugLog,
           references: promptReferences,
@@ -1815,6 +1850,9 @@ async function resolveImagePrompt({
   promptModel,
   promptProvider,
   promptApiKey,
+  referenceInterpreterApiKey,
+  referenceInterpreterModel,
+  referenceInterpreterProvider,
   debugLogDirectory,
   writeDebugLog,
   references,
@@ -1831,6 +1869,9 @@ async function resolveImagePrompt({
   promptModel?: string;
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
+  referenceInterpreterApiKey: string;
+  referenceInterpreterModel?: string;
+  referenceInterpreterProvider: ImagePromptProvider;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   references: readonly ReferenceImageInput[];
@@ -1885,7 +1926,9 @@ async function resolveImagePrompt({
     const interpreterReferences =
       designReferences.length > 0 ? designReferences : references;
     const designGrammar = await interpretReferenceDesign({
-      apiKey: promptApiKey,
+      apiKey: referenceInterpreterApiKey,
+      model: referenceInterpreterModel,
+      provider: referenceInterpreterProvider,
       fetchImpl,
       mode: input.artworkMode,
       references: interpreterReferences,
