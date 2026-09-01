@@ -95,6 +95,8 @@ export interface WorkflowState {
   imagePromptModel: ImagePromptModel;
   albumFormat: AlbumFormatPreference;
   outputSize: ArtworkOutputSize;
+  /** When true, generated artwork shows generic labels (Headline, CTA, ...) instead of real copy. */
+  usePlaceholderCopy: boolean;
   /** Compatibility alias for the total creative-mix quantity. */
   quantity: number;
   successMetric: SuccessMetric;
@@ -148,6 +150,7 @@ export type WorkflowAction =
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-album-format"; format: AlbumFormatPreference }
   | { type: "set-output-size"; size: ArtworkOutputSize }
+  | { type: "set-use-placeholder-copy"; value: boolean }
   | { type: "set-quantity"; quantity: number }
   | { type: "apply-monthly-quota" }
   | {

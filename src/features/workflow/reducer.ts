@@ -154,6 +154,7 @@ export function createInitialWorkflowState({
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,
     outputSize: defaultArtworkOutputSize,
+    usePlaceholderCopy: false,
     quantity: 6,
     successMetric: "CVR",
     ideaIntent: "explore",
@@ -515,6 +516,8 @@ export function workflowReducer(
       return resetCreativeWork({ ...state, albumFormat: action.format });
     case "set-output-size":
       return { ...state, outputSize: action.size };
+    case "set-use-placeholder-copy":
+      return { ...state, usePlaceholderCopy: action.value };
     case "set-artwork-brief":
       return { ...state, artworkBrief: action.brief };
     case "set-quantity":

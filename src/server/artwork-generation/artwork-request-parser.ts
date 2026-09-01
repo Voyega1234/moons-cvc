@@ -144,6 +144,14 @@ export function parseRequestBody(value: unknown): ArtworkGenerationRequest {
     ...(value.referenceLed === undefined
       ? {}
       : { referenceLed: readBoolean(value.referenceLed, "referenceLed") }),
+    ...(value.usePlaceholderCopy === undefined
+      ? {}
+      : {
+          usePlaceholderCopy: readBoolean(
+            value.usePlaceholderCopy,
+            "usePlaceholderCopy"
+          )
+        }),
     imagePromptModel:
       imagePromptModel as ArtworkGenerationRequest["imagePromptModel"],
     albumFormat: albumFormat as ArtworkGenerationRequest["albumFormat"],

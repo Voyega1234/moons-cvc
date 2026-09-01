@@ -110,6 +110,7 @@ export interface ArtworkGenerationRequest {
   model: "gpt-image-2";
   artworkMode: ArtworkMode;
   referenceLed?: boolean;
+  usePlaceholderCopy?: boolean;
   imagePromptModel: ImagePromptModel;
   albumFormat?: AlbumFormatPreference;
   runId: string;
@@ -677,6 +678,7 @@ function buildArtworkRequest({
     model: "gpt-image-2",
     artworkMode: run.artworkMode,
     ...(referenceLed ? { referenceLed: true } : {}),
+    ...(run.usePlaceholderCopy ? { usePlaceholderCopy: true } : {}),
     imagePromptModel: run.imagePromptModel,
     albumFormat: run.albumFormat,
     runId: run.id,

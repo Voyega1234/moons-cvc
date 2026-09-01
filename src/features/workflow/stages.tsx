@@ -1380,6 +1380,10 @@ const brandSystemTopics = [
       "tone and style",
       "น้ำเสียงและแนวทางการสื่อสาร"
     ]
+  },
+  {
+    title: "Character",
+    aliases: ["character", "persona", "ตัวตน"]
   }
 ] as const;
 
@@ -4180,6 +4184,10 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           outputSize={state.outputSize}
           onOutputSizeChange={(size) =>
             dispatch({ type: "set-output-size", size })
+          }
+          usePlaceholderCopy={state.usePlaceholderCopy}
+          onUsePlaceholderCopyChange={(value) =>
+            dispatch({ type: "set-use-placeholder-copy", value })
           }
           visualInputs={{
             referenceCount: preflightReferenceImages.length,

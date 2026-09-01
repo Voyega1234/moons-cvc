@@ -332,6 +332,7 @@ function parseRun(value: unknown): WorkflowState | null {
     imagePromptModel,
     albumFormat,
     outputSize,
+    usePlaceholderCopy: value.usePlaceholderCopy === true,
     quantity: creativeMix.reduce((total, item) => total + item.quantity, 0),
     successMetric,
     ideaIntent,

@@ -33,6 +33,7 @@ const run: WorkflowState = {
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
   outputSize: "1024x1024",
+  usePlaceholderCopy: false,
   quantity: 1,
   successMetric: "CTR",
   ideaIntent: "explore",

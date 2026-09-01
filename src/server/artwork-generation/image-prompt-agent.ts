@@ -255,18 +255,28 @@ export async function preflightCampaignInput({
   fetchImpl,
   input,
   writeTrace,
-  loadPrompt = defaultLoadCampaignInputPreflightPrompt
+  loadPrompt = defaultLoadCampaignInputPreflightPrompt,
+  usePlaceholderCopy = false
 }: {
   apiKey: string;
   fetchImpl: FetchLike;
   input: ImagePromptAgentInput;
   writeTrace?: ImagePromptAgentTraceWriter;
   loadPrompt?: () => Promise<string>;
+  usePlaceholderCopy?: boolean;
 }): Promise<CampaignInputPreflight> {
   const model = PREFLIGHT_MODEL;
   const inputText = [
     (await loadPrompt()).trim(),
     "",
+    ...(usePlaceholderCopy
+      ? [
+          "PLACEHOLDER COPY MODE",
+          'The headline, cta, and every supportingDetails entry below ("Headline", "CTA", "Bullet point") are intentional literal layout placeholders, not filler or meaningless text. Keep every one of them as a required, literally rendered visible element (add each supportingDetails entry to requiredElements as its own labeled callout/bullet in the image) — never move any of them into excludedInformation or drop them as decorative filler.',
+          'The objective and angle.concept fields below ("Objective", "Concept") are also generic layout placeholders with no real product information behind them. Do not invent, infer, or backfill any real product facts, prices, quantities, dates, or statistics anywhere in your output (visualMechanism, singleMainMessage, primaryProductOrService, targetAudience, lockedProductFacts, requiredElements, forbiddenElements, etc.) — every field should stay in this generic, non-specific "layout skeleton" spirit, describing structure and information density only.',
+          ""
+        ]
+      : []),
     "CAMPAIGN INPUT TO PREFLIGHT",
     JSON.stringify(buildCompactCampaignInput(input), null, 2)
   ].join("\n");

@@ -1889,12 +1889,23 @@ async function resolveImagePrompt({
   const promptReferenceLabels = input.referenceLed
     ? references
     : attachedReferences;
+  const promptHook: SelectedHook = input.usePlaceholderCopy
+    ? {
+        ...hook,
+        hook: "Headline",
+        subheadline: hook.subheadline ? "Subheadline" : hook.subheadline,
+        concept: "Concept",
+        why: "Objective",
+        cta: "CTA",
+        supportingPoints: hook.supportingPoints?.map(() => "Bullet point")
+      }
+    : hook;
   const imagePromptInput = {
     brand: input.brand,
     service: input.service,
     albumFormat,
     brief: input.brief,
-    hook,
+    hook: promptHook,
     textInputs: input.textInputs,
     referenceImageLabels: promptReferenceLabels.map(
       (reference) => reference.label ?? "Reference image"
@@ -1963,7 +1974,8 @@ async function resolveImagePrompt({
           buildImagePromptAgentDebugLog(trace, input.runId, hook.id, [])
         );
       },
-      input: imagePromptInput
+      input: imagePromptInput,
+      usePlaceholderCopy: input.usePlaceholderCopy
     });
     return buildStandardImagePrompt(imagePromptInput, undefined, campaignInput);
   }
