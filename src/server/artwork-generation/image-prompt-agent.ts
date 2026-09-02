@@ -245,9 +245,14 @@ export async function generateImagePrompt({
 export async function buildStandardImagePrompt(
   input: ImagePromptAgentInput,
   loadAgentImagePrompt: () => Promise<string> = defaultLoadAgentImagePrompt,
-  campaignInput: unknown = buildCompactCampaignInput(input)
+  campaignInput: unknown = buildCompactCampaignInput(input),
+  usePlaceholderCopy = false
 ): Promise<string> {
-  return renderStandardPrompt(await loadAgentImagePrompt(), campaignInput);
+  return renderStandardPrompt(
+    await loadAgentImagePrompt(),
+    campaignInput,
+    usePlaceholderCopy
+  );
 }
 
 export async function preflightCampaignInput({
@@ -272,8 +277,9 @@ export async function preflightCampaignInput({
     ...(usePlaceholderCopy
       ? [
           "PLACEHOLDER COPY MODE",
-          'The headline, cta, and every supportingDetails entry below ("Headline", "CTA", "Bullet point") are intentional literal layout placeholders, not filler or meaningless text. Keep every one of them as a required, literally rendered visible element (add each supportingDetails entry to requiredElements as its own labeled callout/bullet in the image) — never move any of them into excludedInformation or drop them as decorative filler.',
-          'The objective and angle.concept fields below ("Objective", "Concept") are also generic layout placeholders with no real product information behind them. Do not invent, infer, or backfill any real product facts, prices, quantities, dates, or statistics anywhere in your output (visualMechanism, singleMainMessage, primaryProductOrService, targetAudience, lockedProductFacts, requiredElements, forbiddenElements, etc.) — every field should stay in this generic, non-specific "layout skeleton" spirit, describing structure and information density only.',
+          "The angle.headline, objective, angle.concept, angle.supportingDetails, and angle.cta fields below carry the real, approved campaign idea — use all of it fully to reason about visualMechanism, singleMainMessage, primaryProductOrService, targetAudience, lockedProductFacts, and hierarchyAndDensity, exactly as you would for a normal build, so the artwork's hero visual and structure genuinely fit this idea.",
+          'This is a layout/design preview, though: regardless of the real wording given, your output `copy.headline` and `copy.cta` must always be the literal strings "Headline" and "CTA", and requiredElements must require one literal "Bullet point" callout for each entry in angle.supportingDetails (matching the count, not the wording) — never the real headline/cta/bullet text itself. No other legible word, number, or claim (real or invented) may appear as visible text anywhere in the final image — describe visual mechanism and information density in generic, non-literal terms.',
+          'If a style/composition reference image is attached, use it only for composition, lighting, palette, and mood — never reuse its literal product, subject, scene, wording, or specific content as if it were this campaign\'s own; the hero/subject must be a generic one appropriate to this brand\'s own category, informed by the real concept/objective above, not the reference\'s own product.',
           ""
         ]
       : []),
@@ -709,10 +715,21 @@ function compactAgentText(value: string, maxCharacters: number): string {
   return `${clean.slice(0, Math.max(0, maxCharacters - 1)).trimEnd()}…`;
 }
 
-function renderStandardPrompt(source: string, campaignInput: unknown): string {
+function renderStandardPrompt(
+  source: string,
+  campaignInput: unknown,
+  usePlaceholderCopy = false
+): string {
   return [
     source.trim(),
     "",
+    ...(usePlaceholderCopy
+      ? [
+          "PLACEHOLDER COPY MODE",
+          'This is a layout/design preview build with no real copy locked yet. The ONLY legible text allowed anywhere in the image is what is explicitly listed in requiredElements below (the literal headline/cta/bullet placeholders). Do not add any other legible word, letter, number, or typographic mark for any reason — no extra tagline, subheadline, badge, footer line, or supporting claim beyond what requiredElements lists, even if it would normally read as a natural, tasteful addition. If a design element would normally carry text, either leave it textless or render it as a plain generic mark/shape with no legible characters.',
+          ""
+        ]
+      : []),
     "AUTHORITATIVE PREFLIGHTED CAMPAIGN INPUT",
     JSON.stringify(campaignInput, null, 2)
   ].join("\n");

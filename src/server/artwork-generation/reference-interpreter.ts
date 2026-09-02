@@ -33,7 +33,8 @@ export async function interpretReferenceDesign({
   references,
   campaign,
   writeTrace,
-  loadPrompt = defaultLoadPrompt
+  loadPrompt = defaultLoadPrompt,
+  usePlaceholderCopy = false
 }: {
   apiKey: string;
   model?: string;
@@ -49,6 +50,7 @@ export async function interpretReferenceDesign({
   };
   writeTrace?: ImagePromptAgentTraceWriter;
   loadPrompt?: () => Promise<string>;
+  usePlaceholderCopy?: boolean;
 }): Promise<ReferenceDesignGrammar> {
   if (!references.length) {
     throw new Error("Reference-led generation requires at least one Hook reference.");
@@ -59,6 +61,13 @@ export async function interpretReferenceDesign({
   const inputText = [
     (await loadPrompt()).trim(),
     "",
+    ...(usePlaceholderCopy
+      ? [
+          "PLACEHOLDER COPY MODE",
+          "The concept/objective/headline below are the real, approved creative idea — use them fully to inform artworkConcept, keyVisualGrammar, compositionGrammar, hierarchyAndDensity, and every other field, so the design genuinely fits this idea. However, the artwork's final visible headline/cta text will be overridden to generic layout-placeholder labels regardless of what is given here, so no field you return (especially conceptTranslation) may suggest, quote, imply, or embed any specific literal wording, tagline, or copy line — describe only the structure, mechanism, and mood.",
+          ""
+        ]
+      : []),
     "APPROVED CAMPAIGN TO TRANSLATE",
     JSON.stringify(campaign, null, 2),
     "",
