@@ -138,7 +138,7 @@ export const defaultHookIdeaMode: HookIdeaMode = "fresh-research";
 export const hookGenerationModels = [
   "gpt-5.6-terra",
   "google/gemini-3.6-flash",
-  "google/gemini-3.7-flash",
+  "google/gemini-3.8-flash",
   "anthropic/claude-sonnet-5",
   "openai/gpt-5.6-terra",
   "n8n-compass-new"
@@ -147,7 +147,7 @@ export type BuiltInHookGenerationModel = (typeof hookGenerationModels)[number];
 export type HookGenerationModel = string;
 export const openRouterHookGenerationModels = [
   "google/gemini-3.6-flash",
-  "google/gemini-3.7-flash",
+  "google/gemini-3.8-flash",
   "anthropic/claude-sonnet-5",
   "openai/gpt-5.6-terra"
 ] as const satisfies readonly HookGenerationModel[];
@@ -184,8 +184,8 @@ export function hookGenerationModelLabel(model: HookGenerationModel): string {
   switch (model) {
     case "google/gemini-3.6-flash":
       return "Gemini 3.6 Flash";
-    case "google/gemini-3.7-flash":
-      return "Gemini 3.7 Flash";
+    case "google/gemini-3.8-flash":
+      return "Gemini 3.8 Flash";
     case "anthropic/claude-sonnet-5":
       return "Claude Sonnet 5";
     case "anthropic/claude-sonnet-4.6":
