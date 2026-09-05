@@ -6353,7 +6353,7 @@ export function Overview({
   const { brands, loading, error } = useBrands();
   const collaboration = useOptionalRunCollaboration();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<WorkboardFilter>("all");
+  const [filter, setFilter] = useState<WorkboardFilter>("mine");
   const [visibleLimitByClient, setVisibleLimitByClient] = useState<
     Record<string, number>
   >({});
