@@ -223,7 +223,7 @@ export const artworkOutputSizes = [
   "2160x3840"
 ] as const;
 export type ArtworkOutputSize = (typeof artworkOutputSizes)[number];
-export const defaultArtworkOutputSize: ArtworkOutputSize = "1088x1360";
+export const defaultArtworkOutputSize: ArtworkOutputSize = "1024x1024";
 export function artworkOutputSizeLabel(size: ArtworkOutputSize): string {
   switch (size) {
     case "1088x1360":
