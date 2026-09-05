@@ -6,9 +6,23 @@ import { createStageClientSlideItems, openCreateStageSlidesInGoogleSlides } from
 import { useCreateSelectedHooks } from "../use-create-selected-hooks";
 import { useRunQualityCheck } from "../use-run-quality-check";
 import { DecisionCard, Spinner, type StageProps } from "./shared";
-import { reviewCreativeCount, reviewGuidedImprovementCount } from "../review/output-groups";
+import {
+  groupOutputsForReview,
+  isAlbumOutput,
+  isUgcOutput,
+  resolvedAlbumFormatForDirection,
+  reviewCreativeCount,
+  reviewGuidedImprovementCount,
+  sortAlbumOutputs
+} from "../review/output-groups";
 import { OutputGrid } from "../review/output-grid";
 import { downloadAllOutputsArchive } from "../review/downloads";
+import {
+  PLACEHOLDER_INSTRUCTIONS,
+  placeholderizeAlbumOutputImages,
+  placeholderizeOutputImage
+} from "../../../services/artwork-generation/openai-image-generation";
+import type { CreativeOutput } from "../../../domain/creative-run";
 
 export function StudioStage({
   state,
@@ -21,6 +35,13 @@ export function StudioStage({
   const [slidesImporting, setSlidesImporting] = useState(false);
   const [slidesError, setSlidesError] = useState<string | null>(null);
   const [googleSlidesUrl, setGoogleSlidesUrl] = useState<string | null>(null);
+  const [placeholderSlidesImporting, setPlaceholderSlidesImporting] =
+    useState(false);
+  const [placeholderSlidesError, setPlaceholderSlidesError] = useState<
+    string | null
+  >(null);
+  const [placeholderGoogleSlidesUrl, setPlaceholderGoogleSlidesUrl] =
+    useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadAllError, setDownloadAllError] = useState<string | null>(null);
@@ -95,6 +116,117 @@ export function StudioStage({
       );
     } finally {
       setSlidesImporting(false);
+    }
+  };
+
+  const handleExportPlaceholderSlides = async () => {
+    setExportMenuOpen(false);
+    setPlaceholderSlidesImporting(true);
+    setPlaceholderSlidesError(null);
+    setPlaceholderGoogleSlidesUrl(null);
+    try {
+      const groups = groupOutputsForReview(state.outputs);
+      const placeholderApplicableIds = new Set<string>();
+      const freshlyGenerated: CreativeOutput[] = [];
+
+      const results = await Promise.all(
+        groups.map(async (group) => {
+          const primary = group[0];
+          if (!primary || isUgcOutput(primary) || !primary.assetUrl) {
+            return group;
+          }
+          group.forEach((candidate) =>
+            placeholderApplicableIds.add(candidate.id)
+          );
+          if (primary.isPlaceholder) {
+            return group;
+          }
+          if (isAlbumOutput(primary)) {
+            const direction = state.directions.find(
+              (candidate) => candidate.id === primary.directionId
+            );
+            const updated = sortAlbumOutputs(
+              await placeholderizeAlbumOutputImages({
+                run: state,
+                outputs: group,
+                sourceImageUrl:
+                  primary.albumMasterAssetUrl ?? primary.assetUrl ?? "",
+                albumFormat: resolvedAlbumFormatForDirection(
+                  state.albumFormat,
+                  direction
+                )
+              })
+            );
+            freshlyGenerated.push(...updated);
+            return updated;
+          }
+          const updated = await placeholderizeOutputImage({
+            run: state,
+            output: primary
+          });
+          freshlyGenerated.push(updated);
+          return [updated];
+        })
+      );
+
+      const updatedOutputs = results.flat();
+
+      if (freshlyGenerated.length) {
+        await createCheckpoint?.("replace-image", state.id);
+        freshlyGenerated.forEach((updated) => {
+          const assetUrl = updated.assetUrl;
+          if (!assetUrl) return;
+          dispatch({
+            type: "replace-output-asset",
+            id: updated.id,
+            assetUrl,
+            ...(updated.assetStoragePath
+              ? { assetStoragePath: updated.assetStoragePath }
+              : {}),
+            ...(updated.assetBucket
+              ? { assetBucket: updated.assetBucket }
+              : {}),
+            ...(updated.albumMasterAssetUrl
+              ? { albumMasterAssetUrl: updated.albumMasterAssetUrl }
+              : {}),
+            ...(updated.albumMasterAssetStoragePath
+              ? {
+                  albumMasterAssetStoragePath:
+                    updated.albumMasterAssetStoragePath
+                }
+              : {}),
+            instructions: PLACEHOLDER_INSTRUCTIONS,
+            isPlaceholder: true
+          });
+        });
+      }
+
+      const mergedOutputs: readonly CreativeOutput[] = state.outputs.map(
+        (output) => {
+          if (!placeholderApplicableIds.has(output.id)) return output;
+          const updated = updatedOutputs.find(
+            (candidate) => candidate.id === output.id
+          );
+          return updated
+            ? { ...output, ...updated, isPlaceholder: true }
+            : output;
+        }
+      );
+
+      const result = await openCreateStageSlidesInGoogleSlides({
+        ...state,
+        outputs: mergedOutputs
+      });
+      setPlaceholderGoogleSlidesUrl(result.url);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (caught) {
+      setPlaceholderSlidesError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not export the placeholder deck. Please try again."
+      );
+    } finally {
+      setPlaceholderSlidesImporting(false);
     }
   };
 
@@ -189,18 +321,23 @@ export function StudioStage({
                 (!downloadableCount && !slideCount) ||
                 downloadingAll ||
                 slidesImporting ||
+                placeholderSlidesImporting ||
                 regeneratingAllArtwork ||
                 checking ||
                 sendingToQc
               }
               onClick={() => setExportMenuOpen((current) => !current)}
             >
-              {downloadingAll || slidesImporting ? <Spinner /> : null}
+              {downloadingAll || slidesImporting || placeholderSlidesImporting ? (
+                <Spinner />
+              ) : null}
               {downloadingAll
                 ? "Preparing ZIP…"
                 : slidesImporting
                   ? "Importing to Google…"
-                  : "Export"}
+                  : placeholderSlidesImporting
+                    ? "Preparing placeholders…"
+                    : "Export"}
             </button>
             {exportMenuOpen ? (
               <div
@@ -230,6 +367,23 @@ export function StudioStage({
                 >
                   <b>Export to Slides</b>
                   <span>Open the existing creative deck in Google Slides</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Export to Slides (Placeholder)"
+                  disabled={!slideCount || placeholderSlidesImporting}
+                  title={
+                    slideCount
+                      ? `Create ${slideCount} creative set${slideCount === 1 ? "" : "s"} in Google Slides with placeholder text`
+                      : "Generate artwork before creating Google Slides"
+                  }
+                  onClick={() => void handleExportPlaceholderSlides()}
+                >
+                  <b>Export to Slides (Placeholder)</b>
+                  <span>
+                    Swap real text for placeholders first — reuses any
+                    placeholder already generated for a creative
+                  </span>
                 </button>
               </div>
             ) : null}
@@ -279,6 +433,9 @@ export function StudioStage({
         {slidesError ? (
           <p className="repository-message error">{slidesError}</p>
         ) : null}
+        {placeholderSlidesError ? (
+          <p className="repository-message error">{placeholderSlidesError}</p>
+        ) : null}
         {downloadAllError ? (
           <p className="repository-message error">{downloadAllError}</p>
         ) : null}
@@ -286,6 +443,14 @@ export function StudioStage({
           <p className="repository-message success">
             Google Slides is ready. {" "}
             <a href={googleSlidesUrl} target="_blank" rel="noreferrer">
+              Open the presentation
+            </a>
+          </p>
+        ) : null}
+        {placeholderGoogleSlidesUrl ? (
+          <p className="repository-message success">
+            Placeholder Google Slides is ready. {" "}
+            <a href={placeholderGoogleSlidesUrl} target="_blank" rel="noreferrer">
               Open the presentation
             </a>
           </p>
