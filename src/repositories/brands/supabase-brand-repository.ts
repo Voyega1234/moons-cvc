@@ -7,7 +7,7 @@ import type {
 import type { BrandRepository } from "../../ports/brand-repository";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database, Json } from "../../lib/supabase/database.types";
-import { refreshSupabaseSignedAssetUrl } from "../../lib/supabase/storage-asset-url";
+import { toPermanentSupabaseAssetUrl } from "../../lib/supabase/storage-asset-url";
 
 type ClientRow = Database["moons"]["Tables"]["clients"]["Row"];
 type LibraryRow = Database["moons"]["Tables"]["brand_library"]["Row"];
@@ -68,7 +68,7 @@ export class SupabaseBrandRepository implements BrandRepository {
     if (productsError) throw productsError;
     if (sourcesError) throw sourcesError;
 
-    const resolvedLibrary = await refreshLibraryAssetUrls(client, library ?? []);
+    const resolvedLibrary = refreshLibraryAssetUrls(library ?? []);
 
     return clients.map((brand) =>
       mapBrand(
@@ -133,7 +133,7 @@ export class SupabaseBrandRepository implements BrandRepository {
     if (productsError) throw productsError;
     if (sourcesError) throw sourcesError;
 
-    const resolvedLibrary = await refreshLibraryAssetUrls(client, library ?? []);
+    const resolvedLibrary = refreshLibraryAssetUrls(library ?? []);
 
     return mapBrand(
       brand,
@@ -218,22 +218,14 @@ function mapBrand(
   };
 }
 
-async function refreshLibraryAssetUrls(
-  client: ReturnType<typeof getSupabaseClient>,
+function refreshLibraryAssetUrls(
   rows: readonly LibraryRow[]
-): Promise<readonly LibraryRow[]> {
-  return Promise.all(
-    rows.map(async (row) => {
-      if (!row.asset_url) return row;
-      const assetUrl = await refreshSupabaseSignedAssetUrl(
-        client,
-        row.asset_url
-      );
-      return assetUrl === row.asset_url
-        ? row
-        : { ...row, asset_url: assetUrl };
-    })
-  );
+): readonly LibraryRow[] {
+  return rows.map((row) => {
+    if (!row.asset_url) return row;
+    const assetUrl = toPermanentSupabaseAssetUrl(row.asset_url);
+    return assetUrl === row.asset_url ? row : { ...row, asset_url: assetUrl };
+  });
 }
 
 function mapOnboardingQuestionnaire(

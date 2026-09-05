@@ -11,33 +11,28 @@ export interface SupabaseImageMirrorOptions {
   bucket?: string;
   fetchImpl?: ImageFetch;
   facebookCdnFetchImpl?: ImageFetch;
-  signedUrlExpiresInSeconds?: number;
 }
 
 type ImageFetch = (imageUrl: string) => Promise<Response>;
 
 const DEFAULT_BUCKET = "brand-source-assets";
-const DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 20_000;
 
 export class SupabaseImageMirror implements ImageMirror {
   private readonly bucket: string;
   private readonly fetchImpl: ImageFetch;
   private readonly facebookCdnFetchImpl: ImageFetch;
-  private readonly signedUrlExpiresInSeconds: number;
 
   constructor({
     client,
     bucket = DEFAULT_BUCKET,
     fetchImpl = fetch,
-    facebookCdnFetchImpl = fetchFacebookImageOverIpv4,
-    signedUrlExpiresInSeconds = DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS
+    facebookCdnFetchImpl = fetchFacebookImageOverIpv4
   }: SupabaseImageMirrorOptions) {
     this.client = client;
     this.bucket = bucket;
     this.fetchImpl = fetchImpl;
     this.facebookCdnFetchImpl = facebookCdnFetchImpl;
-    this.signedUrlExpiresInSeconds = signedUrlExpiresInSeconds;
   }
 
   private readonly client: SupabaseClient<Database>;
@@ -88,16 +83,14 @@ export class SupabaseImageMirror implements ImageMirror {
 
     if (uploadResult.error) throw uploadResult.error;
 
-    const signedUrlResult = await this.client.storage
+    const { data: publicUrlResult } = this.client.storage
       .from(this.bucket)
-      .createSignedUrl(assetStoragePath, this.signedUrlExpiresInSeconds);
-
-    if (signedUrlResult.error) throw signedUrlResult.error;
+      .getPublicUrl(assetStoragePath);
 
     return {
       assetBucket: this.bucket,
       assetStoragePath,
-      assetUrl: signedUrlResult.data.signedUrl,
+      assetUrl: publicUrlResult.publicUrl,
       originalUrlHash
     };
   }

@@ -45,10 +45,9 @@ describe("SupabaseImageMirror", () => {
               uploads.push({ bucket, path, size: blob.size, options });
               return { data: { path }, error: null };
             },
-            async createSignedUrl(path: string) {
+            getPublicUrl(path: string) {
               return {
-                data: { signedUrl: `https://storage.example.com/${path}` },
-                error: null
+                data: { publicUrl: `https://storage.example.com/${path}` }
               };
             }
           };
@@ -88,10 +87,9 @@ describe("SupabaseImageMirror", () => {
             async upload() {
               return { data: { path: "asset.jpg" }, error: null };
             },
-            async createSignedUrl() {
+            getPublicUrl() {
               return {
-                data: { signedUrl: "https://storage.example.com/asset.jpg" },
-                error: null
+                data: { publicUrl: "https://storage.example.com/asset.jpg" }
               };
             }
           };
@@ -132,7 +130,7 @@ describe("SupabaseImageMirror", () => {
         from() {
           return {
             upload: vi.fn(),
-            createSignedUrl: vi.fn()
+            getPublicUrl: vi.fn()
           };
         }
       }

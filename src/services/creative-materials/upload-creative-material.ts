@@ -6,7 +6,6 @@ import {
 } from "../../lib/supabase/client";
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
-const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export async function uploadCreativeMaterial({
@@ -47,13 +46,9 @@ export async function uploadCreativeMaterial({
   );
   if (upload.error) throw upload.error;
 
-  const signed = await client.storage
+  const { data } = client.storage
     .from(env.brandAssetsBucket)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRES_IN_SECONDS);
-  if (signed.error) {
-    await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
-    throw signed.error;
-  }
+    .getPublicUrl(storagePath);
 
   return {
     id,
@@ -62,7 +57,7 @@ export async function uploadCreativeMaterial({
     role: "main-object",
     description: "",
     selected: false,
-    url: signed.data.signedUrl,
+    url: data.publicUrl,
     storagePath,
     storageBucket: env.brandAssetsBucket
   };

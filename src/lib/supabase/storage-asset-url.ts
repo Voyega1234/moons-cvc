@@ -7,6 +7,7 @@ export interface SupabaseStorageLocation {
 }
 
 const SIGNED_OBJECT_PREFIX = "/storage/v1/object/sign/";
+const PUBLIC_OBJECT_PREFIX = "/storage/v1/object/public/";
 const DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const REFRESH_EARLY_SECONDS = 5 * 60;
 const refreshedUrlCache = new Map<
@@ -68,6 +69,33 @@ export async function refreshSupabaseSignedAssetUrl(
         now + Math.max(0, expiresInSeconds - REFRESH_EARLY_SECONDS) * 1000
     });
     return data.signedUrl;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Storage buckets in this project are public, so a signed URL never needs to
+ * expire — rewrite any legacy `.../object/sign/{bucket}/{path}?token=...`
+ * URL (persisted before the bucket was made public) to the permanent
+ * `.../object/public/{bucket}/{path}` form. No-op for URLs that already are
+ * a public URL, or aren't a Supabase signed storage URL at all.
+ */
+export function toPermanentSupabaseAssetUrl(value: string): string {
+  const location = parseSupabaseSignedStorageUrl(value);
+  if (!location) return value;
+
+  try {
+    const url = new URL(value);
+    const encodedPath = [location.bucket, ...location.path.split("/")]
+      .map(encodeURIComponent)
+      .join("/");
+    url.pathname =
+      url.pathname.slice(0, url.pathname.indexOf(SIGNED_OBJECT_PREFIX)) +
+      PUBLIC_OBJECT_PREFIX +
+      encodedPath;
+    url.search = "";
+    return url.toString();
   } catch {
     return value;
   }

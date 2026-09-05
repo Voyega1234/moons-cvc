@@ -32,6 +32,7 @@ import type {
   QuestionnaireExtractedField
 } from "../../domain/brand";
 import { resolveSubheadlineHighlight } from "../../domain/subheadline-highlight";
+import { toPermanentSupabaseAssetUrl } from "../../lib/supabase/storage-asset-url";
 import type {
   AppView,
   CreativeMixItem,
@@ -505,8 +506,7 @@ function parseLibraryItems(value: unknown): readonly LibraryItem[] | null {
     const id = parseString(item.id);
     const title = parseString(item.title);
     const description = parseString(item.description, true);
-    const assetUrl =
-      item.assetUrl === undefined ? undefined : parseString(item.assetUrl);
+    const assetUrl = parseAssetUrl(item.assetUrl);
     if (!id || !title || description === null || assetUrl === null) return null;
     return {
       id,
@@ -1030,18 +1030,14 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
     const approval = parseApprovalGate(item.approval);
     const approvalComments =
       parseApprovalComments(item.approvalComments) ?? emptyApprovalComments;
-    const assetUrl =
-      item.assetUrl === undefined ? undefined : parseString(item.assetUrl);
+    const assetUrl = parseAssetUrl(item.assetUrl);
     const assetStoragePath =
       item.assetStoragePath === undefined
         ? undefined
         : parseString(item.assetStoragePath);
     const assetBucket =
       item.assetBucket === undefined ? undefined : parseString(item.assetBucket);
-    const albumMasterAssetUrl =
-      item.albumMasterAssetUrl === undefined
-        ? undefined
-        : parseString(item.albumMasterAssetUrl);
+    const albumMasterAssetUrl = parseAssetUrl(item.albumMasterAssetUrl);
     const albumMasterAssetStoragePath =
       item.albumMasterAssetStoragePath === undefined
         ? undefined
@@ -1115,7 +1111,7 @@ function parseCreativeAssetHistory(
   const history = value.map((item) => {
     if (!isRecord(item)) return null;
     const version = parseNumber(item.version);
-    const assetUrl = parseString(item.assetUrl);
+    const assetUrl = parseAssetUrl(item.assetUrl);
     const assetStoragePath =
       item.assetStoragePath === undefined
         ? undefined
@@ -1124,10 +1120,7 @@ function parseCreativeAssetHistory(
       item.assetBucket === undefined
         ? undefined
         : parseString(item.assetBucket);
-    const albumMasterAssetUrl =
-      item.albumMasterAssetUrl === undefined
-        ? undefined
-        : parseString(item.albumMasterAssetUrl);
+    const albumMasterAssetUrl = parseAssetUrl(item.albumMasterAssetUrl);
     const albumMasterAssetStoragePath =
       item.albumMasterAssetStoragePath === undefined
         ? undefined
@@ -1205,6 +1198,12 @@ function parseView(value: unknown): AppView | null {
 function parseString(value: unknown, allowEmpty = false): string | null {
   if (typeof value !== "string") return null;
   return allowEmpty || value.length > 0 ? value : null;
+}
+
+function parseAssetUrl(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  const parsed = parseString(value);
+  return parsed ? toPermanentSupabaseAssetUrl(parsed) : parsed;
 }
 
 function parseNumber(value: unknown): number | null {

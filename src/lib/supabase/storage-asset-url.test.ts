@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import {
   parseSupabaseSignedStorageUrl,
-  refreshSupabaseSignedAssetUrl
+  refreshSupabaseSignedAssetUrl,
+  toPermanentSupabaseAssetUrl
 } from "./storage-asset-url";
 
 describe("Supabase storage asset URLs", () => {
@@ -63,5 +64,26 @@ describe("Supabase storage asset URLs", () => {
     await expect(refreshSupabaseSignedAssetUrl(client, value)).resolves.toBe(
       value
     );
+  });
+
+  it("rewrites a legacy signed URL to the permanent public URL", () => {
+    expect(
+      toPermanentSupabaseAssetUrl(
+        "https://project.supabase.co/storage/v1/object/sign/brand-assets/client/brand-kit/logo%20final.png?token=expired"
+      )
+    ).toBe(
+      "https://project.supabase.co/storage/v1/object/public/brand-assets/client/brand-kit/logo%20final.png"
+    );
+  });
+
+  it("leaves a URL that is already public unchanged", () => {
+    const value =
+      "https://project.supabase.co/storage/v1/object/public/brand-assets/client/logo.png";
+    expect(toPermanentSupabaseAssetUrl(value)).toBe(value);
+  });
+
+  it("leaves ordinary external image URLs unchanged when converting to a permanent URL", () => {
+    const value = "https://images.example.com/logo.png";
+    expect(toPermanentSupabaseAssetUrl(value)).toBe(value);
   });
 });

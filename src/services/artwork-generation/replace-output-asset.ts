@@ -3,7 +3,6 @@ import type { WorkflowState } from "../../features/workflow/model";
 import { getSupabaseClient } from "../../lib/supabase/client";
 
 const ARTWORK_BUCKET = "creative-assets";
-const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export interface ReplacementAsset {
@@ -39,13 +38,10 @@ export async function uploadReplacementAsset({
     .upload(assetStoragePath, file, { contentType: file.type, upsert: true });
   if (uploadResult.error) throw uploadResult.error;
 
-  const signedUrlResult = await client.storage
-    .from(ARTWORK_BUCKET)
-    .createSignedUrl(assetStoragePath, SIGNED_URL_EXPIRES_IN_SECONDS);
-  if (signedUrlResult.error) throw signedUrlResult.error;
+  const { data } = client.storage.from(ARTWORK_BUCKET).getPublicUrl(assetStoragePath);
 
   return {
-    assetUrl: signedUrlResult.data.signedUrl,
+    assetUrl: data.publicUrl,
     assetStoragePath,
     assetBucket: ARTWORK_BUCKET
   };

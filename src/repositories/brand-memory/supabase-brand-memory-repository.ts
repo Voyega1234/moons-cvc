@@ -18,7 +18,7 @@ import { getSupabaseClient } from "../../lib/supabase/client";
 import type { Database, Json } from "../../lib/supabase/database.types";
 import {
   parseSupabaseSignedStorageUrl,
-  refreshSupabaseSignedAssetUrl
+  toPermanentSupabaseAssetUrl
 } from "../../lib/supabase/storage-asset-url";
 import type {
   AnalyzeGuidelineInput,
@@ -63,7 +63,6 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
 ]);
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const ASSET_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const MAX_GUIDELINE_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_GUIDELINE_TYPES = new Set([
   "application/pdf",
@@ -92,7 +91,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return resolveLibraryItems(client, data);
+    return resolveLibraryItems(data);
   }
 
   async createBrandRule({
@@ -122,7 +121,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return resolveLibraryItem(client, data);
+    return resolveLibraryItem(data);
   }
 
   async updateBrandRule({
@@ -159,7 +158,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
 
     if (error) throw error;
 
-    return resolveLibraryItem(client, data);
+    return resolveLibraryItem(data);
   }
 
   async deleteBrandRule(id: string): Promise<void> {
@@ -186,7 +185,7 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .order("created_at");
 
     if (error) throw error;
-    return resolveLibraryItems(client, data);
+    return resolveLibraryItems(data);
   }
 
   async createGuideline({
@@ -365,12 +364,10 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     const imageUrlByAssetId = await resolvePastWorkSignedUrls(
       assets,
       async (asset) => {
-        const { data, error } = await client.storage
+        const { data } = client.storage
           .from(asset.asset_bucket)
-          .createSignedUrl(asset.asset_storage_path, 60 * 60);
-
-        if (error) throw error;
-        return data.signedUrl;
+          .getPublicUrl(asset.asset_storage_path);
+        return data.publicUrl;
       }
     );
     const postAssetByUrl = new Map(
@@ -583,15 +580,12 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .eq("client_id", clientId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return Promise.all(
-      data.map(async (row) => {
-        const signed = await client.storage
-          .from(env.brandAssetsBucket)
-          .createSignedUrl(row.storage_path, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
-        if (signed.error) throw signed.error;
-        return mapAssetImage(row, signed.data.signedUrl);
-      })
-    );
+    return data.map((row) => {
+      const { data: publicUrl } = client.storage
+        .from(env.brandAssetsBucket)
+        .getPublicUrl(row.storage_path);
+      return mapAssetImage(row, publicUrl.publicUrl);
+    });
   }
 
   async createAssetFolder(
@@ -779,14 +773,10 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
         .maybeSingle();
       if (existing.error) throw existing.error;
       if (existing.data) {
-        const signed = await client.storage
+        const { data: publicUrl } = client.storage
           .from(env.brandAssetsBucket)
-          .createSignedUrl(
-            existing.data.storage_path,
-            ASSET_SIGNED_URL_EXPIRES_IN_SECONDS
-          );
-        if (signed.error) throw signed.error;
-        return mapAssetImage(existing.data, signed.data.signedUrl);
+          .getPublicUrl(existing.data.storage_path);
+        return mapAssetImage(existing.data, publicUrl.publicUrl);
       }
     }
 
@@ -824,11 +814,10 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
       throw inserted.error;
     }
-    const signed = await client.storage
+    const { data: publicUrl } = client.storage
       .from(env.brandAssetsBucket)
-      .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
-    if (signed.error) throw signed.error;
-    return mapAssetImage(inserted.data, signed.data.signedUrl);
+      .getPublicUrl(storagePath);
+    return mapAssetImage(inserted.data, publicUrl.publicUrl);
   }
 
   async moveAssetImage(
@@ -843,11 +832,10 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       .select("*")
       .single();
     if (error) throw error;
-    const signed = await client.storage
+    const { data: publicUrl } = client.storage
       .from(env.brandAssetsBucket)
-      .createSignedUrl(data.storage_path, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
-    if (signed.error) throw signed.error;
-    return mapAssetImage(data, signed.data.signedUrl);
+      .getPublicUrl(data.storage_path);
+    return mapAssetImage(data, publicUrl.publicUrl);
   }
 
   async deleteAssetImage(id: string): Promise<void> {
@@ -971,14 +959,13 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
       throw documentError;
     }
 
-    const signedUrlResult = await client.storage
+    const { data: publicUrl } = client.storage
       .from(env.brandAssetsBucket)
-      .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
-    if (signedUrlResult.error) throw signedUrlResult.error;
+      .getPublicUrl(storagePath);
 
     try {
       const result = await callGuidelineAnalysisEndpoint({
-        fileUrl: signedUrlResult.data.signedUrl,
+        fileUrl: publicUrl.publicUrl,
         mimeType: file.type || "application/octet-stream"
       });
 
@@ -1155,22 +1142,18 @@ function mapAssetImage(
   };
 }
 
-async function resolveLibraryItem(
-  client: SupabaseClient<Database>,
-  row: BrandLibraryRow
-): Promise<LibraryItem> {
+function resolveLibraryItem(row: BrandLibraryRow): LibraryItem {
   if (!row.asset_url) return mapLibraryItem(row);
-  const assetUrl = await refreshSupabaseSignedAssetUrl(client, row.asset_url);
+  const assetUrl = toPermanentSupabaseAssetUrl(row.asset_url);
   return mapLibraryItem(
     assetUrl === row.asset_url ? row : { ...row, asset_url: assetUrl }
   );
 }
 
-async function resolveLibraryItems(
-  client: SupabaseClient<Database>,
+function resolveLibraryItems(
   rows: readonly BrandLibraryRow[]
-): Promise<readonly LibraryItem[]> {
-  return Promise.all(rows.map((row) => resolveLibraryItem(client, row)));
+): readonly LibraryItem[] {
+  return rows.map((row) => resolveLibraryItem(row));
 }
 
 function mapDocument(row: BrandDocumentRow): BrandDocument {
@@ -1263,13 +1246,9 @@ async function uploadBrandImage(
     });
   if (uploadResult.error) throw uploadResult.error;
 
-  const signedUrlResult = await client.storage
+  const { data: publicUrl } = client.storage
     .from(env.brandAssetsBucket)
-    .createSignedUrl(storagePath, ASSET_SIGNED_URL_EXPIRES_IN_SECONDS);
-  if (signedUrlResult.error) {
-    await client.storage.from(env.brandAssetsBucket).remove([storagePath]);
-    throw signedUrlResult.error;
-  }
+    .getPublicUrl(storagePath);
 
-  return signedUrlResult.data.signedUrl;
+  return publicUrl.publicUrl;
 }

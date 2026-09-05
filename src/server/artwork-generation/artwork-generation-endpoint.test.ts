@@ -376,6 +376,13 @@ function fakeStorage(): {
               error: null
             };
           },
+          getPublicUrl(path: string) {
+            return {
+              data: {
+                publicUrl: `https://example.supabase.co/storage/v1/object/public/${bucket}/${path}`
+              }
+            };
+          },
           async download() {
             return { data: null, error: { message: "Not found" } };
           }
@@ -1422,6 +1429,9 @@ describe("handleArtworkGenerationRequest", () => {
         data: { signedUrl: `https://example.com/${path}` },
         error: null
       }),
+      getPublicUrl: (path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` }
+      }),
       download: async () => ({ data: null, error: { message: "Not found" } })
     });
 
@@ -1530,6 +1540,9 @@ describe("handleArtworkGenerationRequest", () => {
       createSignedUrl: async (path: string) => ({
         data: { signedUrl: `https://example.com/${path}` },
         error: null
+      }),
+      getPublicUrl: (path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` }
       }),
       download: async () => ({ data: null, error: { message: "Not found" } })
     });
@@ -1681,6 +1694,9 @@ describe("handleArtworkGenerationRequest", () => {
       createSignedUrl: async (path: string) => ({
         data: { signedUrl: `https://example.com/${path}` },
         error: null
+      }),
+      getPublicUrl: (path: string) => ({
+        data: { publicUrl: `https://example.com/${path}` }
       }),
       download: async () => ({ data: null, error: { message: "Not found" } })
     });
@@ -2115,6 +2131,7 @@ describe("handleArtworkGenerationRequest", () => {
           data: { signedUrl: referenceUrl },
           error: null
         }),
+        getPublicUrl: () => ({ data: { publicUrl: referenceUrl } }),
         download: async () => ({
           data: {
             type: "image/jpeg",
@@ -2275,6 +2292,9 @@ describe("handleArtworkGenerationRequest", () => {
       createSignedUrl: async () => ({
         data: { signedUrl: "https://supabase.example.com/signed.png" },
         error: null
+      }),
+      getPublicUrl: () => ({
+        data: { publicUrl: "https://supabase.example.com/public.png" }
       }),
       download: async () => ({
         data: {

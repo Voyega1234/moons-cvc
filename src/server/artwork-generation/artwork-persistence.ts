@@ -10,7 +10,6 @@ import {
 import { buildStoragePath } from "./artwork-paths.js";
 import {
   ARTWORK_BUCKET,
-  ARTWORK_SIGNED_URL_EXPIRES_IN_SECONDS,
   type ArtworkStorageClient
 } from "./artwork-generation-types.js";
 
@@ -57,16 +56,9 @@ export async function persistArtworkOutput({
     });
   if (uploadResult.error) throw new Error(uploadResult.error.message);
 
-  const signedUrlResult = await storage.storage
+  const { data: publicUrlResult } = storage.storage
     .from(ARTWORK_BUCKET)
-    .createSignedUrl(
-      assetStoragePath,
-      ARTWORK_SIGNED_URL_EXPIRES_IN_SECONDS
-    );
-  if (signedUrlResult.error) throw new Error(signedUrlResult.error.message);
-  if (!signedUrlResult.data) {
-    throw new Error("Could not create a signed URL for the generated asset.");
-  }
+    .getPublicUrl(assetStoragePath);
 
   const imageOutputDebug = buildImageOutputDebugBundle({
     model,
@@ -88,7 +80,7 @@ export async function persistArtworkOutput({
     format,
     status: "ready",
     clientStatus: "queued",
-    assetUrl: signedUrlResult.data.signedUrl,
+    assetUrl: publicUrlResult.publicUrl,
     assetStoragePath,
     assetBucket: ARTWORK_BUCKET,
     provider: "openai",

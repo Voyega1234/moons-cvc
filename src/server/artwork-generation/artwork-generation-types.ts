@@ -16,6 +16,7 @@ export interface ArtworkStorageClient {
         data: { signedUrl: string } | null;
         error: { message: string } | null;
       }>;
+      getPublicUrl(path: string): { data: { publicUrl: string } };
       download(path: string): Promise<{
         data: Blob | null;
         error: { message: string } | null;
