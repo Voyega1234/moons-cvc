@@ -4351,14 +4351,14 @@ describe("redesigned workflow stages", () => {
     const dialog = stage.getByRole("dialog", { name: "Regenerate creative" });
     expect(
       within(dialog).getByRole("button", {
-        name: "Make version 3 the active draft"
+        name: "Restore version 3 as the current draft"
       }).getAttribute("aria-pressed")
     ).toBe("true");
     expect(within(dialog).getByLabelText("Attach image")).toBeTruthy();
 
     await user.click(
       within(dialog).getByRole("button", {
-        name: "Make version 1 the active draft"
+        name: "Restore version 1 as the current draft"
       })
     );
 

@@ -66,19 +66,17 @@ export function OutputGrid({
         (candidate) => candidate.id === previewOutput.directionId
       )
     : undefined;
-  const previewOutputs = (
-    previewOutput
-      ? isAlbumOutput(previewOutput)
-        ? sortAlbumOutputs(
-            state.outputs.filter(
-              (output) =>
-                isAlbumOutput(output) &&
-                output.directionId === previewOutput.directionId
-            )
+  const previewOutputs = previewOutput
+    ? isAlbumOutput(previewOutput)
+      ? sortAlbumOutputs(
+          state.outputs.filter(
+            (output) =>
+              isAlbumOutput(output) &&
+              output.directionId === previewOutput.directionId
           )
-        : [previewOutput]
-      : []
-  ).map(activeOutputAsset);
+        )
+      : [previewOutput]
+    : [];
   const regenerateOutput =
     state.outputs.find((output) => output.id === regenerateOutputId) ?? null;
   const regenerateDirection = regenerateOutput
@@ -181,8 +179,6 @@ export function OutputGrid({
               {reviewGroups.map((reviewOutputs, reviewIndex) => {
                 const output = reviewOutputs[0];
                 if (!output) return null;
-                const displayOutput = activeOutputAsset(output);
-                const displayReviewOutputs = reviewOutputs.map(activeOutputAsset);
                 const album = isAlbumOutput(output);
                 const index = state.outputs.indexOf(output);
                 const direction = state.directions.find(
@@ -214,7 +210,7 @@ export function OutputGrid({
                         </small>
                       </div>
                       <span className="pill badge">
-                        Draft · V{output.activeVersion ?? output.revisionCount + 1}
+                        Draft · V{output.currentVersion ?? output.revisionCount + 1}
                       </span>
                     </header>
                     <div className="compass-build-asset-pair">
@@ -230,7 +226,7 @@ export function OutputGrid({
                       >
                         {album ? (
                           <AlbumPanelPreview
-                            outputs={displayReviewOutputs}
+                            outputs={reviewOutputs}
                             direction={direction}
                             format={resolvedAlbumFormatForDirection(
                               state.albumFormat,
@@ -244,10 +240,10 @@ export function OutputGrid({
                             brandName={state.brand?.name}
                             captureId={output.id}
                           />
-                        ) : displayOutput.assetUrl ? (
+                        ) : output.assetUrl ? (
                           <img
                             className="generated-preview"
-                            src={displayOutput.assetUrl}
+                            src={output.assetUrl}
                             alt={direction?.hook ?? `Creative ${index + 1}`}
                             loading="lazy"
                             decoding="async"
@@ -335,11 +331,7 @@ export function OutputGrid({
                             : "No downloadable artwork is available"
                         }
                         onClick={() =>
-                          void downloadDraft(
-                            displayOutput,
-                            displayReviewOutputs,
-                            reviewIndex
-                          )
+                          void downloadDraft(output, reviewOutputs, reviewIndex)
                         }
                       >
                         {downloading ? <Spinner /> : null}
@@ -526,7 +518,7 @@ function outputAssetVersions(
   const versions = [...(output.assetHistory ?? [])];
   if (output.assetUrl) {
     versions.push({
-      version: output.revisionCount + 1,
+      version: output.currentVersion ?? output.revisionCount + 1,
       assetUrl: output.assetUrl,
       ...(output.assetStoragePath
         ? { assetStoragePath: output.assetStoragePath }
@@ -539,6 +531,9 @@ function outputAssetVersions(
         ? {
             albumMasterAssetStoragePath: output.albumMasterAssetStoragePath
           }
+        : {}),
+      ...(output.lastRevisionInstructions
+        ? { instructions: output.lastRevisionInstructions }
         : {})
     });
   }
@@ -577,12 +572,6 @@ function outputAtVersion(
   };
 }
 
-function activeOutputAsset(output: CreativeOutput): CreativeOutput {
-  return output.activeVersion !== undefined
-    ? outputAtVersion(output, output.activeVersion)
-    : output;
-}
-
 function OutputRegenerateModal({
   run,
   output,
@@ -604,13 +593,14 @@ function OutputRegenerateModal({
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [phase, setPhase] = useState<"idle" | "regenerating">("idle");
   const [selectedVersion, setSelectedVersion] = useState(
-    output.activeVersion ?? output.revisionCount + 1
+    output.currentVersion ?? output.revisionCount + 1
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [referenceAttachment, setReferenceAttachment] =
     useState<OutputReferenceAttachment | null>(null);
   const [attaching, setAttaching] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const album = isAlbumOutput(output);
   const busy = phase !== "idle";
   const versions = outputAssetVersions(output);
@@ -622,8 +612,17 @@ function OutputRegenerateModal({
   );
 
   useEffect(() => {
-    setSelectedVersion(output.activeVersion ?? output.revisionCount + 1);
-  }, [output.assetUrl, output.revisionCount, output.activeVersion]);
+    setSelectedVersion(output.currentVersion ?? output.revisionCount + 1);
+  }, [output.assetUrl, output.revisionCount, output.currentVersion]);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLightboxOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [lightboxOpen]);
 
   const handleReferenceAttachment = async (
     event: ChangeEvent<HTMLInputElement>
@@ -755,7 +754,8 @@ function OutputRegenerateModal({
                 albumMasterAssetStoragePath:
                   updated.albumMasterAssetStoragePath
               }
-            : {})
+            : {}),
+          instructions: revisionInstructions
         });
       });
       setSelectedVersion(output.revisionCount + 2);
@@ -773,6 +773,7 @@ function OutputRegenerateModal({
   };
 
   return (
+    <>
     <div
       className="output-modal-backdrop"
       onClick={busy ? undefined : onClose}
@@ -809,16 +810,44 @@ function OutputRegenerateModal({
                     className={selected ? "selected" : ""}
                     type="button"
                     key={`${version.version}-${version.assetUrl}`}
-                    aria-label={`Make version ${version.version} the active draft`}
+                    aria-label={`Restore version ${version.version} as the current draft`}
                     aria-pressed={selected}
+                    title={version.instructions ?? "No revision instructions recorded."}
                     disabled={busy}
-                    onClick={() => {
+                    onClick={async () => {
                       setSelectedVersion(version.version);
+                      const currentLabel =
+                        output.currentVersion ?? output.revisionCount + 1;
+                      if (version.version === currentLabel) return;
+                      await createCheckpoint?.("replace-image", run.id);
                       outputs.forEach((candidateOutput) => {
+                        const asset = outputAssetVersions(candidateOutput).find(
+                          (candidate) => candidate.version === version.version
+                        );
+                        if (!asset) return;
                         dispatch({
-                          type: "select-output-version",
+                          type: "restore-output-version",
                           id: candidateOutput.id,
-                          version: version.version
+                          version: version.version,
+                          assetUrl: asset.assetUrl,
+                          ...(asset.assetStoragePath
+                            ? { assetStoragePath: asset.assetStoragePath }
+                            : {}),
+                          ...(asset.assetBucket
+                            ? { assetBucket: asset.assetBucket }
+                            : {}),
+                          ...(asset.albumMasterAssetUrl
+                            ? { albumMasterAssetUrl: asset.albumMasterAssetUrl }
+                            : {}),
+                          ...(asset.albumMasterAssetStoragePath
+                            ? {
+                                albumMasterAssetStoragePath:
+                                  asset.albumMasterAssetStoragePath
+                              }
+                            : {}),
+                          ...(asset.instructions
+                            ? { instructions: asset.instructions }
+                            : {})
                         });
                       });
                     }}
@@ -837,40 +866,69 @@ function OutputRegenerateModal({
           </aside>
           <div className="output-regenerate-main">
             <div className="output-modal-image">
-              {album ? (
-                <AlbumPanelPreview
-                  outputs={previewOutputs}
-                  direction={direction}
-                  format={resolvedAlbumFormatForDirection(
-                    run.albumFormat,
-                    direction
-                  )}
-                />
-              ) : isUgcOutput(output) ? (
-                <UgcTemplatePreview
-                  direction={direction}
-                  brandName={run.brand?.name}
-                  captureId={output.id}
-                />
-              ) : selectedAsset?.assetUrl ? (
-                <img
-                  src={selectedAsset.assetUrl}
-                  alt={`Version ${selectedAsset.version} preview`}
-                />
-              ) : (
-                <div className="static-preview">
-                  <span className="static-mark" />
-                  <div className="static-copy">
-                    <h3>{direction?.hook}</h3>
-                    <p>{direction ? directionSubheadline(direction) : null}</p>
-                    <span>Learn more</span>
+              {(() => {
+                const preview = album ? (
+                  <AlbumPanelPreview
+                    outputs={previewOutputs}
+                    direction={direction}
+                    format={resolvedAlbumFormatForDirection(
+                      run.albumFormat,
+                      direction
+                    )}
+                  />
+                ) : isUgcOutput(output) ? (
+                  <UgcTemplatePreview
+                    direction={direction}
+                    brandName={run.brand?.name}
+                    captureId={output.id}
+                  />
+                ) : selectedAsset?.assetUrl ? (
+                  <img
+                    src={selectedAsset.assetUrl}
+                    alt={`Version ${selectedAsset.version} preview`}
+                  />
+                ) : (
+                  <div className="static-preview">
+                    <span className="static-mark" />
+                    <div className="static-copy">
+                      <h3>{direction?.hook}</h3>
+                      <p>{direction ? directionSubheadline(direction) : null}</p>
+                      <span>Learn more</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+                const canZoom =
+                  (album && previewOutputs.some((item) => item.assetUrl)) ||
+                  Boolean(selectedAsset?.assetUrl);
+                if (!canZoom) return preview;
+                return (
+                  <button
+                    type="button"
+                    className="output-regenerate-zoom-trigger"
+                    aria-label="View full-size image"
+                    onClick={() => setLightboxOpen(true)}
+                  >
+                    {preview}
+                  </button>
+                );
+              })()}
             </div>
-            <p className="output-regenerate-source-label">
-              Editing from V{selectedAsset?.version ?? output.revisionCount + 1}
-            </p>
+            <div className="output-regenerate-version-footer">
+              <span className="output-regenerate-source-label">
+                Editing from V
+                {selectedAsset?.version ??
+                  output.currentVersion ??
+                  output.revisionCount + 1}
+              </span>
+              {selectedAsset?.instructions ? (
+                <p
+                  className="output-regenerate-version-instructions"
+                  title={selectedAsset.instructions}
+                >
+                  “{selectedAsset.instructions}”
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="output-chat-composer">
@@ -937,5 +995,46 @@ function OutputRegenerateModal({
         {error ? <p className="repository-message error">{error}</p> : null}
       </div>
     </div>
+    {lightboxOpen ? (
+      <div
+        className="output-modal-backdrop output-lightbox-backdrop"
+        onClick={() => setLightboxOpen(false)}
+      >
+        <div
+          className="output-lightbox-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Full-size creative preview"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="output-lightbox-close"
+            aria-label="Close full-size preview"
+            onClick={() => setLightboxOpen(false)}
+          >
+            Close
+          </button>
+          <div className="output-lightbox-image">
+            {album ? (
+              <AlbumPanelPreview
+                outputs={previewOutputs}
+                direction={direction}
+                format={resolvedAlbumFormatForDirection(
+                  run.albumFormat,
+                  direction
+                )}
+              />
+            ) : selectedAsset?.assetUrl ? (
+              <img
+                src={selectedAsset.assetUrl}
+                alt={`Version ${selectedAsset.version} preview`}
+              />
+            ) : null}
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
