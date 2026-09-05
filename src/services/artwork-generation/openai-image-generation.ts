@@ -168,6 +168,7 @@ export interface ArtworkGenerationResponse {
 export interface ArtworkRevisionRequest {
   requestType: "artwork-revision";
   model: "gpt-image-2";
+  mode?: "revise" | "placeholder";
   clientId: string;
   runId: string;
   outputId: string;
@@ -366,13 +367,15 @@ export function buildArtworkRevisionRequest({
   output,
   instructions,
   referenceImages = [],
-  album
+  album,
+  mode = "revise"
 }: {
   run: WorkflowState;
   output: CreativeOutput;
   instructions: string;
   referenceImages?: readonly ArtworkReferenceImage[];
   album?: ArtworkRevisionRequest["album"];
+  mode?: ArtworkRevisionRequest["mode"];
 }): ArtworkRevisionRequest {
   const sourceImageUrl = output.assetUrl?.trim();
   if (!sourceImageUrl) {
@@ -386,6 +389,7 @@ export function buildArtworkRevisionRequest({
   return {
     requestType: "artwork-revision",
     model: "gpt-image-2",
+    mode,
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
     outputId: output.id,
@@ -401,6 +405,62 @@ export function buildArtworkRevisionRequest({
       format: "png"
     }
   };
+}
+
+export const PLACEHOLDER_INSTRUCTIONS =
+  "First, carefully scan this entire image from top to bottom and edge to edge, and identify every single piece of text in it — including small print, footnotes, legal disclaimers, terms and conditions, badges, stat callouts, labels inside icons or boxes, watermark-style text, and any other text no matter how small or low-contrast. Do not skip any of it. Then replace every one of those body/marketing text elements with generic placeholder labels only — do not keep any real price, offer, claim, or copy anywhere in the image. Label each text element by what it is: \"HEADLINE\" for the main headline, \"SUBHEADLINE\" for the subheadline, \"BODY\" for body copy, and \"CTA\" for the call-to-action button text (use whichever of these apply to the elements actually present; for small print/disclaimers/footnotes use \"BODY\" too). For any numeric data (prices, percentages, phone numbers, dates, durations, etc.), replace each digit with \"X\" while keeping the original format exactly — same digit count, commas, decimal points, %, currency symbols, and units (e.g. \"120%\" becomes \"XX%\", \"1,499 บาท/เดือน\" becomes \"X,XXX บาท/เดือน\", \"1366\" becomes \"XXXX\") so the layout and text weight stay visually identical. Do NOT touch the brand logo — leave it exactly as it is, unchanged and unlabeled, even if it contains the brand name. Keep the exact same layout, fonts, colors, images, and design — only replace the marketing text and numbers with these placeholders.";
+
+export async function placeholderizeOutputImage({
+  run,
+  output
+}: {
+  run: WorkflowState;
+  output: CreativeOutput;
+}): Promise<CreativeOutput> {
+  const request = buildArtworkRevisionRequest({
+    run,
+    output,
+    instructions: PLACEHOLDER_INSTRUCTIONS,
+    mode: "placeholder"
+  });
+  const [revised] = await requestArtworkRevision(request);
+  if (!revised) {
+    throw new Error("Artwork placeholder generation returned no output.");
+  }
+
+  return normalizeArtworkOutput(revised);
+}
+
+export async function placeholderizeAlbumOutputImages({
+  run,
+  outputs,
+  sourceImageUrl,
+  albumFormat
+}: {
+  run: WorkflowState;
+  outputs: readonly CreativeOutput[];
+  sourceImageUrl: string;
+  albumFormat: AlbumFormat;
+}): Promise<readonly CreativeOutput[]> {
+  const output = outputs[0];
+  if (!output) {
+    throw new Error("The current album artwork is required for revision.");
+  }
+  const request = buildArtworkRevisionRequest({
+    run,
+    output: { ...output, assetUrl: sourceImageUrl },
+    instructions: PLACEHOLDER_INSTRUCTIONS,
+    mode: "placeholder",
+    album: {
+      format: albumFormat,
+      outputIds: outputs.map((candidate) => candidate.id)
+    }
+  });
+  const revised = await requestArtworkRevision(request);
+  if (revised.length < outputs.length) {
+    throw new Error("Album placeholder generation did not return every panel.");
+  }
+  return revised.map(normalizeArtworkOutput);
 }
 
 export async function regenerateOutputImages({

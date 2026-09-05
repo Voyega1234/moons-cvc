@@ -58,9 +58,12 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
     album = { format, outputIds };
   }
 
+  const mode = value.mode === "placeholder" ? "placeholder" : "revise";
+
   return {
     requestType: "artwork-revision",
     model: readString(value.model, "model") as ArtworkRevisionRequest["model"],
+    mode,
     clientId: readString(value.clientId, "clientId"),
     runId: readString(value.runId, "runId"),
     outputId: readString(value.outputId, "outputId"),

@@ -95,6 +95,108 @@ export async function editImage({
   };
 }
 
+export type GptImageAspectRatio =
+  | "1:1"
+  | "3:2"
+  | "2:3"
+  | "4:3"
+  | "3:4"
+  | "16:9"
+  | "9:16"
+  | "21:9"
+  | "auto";
+
+const GPT_IMAGE_ASPECT_RATIO_VALUES: Record<
+  Exclude<GptImageAspectRatio, "auto">,
+  number
+> = {
+  "1:1": 1,
+  "3:2": 3 / 2,
+  "2:3": 2 / 3,
+  "4:3": 4 / 3,
+  "3:4": 3 / 4,
+  "16:9": 16 / 9,
+  "9:16": 9 / 16,
+  "21:9": 21 / 9
+};
+
+export function gptImageAspectRatioForOutputSize(
+  size: ArtworkOutputSize
+): GptImageAspectRatio {
+  const [widthText, heightText] = size.split("x");
+  const width = Number(widthText);
+  const height = Number(heightText);
+  const targetRatio = width / height;
+
+  let closest: Exclude<GptImageAspectRatio, "auto"> = "1:1";
+  let closestDiff = Infinity;
+  for (const [ratio, value] of Object.entries(
+    GPT_IMAGE_ASPECT_RATIO_VALUES
+  ) as [Exclude<GptImageAspectRatio, "auto">, number][]) {
+    const diff = Math.abs(value - targetRatio);
+    if (diff < closestDiff) {
+      closest = ratio;
+      closestDiff = diff;
+    }
+  }
+  return closest;
+}
+
+export interface EditImageWithAspectRatioOptions {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  aspectRatio: GptImageAspectRatio;
+  quality?: "auto" | "low" | "medium" | "high";
+  referenceImages: readonly ReferenceImageInput[];
+  fetchImpl: typeof fetch;
+}
+
+export async function editImageWithAspectRatio({
+  apiKey,
+  model,
+  prompt,
+  aspectRatio,
+  quality = "high",
+  referenceImages,
+  fetchImpl
+}: EditImageWithAspectRatioOptions): Promise<GeneratedImage> {
+  const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: openRouterImageModel(model),
+      prompt: fitOpenAIImagePrompt(prompt),
+      aspect_ratio: aspectRatio,
+      quality,
+      input_references: referenceImages.map((reference) => ({
+        type: "image_url",
+        image_url: {
+          url: `data:${reference.mimeType};base64,${reference.bytes.toString(
+            "base64"
+          )}`
+        }
+      }))
+    })
+  });
+
+  const payload = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(
+      readErrorMessage(payload) ?? `OpenRouter image edit failed: ${response.status}`
+    );
+  }
+
+  return {
+    base64: extractB64Json(payload),
+    mimeType: "image/png"
+  };
+}
+
 export async function generateImage({
   apiKey,
   model,

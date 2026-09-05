@@ -10,7 +10,11 @@ import type { ArtworkStorageClient } from "./artwork-generation-types.js";
 import { persistArtworkOutput } from "./artwork-persistence.js";
 import { composeImagePrompt } from "./prompt-runtime.js";
 import { resolveReferenceImages } from "./reference-images.js";
-import { editImage } from "./openai-images-client.js";
+import {
+  editImage,
+  editImageWithAspectRatio,
+  gptImageAspectRatioForOutputSize
+} from "./openai-images-client.js";
 import { splitAlbumMaster } from "./album-master.js";
 import { planArtworkRevision } from "./design-system-flow-agent.js";
 
@@ -152,6 +156,21 @@ async function generateRevisedArtwork({
     throw new Error("Could not load the current artwork for revision.");
   }
   const revisionReferences = [sourceImage, ...additionalReferences];
+
+  if (input.mode === "placeholder") {
+    const image = await editImageWithAspectRatio({
+      apiKey,
+      model,
+      prompt: input.instructions,
+      aspectRatio: input.album
+        ? "1:1"
+        : gptImageAspectRatioForOutputSize(input.output.size),
+      quality: "low",
+      referenceImages: revisionReferences,
+      fetchImpl
+    });
+    return { image, effectiveInstructions: input.instructions };
+  }
 
   let effectiveInstructions = input.instructions;
   try {
