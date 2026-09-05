@@ -30,9 +30,19 @@ export interface IdeaPreflightDirection {
   revisionFeedback: string;
 }
 
+export type IdeaPreflightFixableField =
+  | "hook"
+  | "subheadline"
+  | "concept"
+  | "visual"
+  | "cta"
+  | "caption";
+
 export interface IdeaPreflightFinding {
   check: IdeaPreflightCheckId;
   message: string;
+  field: IdeaPreflightFixableField | null;
+  suggestion: string | null;
 }
 
 export interface IdeaPreflightResult {

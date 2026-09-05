@@ -1,0 +1,82 @@
+import { handleIdeaPreflightFixRequest } from "../src/server/quality-check/idea-preflight-fix-endpoint.js";
+
+export const config = {
+  maxDuration: 60
+};
+
+type VercelRequest = {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
+  body?: unknown;
+};
+
+type VercelResponse = {
+  status(statusCode: number): VercelResponse;
+  setHeader(name: string, value: string): void;
+  json(body: unknown): void;
+};
+
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse
+) {
+  const workerResponse = await handleIdeaPreflightFixRequest({
+    request: toFetchRequest(request),
+    env: {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      OPENROUTER_IDEA_PREFLIGHT_FIX_MODEL:
+        process.env.OPENROUTER_IDEA_PREFLIGHT_FIX_MODEL,
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY
+    }
+  });
+  const bodyText = await workerResponse.text();
+
+  response.status(workerResponse.status);
+  response.setHeader("Content-Type", "application/json");
+  response.json(parseJsonBody(bodyText));
+}
+
+function toFetchRequest(request: VercelRequest): Request {
+  return new Request("https://moons.local/api/idea-preflight-fix", {
+    method: request.method ?? "GET",
+    headers: toHeaders(request.headers),
+    body:
+      request.method === "POST"
+        ? typeof request.body === "string"
+          ? request.body
+          : JSON.stringify(request.body ?? {})
+        : undefined
+  });
+}
+
+function toHeaders(
+  headers: Record<string, string | string[] | undefined>
+): Headers {
+  const nextHeaders = new Headers();
+  for (const [key, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) nextHeaders.set(key, value.join(","));
+    else if (value) nextHeaders.set(key, value);
+  }
+  if (!nextHeaders.has("Content-Type")) {
+    nextHeaders.set("Content-Type", "application/json");
+  }
+  return nextHeaders;
+}
+
+function parseJsonBody(text: string): unknown {
+  if (!text.trim()) {
+    return {
+      ok: false,
+      error: "Idea preflight fix returned an empty response body."
+    };
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return {
+      ok: false,
+      error: "Idea preflight fix returned a non-JSON response body."
+    };
+  }
+}

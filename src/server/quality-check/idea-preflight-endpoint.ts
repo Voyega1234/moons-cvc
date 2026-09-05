@@ -2,6 +2,13 @@ import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js"
 
 type FetchLike = typeof fetch;
 type CheckId = "quality" | "spelling" | "policy";
+type FixableField =
+  | "hook"
+  | "subheadline"
+  | "concept"
+  | "visual"
+  | "cta"
+  | "caption";
 
 export interface IdeaPreflightEndpointEnv {
   OPENAI_API_KEY?: string;
@@ -49,6 +56,14 @@ const DEFAULT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 const CHECK_IDS = new Set<CheckId>(["quality", "spelling", "policy"]);
+const FIXABLE_FIELDS = new Set<FixableField>([
+  "hook",
+  "subheadline",
+  "concept",
+  "visual",
+  "cta",
+  "caption"
+]);
 
 export async function handleIdeaPreflightRequest({
   request,
@@ -180,7 +195,13 @@ function buildPrompt(input: IdeaPreflightRequest): string {
     "คุณคือ Creative Strategist และ Copy QA สำหรับตรวจ creative idea ก่อนสร้าง artwork",
     "ตรวจเฉพาะหลักฐานที่ให้มา ห้ามอ้างว่าเห็น final artwork เพราะขั้นตอนนี้มีเพียง hook, caption, concept และ visual direction",
     "คืนเฉพาะปัญหาที่ต้องแก้จริง ข้อความ finding ต้องสั้น ชัด และระบุวิธีแก้ได้ในประโยคเดียว",
+    "ห้ามคืน finding ซ้ำกันสำหรับ idea เดียวกัน ถ้าปัญหาเดียวกันเกิดกับหลายจุดในไอเดียเดียวกัน ให้รวมเป็น finding เดียวและอธิบายทุกจุดในข้อความเดียว",
     "ถ้าไม่พบปัญหา ให้ findings เป็น array ว่างสำหรับ idea นั้น",
+    "",
+    "ทุก finding ต้องระบุ field ที่มีปัญหาให้ได้มากที่สุดเท่าที่จะทำได้ เพื่อให้ระบบส่งต่อให้ agent ตัวที่สองช่วยแก้ไขข้อความ field นั้นให้อัตโนมัติ ผ่าน field และ suggestion:",
+    "- field: ชื่อ field ที่มีปัญหา ต้องเป็นหนึ่งใน hook, subheadline, concept, visual, cta, caption เท่านั้น (เลือก field เดียวที่ตรงที่สุด) ให้พยายามระบุ field เสมอถ้าปัญหาเกี่ยวข้องกับข้อความส่วนใดส่วนหนึ่งของไอเดีย ใส่ null เฉพาะกรณีที่ปัญหาไม่เกี่ยวกับข้อความ field ใดเลยจริง ๆ (เช่นปัญหาเชิงโครงสร้างข้าม field หลายจุดพร้อมกัน)",
+    "- suggestion: อธิบายสั้น ๆ ว่าควรแก้ field นั้นอย่างไรหรือควรเป็นข้อความประมาณไหน ไม่จำเป็นต้องเป็นคำพูดที่คัดลอกมาตรงตัว เขียนเป็นแนวทางที่ agent อีกตัวจะเอาไปเขียนข้อความจริงต่อได้ หรือ null ถ้าให้แนวทางที่เป็นประโยชน์ไม่ได้",
+    "- ถ้า field เป็น null ให้ suggestion เป็น null ด้วยเสมอ",
     "",
     enabled.has("quality")
       ? [
@@ -218,10 +239,10 @@ function buildPrompt(input: IdeaPreflightRequest): string {
     `Brief: ${input.brief}`,
     `Confirmed context:\n${formatBrandContext(input.brandContext)}`,
     "",
-    "Ideas:",
+    "Ideas (อ้างอิงด้วยหมายเลขข้อเท่านั้น ห้ามพิมพ์หรือมโน directionId เอง):",
     ...input.directions.map((direction, index) =>
       [
-        `${index + 1}. directionId: ${direction.id}`,
+        `Idea #${index + 1}`,
         `Service: ${direction.service}`,
         `Hook: ${direction.hook}`,
         `Subheadline: ${direction.subheadline}`,
@@ -234,7 +255,7 @@ function buildPrompt(input: IdeaPreflightRequest): string {
       ].join("\n")
     ),
     "",
-    "ตอบ directionId ให้ครบและตรงกับทุก idea ตามลำดับ Return only JSON ตาม schema."
+    `ตอบกลับด้วย ideaIndex เป็นตัวเลข 1 ถึง ${input.directions.length} ตรงกับหมายเลข "Idea #" ด้านบนเท่านั้น ห้ามใช้ตัวเลขนอกช่วงนี้ ต้องตอบให้ครบทุกข้อ ข้อละหนึ่งครั้งเท่านั้น ห้ามตอบเลขซ้ำ Return only JSON ตาม schema.`
   ].join("\n");
 }
 
@@ -262,7 +283,7 @@ const resultsSchema = {
         type: "object",
         additionalProperties: false,
         properties: {
-          directionId: { type: "string" },
+          ideaIndex: { type: "integer" },
           findings: {
             type: "array",
             items: {
@@ -273,84 +294,157 @@ const resultsSchema = {
                   type: "string",
                   enum: ["quality", "spelling", "policy"]
                 },
-                message: { type: "string" }
+                message: { type: "string" },
+                field: {
+                  type: ["string", "null"],
+                  enum: [
+                    "hook",
+                    "subheadline",
+                    "concept",
+                    "visual",
+                    "cta",
+                    "caption",
+                    null
+                  ]
+                },
+                suggestion: { type: ["string", "null"] }
               },
-              required: ["check", "message"]
+              required: ["check", "message", "field", "suggestion"]
             }
           }
         },
-        required: ["directionId", "findings"]
+        required: ["ideaIndex", "findings"]
       }
     }
   },
   required: ["results"]
 } as const;
 
+interface ParsedFinding {
+  check: CheckId;
+  message: string;
+  field: FixableField | null;
+  suggestion: string | null;
+}
+
+interface ParsedResult {
+  directionId: string;
+  findings: readonly ParsedFinding[];
+}
+
 function parseResults(
   text: string,
   expectedIds: readonly string[],
   enabledChecks: ReadonlySet<CheckId>
-) {
+): readonly ParsedResult[] {
   const parsed = JSON.parse(text) as unknown;
   const record = readRecord(parsed, "idea preflight payload");
   if (!Array.isArray(record.results)) {
     throw new Error("results must be an array.");
   }
 
-  const expected = new Set(expectedIds);
-  const seen = new Set<string>();
-  const results = record.results.map((item, index) => {
-    const result = readRecord(item, `results[${index}]`);
-    const directionId = readString(
-      result.directionId,
-      `results[${index}].directionId`
-    );
-    if (!expected.has(directionId) || seen.has(directionId)) {
-      throw new Error(`results[${index}].directionId is invalid.`);
-    }
-    seen.add(directionId);
-    if (!Array.isArray(result.findings)) {
-      throw new Error(`results[${index}].findings must be an array.`);
-    }
+  const seen = new Set<number>();
+  const results: ParsedResult[] = [];
 
-    const findings = result.findings.map((itemFinding, findingIndex) => {
+  // Asking the model to echo back an opaque directionId string invites
+  // typos and hallucinated ids across a large batch. Asking for the 1-based
+  // "Idea #" position instead (resolved back to the real id here) removes
+  // that failure mode almost entirely; the skip-on-malformed fallback below
+  // is just a backstop for the rare remaining case (duplicate/out-of-range
+  // index), so one bad entry still can't fail the whole (advisory) check.
+  record.results.forEach((item, index) => {
+    try {
+      const result = readRecord(item, `results[${index}]`);
+      const ideaIndex = readInteger(
+        result.ideaIndex,
+        `results[${index}].ideaIndex`
+      );
+      if (ideaIndex < 1 || ideaIndex > expectedIds.length || seen.has(ideaIndex)) {
+        throw new Error(`results[${index}].ideaIndex is invalid.`);
+      }
+      if (!Array.isArray(result.findings)) {
+        throw new Error(`results[${index}].findings must be an array.`);
+      }
+      seen.add(ideaIndex);
+      results.push({
+        directionId: expectedIds[ideaIndex - 1]!,
+        findings: parseFindings(result.findings, index, enabledChecks)
+      });
+    } catch (error) {
+      console.warn("Idea preflight: ignoring a malformed result.", error);
+    }
+  });
+
+  expectedIds.forEach((directionId, index) => {
+    if (!seen.has(index + 1)) results.push({ directionId, findings: [] });
+  });
+  return results;
+}
+
+function parseFindings(
+  items: readonly unknown[],
+  resultIndex: number,
+  enabledChecks: ReadonlySet<CheckId>
+): readonly ParsedFinding[] {
+  const findings = items.flatMap((itemFinding, findingIndex) => {
+    try {
       const finding = readRecord(
         itemFinding,
-        `results[${index}].findings[${findingIndex}]`
+        `results[${resultIndex}].findings[${findingIndex}]`
       );
       const check = readString(
         finding.check,
-        `results[${index}].findings[${findingIndex}].check`
+        `results[${resultIndex}].findings[${findingIndex}].check`
       );
       if (
         !CHECK_IDS.has(check as CheckId) ||
         !enabledChecks.has(check as CheckId)
       ) {
-        throw new Error(
-          `results[${index}].findings[${findingIndex}].check is invalid.`
-        );
+        return [];
       }
-      return {
-        check: check as CheckId,
-        message: readString(
-          finding.message,
-          `results[${index}].findings[${findingIndex}].message`
-        )
-      };
-    });
+      const field = readNullableString(
+        finding.field,
+        `results[${resultIndex}].findings[${findingIndex}].field`
+      );
+      const validField =
+        field !== null && FIXABLE_FIELDS.has(field as FixableField)
+          ? (field as FixableField)
+          : null;
+      const suggestion = readNullableString(
+        finding.suggestion,
+        `results[${resultIndex}].findings[${findingIndex}].suggestion`
+      );
 
-    return {
-      directionId,
-      findings: findings.filter(
-        (finding) => !isFormattingOnlyFinding(finding)
-      )
-    };
+      return [
+        {
+          check: check as CheckId,
+          message: readString(
+            finding.message,
+            `results[${resultIndex}].findings[${findingIndex}].message`
+          ),
+          field: validField,
+          suggestion: validField === null ? null : suggestion
+        }
+      ];
+    } catch (error) {
+      console.warn("Idea preflight: ignoring a malformed finding.", error);
+      return [];
+    }
   });
 
-  if (seen.size !== expected.size) {
-    throw new Error("GPT Luna did not return every requested idea.");
-  }
-  return results;
+  return dedupeFindings(findings.filter((finding) => !isFormattingOnlyFinding(finding)));
+}
+
+function dedupeFindings<T extends { message: string }>(
+  findings: readonly T[]
+): T[] {
+  const seenMessages = new Set<string>();
+  return findings.filter((finding) => {
+    const normalized = finding.message.trim().replace(/\s+/g, " ").toLowerCase();
+    if (seenMessages.has(normalized)) return false;
+    seenMessages.add(normalized);
+    return true;
+  });
 }
 
 function isFormattingOnlyFinding(finding: {
@@ -499,6 +593,19 @@ function readRecord(value: unknown, field: string): Record<string, unknown> {
 
 function readString(value: unknown, field: string): string {
   if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  return value;
+}
+
+function readNullableString(value: unknown, field: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string") throw new Error(`${field} must be a string or null.`);
+  return value;
+}
+
+function readInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(`${field} must be an integer.`);
+  }
   return value;
 }
 

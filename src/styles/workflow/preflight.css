@@ -696,6 +696,10 @@
 }
 
 .preflight-results-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -736,6 +740,22 @@
   font-size: 12.5px;
 }
 
+.preflight-result-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preflight-result-apply-all {
+  padding: 3px 9px;
+  font-size: 9.5px;
+}
+
+.preflight-result-apply-all:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .preflight-result-badge {
   padding: 4px 7px;
   border-radius: 999px;
@@ -759,6 +779,52 @@
   color: #525a68;
   font-size: 10.8px;
   line-height: 1.55;
+}
+
+.preflight-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.preflight-finding-fix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preflight-finding-suggestion {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  font-size: 10.5px;
+  color: #20283a;
+  background: #fff;
+}
+
+.preflight-finding-suggestion:disabled {
+  color: #8b93a4;
+  background: #f5f6f8;
+}
+
+.preflight-finding-apply {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  font-size: 9.5px;
+}
+
+.preflight-finding-apply:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.preflight-finding-error {
+  margin: 0;
+  color: #b23c32;
+  font-size: 9.5px;
 }
 
 .preflight-clean {

@@ -108,6 +108,456 @@ describe("PreflightModal", () => {
     unmount();
   });
 
+  it("uses the fix agent to revise only the flagged field, not the whole idea", async () => {
+    const user = userEvent.setup();
+    const [direction] = buildDirectionFixtures("Compass");
+    if (!direction) throw new Error("Expected a direction fixture.");
+    const onApplyFinding = vi.fn();
+    const runChecks = vi.fn().mockResolvedValue([
+      {
+        directionId: direction.id,
+        findings: [
+          {
+            check: "quality",
+            message: "คำว่า 'hook' ควรระบุให้ชัดเจนกว่านี้",
+            field: "hook",
+            suggestion: "ทำให้ hook ชัดเจนขึ้น"
+          },
+          {
+            check: "policy",
+            message: "ต้องให้ทีมกฎหมายตรวจสอบคำกล่าวอ้างนี้ก่อน",
+            field: null,
+            suggestion: null
+          }
+        ]
+      }
+    ]);
+    const runApplyFix = vi.fn().mockResolvedValue("Compass hook 1 (revised)");
+
+    const { unmount } = render(
+      <PreflightModal
+        directions={[direction]}
+        fallbackService="single-static"
+        context={{
+          runId: "run-preflight-apply",
+          brief: "Make the product benefit instantly clear.",
+          brandContext: null
+        }}
+        artworkMode="design-system"
+        onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+        onApplyFinding={onApplyFinding}
+        runChecks={runChecks}
+        runApplyFix={runApplyFix}
+      />
+    );
+
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const modal = within(dialog);
+
+    await user.click(modal.getByRole("button", { name: "Run checks on 1" }));
+    expect(await modal.findByText("คำว่า 'hook' ควรระบุให้ชัดเจนกว่านี้")).toBeTruthy();
+
+    expect(modal.getAllByRole("button", { name: "Fix with AI" })).toHaveLength(1);
+
+    await user.click(modal.getByRole("button", { name: "Fix with AI" }));
+    expect(await modal.findByRole("button", { name: "Applied ✓" })).toBeTruthy();
+
+    expect(runApplyFix).toHaveBeenCalledTimes(1);
+    expect(runApplyFix).toHaveBeenCalledWith(
+      expect.objectContaining({
+        field: "hook",
+        check: "quality",
+        message: "คำว่า 'hook' ควรระบุให้ชัดเจนกว่านี้",
+        suggestion: "ทำให้ hook ชัดเจนขึ้น",
+        direction: expect.objectContaining({ hook: "Compass hook 1" })
+      })
+    );
+    expect(onApplyFinding).toHaveBeenCalledTimes(1);
+    expect(onApplyFinding).toHaveBeenCalledWith(direction.id, {
+      hook: "Compass hook 1 (revised)"
+    });
+    expect(
+      (
+        modal.getByRole("button", {
+          name: "Applied ✓"
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+
+    unmount();
+  });
+
+  it("sends the user's added instructions to the fix agent", async () => {
+    const user = userEvent.setup();
+    const [direction] = buildDirectionFixtures("Compass");
+    if (!direction) throw new Error("Expected a direction fixture.");
+    const onApplyFinding = vi.fn();
+    const runChecks = vi.fn().mockResolvedValue([
+      {
+        directionId: direction.id,
+        findings: [
+          {
+            check: "quality",
+            message: "คำว่า 'hook' ควรระบุให้ชัดเจนกว่านี้",
+            field: "hook",
+            suggestion: "ทำให้ hook ชัดเจนขึ้น"
+          }
+        ]
+      }
+    ]);
+    const runApplyFix = vi
+      .fn()
+      .mockResolvedValue("Compass hook 1 (revised and extra clear)");
+
+    const { unmount } = render(
+      <PreflightModal
+        directions={[direction]}
+        fallbackService="single-static"
+        context={{
+          runId: "run-preflight-edit-suggestion",
+          brief: "Make the product benefit instantly clear.",
+          brandContext: null
+        }}
+        artworkMode="design-system"
+        onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+        onApplyFinding={onApplyFinding}
+        runChecks={runChecks}
+        runApplyFix={runApplyFix}
+      />
+    );
+
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const modal = within(dialog);
+
+    await user.click(modal.getByRole("button", { name: "Run checks on 1" }));
+    const instructionsInput = (await modal.findByRole("textbox", {
+      name: "Additional instructions (optional)"
+    })) as HTMLInputElement;
+    expect(instructionsInput.value).toBe("ทำให้ hook ชัดเจนขึ้น");
+
+    await user.clear(instructionsInput);
+    await user.type(instructionsInput, "Keep it under 8 words");
+
+    await user.click(modal.getByRole("button", { name: "Fix with AI" }));
+    expect(await modal.findByRole("button", { name: "Applied ✓" })).toBeTruthy();
+
+    expect(runApplyFix).toHaveBeenCalledWith(
+      expect.objectContaining({ instructions: "Keep it under 8 words" })
+    );
+    expect(onApplyFinding).toHaveBeenCalledWith(direction.id, {
+      hook: "Compass hook 1 (revised and extra clear)"
+    });
+
+    unmount();
+  });
+
+  it("applies every fixable finding across ideas in one click", async () => {
+    const user = userEvent.setup();
+    const [directionOne, directionTwo] = buildDirectionFixtures("Compass");
+    if (!directionOne || !directionTwo) {
+      throw new Error("Expected two direction fixtures.");
+    }
+    const onApplyFinding = vi.fn();
+    const runChecks = vi.fn().mockResolvedValue([
+      {
+        directionId: directionOne.id,
+        findings: [
+          {
+            check: "quality",
+            message: "Fix hook 1",
+            field: "hook",
+            suggestion: "Make it clearer"
+          },
+          {
+            check: "quality",
+            message: "Fix subheadline 1",
+            field: "subheadline",
+            suggestion: "Tighten the subheadline"
+          }
+        ]
+      },
+      {
+        directionId: directionTwo.id,
+        findings: [
+          {
+            check: "quality",
+            message: "Fix caption 2",
+            field: "caption",
+            suggestion: "Tighten the caption"
+          },
+          {
+            check: "policy",
+            message: "Needs legal review, no automatic fix",
+            field: null,
+            suggestion: null
+          }
+        ]
+      }
+    ]);
+    const runApplyFix = vi.fn().mockImplementation(
+      async ({ field }: { field: string }) => `Fixed ${field}`
+    );
+
+    const { unmount } = render(
+      <PreflightModal
+        directions={[directionOne, directionTwo]}
+        fallbackService="single-static"
+        context={{
+          runId: "run-preflight-apply-all",
+          brief: "Make the product benefit instantly clear.",
+          brandContext: null
+        }}
+        artworkMode="design-system"
+        onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+        onApplyFinding={onApplyFinding}
+        runChecks={runChecks}
+        runApplyFix={runApplyFix}
+      />
+    );
+
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const modal = within(dialog);
+
+    await user.click(modal.getByRole("button", { name: "Run checks on 2" }));
+    await modal.findByText("Fix hook 1");
+
+    await user.click(
+      modal.getByRole("button", { name: "Apply all fixes (3)" })
+    );
+
+    expect(
+      await modal.findAllByRole("button", { name: "Applied ✓" })
+    ).toHaveLength(3);
+    expect(onApplyFinding).toHaveBeenCalledTimes(2);
+    expect(onApplyFinding).toHaveBeenCalledWith(directionOne.id, {
+      hook: "Fixed hook",
+      subheadline: "Fixed subheadline"
+    });
+    expect(onApplyFinding).toHaveBeenCalledWith(directionTwo.id, {
+      caption: "Fixed caption"
+    });
+    expect(
+      modal.queryByRole("button", { name: /Apply all fixes/ })
+    ).toBeNull();
+
+    unmount();
+  });
+
+  it("locks the whole idea while one fix is in flight so a second click can't race it", async () => {
+    const user = userEvent.setup();
+    const [direction] = buildDirectionFixtures("Compass");
+    if (!direction) throw new Error("Expected a direction fixture.");
+    const onApplyFinding = vi.fn();
+    const runChecks = vi.fn().mockResolvedValue([
+      {
+        directionId: direction.id,
+        findings: [
+          {
+            check: "quality",
+            message: "Fix hook",
+            field: "hook",
+            suggestion: "Make it clearer"
+          },
+          {
+            check: "quality",
+            message: "Fix subheadline",
+            field: "subheadline",
+            suggestion: "Tighten it"
+          }
+        ]
+      }
+    ]);
+    let resolveFirstFix: (value: string) => void = () => undefined;
+    const runApplyFix = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<string>((resolve) => (resolveFirstFix = resolve))
+      )
+      .mockResolvedValue("Fixed subheadline");
+
+    const { unmount } = render(
+      <PreflightModal
+        directions={[direction]}
+        fallbackService="single-static"
+        context={{
+          runId: "run-preflight-race",
+          brief: "Make the product benefit instantly clear.",
+          brandContext: null
+        }}
+        artworkMode="design-system"
+        onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+        onApplyFinding={onApplyFinding}
+        runChecks={runChecks}
+        runApplyFix={runApplyFix}
+      />
+    );
+
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const modal = within(dialog);
+
+    await user.click(modal.getByRole("button", { name: "Run checks on 1" }));
+    await modal.findByText("Fix hook");
+
+    const [firstFixButton, secondFixButton] = modal.getAllByRole("button", {
+      name: "Fix with AI"
+    }) as HTMLButtonElement[];
+    await user.click(firstFixButton!);
+
+    // The first fix is still in flight (its promise hasn't resolved yet), so
+    // clicking the second finding's button for the SAME idea must be a no-op
+    // — otherwise the two dispatches could race and one would clobber the
+    // other's change. Both this idea's own "Fixing…" buttons (its per-idea
+    // apply-all and the second finding) reflect the lock.
+    expect(
+      await modal.findAllByRole("button", { name: "Fixing…" })
+    ).toHaveLength(2);
+    expect(secondFixButton!.disabled).toBe(true);
+    await user.click(secondFixButton!);
+    expect(runApplyFix).toHaveBeenCalledTimes(1);
+
+    resolveFirstFix("Fixed hook");
+    expect(await modal.findAllByRole("button", { name: "Applied ✓" })).toHaveLength(1);
+
+    // Now that the idea is unlocked again, the second finding can be fixed.
+    const remainingFixButton = modal.getByRole("button", { name: "Fix with AI" });
+    await user.click(remainingFixButton);
+    expect(await modal.findAllByRole("button", { name: "Applied ✓" })).toHaveLength(2);
+
+    expect(onApplyFinding).toHaveBeenCalledTimes(2);
+    expect(onApplyFinding).toHaveBeenNthCalledWith(1, direction.id, {
+      hook: "Fixed hook"
+    });
+    expect(onApplyFinding).toHaveBeenNthCalledWith(2, direction.id, {
+      subheadline: "Fixed subheadline"
+    });
+
+    unmount();
+  });
+
+  it("lets you apply all fixes for just one idea from that idea's own button", async () => {
+    const user = userEvent.setup();
+    const [directionOne, directionTwo] = buildDirectionFixtures("Compass");
+    if (!directionOne || !directionTwo) {
+      throw new Error("Expected two direction fixtures.");
+    }
+    const onApplyFinding = vi.fn();
+    const runChecks = vi.fn().mockResolvedValue([
+      {
+        directionId: directionOne.id,
+        findings: [
+          {
+            check: "quality",
+            message: "Fix hook 1",
+            field: "hook",
+            suggestion: "Make it clearer"
+          },
+          {
+            check: "quality",
+            message: "Fix subheadline 1",
+            field: "subheadline",
+            suggestion: "Tighten it"
+          }
+        ]
+      },
+      {
+        directionId: directionTwo.id,
+        findings: [
+          {
+            check: "quality",
+            message: "Fix caption 2",
+            field: "caption",
+            suggestion: "Tighten it"
+          }
+        ]
+      }
+    ]);
+    const runApplyFix = vi
+      .fn()
+      .mockImplementation(async ({ field }: { field: string }) => `Fixed ${field}`);
+
+    const { unmount } = render(
+      <PreflightModal
+        directions={[directionOne, directionTwo]}
+        fallbackService="single-static"
+        context={{
+          runId: "run-preflight-apply-all-one-idea",
+          brief: "Make the product benefit instantly clear.",
+          brandContext: null
+        }}
+        artworkMode="design-system"
+        onArtworkModeChange={vi.fn()}
+        outputSize="1088x1360"
+        onOutputSizeChange={vi.fn()}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+        onApplyFinding={onApplyFinding}
+        runChecks={runChecks}
+        runApplyFix={runApplyFix}
+      />
+    );
+
+    const dialog = within(document.body).getByRole("dialog", {
+      name: "Check these ideas before you build"
+    });
+    const modal = within(dialog);
+
+    await user.click(modal.getByRole("button", { name: "Run checks on 2" }));
+    await modal.findByText("Fix hook 1");
+
+    expect(
+      modal.getAllByRole("button", { name: /^Apply all \(\d+\)$/ })
+    ).toHaveLength(2);
+
+    await user.click(modal.getByRole("button", { name: "Apply all (2)" }));
+    expect(
+      await modal.findAllByRole("button", { name: "Applied ✓" })
+    ).toHaveLength(2);
+
+    expect(onApplyFinding).toHaveBeenCalledTimes(1);
+    expect(onApplyFinding).toHaveBeenCalledWith(directionOne.id, {
+      hook: "Fixed hook",
+      subheadline: "Fixed subheadline"
+    });
+    // The second idea's finding is untouched — only its own button applies it.
+    expect(modal.getByRole("button", { name: "Apply all (1)" })).toBeTruthy();
+    expect(modal.getByRole("button", { name: "Fix with AI" })).toBeTruthy();
+
+    await user.click(modal.getByRole("button", { name: "Apply all (1)" }));
+    expect(
+      await modal.findAllByRole("button", { name: "Applied ✓" })
+    ).toHaveLength(3);
+    expect(onApplyFinding).toHaveBeenCalledTimes(2);
+    expect(onApplyFinding).toHaveBeenCalledWith(directionTwo.id, {
+      caption: "Fixed caption"
+    });
+
+    unmount();
+  });
+
   it("cancels without continuing and previews editable visual inputs", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();

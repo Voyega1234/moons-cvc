@@ -19,8 +19,11 @@ import {
   runIdeaPreflight,
   type IdeaPreflightCheckId,
   type IdeaPreflightContext,
+  type IdeaPreflightFinding,
+  type IdeaPreflightFixableField,
   type IdeaPreflightResult
 } from "../../../services/quality-check/run-idea-preflight";
+import { applyIdeaPreflightFix } from "../../../services/quality-check/apply-idea-preflight-fix";
 import {
   defaultArtworkContextSelection,
   type ArtworkContextSelection
@@ -201,7 +204,9 @@ export function PreflightModal({
   onUsePlaceholderCopyChange = () => undefined,
   onCancel,
   onContinue,
-  runChecks = runIdeaPreflight
+  onApplyFinding,
+  runChecks = runIdeaPreflight,
+  runApplyFix = applyIdeaPreflightFix
 }: {
   directions: readonly CreativeDirection[];
   fallbackService: ServiceType;
@@ -229,7 +234,12 @@ export function PreflightModal({
   onUsePlaceholderCopyChange?: (value: boolean) => void;
   onCancel: () => void;
   onContinue: () => void;
+  onApplyFinding?: (
+    directionId: string,
+    patch: Partial<Record<IdeaPreflightFixableField, string>>
+  ) => void;
   runChecks?: typeof runIdeaPreflight;
+  runApplyFix?: typeof applyIdeaPreflightFix;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCancelRef = useRef(onCancel);
@@ -245,6 +255,18 @@ export function PreflightModal({
   const [results, setResults] = useState<readonly IdeaPreflightResult[]>([]);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [appliedFindingKeys, setAppliedFindingKeys] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [editedInstructions, setEditedInstructions] = useState<
+    Record<string, string>
+  >({});
+  const [applyingKeys, setApplyingKeys] = useState<Set<string>>(() => new Set());
+  const [applyingDirectionIds, setApplyingDirectionIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [applyingAll, setApplyingAll] = useState(false);
+  const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
   const [visualInputView, setVisualInputView] = useState<
     "reference" | "material"
   >("reference");
@@ -258,9 +280,8 @@ export function PreflightModal({
       selectedDirections.map((direction) => ({
         direction,
         findings:
-          results
-            .find((result) => result.directionId === direction.id)
-            ?.findings.map((finding) => finding.message) ?? []
+          results.find((result) => result.directionId === direction.id)
+            ?.findings ?? []
       })),
     [results, selectedDirections]
   );
@@ -270,6 +291,163 @@ export function PreflightModal({
   );
   const anyCheck = Object.values(checks).some(Boolean);
   const artworkBriefText = artworkBrief ?? "";
+
+  function findingKey(directionId: string, findingIndex: number): string {
+    return `${directionId}::${findingIndex}`;
+  }
+
+  function instructionsFor(finding: IdeaPreflightFinding, key: string): string {
+    return editedInstructions[key] ?? finding.suggestion ?? "";
+  }
+
+  function canApply(finding: IdeaPreflightFinding): boolean {
+    return Boolean(finding.field) && Boolean(onApplyFinding);
+  }
+
+  function fixInput(
+    direction: CreativeDirection,
+    finding: IdeaPreflightFinding,
+    key: string
+  ) {
+    return {
+      field: finding.field as IdeaPreflightFixableField,
+      check: finding.check,
+      message: finding.message,
+      suggestion: finding.suggestion,
+      instructions: instructionsFor(finding, key),
+      direction: {
+        hook: direction.hook,
+        subheadline: direction.subheadline ?? "",
+        concept: direction.concept,
+        visual: direction.visual,
+        cta: direction.cta,
+        caption: direction.caption
+      },
+      brandPolicies: context.brandContext?.policies ?? [],
+      brandAvoid: context.brandContext?.avoid ?? []
+    };
+  }
+
+  function applicableCountFor(
+    direction: CreativeDirection,
+    findings: readonly IdeaPreflightFinding[]
+  ): number {
+    return findings.reduce((count, finding, findingIndex) => {
+      const key = findingKey(direction.id, findingIndex);
+      if (appliedFindingKeys.has(key)) return count;
+      return canApply(finding) ? count + 1 : count;
+    }, 0);
+  }
+
+  // Every fix for one idea is funneled through here, whether triggered by a
+  // single "Fix with AI" click, this idea's "Apply all", or the global
+  // "Apply all fixes". Locking the whole direction while it runs (see
+  // applyingDirectionIds below) and dispatching exactly one merged patch at
+  // the end is what stops two concurrent fixes on the same idea from
+  // clobbering each other's change — see handleApplyFinding for why that
+  // matters.
+  async function applyFixesForDirection(
+    direction: CreativeDirection,
+    findings: readonly IdeaPreflightFinding[],
+    only?: ReadonlySet<string>
+  ) {
+    if (!onApplyFinding || applyingDirectionIds.has(direction.id)) return;
+    const targets = findings
+      .map((finding, findingIndex) => ({
+        finding,
+        key: findingKey(direction.id, findingIndex)
+      }))
+      .filter(
+        ({ finding, key }) =>
+          !appliedFindingKeys.has(key) &&
+          canApply(finding) &&
+          (!only || only.has(key))
+      );
+    if (!targets.length) return;
+
+    setApplyingDirectionIds((current) => new Set(current).add(direction.id));
+    setApplyingKeys(
+      (current) => new Set([...current, ...targets.map((target) => target.key)])
+    );
+    setApplyErrors((current) => {
+      const next = { ...current };
+      targets.forEach((target) => delete next[target.key]);
+      return next;
+    });
+
+    const settled = await Promise.allSettled(
+      targets.map((target) =>
+        runApplyFix(fixInput(direction, target.finding, target.key))
+      )
+    );
+
+    const patch: Partial<Record<IdeaPreflightFixableField, string>> = {};
+    const newlyAppliedKeys: string[] = [];
+    const nextErrors: Record<string, string> = {};
+    settled.forEach((outcome, index) => {
+      const target = targets[index]!;
+      if (outcome.status === "fulfilled") {
+        patch[target.finding.field as IdeaPreflightFixableField] = outcome.value;
+        newlyAppliedKeys.push(target.key);
+      } else {
+        nextErrors[target.key] =
+          outcome.reason instanceof Error
+            ? outcome.reason.message
+            : "Could not apply this fix.";
+      }
+    });
+
+    if (Object.keys(patch).length) onApplyFinding(direction.id, patch);
+    if (newlyAppliedKeys.length) {
+      setAppliedFindingKeys(
+        (current) => new Set([...current, ...newlyAppliedKeys])
+      );
+    }
+    setApplyErrors((current) => ({ ...current, ...nextErrors }));
+    setApplyingKeys((current) => {
+      const next = new Set(current);
+      targets.forEach((target) => next.delete(target.key));
+      return next;
+    });
+    setApplyingDirectionIds((current) => {
+      const next = new Set(current);
+      next.delete(direction.id);
+      return next;
+    });
+  }
+
+  async function handleApplyFinding(
+    direction: CreativeDirection,
+    findings: readonly IdeaPreflightFinding[],
+    key: string
+  ) {
+    await applyFixesForDirection(direction, findings, new Set([key]));
+  }
+
+  async function handleApplyAllForDirection(
+    direction: CreativeDirection,
+    findings: readonly IdeaPreflightFinding[]
+  ) {
+    await applyFixesForDirection(direction, findings);
+  }
+
+  async function handleApplyAll() {
+    setApplyingAll(true);
+    try {
+      await Promise.all(
+        presentedResults.map(({ direction, findings }) =>
+          applyFixesForDirection(direction, findings)
+        )
+      );
+    } finally {
+      setApplyingAll(false);
+    }
+  }
+
+  const applicableFindingCount = presentedResults.reduce(
+    (total, { direction, findings }) => total + applicableCountFor(direction, findings),
+    0
+  );
 
   useEffect(() => {
     onCancelRef.current = onCancel;
@@ -400,10 +578,24 @@ export function PreflightModal({
                   still open Create · GPT Luna
                 </small>
               </div>
+              {onApplyFinding && applicableFindingCount ? (
+                <button
+                  className="btn secondary small"
+                  type="button"
+                  disabled={applyingAll}
+                  onClick={() => void handleApplyAll()}
+                >
+                  {applyingAll
+                    ? "Fixing…"
+                    : `Apply all fixes (${applicableFindingCount})`}
+                </button>
+              ) : null}
             </div>
             {presentedResults.map(({ direction, findings }, index) => {
               const service = directionService(direction, fallbackService);
               const kind = directionKind(service);
+              const directionApplicableCount = applicableCountFor(direction, findings);
+              const directionApplying = applyingDirectionIds.has(direction.id);
               return (
                 <article
                   className={`preflight-result ${findings.length ? "" : "clean"}`}
@@ -413,19 +605,86 @@ export function PreflightModal({
                     <b>
                       {kind} {String(index + 1).padStart(2, "0")}
                     </b>
-                    <span
-                      className={`preflight-result-badge ${findings.length ? "warn" : "clean"}`}
-                    >
-                      {findings.length
-                        ? `${findings.length} to look at`
-                        : "Clear"}
-                    </span>
+                    <div className="preflight-result-head-actions">
+                      {onApplyFinding && directionApplicableCount ? (
+                        <button
+                          type="button"
+                          className="btn ghost small preflight-result-apply-all"
+                          disabled={directionApplying}
+                          onClick={() =>
+                            void handleApplyAllForDirection(direction, findings)
+                          }
+                        >
+                          {directionApplying
+                            ? "Fixing…"
+                            : `Apply all (${directionApplicableCount})`}
+                        </button>
+                      ) : null}
+                      <span
+                        className={`preflight-result-badge ${findings.length ? "warn" : "clean"}`}
+                      >
+                        {findings.length
+                          ? `${findings.length} to look at`
+                          : "Clear"}
+                      </span>
+                    </div>
                   </header>
                   {findings.length ? (
                     <ul className="preflight-findings">
-                      {findings.map((finding) => (
-                        <li key={finding}>{finding}</li>
-                      ))}
+                      {findings.map((finding, findingIndex) => {
+                        const key = findingKey(direction.id, findingIndex);
+                        const applied = appliedFindingKeys.has(key);
+                        const applying = applyingKeys.has(key);
+                        const error = applyErrors[key];
+                        return (
+                          <li key={key} className="preflight-finding">
+                            <span>{finding.message}</span>
+                            {onApplyFinding && finding.field ? (
+                              <>
+                                <div className="preflight-finding-fix">
+                                  <input
+                                    type="text"
+                                    className="preflight-finding-suggestion"
+                                    aria-label="Additional instructions (optional)"
+                                    placeholder="Add extra instructions for the fix (optional)"
+                                    value={instructionsFor(finding, key)}
+                                    disabled={applied || applying || directionApplying}
+                                    onChange={(event) =>
+                                      setEditedInstructions((current) => ({
+                                        ...current,
+                                        [key]: event.target.value
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn ghost small preflight-finding-apply"
+                                    disabled={applied || applying || directionApplying}
+                                    onClick={() =>
+                                      void handleApplyFinding(
+                                        direction,
+                                        findings,
+                                        key
+                                      )
+                                    }
+                                  >
+                                    {applied
+                                      ? "Applied ✓"
+                                      : applying
+                                        ? "Fixing…"
+                                        : "Fix with AI"}
+                                  </button>
+                                </div>
+                                {error ? (
+                                  <p className="preflight-finding-error" role="alert">
+                                    {error}
+                                  </p>
+                                ) : null}
+                              </>
+                            ) : null}
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <p className="preflight-clean">Nothing flagged.</p>

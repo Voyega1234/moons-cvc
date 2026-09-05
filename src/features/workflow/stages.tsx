@@ -4216,6 +4216,17 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             setPreflightOpen(false);
             createSelectedHooks(artworkContextSelection);
           }}
+          onApplyFinding={(directionId, patch) => {
+            const direction = state.directions.find(
+              (candidate) => candidate.id === directionId
+            );
+            if (!direction) return;
+            dispatch({
+              type: "replace-direction",
+              id: directionId,
+              direction: { ...direction, ...patch }
+            });
+          }}
         />
       ) : null}
       <div className="compass-angle-groups">
