@@ -124,7 +124,9 @@ function parseProviderRequest(
   const isOpenRouter = url.hostname === "openrouter.ai";
   if (!isOpenAi && !isOpenRouter) return null;
 
-  const isImage = /^\/v1\/images\/(?:generations|edits)$/.test(url.pathname);
+  const isImage =
+    /^\/v1\/images\/(?:generations|edits)$/.test(url.pathname) ||
+    url.pathname === "/api/v1/images";
   const isText =
     url.pathname === "/v1/responses" ||
     url.pathname === "/api/v1/chat/completions";
@@ -135,9 +137,10 @@ function parseProviderRequest(
   const schemaName =
     nestedString(body, ["text", "format", "name"]) ||
     nestedString(body, ["response_format", "json_schema", "name"]);
-  const imageOperation = url.pathname.endsWith("/edits")
-    ? "image-edit"
-    : "image-generation";
+  const imageOperation =
+    url.pathname.endsWith("/edits") || bodyHasInputReferences(body)
+      ? "image-edit"
+      : "image-generation";
 
   return {
     provider: isOpenRouter ? "openrouter" : "openai",
@@ -363,6 +366,14 @@ function readBodyString(value: unknown, key: string): string {
   return isRecord(value) && typeof value[key] === "string"
     ? value[key]
     : "";
+}
+
+function bodyHasInputReferences(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.input_references) &&
+    value.input_references.length > 0
+  );
 }
 
 function readBodyNumber(value: unknown, key: string): number {

@@ -52,6 +52,10 @@ function buildRequest(headers: Record<string, string> = {}): Request {
   });
 }
 
+function mimeTypeFromDataUrl(url: string): string {
+  return /^data:([^;]+);base64,/.exec(url)?.[1] ?? "";
+}
+
 describe("reference image normalization", () => {
   it("converts CMYK JPEG references to an sRGB JPEG", async () => {
     const cmykReference = await sharp({
@@ -480,22 +484,7 @@ async function captureDesignSystemGenerationPrompt(
               missingEvidence: []
             });
       }
-      if (href.includes("/v1/images/edits")) {
-        imageBodies.push({
-          prompt: String((init?.body as FormData).get("prompt"))
-        });
-        return new Response(
-          JSON.stringify({
-            data: [
-              {
-                b64_json: Buffer.from("fake-png-bytes").toString("base64")
-              }
-            ]
-          }),
-          { status: 200 }
-        );
-      }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         imageBodies.push(
           JSON.parse(String(init?.body)) as { prompt: string }
         );
@@ -526,6 +515,7 @@ async function captureDesignSystemGenerationPrompt(
     }),
     env: {
       OPENAI_API_KEY: "test-key",
+      OPENROUTER_API_KEY: "test-key",
       SUPABASE_URL: "https://supabase.example.com",
       SUPABASE_ANON_KEY: "anon-key"
     },
@@ -857,6 +847,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest(),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -867,7 +858,9 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("interprets every Hook reference and attaches them to the final GPT Image 2 edit", async () => {
-    let editForm: FormData | undefined;
+    let editBody:
+      | { prompt: string; input_references?: { image_url: { url: string } }[] }
+      | undefined;
     let interpreterBody: Record<string, unknown> | undefined;
     const fetchMock = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
@@ -895,8 +888,8 @@ describe("handleArtworkGenerationRequest", () => {
             headers: { "content-type": "image/png" }
           });
         }
-        if (href.includes("/v1/images/edits")) {
-          editForm = init?.body as FormData;
+        if (href.includes("/api/v1/images")) {
+          editBody = JSON.parse(String(init?.body));
           return new Response(
             JSON.stringify({
               data: [
@@ -971,6 +964,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -980,7 +974,7 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status, await response.clone().text()).toBe(200);
-    const prompt = String(editForm?.get("prompt"));
+    const prompt = String(editBody?.prompt);
     expect(prompt).toContain("# DESIGN-GRAMMAR-LED GENERATION");
     expect(prompt).toContain("AUTHORITY ORDER IS MANDATORY");
     expect(prompt).toContain("Brand CI wins without compromise");
@@ -994,7 +988,7 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain(
       "Supporting reference · Style · Typography example"
     );
-    expect(editForm?.getAll("image[]")).toHaveLength(3);
+    expect(editBody?.input_references).toHaveLength(3);
     expect(JSON.stringify(interpreterBody)).toContain("input_image");
     expect(JSON.stringify(interpreterBody)).toContain("REFERENCE SCOPE");
     expect(JSON.stringify(interpreterBody)).toContain(
@@ -1017,7 +1011,14 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("revises the current image directly without invoking prompt or strategy agents", async () => {
-    let editForm: FormData | undefined;
+    let editBody:
+      | {
+          model: string;
+          prompt: string;
+          quality: string;
+          input_references: unknown[];
+        }
+      | undefined;
     const fetchMock = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
         const href = String(url);
@@ -1033,8 +1034,8 @@ describe("handleArtworkGenerationRequest", () => {
             headers: { "content-type": "image/png" }
           });
         }
-        if (href.includes("/v1/images/edits")) {
-          editForm = init?.body as FormData;
+        if (href.includes("/api/v1/images")) {
+          editBody = JSON.parse(String(init?.body));
           return new Response(
             JSON.stringify({
               data: [
@@ -1076,6 +1077,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: revisionRequest,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1087,10 +1089,10 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(editForm?.get("model")).toBe("gpt-image-2");
-    expect(editForm?.get("quality")).toBe("medium");
-    expect(editForm?.getAll("image[]")).toHaveLength(1);
-    const prompt = String(editForm?.get("prompt"));
+    expect(editBody?.model).toBe("openai/gpt-image-2");
+    expect(editBody?.quality).toBe("medium");
+    expect(editBody?.input_references).toHaveLength(1);
+    const prompt = String(editBody?.prompt);
     expect(prompt).toBe("Increase whitespace around the CTA.");
     expect(prompt).not.toContain(requestBody.brief);
     expect(
@@ -1108,8 +1110,8 @@ describe("handleArtworkGenerationRequest", () => {
       expect.objectContaining({
         directionId: "hook-1",
         request: expect.objectContaining({
-          endpoint: "/v1/images/edits",
-          multipartFields: expect.objectContaining({ quality: "medium" })
+          endpoint: "/api/v1/images",
+          body: expect.objectContaining({ quality: "medium" })
         })
       }),
       expect.objectContaining({
@@ -1121,7 +1123,7 @@ describe("handleArtworkGenerationRequest", () => {
 
   it("revises an Album master with only the user instruction and selected source", async () => {
     const masterImage = await albumMasterPng();
-    let editForm: FormData | undefined;
+    let editBody: { prompt: string; input_references: unknown[] } | undefined;
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -1135,8 +1137,8 @@ describe("handleArtworkGenerationRequest", () => {
           headers: { "content-type": "image/png" }
         });
       }
-      if (href.includes("/v1/images/edits")) {
-        editForm = init?.body as FormData;
+      if (href.includes("/api/v1/images")) {
+        editBody = JSON.parse(String(init?.body));
         return new Response(
           JSON.stringify({ data: [{ b64_json: masterImage.toString("base64") }] }),
           { status: 200 }
@@ -1178,6 +1180,7 @@ describe("handleArtworkGenerationRequest", () => {
       request,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1188,10 +1191,10 @@ describe("handleArtworkGenerationRequest", () => {
     const payload = (await response.json()) as { outputs: unknown[] };
 
     expect(response.status).toBe(200);
-    expect(String(editForm?.get("prompt"))).toBe(
+    expect(String(editBody?.prompt)).toBe(
       "Change only the cover background to blue."
     );
-    expect(editForm?.getAll("image[]")).toHaveLength(1);
+    expect(editBody?.input_references).toHaveLength(1);
     expect(payload.outputs).toHaveLength(3);
     expect(uploads).toHaveLength(4);
     expect(
@@ -1210,7 +1213,7 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -1233,6 +1236,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
         CREATIVE_LEARNING_CAPTURE_ENABLED: "true",
         SUPABASE_URL: "https://supabase.example.com",
@@ -1284,7 +1288,7 @@ describe("handleArtworkGenerationRequest", () => {
         runId: "run-1",
         directionId: "hook-1",
         request: expect.objectContaining({
-          endpoint: "/v1/images/generations",
+          endpoint: "/api/v1/images",
           body: expect.objectContaining({
             model: "gpt-image-2",
             prompt: expect.stringContaining(
@@ -1345,7 +1349,7 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         imageBodies.push(JSON.parse(String(init?.body)));
         return new Response(
           JSON.stringify({
@@ -1372,6 +1376,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1400,7 +1405,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return standardAgentResponse(init);
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         imageBodies.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
@@ -1452,6 +1457,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1521,7 +1527,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return standardAgentResponse(init);
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         return new Response(
           JSON.stringify({
             data: [{ b64_json: shiftedMaster.toString("base64") }]
@@ -1566,6 +1572,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1608,10 +1615,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return standardAgentResponse(init);
       }
-      if (
-        href.includes("/v1/images/generations") ||
-        href.includes("/v1/images/edits")
-      ) {
+      if (href.includes("/api/v1/images")) {
         return new Response(
           JSON.stringify({
             data: [{ b64_json: shiftedMaster.toString("base64") }]
@@ -1641,6 +1645,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1666,7 +1671,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return responseForArtworkAgentRequest(init);
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         imageBodies.push(
           JSON.parse(String(init?.body)) as Record<string, unknown>
         );
@@ -1721,6 +1726,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1802,7 +1808,7 @@ describe("handleArtworkGenerationRequest", () => {
         if (href.includes("/v1/responses")) {
           return responseForArtworkAgentRequest(init);
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
           imageBodies.push(
             JSON.parse(String(init?.body)) as { prompt: string }
           );
@@ -1861,6 +1867,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1892,7 +1899,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return standardAgentResponse(init);
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         activeGenerations += 1;
         maximumConcurrentGenerations = Math.max(
           maximumConcurrentGenerations,
@@ -1926,6 +1933,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1944,7 +1952,7 @@ describe("handleArtworkGenerationRequest", () => {
     ]);
   });
 
-  it("returns a readable error when OpenAI returns an empty body", async () => {
+  it("returns a readable error when OpenRouter returns an empty body", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -1965,6 +1973,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -1975,12 +1984,15 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({
       ok: false,
-      error: "OpenAI image generation returned an empty response body."
+      error: "OpenRouter image generation returned an empty response body."
     });
   });
 
   it("attaches Standard references without adding a reference-direction wrapper", async () => {
-    const editCalls: { href: string; body: FormData }[] = [];
+    const editCalls: {
+      href: string;
+      body: { prompt: string; input_references: { image_url: { url: string } }[] };
+    }[] = [];
     const cmykReference = await sharp({
       create: {
         width: 32,
@@ -2009,8 +2021,8 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return standardAgentResponse(init);
       }
-      if (href.includes("/v1/images/edits")) {
-        editCalls.push({ href, body: init?.body as FormData });
+      if (href.includes("/api/v1/images")) {
+        editCalls.push({ href, body: JSON.parse(String(init?.body)) });
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -2042,6 +2054,7 @@ describe("handleArtworkGenerationRequest", () => {
       request,
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2056,18 +2069,20 @@ describe("handleArtworkGenerationRequest", () => {
       )
     ).toBe(true);
     expect(editCalls).toHaveLength(1);
-    const referenceFile = editCalls[0]?.body.get("image[]") as File;
-    expect(referenceFile.type).toBe("image/jpeg");
-    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+    const referenceMimeType = mimeTypeFromDataUrl(
+      editCalls[0]!.body.input_references[0]!.image_url.url
+    );
+    expect(referenceMimeType).toBe("image/jpeg");
+    expect(editCalls[0]?.body.prompt).not.toContain(
       "CONCEPT ALIGNMENT"
     );
-    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+    expect(editCalls[0]?.body.prompt).not.toContain(
       "REFERENCE-INFORMED DESIGN"
     );
-    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+    expect(editCalls[0]?.body.prompt).not.toContain(
       "PAST-WORK VISUAL DNA"
     );
-    expect(editCalls[0]?.body.get("prompt")).not.toContain(
+    expect(editCalls[0]?.body.prompt).not.toContain(
       "STYLE FIDELITY IS MANDATORY"
     );
     expect(uploads).toHaveLength(1);
@@ -2076,7 +2091,10 @@ describe("handleArtworkGenerationRequest", () => {
   it("uses a private Supabase artwork reference URL in reference-library mode", async () => {
     const strategyAgentBodies: Record<string, unknown>[] = [];
     const promptAgentBodies: Record<string, unknown>[] = [];
-    const editCalls: FormData[] = [];
+    const editCalls: {
+      prompt: string;
+      input_references: { image_url: { url: string } }[];
+    }[] = [];
     const debugLogs: unknown[] = [];
     const debugAssets: { filename: string; bytes: Buffer }[] = [];
     const referenceUrl =
@@ -2110,8 +2128,8 @@ describe("handleArtworkGenerationRequest", () => {
         promptAgentBodies.push(body);
         return promptAgentResponse("Reference-informed beauty artwork.");
       }
-      if (href.includes("/v1/images/edits")) {
-        editCalls.push(init?.body as FormData);
+      if (href.includes("/api/v1/images")) {
+        editCalls.push(JSON.parse(String(init?.body)));
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -2155,6 +2173,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         ARTWORK_GENERATION_DEBUG_LOG_DIR: "logs/artwork-generation",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
@@ -2186,8 +2205,8 @@ describe("handleArtworkGenerationRequest", () => {
       }
     ]);
     expect(editCalls).toHaveLength(1);
-    expect(editCalls[0]?.getAll("image[]")).toHaveLength(2);
-    const generationPrompt = String(editCalls[0]?.get("prompt"));
+    expect(editCalls[0]?.input_references).toHaveLength(2);
+    const generationPrompt = String(editCalls[0]?.prompt);
     expect(generationPrompt).toContain(
       "Invent a new main visual, visual metaphor"
     );
@@ -2224,12 +2243,12 @@ describe("handleArtworkGenerationRequest", () => {
           runId: "run-1",
           directionId: "hook-1",
           request: expect.objectContaining({
-            endpoint: "/v1/images/edits",
-            multipartFields: expect.objectContaining({
+            endpoint: "/api/v1/images",
+            body: expect.objectContaining({
               prompt: expect.stringContaining(
                 "Study the attached Creative Compass artwork references directly"
               ),
-              images: [
+              inputReferences: [
                 {
                   label: "Creative Compass artwork reference — primary",
                   mimeType: "image/jpeg",
@@ -2261,7 +2280,7 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("recovers an expired Supabase signed reference URL through storage", async () => {
-    const editCalls: FormData[] = [];
+    const editCalls: { input_references: { image_url: { url: string } }[] }[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -2275,8 +2294,8 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return promptAgentResponse();
       }
-      if (href.includes("/v1/images/edits")) {
-        editCalls.push(init?.body as FormData);
+      if (href.includes("/api/v1/images")) {
+        editCalls.push(JSON.parse(String(init?.body)));
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -2322,6 +2341,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2331,7 +2351,9 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status).toBe(200);
     expect(editCalls).toHaveLength(1);
-    expect((editCalls[0]?.get("image[]") as File).type).toBe("image/png");
+    expect(
+      mimeTypeFromDataUrl(editCalls[0]!.input_references[0]!.image_url.url)
+    ).toBe("image/png");
   });
 
   it("preflights Campaign Input with Sol, then sends agent_image.md plus the cleaned input to GPT Image 2", async () => {
@@ -2345,7 +2367,7 @@ describe("handleArtworkGenerationRequest", () => {
           { status: 200 }
         );
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         const body = JSON.parse(String(init?.body)) as { prompt: string };
         generationCalls.push(body.prompt);
         return new Response(
@@ -2381,6 +2403,7 @@ describe("handleArtworkGenerationRequest", () => {
       request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2445,7 +2468,7 @@ describe("handleArtworkGenerationRequest", () => {
           }
           return standardAgentResponse(init);
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
           imageAuthorizations.push(
             new Headers(init?.headers).get("Authorization")
           );
@@ -2474,6 +2497,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "openai-image-key",
+        OPENROUTER_API_KEY: "openrouter-image-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -2489,31 +2513,17 @@ describe("handleArtworkGenerationRequest", () => {
         authorization: "Bearer openai-image-key"
       }
     ]);
-    expect(imageAuthorizations).toEqual(["Bearer openai-image-key"]);
+    expect(imageAuthorizations).toEqual(["Bearer openrouter-image-key"]);
     expect(visualQcAuthorizations).toEqual([]);
   });
 
-  it("requires an OpenRouter key only when its prompt model is selected", async () => {
+  it("requires an OpenRouter key for image generation regardless of prompt model", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
-      if (String(url).includes("/auth/v1/user")) {
-        return new Response(
-          JSON.stringify({ email: "team@convertcake.com" }),
-          { status: 200 }
-        );
-      }
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
 
     const response = await handleArtworkGenerationRequest({
-      request: new Request("https://moons.local/api/artwork-generation", {
-        method: "POST",
-        headers: { authorization: "Bearer user-token" },
-        body: JSON.stringify({
-          ...requestBody,
-          artworkMode: "reference-library",
-          imagePromptModel: "anthropic/claude-sonnet-4.6"
-        })
-      }),
+      request: buildRequest({ authorization: "Bearer user-token" }),
       env: {
         OPENAI_API_KEY: "openai-image-key",
         SUPABASE_URL: "https://supabase.example.com",
@@ -2525,8 +2535,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({
       ok: false,
-      error: "OPENROUTER_API_KEY is required."
+      error: "OPENROUTER_API_KEY is required for image generation."
     });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("compiles a sparse, service-relevant Campaign Context for budget allocation", async () => {
@@ -2608,7 +2619,11 @@ describe("handleArtworkGenerationRequest", () => {
   });
 
   it("runs V6 upstream with the V6.2 Judgment final prompt in design-system mode", async () => {
-    const editCalls: FormData[] = [];
+    const editCalls: {
+      prompt: string;
+      quality: string;
+      input_references: unknown[];
+    }[] = [];
     const strategyCalls: Record<string, unknown>[] = [];
     const oversizedContext = "Brand context detail ".repeat(500);
     const artworkBriefTail = "ARTWORK-BRIEF-END";
@@ -2657,8 +2672,8 @@ describe("handleArtworkGenerationRequest", () => {
               missingEvidence: []
             });
       }
-      if (href.includes("/v1/images/edits")) {
-        editCalls.push(init?.body as FormData);
+      if (href.includes("/api/v1/images")) {
+        editCalls.push(JSON.parse(String(init?.body)));
         return new Response(
           JSON.stringify({
             data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
@@ -2759,9 +2774,9 @@ describe("handleArtworkGenerationRequest", () => {
 
     expect(response.status).toBe(200);
     expect(editCalls).toHaveLength(1);
-    expect(editCalls[0]?.getAll("image[]")).toHaveLength(2);
-    expect(editCalls[0]?.get("quality")).toBe("medium");
-    const prompt = String(editCalls[0]?.get("prompt"));
+    expect(editCalls[0]?.input_references).toHaveLength(2);
+    expect(editCalls[0]?.quality).toBe("medium");
+    const prompt = String(editCalls[0]?.prompt);
     expect(prompt).toContain(
       "GPT IMAGE 2 — ADAPTIVE FINAL ART DIRECTOR V6.3"
     );
@@ -2937,7 +2952,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) {
         return new Response("agent unavailable", { status: 500 });
       }
-      if (href.includes("/v1/images/generations")) {
+      if (href.includes("/api/v1/images")) {
         const body = JSON.parse(String(init?.body)) as { prompt: string };
         generationCalls.push(body.prompt);
         return new Response(
@@ -2963,6 +2978,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3026,7 +3042,7 @@ describe("handleArtworkGenerationRequest", () => {
             { status: 200 }
           );
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
           const body = JSON.parse(String(init?.body)) as { prompt: string };
           generationCalls.push(body.prompt);
           return new Response(
@@ -3056,6 +3072,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3088,7 +3105,7 @@ describe("handleArtworkGenerationRequest", () => {
         if (href.includes("/v1/responses")) {
           throw new Error("Direct Final Artwork must not call an upstream agent.");
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
           const body = JSON.parse(String(init?.body)) as { prompt: string };
           generationCalls.push(body.prompt);
           return new Response(
@@ -3171,6 +3188,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3249,7 +3267,7 @@ describe("handleArtworkGenerationRequest", () => {
           }
           return strategyAgentResponse();
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
           const body = JSON.parse(String(init?.body)) as { prompt: string };
           generationCalls.push(body.prompt);
           return new Response(
@@ -3279,6 +3297,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },
@@ -3329,7 +3348,7 @@ describe("handleArtworkGenerationRequest", () => {
   it("does not run or revise with post-generation visual QC while it is disabled", async () => {
     let visualQcCalls = 0;
     let generationCalls = 0;
-    const editCalls: FormData[] = [];
+    const editCalls: unknown[] = [];
     const fetchMock = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
         const href = String(url);
@@ -3358,26 +3377,29 @@ describe("handleArtworkGenerationRequest", () => {
           }
           return strategyAgentResponse();
         }
-        if (href.includes("/v1/images/generations")) {
+        if (href.includes("/api/v1/images")) {
+          const body = JSON.parse(String(init?.body)) as {
+            input_references?: unknown[];
+          };
+          if (body.input_references?.length) {
+            editCalls.push(body);
+            return new Response(
+              JSON.stringify({
+                data: [
+                  {
+                    b64_json: Buffer.from("revised-image").toString("base64")
+                  }
+                ]
+              }),
+              { status: 200 }
+            );
+          }
           generationCalls += 1;
           return new Response(
             JSON.stringify({
               data: [
                 {
                   b64_json: Buffer.from("initial-image").toString("base64")
-                }
-              ]
-            }),
-            { status: 200 }
-          );
-        }
-        if (href.includes("/v1/images/edits")) {
-          editCalls.push(init?.body as FormData);
-          return new Response(
-            JSON.stringify({
-              data: [
-                {
-                  b64_json: Buffer.from("revised-image").toString("base64")
                 }
               ]
             }),
@@ -3400,6 +3422,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       env: {
         OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com",
         SUPABASE_ANON_KEY: "anon-key"
       },

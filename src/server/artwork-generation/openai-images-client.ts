@@ -13,10 +13,12 @@ export interface GenerateImageOptions {
   fetchImpl: typeof fetch;
 }
 
-const OPENAI_IMAGES_GENERATIONS_ENDPOINT =
-  "https://api.openai.com/v1/images/generations";
-const OPENAI_IMAGES_EDITS_ENDPOINT = "https://api.openai.com/v1/images/edits";
+const OPENROUTER_IMAGES_ENDPOINT = "https://openrouter.ai/api/v1/images";
 export const OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS = 30_000;
+
+function openRouterImageModel(model: string): string {
+  return model.includes("/") ? model : `openai/${model}`;
+}
 
 export function fitOpenAIImagePrompt(prompt: string): string {
   if (prompt.length <= OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS) return prompt;
@@ -57,34 +59,33 @@ export async function editImage({
   referenceImages,
   fetchImpl
 }: EditImageOptions): Promise<GeneratedImage> {
-  const form = new FormData();
-  form.set("model", model);
-  form.set("prompt", fitOpenAIImagePrompt(prompt));
-  form.set("size", size);
-  form.set("quality", quality);
-
-  referenceImages.forEach((reference, index) => {
-    const blob = new Blob([reference.bytes as unknown as BlobPart], {
-      type: reference.mimeType
-    });
-    form.append(
-      "image[]",
-      blob,
-      `reference-${index}.${extensionFromMimeType(reference.mimeType)}`
-    );
-  });
-
-  const response = await fetchImpl(OPENAI_IMAGES_EDITS_ENDPOINT, {
+  const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: openRouterImageModel(model),
+      prompt: fitOpenAIImagePrompt(prompt),
+      size,
+      quality,
+      input_references: referenceImages.map((reference) => ({
+        type: "image_url",
+        image_url: {
+          url: `data:${reference.mimeType};base64,${reference.bytes.toString(
+            "base64"
+          )}`
+        }
+      }))
+    })
   });
 
   const payload = await readJsonResponse(response);
 
   if (!response.ok) {
     throw new Error(
-      readErrorMessage(payload) ?? `OpenAI image edit failed: ${response.status}`
+      readErrorMessage(payload) ?? `OpenRouter image edit failed: ${response.status}`
     );
   }
 
@@ -94,17 +95,6 @@ export async function editImage({
   };
 }
 
-function extensionFromMimeType(mimeType: string): string {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/webp":
-      return "webp";
-    default:
-      return "png";
-  }
-}
-
 export async function generateImage({
   apiKey,
   model,
@@ -112,14 +102,14 @@ export async function generateImage({
   size,
   fetchImpl
 }: GenerateImageOptions): Promise<GeneratedImage> {
-  const response = await fetchImpl(OPENAI_IMAGES_GENERATIONS_ENDPOINT, {
+  const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model,
+      model: openRouterImageModel(model),
       prompt: fitOpenAIImagePrompt(prompt),
       n: 1,
       size,
@@ -131,7 +121,7 @@ export async function generateImage({
 
   if (!response.ok) {
     throw new Error(
-      readErrorMessage(payload) ?? `OpenAI image generation failed: ${response.status}`
+      readErrorMessage(payload) ?? `OpenRouter image generation failed: ${response.status}`
     );
   }
 
@@ -149,19 +139,19 @@ function extractB64Json(payload: unknown): string {
     }
   }
 
-  throw new Error("OpenAI image generation did not return image data.");
+  throw new Error("OpenRouter image generation did not return image data.");
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text.trim()) {
-    throw new Error("OpenAI image generation returned an empty response body.");
+    throw new Error("OpenRouter image generation returned an empty response body.");
   }
 
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new Error("OpenAI image generation returned a non-JSON response.");
+    throw new Error("OpenRouter image generation returned a non-JSON response.");
   }
 }
 

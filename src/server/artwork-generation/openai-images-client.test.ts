@@ -58,7 +58,9 @@ describe("OpenAI image prompt limit", () => {
   it("enforces the limit on edit requests at the API boundary", async () => {
     let sentPrompt = "";
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      sentPrompt = String((init?.body as FormData).get("prompt"));
+      sentPrompt = (
+        JSON.parse(String(init?.body)) as { prompt: string }
+      ).prompt;
       return imageResponse();
     });
 

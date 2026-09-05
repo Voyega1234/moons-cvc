@@ -22,7 +22,7 @@ interface ImageRequestDebugLog {
   directionId: string;
   request:
     | {
-        endpoint: "/v1/images/generations";
+        endpoint: "/api/v1/images";
         body: {
           model: string;
           prompt: string;
@@ -32,13 +32,13 @@ interface ImageRequestDebugLog {
         };
       }
     | {
-        endpoint: "/v1/images/edits";
-        multipartFields: {
+        endpoint: "/api/v1/images";
+        body: {
           model: string;
           prompt: string;
           size: ArtworkOutputSize;
           quality?: "medium";
-          images: readonly {
+          inputReferences: readonly {
             label?: string;
             mimeType: string;
             bytes: number;
@@ -202,13 +202,13 @@ export function buildImageRequestDebugBundle({
       request:
         references.length
           ? {
-              endpoint: "/v1/images/edits",
-              multipartFields: {
+              endpoint: "/api/v1/images",
+              body: {
                 model,
                 prompt,
                 size,
                 ...(quality ? { quality } : {}),
-                images: references.map((reference) => ({
+                inputReferences: references.map((reference) => ({
                   ...(reference.label ? { label: reference.label } : {}),
                   mimeType: reference.mimeType,
                   bytes: reference.bytes.length
@@ -216,7 +216,7 @@ export function buildImageRequestDebugBundle({
               }
             }
           : {
-              endpoint: "/v1/images/generations",
+              endpoint: "/api/v1/images",
               body: { model, prompt, n: 1, size, quality: "medium" }
             }
     },

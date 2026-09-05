@@ -174,6 +174,13 @@ export async function handleArtworkGenerationRequest({
         500
       );
     }
+    const imageApiKey = env.OPENROUTER_API_KEY?.trim();
+    if (!imageApiKey) {
+      return jsonResponse(
+        { ok: false, error: "OPENROUTER_API_KEY is required for image generation." },
+        500
+      );
+    }
 
     const auth = await resolveConvertCakeAuthorization(request, env, fetchImpl);
     if (!auth.authorized) {
@@ -223,7 +230,7 @@ export async function handleArtworkGenerationRequest({
         env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || revisionInput.model;
       const revisionOptions = {
         input: revisionInput,
-        apiKey,
+        apiKey: imageApiKey,
         model,
         debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),
         writeDebugLog,
@@ -281,6 +288,7 @@ export async function handleArtworkGenerationRequest({
     const outputs = await generateOutputsForSelectedHooks({
       input,
       apiKey,
+      imageApiKey,
       model,
       promptModel,
       promptProvider,
@@ -355,6 +363,7 @@ function defaultCreateLearningCandidateStore({
 async function generateOutputsForSelectedHooks({
   input,
   apiKey,
+  imageApiKey,
   model,
   promptModel,
   promptProvider,
@@ -371,6 +380,7 @@ async function generateOutputsForSelectedHooks({
 }: {
   input: ArtworkGenerationRequest;
   apiKey: string;
+  imageApiKey: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -414,6 +424,7 @@ async function generateOutputsForSelectedHooks({
         input,
         hook,
         apiKey,
+        imageApiKey,
         model,
         promptModel,
         promptProvider,
@@ -523,6 +534,7 @@ async function generateOutputForHook({
   input,
   hook,
   apiKey,
+  imageApiKey,
   model,
   promptModel,
   promptProvider,
@@ -542,6 +554,7 @@ async function generateOutputForHook({
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
   apiKey: string;
+  imageApiKey: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -737,7 +750,7 @@ async function generateOutputForHook({
     const generatedImage =
       generationReferences.length > 0
         ? await editImage({
-            apiKey,
+            apiKey: imageApiKey,
             model,
             prompt: masterPrompt,
             size: generationSize,
@@ -746,7 +759,7 @@ async function generateOutputForHook({
             fetchImpl
           })
         : await generateImage({
-            apiKey,
+            apiKey: imageApiKey,
             model,
             prompt: masterPrompt,
             size: generationSize,
@@ -759,6 +772,7 @@ async function generateOutputForHook({
       setDirection,
       shotOpportunity,
       apiKey,
+      imageApiKey,
       model,
       promptModel,
       promptProvider,
@@ -782,6 +796,7 @@ async function generateOutputForHook({
       masterImage: finalMasterImage,
       panels,
       apiKey,
+      imageApiKey,
       model,
       promptModel:
         promptProvider === "openai" ? promptModel : "gpt-5.6-terra",
@@ -847,7 +862,7 @@ async function generateOutputForHook({
   const generatedImage =
     generationReferences.length > 0
       ? await editImage({
-          apiKey,
+          apiKey: imageApiKey,
           model,
           prompt: imagePrompt,
           size: generationSize,
@@ -856,7 +871,7 @@ async function generateOutputForHook({
           fetchImpl
         })
       : await generateImage({
-          apiKey,
+          apiKey: imageApiKey,
           model,
           prompt: imagePrompt,
           size: generationSize,
@@ -869,6 +884,7 @@ async function generateOutputForHook({
     setDirection,
     shotOpportunity,
     apiKey,
+    imageApiKey,
     model,
     promptModel,
     promptProvider,
@@ -904,6 +920,7 @@ async function applyPostGenerationVisualQc({
   setDirection,
   shotOpportunity,
   apiKey,
+  imageApiKey,
   model,
   promptModel,
   promptProvider,
@@ -919,6 +936,7 @@ async function applyPostGenerationVisualQc({
   setDirection?: string;
   shotOpportunity?: string;
   apiKey: string;
+  imageApiKey: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -995,7 +1013,7 @@ async function applyPostGenerationVisualQc({
       imageRequestDebug.assets
     );
     return await editImage({
-      apiKey,
+      apiKey: imageApiKey,
       model,
       prompt: revisionPrompt,
       size: generationSize,
@@ -1019,6 +1037,7 @@ async function applyAlbumPanelSeparationQc({
   masterImage,
   panels,
   apiKey,
+  imageApiKey,
   model,
   promptModel,
   generationSize,
@@ -1032,6 +1051,7 @@ async function applyAlbumPanelSeparationQc({
   masterImage: GeneratedImage;
   panels: Awaited<ReturnType<typeof splitAlbumMaster>>;
   apiKey: string;
+  imageApiKey: string;
   model: string;
   promptModel?: string;
   generationSize: ArtworkOutputSize;
@@ -1096,7 +1116,7 @@ async function applyAlbumPanelSeparationQc({
       imageRequestDebug.assets
     );
     const repairedMaster = await editImage({
-      apiKey,
+      apiKey: imageApiKey,
       model,
       prompt: revisionPrompt,
       size: generationSize,
