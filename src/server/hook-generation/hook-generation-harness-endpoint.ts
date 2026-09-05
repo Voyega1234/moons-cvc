@@ -449,9 +449,14 @@ async function runGenerationStep({
   let payload = await requestDirections(finalInputText);
   let result: HookGenerationResult | undefined;
   let albumPanelCountRepairAttempts = 0;
-  let repairedThaiNaturalness = false;
+  let thaiNaturalnessRepairAttempts = 0;
+  const THAI_NATURALNESS_MAX_RETRIES = 3;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < 2 + THAI_NATURALNESS_MAX_RETRIES;
+    attempt += 1
+  ) {
     try {
       result = parseHookGenerationResult(extractResponseText(payload));
     } catch (error) {
@@ -471,14 +476,14 @@ async function runGenerationStep({
     }
 
     if (
-      !repairedThaiNaturalness &&
+      thaiNaturalnessRepairAttempts < THAI_NATURALNESS_MAX_RETRIES &&
       containsForbiddenThaiFirstPerson(result)
     ) {
       finalInputText = buildThaiNaturalnessRetryPrompt(
         finalInputText,
         "direction"
       );
-      repairedThaiNaturalness = true;
+      thaiNaturalnessRepairAttempts += 1;
       result = undefined;
       payload = await requestDirections(finalInputText);
       continue;
