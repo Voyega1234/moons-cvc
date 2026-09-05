@@ -598,6 +598,7 @@ export interface CreativeAssetVersion {
   assetBucket?: string;
   albumMasterAssetUrl?: string;
   albumMasterAssetStoragePath?: string;
+  instructions?: string;
 }
 
 export interface CreativeOutput {
@@ -612,10 +613,11 @@ export interface CreativeOutput {
   albumMasterAssetUrl?: string;
   albumMasterAssetStoragePath?: string;
   assetHistory?: readonly CreativeAssetVersion[];
-  activeVersion?: number;
+  lastRevisionInstructions?: string;
   provider?: string;
   model?: string;
   revisionCount: number;
+  currentVersion?: number;
   approval: ApprovalGate;
   approvalComments: ApprovalComments;
   qaNote?: string;

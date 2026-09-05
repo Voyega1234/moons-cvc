@@ -273,8 +273,19 @@ export type WorkflowAction =
       assetBucket?: string;
       albumMasterAssetUrl?: string;
       albumMasterAssetStoragePath?: string;
+      instructions?: string;
     }
-  | { type: "select-output-version"; id: string; version: number }
+  | {
+      type: "restore-output-version";
+      id: string;
+      version: number;
+      assetUrl: string;
+      assetStoragePath?: string;
+      assetBucket?: string;
+      albumMasterAssetUrl?: string;
+      albumMasterAssetStoragePath?: string;
+      instructions?: string;
+    }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
   | { type: "unapprove-output"; id: string }

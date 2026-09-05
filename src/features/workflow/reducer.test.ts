@@ -1022,6 +1022,128 @@ describe("workflowReducer", () => {
     ]);
   });
 
+  it("tags each archived version with the instructions that created it", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    const first = state.outputs[0];
+    if (!first) throw new Error("Expected at least one output.");
+
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v1.png",
+      instructions: "Make the CTA button bigger."
+    });
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v2.png",
+      instructions: "Swap the background to blue."
+    });
+
+    const updated = state.outputs.find((output) => output.id === first.id);
+    expect(updated?.lastRevisionInstructions).toBe(
+      "Swap the background to blue."
+    );
+    expect(updated?.assetHistory).toEqual([
+      {
+        version: 2,
+        assetUrl: "https://example.com/v1.png",
+        instructions: "Make the CTA button bigger."
+      }
+    ]);
+  });
+
+  it("restores an older version without bumping the version count or duplicating it", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    const first = state.outputs[0];
+    if (!first) throw new Error("Expected at least one output.");
+
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v1.png"
+    });
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v2.png"
+    });
+
+    const beforeRestore = state.outputs.find((output) => output.id === first.id);
+    expect(beforeRestore?.assetUrl).toBe("https://example.com/v2.png");
+    expect(beforeRestore?.currentVersion).toBe(3);
+    expect(beforeRestore?.revisionCount).toBe(2);
+
+    state = workflowReducer(state, {
+      type: "restore-output-version",
+      id: first.id,
+      version: 2,
+      assetUrl: "https://example.com/v1.png"
+    });
+
+    const afterRestore = state.outputs.find((output) => output.id === first.id);
+    expect(afterRestore?.assetUrl).toBe("https://example.com/v1.png");
+    expect(afterRestore?.currentVersion).toBe(2);
+    expect(afterRestore?.revisionCount).toBe(2);
+    expect(afterRestore?.assetHistory).toEqual([
+      { version: 3, assetUrl: "https://example.com/v2.png" }
+    ]);
+
+    // Restoring back to V3 should swap cleanly, not create a V4.
+    state = workflowReducer(state, {
+      type: "restore-output-version",
+      id: first.id,
+      version: 3,
+      assetUrl: "https://example.com/v2.png"
+    });
+    const swappedBack = state.outputs.find((output) => output.id === first.id);
+    expect(swappedBack?.assetUrl).toBe("https://example.com/v2.png");
+    expect(swappedBack?.currentVersion).toBe(3);
+    expect(swappedBack?.revisionCount).toBe(2);
+    expect(swappedBack?.assetHistory).toEqual([
+      { version: 2, assetUrl: "https://example.com/v1.png" }
+    ]);
+
+    // A real regeneration after a restore must not collide with existing numbers.
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v3.png"
+    });
+    const afterNewRegen = state.outputs.find((output) => output.id === first.id);
+    expect(afterNewRegen?.assetUrl).toBe("https://example.com/v3.png");
+    expect(afterNewRegen?.currentVersion).toBe(4);
+    expect(afterNewRegen?.revisionCount).toBe(3);
+    expect(afterNewRegen?.assetHistory).toEqual([
+      { version: 2, assetUrl: "https://example.com/v1.png" },
+      { version: 3, assetUrl: "https://example.com/v2.png" }
+    ]);
+  });
+
   it("appends generated-more directions instead of replacing existing ones", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

@@ -5510,7 +5510,8 @@ export function ClientStage({
                 <div className="client-state-row compass-client-state-row">
                   <span className={`badge ${statusClass}`}>{statusLabel}</span>
                   <small>
-                    {qcContentTypeLabel(output)} · V{output.revisionCount + 1}
+                    {qcContentTypeLabel(output)} · V
+                    {output.currentVersion ?? output.revisionCount + 1}
                   </small>
                 </div>
                 <div className="compass-client-card-copy">
@@ -5631,8 +5632,9 @@ export function ClientStage({
               className="compass-client-approve-sub"
               id="client-approve-description"
             >
-              This marks V{approvalOutput.revisionCount + 1} as ready for
-              delivery.
+              This marks V
+              {approvalOutput.currentVersion ?? approvalOutput.revisionCount + 1}{" "}
+              as ready for delivery.
             </p>
             <div className="compass-client-approve-asset">
               <b>
@@ -5640,7 +5642,9 @@ export function ClientStage({
                   approvalOutput,
                   Math.max(approvalGroupIndex, 0)
                 )}{" "}
-                · V{approvalOutput.revisionCount + 1}
+                · V
+                {approvalOutput.currentVersion ??
+                  approvalOutput.revisionCount + 1}
               </b>
               <span>
                 {qcContentTypeLabel(approvalOutput)} ·{" "}
@@ -5717,7 +5721,7 @@ export function ClientStage({
             </p>
             <div className="compass-qc-decision-meta">
               <b>Client request</b> · {qcContentTypeLabel(revisionOutput)} · V
-              {revisionOutput.revisionCount + 1}
+              {revisionOutput.currentVersion ?? revisionOutput.revisionCount + 1}
             </div>
             <div className="compass-qc-change-type-field">
               <span>What needs to change?</span>

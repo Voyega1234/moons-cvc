@@ -1027,8 +1027,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
     const status = parseMember(item.status, validStatuses);
     const clientStatus = parseMember(item.clientStatus, validClientStatuses);
     const revisionCount = parseNumber(item.revisionCount);
-    const activeVersion =
-      item.activeVersion === undefined ? undefined : parseNumber(item.activeVersion);
+    const currentVersion =
+      item.currentVersion === undefined ? undefined : parseNumber(item.currentVersion);
     const approval = parseApprovalGate(item.approval);
     const approvalComments =
       parseApprovalComments(item.approvalComments) ?? emptyApprovalComments;
@@ -1048,6 +1048,10 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       item.assetHistory === undefined
         ? undefined
         : parseCreativeAssetHistory(item.assetHistory);
+    const lastRevisionInstructions =
+      item.lastRevisionInstructions === undefined
+        ? undefined
+        : parseString(item.lastRevisionInstructions, true);
     const provider =
       item.provider === undefined ? undefined : parseString(item.provider);
     const model = item.model === undefined ? undefined : parseString(item.model);
@@ -1066,7 +1070,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       !clientStatus ||
       revisionCount === null ||
       revisionCount < 0 ||
-      activeVersion === null ||
+      currentVersion === null ||
       !approval ||
       assetUrl === null ||
       assetStoragePath === null ||
@@ -1074,6 +1078,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       albumMasterAssetUrl === null ||
       albumMasterAssetStoragePath === null ||
       assetHistory === null ||
+      lastRevisionInstructions === null ||
       provider === null ||
       model === null ||
       savedToReferences === null
@@ -1088,7 +1093,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       status,
       clientStatus,
       revisionCount,
-      ...(activeVersion !== undefined ? { activeVersion } : {}),
+      ...(currentVersion !== undefined ? { currentVersion } : {}),
       approval,
       approvalComments,
       ...(assetUrl ? { assetUrl } : {}),
@@ -1099,6 +1104,9 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
         ? { albumMasterAssetStoragePath }
         : {}),
       ...(assetHistory?.length ? { assetHistory } : {}),
+      ...(lastRevisionInstructions
+        ? { lastRevisionInstructions }
+        : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
       ...(savedToReferences !== undefined ? { savedToReferences } : {})
@@ -1129,6 +1137,10 @@ function parseCreativeAssetHistory(
       item.albumMasterAssetStoragePath === undefined
         ? undefined
         : parseString(item.albumMasterAssetStoragePath);
+    const instructions =
+      item.instructions === undefined
+        ? undefined
+        : parseString(item.instructions, true);
     if (
       version === null ||
       version < 1 ||
@@ -1136,7 +1148,8 @@ function parseCreativeAssetHistory(
       assetStoragePath === null ||
       assetBucket === null ||
       albumMasterAssetUrl === null ||
-      albumMasterAssetStoragePath === null
+      albumMasterAssetStoragePath === null ||
+      instructions === null
     ) {
       return null;
     }
@@ -1148,7 +1161,8 @@ function parseCreativeAssetHistory(
       ...(albumMasterAssetUrl ? { albumMasterAssetUrl } : {}),
       ...(albumMasterAssetStoragePath
         ? { albumMasterAssetStoragePath }
-        : {})
+        : {}),
+      ...(instructions ? { instructions } : {})
     };
   });
   return history.every((item) => item !== null) ? history : null;

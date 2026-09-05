@@ -1166,7 +1166,7 @@ export function workflowReducer(
           ? (() => {
               const previousAsset = output.assetUrl
                 ? {
-                    version: output.revisionCount + 1,
+                    version: output.currentVersion ?? output.revisionCount + 1,
                     assetUrl: output.assetUrl,
                     ...(output.assetStoragePath
                       ? { assetStoragePath: output.assetStoragePath }
@@ -1182,6 +1182,9 @@ export function workflowReducer(
                           albumMasterAssetStoragePath:
                             output.albumMasterAssetStoragePath
                         }
+                      : {}),
+                    ...(output.lastRevisionInstructions
+                      ? { instructions: output.lastRevisionInstructions }
                       : {})
                   }
                 : null;
@@ -1213,7 +1216,8 @@ export function workflowReducer(
                   : {}),
                 ...(assetHistory?.length ? { assetHistory } : {}),
                 revisionCount: output.revisionCount + 1,
-                activeVersion: undefined,
+                currentVersion: output.revisionCount + 2,
+                lastRevisionInstructions: action.instructions,
                 status: "draft" as const,
                 qaNote: undefined,
                 qaReport: undefined,
@@ -1229,19 +1233,82 @@ export function workflowReducer(
         approved: computeApproved(outputs)
       };
     }
-    case "select-output-version": {
+    case "restore-output-version": {
       const outputs = state.outputs.map((output) =>
         output.id === action.id
-          ? {
-              ...output,
-              activeVersion:
-                action.version === output.revisionCount + 1
-                  ? undefined
-                  : action.version
-            }
+          ? (() => {
+              const currentLabel = output.currentVersion ?? output.revisionCount + 1;
+              if (action.version === currentLabel) return output;
+              const archivedCurrent = output.assetUrl
+                ? {
+                    version: currentLabel,
+                    assetUrl: output.assetUrl,
+                    ...(output.assetStoragePath
+                      ? { assetStoragePath: output.assetStoragePath }
+                      : {}),
+                    ...(output.assetBucket
+                      ? { assetBucket: output.assetBucket }
+                      : {}),
+                    ...(output.albumMasterAssetUrl
+                      ? { albumMasterAssetUrl: output.albumMasterAssetUrl }
+                      : {}),
+                    ...(output.albumMasterAssetStoragePath
+                      ? {
+                          albumMasterAssetStoragePath:
+                            output.albumMasterAssetStoragePath
+                        }
+                      : {}),
+                    ...(output.lastRevisionInstructions
+                      ? { instructions: output.lastRevisionInstructions }
+                      : {})
+                  }
+                : null;
+              const historyWithoutTarget = (output.assetHistory ?? []).filter(
+                (asset) => asset.version !== action.version
+              );
+              const assetHistory = archivedCurrent
+                ? [
+                    ...historyWithoutTarget.filter(
+                      (asset) => asset.assetUrl !== archivedCurrent.assetUrl
+                    ),
+                    archivedCurrent
+                  ]
+                : historyWithoutTarget;
+              return {
+                ...output,
+                assetUrl: action.assetUrl,
+                ...(action.assetStoragePath
+                  ? { assetStoragePath: action.assetStoragePath }
+                  : {}),
+                ...(action.assetBucket
+                  ? { assetBucket: action.assetBucket }
+                  : {}),
+                ...(action.albumMasterAssetUrl
+                  ? { albumMasterAssetUrl: action.albumMasterAssetUrl }
+                  : {}),
+                ...(action.albumMasterAssetStoragePath
+                  ? {
+                      albumMasterAssetStoragePath:
+                        action.albumMasterAssetStoragePath
+                    }
+                  : {}),
+                ...(assetHistory.length ? { assetHistory } : {}),
+                currentVersion: action.version,
+                lastRevisionInstructions: action.instructions,
+                status: "draft" as const,
+                qaNote: undefined,
+                qaReport: undefined,
+                approval: emptyApprovalGate
+              };
+            })()
           : output
       );
-      return { ...state, outputs };
+      return {
+        ...state,
+        outputs,
+        qaComplete: false,
+        approved: computeApproved(outputs)
+      };
     }
     case "send-client":
       return {
