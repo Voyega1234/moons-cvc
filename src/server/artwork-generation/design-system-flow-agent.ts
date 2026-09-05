@@ -36,12 +36,20 @@ export interface AlbumPanelSeparationReview {
   revisionInstruction: string;
 }
 
+export interface RevisionPlan {
+  refinedInstruction: string;
+}
+
 export interface DesignSystemFlowTrace {
   createdAt: string;
   provider: ImagePromptProvider;
   endpoint: "/v1/responses" | "/api/v1/responses";
   model: string;
-  stage: "set-creative-direction" | "visual-qc" | "album-panel-qc";
+  stage:
+    | "set-creative-direction"
+    | "visual-qc"
+    | "album-panel-qc"
+    | "revision-planning";
   status: "succeeded" | "failed";
   inputText: string;
   referenceImages: readonly {
@@ -52,7 +60,8 @@ export interface DesignSystemFlowTrace {
   response?:
     | CreativeSetDirection
     | VisualQualityReview
-    | AlbumPanelSeparationReview;
+    | AlbumPanelSeparationReview
+    | RevisionPlan;
   error?: string;
 }
 
@@ -169,6 +178,60 @@ export async function reviewGeneratedArtwork({
     schemaName: "moons_visual_quality_review",
     schema: visualQualityReviewSchema,
     parse: parseVisualQualityReview,
+    writeTrace
+  });
+}
+
+export async function planArtworkRevision({
+  apiKey,
+  model,
+  provider = "openai",
+  fetchImpl,
+  image,
+  instructions,
+  writeTrace
+}: {
+  apiKey: string;
+  model?: string;
+  provider?: ImagePromptProvider;
+  fetchImpl: FetchLike;
+  image: {
+    bytes: Buffer;
+    mimeType: string;
+    label?: string;
+  };
+  instructions: string;
+  writeTrace?: DesignSystemFlowTraceWriter;
+}): Promise<RevisionPlan> {
+  const inputText = [
+    "You are looking at Image 1, the current artwork. The user wants this exact change applied:",
+    instructions.trim(),
+    "",
+    "Look carefully at Image 1 first and identify exactly where the relevant element(s) are located",
+    "(e.g. \"top red headline\", \"info panel on the right\", \"bottom-left corner\").",
+    "Then rewrite the request as a precise, unambiguous instruction for an image-editing model,",
+    "naming the exact location(s) and what to change at each one.",
+    "Do not invent changes the user did not ask for, and do not change anything you were not asked to change."
+  ].join("\n");
+
+  return callStructuredAgent({
+    apiKey,
+    model,
+    provider,
+    fetchImpl,
+    stage: "revision-planning",
+    inputText,
+    referenceImages: [
+      {
+        imageUrl: `data:${image.mimeType};base64,${image.bytes.toString("base64")}`,
+        label: image.label,
+        mimeType: image.mimeType,
+        bytes: image.bytes.length
+      }
+    ],
+    schemaName: "moons_revision_plan",
+    schema: revisionPlanSchema,
+    parse: parseRevisionPlan,
     writeTrace
   });
 }
@@ -383,6 +446,17 @@ function parseCreativeSetDirection(
     );
   }
   return { setDirection, ideas: parsedIdeas };
+}
+
+function parseRevisionPlan(value: unknown): RevisionPlan {
+  if (!isRecord(value) || typeof value.refinedInstruction !== "string") {
+    throw new Error("Revision planning returned invalid JSON.");
+  }
+  const refinedInstruction = value.refinedInstruction.trim();
+  if (!refinedInstruction) {
+    throw new Error("Revision planning returned an empty instruction.");
+  }
+  return { refinedInstruction };
 }
 
 function parseVisualQualityReview(value: unknown): VisualQualityReview {
@@ -627,6 +701,15 @@ const creativeSetDirectionSchema = {
     }
   },
   required: ["setDirection", "ideas"]
+} as const;
+
+const revisionPlanSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    refinedInstruction: { type: "string" }
+  },
+  required: ["refinedInstruction"]
 } as const;
 
 const visualQualityReviewSchema = {

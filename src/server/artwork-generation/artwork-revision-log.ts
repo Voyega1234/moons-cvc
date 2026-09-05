@@ -8,6 +8,7 @@ export interface ArtworkRevisionLogEntry {
   isAlbum: boolean;
   affectedOutputIds: readonly string[];
   instructions: string;
+  effectiveInstructions: string;
   previousAssetUrl: string | null;
   newAssetUrl: string | null;
 }
@@ -48,6 +49,7 @@ export async function persistArtworkRevisionLog({
       is_album: entry.isAlbum,
       affected_output_ids: entry.affectedOutputIds,
       instructions: entry.instructions,
+      effective_instructions: entry.effectiveInstructions,
       previous_asset_url: entry.previousAssetUrl,
       new_asset_url: entry.newAssetUrl
     })

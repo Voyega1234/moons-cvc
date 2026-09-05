@@ -12,6 +12,9 @@ import { composeImagePrompt } from "./prompt-runtime.js";
 import { resolveReferenceImages } from "./reference-images.js";
 import { editImage } from "./openai-images-client.js";
 import { splitAlbumMaster } from "./album-master.js";
+import { planArtworkRevision } from "./design-system-flow-agent.js";
+
+const REVISION_PLANNING_MODEL = "openai/gpt-5.6-sol";
 
 type ArtworkOutput = ArtworkGenerationResponse["outputs"][number];
 
@@ -33,8 +36,8 @@ export async function reviseArtworkOutput({
   storage: ArtworkStorageClient;
   supabaseUrl: string;
   fetchImpl: typeof fetch;
-}): Promise<ArtworkOutput> {
-  const image = await generateRevisedArtwork({
+}): Promise<{ output: ArtworkOutput; effectiveInstructions: string }> {
+  const { image, effectiveInstructions } = await generateRevisedArtwork({
     input,
     apiKey,
     model,
@@ -45,7 +48,7 @@ export async function reviseArtworkOutput({
     fetchImpl
   });
   const hook = { id: input.directionId };
-  return persistArtworkOutput({
+  const output = await persistArtworkOutput({
     input: {
       runId: input.runId,
       brand: { id: input.clientId }
@@ -62,15 +65,21 @@ export async function reviseArtworkOutput({
     debugLogDirectory,
     writeDebugLog
   });
+  return { output, effectiveInstructions };
 }
 
 export async function reviseAlbumArtworkOutputs(
   options: Parameters<typeof reviseArtworkOutput>[0]
-): Promise<readonly ArtworkOutput[]> {
+): Promise<{
+  outputs: readonly ArtworkOutput[];
+  effectiveInstructions: string;
+}> {
   const { input, model, storage, debugLogDirectory, writeDebugLog } = options;
   if (!input.album) throw new Error("Album revision details are required.");
   const album = input.album;
-  const image = await generateRevisedArtwork(options);
+  const { image, effectiveInstructions } = await generateRevisedArtwork(
+    options
+  );
   const imageBytes = Buffer.from(image.base64, "base64");
   const panels = await splitAlbumMaster(imageBytes, album.format);
   const persistenceInput = {
@@ -91,7 +100,7 @@ export async function reviseAlbumArtworkOutputs(
     debugLogDirectory,
     writeDebugLog
   });
-  return Promise.all(
+  const outputs = await Promise.all(
     panels.map(async (panel, index) => ({
       ...(await persistArtworkOutput({
         input: persistenceInput,
@@ -113,6 +122,7 @@ export async function reviseAlbumArtworkOutputs(
       albumMasterAssetStoragePath: masterOutput.assetStoragePath
     }))
   );
+  return { outputs, effectiveInstructions };
 }
 
 async function generateRevisedArtwork({
@@ -143,8 +153,26 @@ async function generateRevisedArtwork({
   }
   const revisionReferences = [sourceImage, ...additionalReferences];
 
+  let effectiveInstructions = input.instructions;
+  try {
+    const plan = await planArtworkRevision({
+      apiKey,
+      model: REVISION_PLANNING_MODEL,
+      provider: "openrouter",
+      fetchImpl,
+      image: { bytes: sourceImage.bytes, mimeType: sourceImage.mimeType },
+      instructions: input.instructions
+    });
+    effectiveInstructions = plan.refinedInstruction;
+  } catch (error) {
+    console.warn(
+      "Could not plan artwork revision; using the raw instructions.",
+      error
+    );
+  }
+
   const prompt = composeImagePrompt([
-    buildArtworkRevisionPrompt(input.instructions)
+    buildArtworkRevisionPrompt(effectiveInstructions)
   ]);
   const hook = { id: input.directionId };
   const imageRequestDebug = buildImageRequestDebugBundle({
@@ -162,7 +190,7 @@ async function generateRevisedArtwork({
     imageRequestDebug.assets
   );
 
-  return editImage({
+  const image = await editImage({
     apiKey,
     model,
     prompt,
@@ -171,12 +199,17 @@ async function generateRevisedArtwork({
     referenceImages: revisionReferences,
     fetchImpl
   });
+  return { image, effectiveInstructions };
 }
-
 export function buildArtworkRevisionPrompt(instructions: string): string {
   const trimmed = instructions.trim();
+
   return [
-    "IMPORTANT RULE — STRICT EDIT ONLY: Apply ONLY the change(s) described below to Image 1 (the current artwork). Do not add, remove, restyle, recolor, or move any other element. Every part of Image 1 not explicitly mentioned in the instructions — layout, text, logo, colors, background, product, and composition — must remain pixel-identical to the original.",
-    `Requested change: ${trimmed}`
-  ].join("\n\n");
+    "Follow the user's editing request exactly.",
+    "Make only the changes necessary to achieve what the user wants.",
+    "Do not add, remove, or modify anything the user did not ask for.",
+    "Preserve the rest of Image 1 as closely as possible.",
+    "",
+    `USER REQUEST:\n${trimmed}`
+  ].join("\n");
 }

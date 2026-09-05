@@ -239,9 +239,12 @@ export async function handleArtworkGenerationRequest({
         supabaseUrl,
         fetchImpl: providerFetchImpl
       };
-      const outputs = revisionInput.album
+      const { outputs, effectiveInstructions } = revisionInput.album
         ? await reviseAlbumArtworkOutputs(revisionOptions)
-        : [await reviseArtworkOutput(revisionOptions)];
+        : await reviseArtworkOutput(revisionOptions).then((result) => ({
+            outputs: [result.output],
+            effectiveInstructions: result.effectiveInstructions
+          }));
       try {
         await persistArtworkRevisionLog({
           fetchImpl,
@@ -257,6 +260,7 @@ export async function handleArtworkGenerationRequest({
             isAlbum: Boolean(revisionInput.album),
             affectedOutputIds: outputs.map((output) => output.id),
             instructions: revisionInput.instructions,
+            effectiveInstructions,
             previousAssetUrl: revisionInput.sourceImageUrl,
             newAssetUrl: outputs[0]?.assetUrl ?? null
           }
