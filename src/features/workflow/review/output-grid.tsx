@@ -66,17 +66,19 @@ export function OutputGrid({
         (candidate) => candidate.id === previewOutput.directionId
       )
     : undefined;
-  const previewOutputs = previewOutput
-    ? isAlbumOutput(previewOutput)
-      ? sortAlbumOutputs(
-          state.outputs.filter(
-            (output) =>
-              isAlbumOutput(output) &&
-              output.directionId === previewOutput.directionId
+  const previewOutputs = (
+    previewOutput
+      ? isAlbumOutput(previewOutput)
+        ? sortAlbumOutputs(
+            state.outputs.filter(
+              (output) =>
+                isAlbumOutput(output) &&
+                output.directionId === previewOutput.directionId
+            )
           )
-        )
-      : [previewOutput]
-    : [];
+        : [previewOutput]
+      : []
+  ).map(activeOutputAsset);
   const regenerateOutput =
     state.outputs.find((output) => output.id === regenerateOutputId) ?? null;
   const regenerateDirection = regenerateOutput
@@ -125,7 +127,10 @@ export function OutputGrid({
       if (isAlbumOutput(output)) {
         await downloadAlbumArchive(sortAlbumOutputs(outputs), albumIndex);
       } else {
-        await downloadOutputAsset(output, state.outputs.indexOf(output));
+        await downloadOutputAsset(
+          output,
+          state.outputs.findIndex((candidate) => candidate.id === output.id)
+        );
       }
     } catch (caught) {
       setDownloadErrorByOutputId((current) => ({
@@ -176,6 +181,8 @@ export function OutputGrid({
               {reviewGroups.map((reviewOutputs, reviewIndex) => {
                 const output = reviewOutputs[0];
                 if (!output) return null;
+                const displayOutput = activeOutputAsset(output);
+                const displayReviewOutputs = reviewOutputs.map(activeOutputAsset);
                 const album = isAlbumOutput(output);
                 const index = state.outputs.indexOf(output);
                 const direction = state.directions.find(
@@ -207,7 +214,7 @@ export function OutputGrid({
                         </small>
                       </div>
                       <span className="pill badge">
-                        Draft · V{output.revisionCount + 1}
+                        Draft · V{output.activeVersion ?? output.revisionCount + 1}
                       </span>
                     </header>
                     <div className="compass-build-asset-pair">
@@ -223,7 +230,7 @@ export function OutputGrid({
                       >
                         {album ? (
                           <AlbumPanelPreview
-                            outputs={reviewOutputs}
+                            outputs={displayReviewOutputs}
                             direction={direction}
                             format={resolvedAlbumFormatForDirection(
                               state.albumFormat,
@@ -237,10 +244,10 @@ export function OutputGrid({
                             brandName={state.brand?.name}
                             captureId={output.id}
                           />
-                        ) : output.assetUrl ? (
+                        ) : displayOutput.assetUrl ? (
                           <img
                             className="generated-preview"
-                            src={output.assetUrl}
+                            src={displayOutput.assetUrl}
                             alt={direction?.hook ?? `Creative ${index + 1}`}
                             loading="lazy"
                             decoding="async"
@@ -328,7 +335,11 @@ export function OutputGrid({
                             : "No downloadable artwork is available"
                         }
                         onClick={() =>
-                          void downloadDraft(output, reviewOutputs, reviewIndex)
+                          void downloadDraft(
+                            displayOutput,
+                            displayReviewOutputs,
+                            reviewIndex
+                          )
                         }
                       >
                         {downloading ? <Spinner /> : null}
@@ -566,6 +577,12 @@ function outputAtVersion(
   };
 }
 
+function activeOutputAsset(output: CreativeOutput): CreativeOutput {
+  return output.activeVersion !== undefined
+    ? outputAtVersion(output, output.activeVersion)
+    : output;
+}
+
 function OutputRegenerateModal({
   run,
   output,
@@ -587,7 +604,7 @@ function OutputRegenerateModal({
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [phase, setPhase] = useState<"idle" | "regenerating">("idle");
   const [selectedVersion, setSelectedVersion] = useState(
-    output.revisionCount + 1
+    output.activeVersion ?? output.revisionCount + 1
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -605,8 +622,8 @@ function OutputRegenerateModal({
   );
 
   useEffect(() => {
-    setSelectedVersion(output.revisionCount + 1);
-  }, [output.assetUrl, output.revisionCount]);
+    setSelectedVersion(output.activeVersion ?? output.revisionCount + 1);
+  }, [output.assetUrl, output.revisionCount, output.activeVersion]);
 
   const handleReferenceAttachment = async (
     event: ChangeEvent<HTMLInputElement>
@@ -792,10 +809,19 @@ function OutputRegenerateModal({
                     className={selected ? "selected" : ""}
                     type="button"
                     key={`${version.version}-${version.assetUrl}`}
-                    aria-label={`Use version ${version.version} as revision source`}
+                    aria-label={`Make version ${version.version} the active draft`}
                     aria-pressed={selected}
                     disabled={busy}
-                    onClick={() => setSelectedVersion(version.version)}
+                    onClick={() => {
+                      setSelectedVersion(version.version);
+                      outputs.forEach((candidateOutput) => {
+                        dispatch({
+                          type: "select-output-version",
+                          id: candidateOutput.id,
+                          version: version.version
+                        });
+                      });
+                    }}
                   >
                     <img src={version.assetUrl} alt="" />
                     <span>V{version.version}</span>

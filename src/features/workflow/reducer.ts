@@ -1213,6 +1213,7 @@ export function workflowReducer(
                   : {}),
                 ...(assetHistory?.length ? { assetHistory } : {}),
                 revisionCount: output.revisionCount + 1,
+                activeVersion: undefined,
                 status: "draft" as const,
                 qaNote: undefined,
                 qaReport: undefined,
@@ -1227,6 +1228,20 @@ export function workflowReducer(
         qaComplete: false,
         approved: computeApproved(outputs)
       };
+    }
+    case "select-output-version": {
+      const outputs = state.outputs.map((output) =>
+        output.id === action.id
+          ? {
+              ...output,
+              activeVersion:
+                action.version === output.revisionCount + 1
+                  ? undefined
+                  : action.version
+            }
+          : output
+      );
+      return { ...state, outputs };
     }
     case "send-client":
       return {

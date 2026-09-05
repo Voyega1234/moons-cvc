@@ -612,6 +612,7 @@ export interface CreativeOutput {
   albumMasterAssetUrl?: string;
   albumMasterAssetStoragePath?: string;
   assetHistory?: readonly CreativeAssetVersion[];
+  activeVersion?: number;
   provider?: string;
   model?: string;
   revisionCount: number;

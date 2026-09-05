@@ -274,6 +274,7 @@ export type WorkflowAction =
       albumMasterAssetUrl?: string;
       albumMasterAssetStoragePath?: string;
     }
+  | { type: "select-output-version"; id: string; version: number }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }
   | { type: "unapprove-output"; id: string }

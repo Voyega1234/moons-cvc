@@ -1027,6 +1027,8 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
     const status = parseMember(item.status, validStatuses);
     const clientStatus = parseMember(item.clientStatus, validClientStatuses);
     const revisionCount = parseNumber(item.revisionCount);
+    const activeVersion =
+      item.activeVersion === undefined ? undefined : parseNumber(item.activeVersion);
     const approval = parseApprovalGate(item.approval);
     const approvalComments =
       parseApprovalComments(item.approvalComments) ?? emptyApprovalComments;
@@ -1064,6 +1066,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       !clientStatus ||
       revisionCount === null ||
       revisionCount < 0 ||
+      activeVersion === null ||
       !approval ||
       assetUrl === null ||
       assetStoragePath === null ||
@@ -1085,6 +1088,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       status,
       clientStatus,
       revisionCount,
+      ...(activeVersion !== undefined ? { activeVersion } : {}),
       approval,
       approvalComments,
       ...(assetUrl ? { assetUrl } : {}),
