@@ -107,6 +107,7 @@ import {
   reviseAlbumArtworkOutputs,
   reviseArtworkOutput
 } from "./artwork-revision.js";
+import { persistArtworkRevisionLog } from "./artwork-revision-log.js";
 
 export { buildArtworkRevisionPrompt } from "./artwork-revision.js";
 
@@ -241,6 +242,28 @@ export async function handleArtworkGenerationRequest({
       const outputs = revisionInput.album
         ? await reviseAlbumArtworkOutputs(revisionOptions)
         : [await reviseArtworkOutput(revisionOptions)];
+      try {
+        await persistArtworkRevisionLog({
+          fetchImpl,
+          supabaseUrl,
+          supabaseAnonKey,
+          accessToken: auth.accessToken,
+          ownerUserId: auth.userId,
+          entry: {
+            clientId: revisionInput.clientId,
+            workspaceRunId: revisionInput.runId,
+            directionId: revisionInput.directionId,
+            outputId: revisionInput.outputId,
+            isAlbum: Boolean(revisionInput.album),
+            affectedOutputIds: outputs.map((output) => output.id),
+            instructions: revisionInput.instructions,
+            previousAssetUrl: revisionInput.sourceImageUrl,
+            newAssetUrl: outputs[0]?.assetUrl ?? null
+          }
+        });
+      } catch (error) {
+        console.warn("Could not record artwork revision log.", error);
+      }
       return jsonResponse({ ok: true, outputs });
     }
 
