@@ -1093,7 +1093,8 @@ describe("handleArtworkGenerationRequest", () => {
     expect(editBody?.quality).toBe("medium");
     expect(editBody?.input_references).toHaveLength(1);
     const prompt = String(editBody?.prompt);
-    expect(prompt).toBe("Increase whitespace around the CTA.");
+    expect(prompt).toContain("Increase whitespace around the CTA.");
+    expect(prompt).toContain("STRICT EDIT ONLY");
     expect(prompt).not.toContain(requestBody.brief);
     expect(
       fetchMock.mock.calls.some(([url]) =>
@@ -1191,9 +1192,10 @@ describe("handleArtworkGenerationRequest", () => {
     const payload = (await response.json()) as { outputs: unknown[] };
 
     expect(response.status).toBe(200);
-    expect(String(editBody?.prompt)).toBe(
+    expect(String(editBody?.prompt)).toContain(
       "Change only the cover background to blue."
     );
+    expect(String(editBody?.prompt)).toContain("STRICT EDIT ONLY");
     expect(editBody?.input_references).toHaveLength(1);
     expect(payload.outputs).toHaveLength(3);
     expect(uploads).toHaveLength(4);

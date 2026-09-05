@@ -174,5 +174,9 @@ async function generateRevisedArtwork({
 }
 
 export function buildArtworkRevisionPrompt(instructions: string): string {
-  return instructions.trim();
+  const trimmed = instructions.trim();
+  return [
+    "IMPORTANT RULE — STRICT EDIT ONLY: Apply ONLY the change(s) described below to Image 1 (the current artwork). Do not add, remove, restyle, recolor, or move any other element. Every part of Image 1 not explicitly mentioned in the instructions — layout, text, logo, colors, background, product, and composition — must remain pixel-identical to the original.",
+    `Requested change: ${trimmed}`
+  ].join("\n\n");
 }
