@@ -555,7 +555,7 @@ export function PreflightModal({
                     aria-label="Artwork brief"
                     maxLength={3000}
                     value={artworkBriefText}
-                    placeholder="Add visual direction, composition, lighting, mood, or restrictions for the final artwork."
+                    placeholder="ออกแบบให้เป็นภาพโฆษณา Campaign Key Visual จริง ไม่ใช่ Infographic หรือ Information Sheet เน้น 1 Key Message + 1 Hero Visual / Offer ที่เด่นชัด ใช้ข้อความเท่าที่จำเป็น มี hierarchy ชัด อ่านจบไว สื่อสารด้วยภาพเป็นหลัก ไม่ใช้กล่องข้อความหลายส่วนเพื่ออธิบาย จัดองค์ประกอบให้ดูเป็นงานเอเจนซี่ มี balance, negative space และความน่าสนใจแบบภาพโฆษณาจริง ดูโดดเด่น ให้คนเห็นต้องหยุดดู และ ทำตามหลัก Design Principle"
                     onChange={(event) =>
                       onArtworkBriefChange?.(event.target.value)
                     }
