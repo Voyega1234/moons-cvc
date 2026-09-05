@@ -1144,6 +1144,84 @@ describe("workflowReducer", () => {
     ]);
   });
 
+  it("tags placeholder versions and clears the tag on a real edit, carrying it through restore", () => {
+    const brand = brands[0];
+    if (!brand) throw new Error("Mock brand fixture is missing.");
+
+    let state = workflowReducer(initialWorkflowState, {
+      type: "select-brand",
+      brand
+    });
+    state = workflowReducer(state, {
+      type: "generate-directions",
+      directions: buildDirectionFixtures(brand.name)
+    });
+    state = workflowReducer(state, { type: "auto-select-directions" });
+    state = workflowReducer(state, { type: "create-outputs" });
+    const first = state.outputs[0];
+    if (!first) throw new Error("Expected at least one output.");
+
+    // A real regeneration is not a placeholder.
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v1-real.png"
+    });
+    expect(
+      state.outputs.find((output) => output.id === first.id)?.isPlaceholder
+    ).toBeFalsy();
+
+    // Generating a placeholder tags the output as such.
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v2-placeholder.png",
+      isPlaceholder: true
+    });
+    const afterPlaceholder = state.outputs.find(
+      (output) => output.id === first.id
+    );
+    expect(afterPlaceholder?.isPlaceholder).toBe(true);
+    expect(afterPlaceholder?.assetHistory).toEqual([
+      { version: 2, assetUrl: "https://example.com/v1-real.png" }
+    ]);
+
+    // A real edit afterward clears the placeholder tag on the new current asset.
+    state = workflowReducer(state, {
+      type: "replace-output-asset",
+      id: first.id,
+      assetUrl: "https://example.com/v3-real.png"
+    });
+    const afterRealEdit = state.outputs.find(
+      (output) => output.id === first.id
+    );
+    expect(afterRealEdit?.isPlaceholder).toBeFalsy();
+    expect(afterRealEdit?.assetHistory).toEqual([
+      { version: 2, assetUrl: "https://example.com/v1-real.png" },
+      {
+        version: 3,
+        assetUrl: "https://example.com/v2-placeholder.png",
+        isPlaceholder: true
+      }
+    ]);
+
+    // Restoring the placeholder version brings the tag back with it.
+    state = workflowReducer(state, {
+      type: "restore-output-version",
+      id: first.id,
+      version: 3,
+      assetUrl: "https://example.com/v2-placeholder.png",
+      isPlaceholder: true
+    });
+    const afterRestore = state.outputs.find(
+      (output) => output.id === first.id
+    );
+    expect(afterRestore?.assetUrl).toBe(
+      "https://example.com/v2-placeholder.png"
+    );
+    expect(afterRestore?.isPlaceholder).toBe(true);
+  });
+
   it("appends generated-more directions instead of replacing existing ones", () => {
     const brand = brands[0];
     if (!brand) throw new Error("Mock brand fixture is missing.");

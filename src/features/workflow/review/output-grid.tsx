@@ -9,6 +9,9 @@ import { directionSubheadline } from "../../../domain/subheadline-highlight";
 import { CREATIVE_STRATEGIST_AGENT_NAME, type CreativeQualityReport } from "../../../domain/quality-check";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
 import {
+  PLACEHOLDER_INSTRUCTIONS,
+  placeholderizeAlbumOutputImages,
+  placeholderizeOutputImage,
   reviseAlbumOutputImages,
   reviseOutputImage,
   type ArtworkReferenceImage
@@ -59,6 +62,13 @@ export function OutputGrid({
   const [downloadErrorByOutputId, setDownloadErrorByOutputId] = useState<
     Record<string, string>
   >({});
+  const [placeholderizingOutputId, setPlaceholderizingOutputId] = useState<
+    string | null
+  >(null);
+  const [placeholderErrorByOutputId, setPlaceholderErrorByOutputId] = useState<
+    Record<string, string>
+  >({});
+  const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const previewOutput =
     state.outputs.find((output) => output.id === previewOutputId) ?? null;
   const previewDirection = previewOutput
@@ -143,6 +153,89 @@ export function OutputGrid({
     }
   }
 
+  async function handlePlaceholder(
+    output: CreativeOutput,
+    outputs: readonly CreativeOutput[]
+  ) {
+    const direction = state.directions.find(
+      (candidate) => candidate.id === output.directionId
+    );
+    if (!direction) {
+      setPlaceholderErrorByOutputId((current) => ({
+        ...current,
+        [output.id]: "Missing hook details for this creative."
+      }));
+      return;
+    }
+    setPlaceholderizingOutputId(output.id);
+    setPlaceholderErrorByOutputId((current) => ({
+      ...current,
+      [output.id]: ""
+    }));
+    try {
+      const album = isAlbumOutput(output);
+      const updatedOutputs = album
+        ? await placeholderizeAlbumOutputImages({
+            run: state,
+            outputs,
+            sourceImageUrl: output.albumMasterAssetUrl ?? output.assetUrl ?? "",
+            albumFormat: resolvedAlbumFormatForDirection(
+              state.albumFormat,
+              direction
+            )
+          })
+        : [await placeholderizeOutputImage({ run: state, output })];
+      const orderedUpdated = album
+        ? sortAlbumOutputs(updatedOutputs)
+        : updatedOutputs;
+      if (album && orderedUpdated.length < outputs.length) {
+        throw new Error("Placeholder generation did not return every panel.");
+      }
+      const replacements = outputs.map((currentOutput, index) => {
+        const updated = orderedUpdated[index];
+        const assetUrl = updated?.assetUrl;
+        if (!updated || !assetUrl) {
+          throw new Error("Placeholder generation did not return an image.");
+        }
+        return { currentOutput, updated: { ...updated, assetUrl } };
+      });
+      await createCheckpoint?.("replace-image", state.id);
+      replacements.forEach(({ currentOutput, updated }) => {
+        dispatch({
+          type: "replace-output-asset",
+          id: currentOutput.id,
+          assetUrl: updated.assetUrl,
+          ...(updated.assetStoragePath
+            ? { assetStoragePath: updated.assetStoragePath }
+            : {}),
+          ...(updated.assetBucket ? { assetBucket: updated.assetBucket } : {}),
+          ...(updated.albumMasterAssetUrl
+            ? { albumMasterAssetUrl: updated.albumMasterAssetUrl }
+            : {}),
+          ...(updated.albumMasterAssetStoragePath
+            ? {
+                albumMasterAssetStoragePath:
+                  updated.albumMasterAssetStoragePath
+              }
+            : {}),
+          instructions: PLACEHOLDER_INSTRUCTIONS,
+          isPlaceholder: true
+        });
+      });
+      playGenerationSuccessSound();
+    } catch (caught) {
+      setPlaceholderErrorByOutputId((current) => ({
+        ...current,
+        [output.id]:
+          caught instanceof Error
+            ? caught.message
+            : "Could not generate placeholder artwork."
+      }));
+    } finally {
+      setPlaceholderizingOutputId(null);
+    }
+  }
+
   if (!state.outputs.length) {
     return (
       <div className="empty">
@@ -209,9 +302,16 @@ export function OutputGrid({
                           {qcContentTypeLabel(output)} working draft
                         </small>
                       </div>
-                      <span className="pill badge">
-                        Draft · V{output.currentVersion ?? output.revisionCount + 1}
-                      </span>
+                      <div className="output-head-badges">
+                        <span className="pill badge">
+                          Draft · V{output.currentVersion ?? output.revisionCount + 1}
+                        </span>
+                        {output.isPlaceholder ? (
+                          <span className="pill badge placeholder-badge">
+                            Placeholder
+                          </span>
+                        ) : null}
+                      </div>
                     </header>
                     <div className="compass-build-asset-pair">
                       <button
@@ -318,6 +418,11 @@ export function OutputGrid({
                         {downloadErrorByOutputId[output.id]}
                       </p>
                     ) : null}
+                    {placeholderErrorByOutputId[output.id] ? (
+                      <p className="repository-message error">
+                        {placeholderErrorByOutputId[output.id]}
+                      </p>
+                    ) : null}
                     <footer className="compass-build-output-foot">
                       <button
                         className="btn secondary small"
@@ -344,6 +449,24 @@ export function OutputGrid({
                         onClick={() => setRegenerateOutputId(output.id)}
                       >
                         Regenerate draft
+                      </button>
+                      <button
+                        className="btn secondary small"
+                        type="button"
+                        disabled={
+                          !canEdit ||
+                          !downloadable ||
+                          placeholderizingOutputId === output.id
+                        }
+                        title="Replace all text in this creative with generic placeholder labels"
+                        onClick={() => void handlePlaceholder(output, reviewOutputs)}
+                      >
+                        {placeholderizingOutputId === output.id ? (
+                          <Spinner />
+                        ) : null}
+                        {placeholderizingOutputId === output.id
+                          ? "Working…"
+                          : "Placeholder"}
                       </button>
                     </footer>
                   </article>
@@ -534,7 +657,8 @@ function outputAssetVersions(
         : {}),
       ...(output.lastRevisionInstructions
         ? { instructions: output.lastRevisionInstructions }
-        : {})
+        : {}),
+      ...(output.isPlaceholder ? { isPlaceholder: true } : {})
     });
   }
   return versions
@@ -847,7 +971,8 @@ function OutputRegenerateModal({
                             : {}),
                           ...(asset.instructions
                             ? { instructions: asset.instructions }
-                            : {})
+                            : {}),
+                          isPlaceholder: Boolean(asset.isPlaceholder)
                         });
                       });
                     }}

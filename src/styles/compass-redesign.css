@@ -6413,6 +6413,18 @@
   display: block;
 }
 
+.compass-app .output-head-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.compass-app .placeholder-badge {
+  background: #fdf0d5;
+  color: #9a5b00;
+}
+
 .compass-app .compass-build-card-head b {
   color: var(--ink);
   font-size: 12px;

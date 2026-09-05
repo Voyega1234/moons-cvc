@@ -1052,6 +1052,12 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       item.lastRevisionInstructions === undefined
         ? undefined
         : parseString(item.lastRevisionInstructions, true);
+    const isPlaceholder =
+      item.isPlaceholder === undefined
+        ? undefined
+        : typeof item.isPlaceholder === "boolean"
+          ? item.isPlaceholder
+          : null;
     const provider =
       item.provider === undefined ? undefined : parseString(item.provider);
     const model = item.model === undefined ? undefined : parseString(item.model);
@@ -1079,6 +1085,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       albumMasterAssetStoragePath === null ||
       assetHistory === null ||
       lastRevisionInstructions === null ||
+      isPlaceholder === null ||
       provider === null ||
       model === null ||
       savedToReferences === null
@@ -1107,6 +1114,7 @@ function parseOutputs(value: unknown): WorkflowState["outputs"] | null {
       ...(lastRevisionInstructions
         ? { lastRevisionInstructions }
         : {}),
+      ...(isPlaceholder ? { isPlaceholder } : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
       ...(savedToReferences !== undefined ? { savedToReferences } : {})
@@ -1141,6 +1149,12 @@ function parseCreativeAssetHistory(
       item.instructions === undefined
         ? undefined
         : parseString(item.instructions, true);
+    const isPlaceholder =
+      item.isPlaceholder === undefined
+        ? undefined
+        : typeof item.isPlaceholder === "boolean"
+          ? item.isPlaceholder
+          : null;
     if (
       version === null ||
       version < 1 ||
@@ -1149,7 +1163,8 @@ function parseCreativeAssetHistory(
       assetBucket === null ||
       albumMasterAssetUrl === null ||
       albumMasterAssetStoragePath === null ||
-      instructions === null
+      instructions === null ||
+      isPlaceholder === null
     ) {
       return null;
     }
@@ -1162,7 +1177,8 @@ function parseCreativeAssetHistory(
       ...(albumMasterAssetStoragePath
         ? { albumMasterAssetStoragePath }
         : {}),
-      ...(instructions ? { instructions } : {})
+      ...(instructions ? { instructions } : {}),
+      ...(isPlaceholder ? { isPlaceholder } : {})
     };
   });
   return history.every((item) => item !== null) ? history : null;

@@ -1185,7 +1185,8 @@ export function workflowReducer(
                       : {}),
                     ...(output.lastRevisionInstructions
                       ? { instructions: output.lastRevisionInstructions }
-                      : {})
+                      : {}),
+                    ...(output.isPlaceholder ? { isPlaceholder: true } : {})
                   }
                 : null;
               const assetHistory = previousAsset
@@ -1218,6 +1219,7 @@ export function workflowReducer(
                 revisionCount: output.revisionCount + 1,
                 currentVersion: output.revisionCount + 2,
                 lastRevisionInstructions: action.instructions,
+                isPlaceholder: Boolean(action.isPlaceholder),
                 status: "draft" as const,
                 qaNote: undefined,
                 qaReport: undefined,
@@ -1260,7 +1262,8 @@ export function workflowReducer(
                       : {}),
                     ...(output.lastRevisionInstructions
                       ? { instructions: output.lastRevisionInstructions }
-                      : {})
+                      : {}),
+                    ...(output.isPlaceholder ? { isPlaceholder: true } : {})
                   }
                 : null;
               const historyWithoutTarget = (output.assetHistory ?? []).filter(
@@ -1295,6 +1298,7 @@ export function workflowReducer(
                 ...(assetHistory.length ? { assetHistory } : {}),
                 currentVersion: action.version,
                 lastRevisionInstructions: action.instructions,
+                isPlaceholder: Boolean(action.isPlaceholder),
                 status: "draft" as const,
                 qaNote: undefined,
                 qaReport: undefined,

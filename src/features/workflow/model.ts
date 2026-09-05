@@ -274,6 +274,7 @@ export type WorkflowAction =
       albumMasterAssetUrl?: string;
       albumMasterAssetStoragePath?: string;
       instructions?: string;
+      isPlaceholder?: boolean;
     }
   | {
       type: "restore-output-version";
@@ -285,6 +286,7 @@ export type WorkflowAction =
       albumMasterAssetUrl?: string;
       albumMasterAssetStoragePath?: string;
       instructions?: string;
+      isPlaceholder?: boolean;
     }
   | { type: "send-client" }
   | { type: "approve-output"; id: string }

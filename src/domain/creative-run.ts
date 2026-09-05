@@ -599,6 +599,7 @@ export interface CreativeAssetVersion {
   albumMasterAssetUrl?: string;
   albumMasterAssetStoragePath?: string;
   instructions?: string;
+  isPlaceholder?: boolean;
 }
 
 export interface CreativeOutput {
@@ -618,6 +619,7 @@ export interface CreativeOutput {
   model?: string;
   revisionCount: number;
   currentVersion?: number;
+  isPlaceholder?: boolean;
   approval: ApprovalGate;
   approvalComments: ApprovalComments;
   qaNote?: string;
