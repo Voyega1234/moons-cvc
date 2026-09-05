@@ -1795,6 +1795,9 @@ function readAlbumFormat(value: unknown): AlbumFormatPreference {
   throw new Error("albumFormat is invalid.");
 }
 
+const albumBeatDiversityRule =
+  "  ห้ามให้ album-post ทุก direction ในชุดนี้เล่าด้วยกลไกเดียวกัน เช่น How-to/Checklist/Numbered-tips ซ้ำทุกใบเพียงเพราะกรอกตามจำนวน formatBeats ได้ง่าย ให้แต่ละ direction เลือกกลไกเล่าเรื่องข้าม Panel ที่ต่างกันตามสารและผู้ชม เช่น Before/After, Myth vs Fact, Comparison, Problem-to-solution, Story sequence หรือ Q&A.";
+
 function albumHookInstruction(
   preference: AlbumFormatPreference
 ): string {
@@ -1804,7 +1807,8 @@ function albumHookInstruction(
       "  - three-vertical: vertical cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
       "  - three-horizontal: horizontal cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
       "  - four-vertical: vertical cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
-      "  - four-grid: cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel."
+      "  - four-grid: cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
+      albumBeatDiversityRule
     ].join("\n");
   }
   const format = preference;
@@ -1817,7 +1821,10 @@ function albumHookInstruction(
           ? "4 images: vertical cover on the left with three square panels on the right"
           : "4 images: four square panels in a 2 by 2 grid";
   const supportingPanelCount = format.startsWith("three-") ? 2 : 3;
-  return `- album-post: Selected layout is ${layout}. formatBeats ต้องมี ${supportingPanelCount} ข้อ หนึ่งข้อต่อ supporting panel.`;
+  return [
+    `- album-post: Selected layout is ${layout}. formatBeats ต้องมี ${supportingPanelCount} ข้อ หนึ่งข้อต่อ supporting panel.`,
+    albumBeatDiversityRule
+  ].join("\n");
 }
 
 function readHookIdeaMode(value: unknown): HookIdeaMode {
