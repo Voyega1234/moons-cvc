@@ -79,7 +79,8 @@ describe("handleMappingClientsRequest", () => {
       env: {
         ...baseEnv,
         GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com",
-        OPENAI_API_KEY: "openai-key"
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_TERRA_MODEL: "openai/gpt-test"
       },
       fetchImpl,
       createSheetsAccessToken,
@@ -109,8 +110,9 @@ describe("handleMappingClientsRequest", () => {
     expect(createSheetsAccessToken).not.toHaveBeenCalled();
     expect(reviewQuestionnaireExtraction).toHaveBeenCalledWith(
       expect.objectContaining({
-        apiKey: "openai-key",
-        model: undefined,
+        provider: "openrouter",
+        apiKey: "openrouter-key",
+        model: "openai/gpt-test",
         extractedFields: [
           {
             key: "products_target_customer",
@@ -145,8 +147,7 @@ describe("handleMappingClientsRequest", () => {
       ),
       env: {
         ...baseEnv,
-        GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com",
-        OPENAI_API_KEY: ""
+        GOOGLE_WORKSPACE_LOCAL_USER: "developer@convertcake.com"
       },
       fetchImpl,
       reviewQuestionnaireExtraction

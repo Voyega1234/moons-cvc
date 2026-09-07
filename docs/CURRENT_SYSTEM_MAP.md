@@ -247,6 +247,12 @@ imports stay stable. Ownership after the first extraction is:
 | Overview | `Overview`, workboard helpers |
 | My Work | `src/features/workflow/my-work.tsx`, live run assignments and queue state |
 
+Client setup routes Questionnaire QC, Brand Visual Analysis, and grounded Brand
+Discovery through OpenRouter. The ingestion worker prefers
+`OPENROUTER_BRAND_ANALYSIS_MODEL`, Questionnaire QC prefers
+`OPENROUTER_QUESTIONNAIRE_QC_MODEL`, and both fall back to the shared
+`OPENROUTER_TERRA_MODEL`. These steps do not fall back to the direct OpenAI API.
+
 The before-build Policy checker keeps its shared claim-risk rules and adds any
 active Brand System rows whose title contains the standalone word `Policy`
 (for example, `Policy (Strictly apply)`) as brand-specific constraints. Those

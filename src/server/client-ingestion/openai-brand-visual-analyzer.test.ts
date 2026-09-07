@@ -266,6 +266,56 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(prompt).not.toContain("ก".repeat(701));
   });
 
+  it("does not split an emoji surrogate pair at the evidence limit", async () => {
+    const fetchMock = vi.fn(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        _init?: Parameters<typeof fetch>[1]
+      ) =>
+        new Response(
+          JSON.stringify({ output_text: JSON.stringify(responseAnalysis) }),
+          { status: 200 }
+        )
+    );
+    const analyzer = new OpenAiBrandVisualAnalyzer({
+      apiKey: "test-key",
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    await analyzer.analyze({
+      client: {
+        id: "client-1",
+        name: "Flora Daily",
+        facebookUrl: "https://www.facebook.com/flora"
+      },
+      sourceSummary: {
+        postsSaved: 1,
+        adsSaved: 0,
+        manualInputsSaved: 0,
+        usedFallbackSearch: false
+      },
+      textEvidence: [
+        {
+          sourceType: "facebook_post",
+          sourceId: "post-1",
+          text: `${"ก".repeat(699)}📱ข้อความหลังขีดจำกัด`
+        }
+      ],
+      visualAssets: []
+    });
+
+    const body = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)
+    ) as {
+      input: { content: { type: string; text?: string }[] }[];
+    };
+    const prompt = body.input[0]?.content[0]?.text ?? "";
+
+    expect(prompt).toContain(`${"ก".repeat(699)}📱`);
+    expect(prompt).not.toMatch(/[\uD800-\uDFFF]/u);
+    expect(prompt).not.toContain("ข้อความหลังขีดจำกัด");
+  });
+
   it("falls back to text evidence and requires review when OpenAI rejects an image request", async () => {
     const fetchMock = vi
       .fn()
@@ -472,7 +522,7 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     expect(result.needsReview).toBe(false);
   });
 
-  it("includes OpenAI error details and request IDs when recovery is not possible", async () => {
+  it("labels OpenRouter error details and request IDs when recovery is not possible", async () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(
@@ -491,6 +541,8 @@ describe("OpenAiBrandVisualAnalyzer", () => {
     );
     const analyzer = new OpenAiBrandVisualAnalyzer({
       apiKey: "test-key",
+      provider: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1/responses",
       fetchImpl: fetchMock as unknown as typeof fetch,
       retryDelayMs: 0
     });
@@ -518,7 +570,7 @@ describe("OpenAiBrandVisualAnalyzer", () => {
         visualAssets: []
       })
     ).rejects.toThrow(
-      "OpenAI visual analysis failed (401, request req-unauthorized): invalid_api_key — Incorrect API key."
+      "OpenRouter visual analysis failed (401, request req-unauthorized): invalid_api_key — Incorrect API key."
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

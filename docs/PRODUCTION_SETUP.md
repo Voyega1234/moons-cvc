@@ -137,8 +137,10 @@ SUPABASE_URL=<project-url>
 SUPABASE_ANON_KEY=<anon-key>
 APIFY_TOKEN=<apify-token>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-OPENAI_API_KEY=<openai-api-key>
-OPENAI_BRAND_ANALYSIS_MODEL=gpt-5.6-terra
+OPENROUTER_API_KEY=<openrouter-api-key>
+OPENROUTER_TERRA_MODEL=openai/gpt-5.6-terra
+OPENROUTER_BRAND_ANALYSIS_MODEL=openai/gpt-5.6-terra
+OPENROUTER_QUESTIONNAIRE_QC_MODEL=openai/gpt-5.6-terra
 GEMINI_API_KEY=<gemini-api-key>
 GEMINI_GROUNDING_MODEL=gemini-3.5-flash
 CLIENT_INGESTION_WORKER_TOKEN=<long-random-secret>
@@ -155,9 +157,10 @@ They expect a backend-created Supabase client that uses
 `SUPABASE_SERVICE_ROLE_KEY`; the Vite browser app must never import or
 instantiate that client.
 
-Visual brand analysis is handled by `OpenAiBrandVisualAnalyzer` in the backend
-runtime. It reads mirrored Supabase signed image URLs and returns structured
-Brand Memory guidance; do not call OpenAI from the frontend.
+Questionnaire QC, visual brand analysis, and grounded brand discovery are sent
+to the OpenRouter Responses API by the backend runtime. Visual analysis reads
+mirrored Supabase signed image URLs and returns structured Brand Memory
+guidance. These client-setup steps do not fall back to the direct OpenAI API.
 
 Facebook fallback search is handled by `GeminiGroundingSearchFallback` when
 `GEMINI_API_KEY` is present. It uses Gemini grounding with Google Search from

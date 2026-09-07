@@ -95,6 +95,89 @@ describe("OpenAiBrandDiscoverySearch", () => {
     ).toEqual({ outputText: "Grounded brand summary", citations: [] });
   });
 
+  it("uses OpenRouter Responses web search without calling OpenAI", async () => {
+    const fetchMock = vi.fn(
+      async (
+        _input: Parameters<typeof fetch>[0],
+        _init?: Parameters<typeof fetch>[1]
+      ) =>
+        new Response(
+          JSON.stringify({
+            output: [
+              {
+                type: "message",
+                content: [
+                  {
+                    type: "output_text",
+                    text: "Grounded via OpenRouter.",
+                    annotations: [
+                      {
+                        type: "url_citation",
+                        url_citation: {
+                          title: "Official source",
+                          url: "https://example.co.th/official"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+    const search = new OpenAiBrandDiscoverySearch({
+      apiKey: "openrouter-key",
+      model: "openai/gpt-test",
+      provider: "openrouter",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      retryDelayMs: 0
+    });
+
+    const result = await search.search({
+      clientName: "Siam Bloom",
+      facebookUrl: ""
+    });
+
+    const request = fetchMock.mock.calls[0];
+    if (!request) throw new Error("fetch was not called.");
+    expect(String(request[0])).toBe("https://openrouter.ai/api/v1/responses");
+    const body = JSON.parse(String(request[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      model: "openai/gpt-test",
+      tool_choice: "required",
+      tools: [
+        {
+          type: "openrouter:web_search",
+          parameters: {
+            search_context_size: "medium",
+            max_total_results: 10,
+            user_location: {
+              type: "approximate",
+              country: "TH",
+              city: "Bangkok",
+              region: "Bangkok",
+              timezone: "Asia/Bangkok"
+            }
+          }
+        }
+      ]
+    });
+    expect(body).not.toHaveProperty("include");
+    expect(result).toMatchObject({
+      provider: "openrouter",
+      model: "openai/gpt-test",
+      outputText: "Grounded via OpenRouter.",
+      citations: [
+        {
+          title: "Official source",
+          url: "https://example.co.th/official"
+        }
+      ]
+    });
+  });
+
   it("includes upstream error details and request id", async () => {
     const search = new OpenAiBrandDiscoverySearch({
       apiKey: "test-key",

@@ -16,10 +16,9 @@ export interface MappingClientsEndpointEnv
   SUPABASE_ANON_KEY?: string;
   MAPPING_CLIENTS_GOOGLE_SHEET_URL?: string;
   GOOGLE_WORKSPACE_LOCAL_USER?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_QUESTIONNAIRE_QC_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_QUESTIONNAIRE_QC_MODEL?: string;
+  OPENROUTER_TERRA_MODEL?: string;
 }
 
 export interface MappingClientsEndpointOptions {
@@ -65,11 +64,9 @@ export async function handleMappingClientsRequest({
           403
         );
       }
-      const openRouterModel = env.OPENROUTER_QUESTIONNAIRE_QC_MODEL?.trim();
-      const provider =
-        openRouterModel && env.OPENROUTER_API_KEY?.trim()
-          ? "openrouter"
-          : "openai";
+      const openRouterModel =
+        env.OPENROUTER_QUESTIONNAIRE_QC_MODEL?.trim() ||
+        env.OPENROUTER_TERRA_MODEL?.trim();
       const questionnaire = await readOnboardingQuestionnaireFromGoogleSheet({
         sheetUrl: questionnaireSheetUrl,
         accessToken: googleAccessToken,
@@ -78,18 +75,15 @@ export async function handleMappingClientsRequest({
           reviewQuestionnaireExtraction({
             rows,
             extractedFields,
-            provider,
-            apiKey:
-              provider === "openrouter"
-                ? required(
-                    env.OPENROUTER_API_KEY,
-                    "OPENROUTER_API_KEY for questionnaire QC"
-                  )
-                : required(
-                    env.OPENAI_API_KEY,
-                    "OPENAI_API_KEY for questionnaire QC"
-                  ),
-            model: provider === "openrouter" ? openRouterModel : env.OPENAI_QUESTIONNAIRE_QC_MODEL,
+            provider: "openrouter",
+            apiKey: required(
+              env.OPENROUTER_API_KEY,
+              "OPENROUTER_API_KEY for questionnaire QC"
+            ),
+            model: required(
+              openRouterModel,
+              "OPENROUTER_QUESTIONNAIRE_QC_MODEL or OPENROUTER_TERRA_MODEL for questionnaire QC"
+            ),
             fetchImpl
           })
       });

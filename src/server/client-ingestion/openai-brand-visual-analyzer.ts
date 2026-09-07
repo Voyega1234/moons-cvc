@@ -10,6 +10,7 @@ type FetchLike = typeof fetch;
 export interface OpenAiBrandVisualAnalyzerOptions {
   apiKey: string;
   model?: string;
+  provider?: "openai" | "openrouter";
   endpoint?: string;
   fetchImpl?: FetchLike;
   maxImages?: number;
@@ -39,6 +40,7 @@ const MAX_EVIDENCE_CHARACTERS = 700;
 export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly providerLabel: "OpenAI" | "OpenRouter";
   private readonly endpoint: string;
   private readonly fetchImpl: FetchLike;
   private readonly maxImages: number;
@@ -49,6 +51,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
   constructor({
     apiKey,
     model = DEFAULT_MODEL,
+    provider = "openai",
     endpoint = DEFAULT_ENDPOINT,
     fetchImpl = fetch,
     maxImages = DEFAULT_MAX_IMAGES,
@@ -56,10 +59,17 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     retryDelayMs = 250,
     requestTimeoutMs = DEFAULT_BRAND_VISUAL_ANALYSIS_REQUEST_TIMEOUT_MS
   }: OpenAiBrandVisualAnalyzerOptions) {
-    if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
+    if (!apiKey.trim()) {
+      throw new Error(
+        provider === "openrouter"
+          ? "OPENROUTER_API_KEY is required."
+          : "OPENAI_API_KEY is required."
+      );
+    }
 
     this.apiKey = apiKey;
     this.model = model;
+    this.providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl;
     this.maxImages = maxImages;
@@ -123,7 +133,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
       try {
         return await this.requestAnalysis(input, visualAssets);
       } catch (error) {
-        lastError = normalizeRequestError(error);
+        lastError = normalizeRequestError(error, this.providerLabel);
         if (
           attempt >= this.maxAttempts ||
           !isRetryableRequestError(lastError)
@@ -177,7 +187,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     } catch (error) {
       if (controller.signal.aborted) {
         throw new OpenAiVisualAnalysisRequestError(
-          "OpenAI visual analysis timed out.",
+          `${this.providerLabel} visual analysis timed out.`,
           null,
           false,
           visualAssets.length > 0
@@ -189,7 +199,7 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
     }
 
     if (!response.ok) {
-      throw await readOpenAiRequestError(response);
+      throw await readOpenAiRequestError(response, this.providerLabel);
     }
 
     const payload = (await response.json()) as unknown;
@@ -216,7 +226,8 @@ class OpenAiVisualAnalysisRequestError extends Error {
 }
 
 async function readOpenAiRequestError(
-  response: Response
+  response: Response,
+  providerLabel: "OpenAI" | "OpenRouter"
 ): Promise<OpenAiVisualAnalysisRequestError> {
   const requestId = response.headers.get("x-request-id")?.trim() || null;
   const rawBody = await response.text();
@@ -228,8 +239,8 @@ async function readOpenAiRequestError(
     .filter(Boolean)
     .join(" — ");
   const message = detailText
-    ? `OpenAI visual analysis failed (${context}): ${detailText}`
-    : `OpenAI visual analysis failed (${context}).`;
+    ? `${providerLabel} visual analysis failed (${context}): ${detailText}`
+    : `${providerLabel} visual analysis failed (${context}).`;
 
   return new OpenAiVisualAnalysisRequestError(
     message,
@@ -265,12 +276,15 @@ function parseOpenAiErrorDetail(rawBody: string): {
   };
 }
 
-function normalizeRequestError(error: unknown): Error {
+function normalizeRequestError(
+  error: unknown,
+  providerLabel: "OpenAI" | "OpenRouter"
+): Error {
   if (error instanceof OpenAiVisualAnalysisRequestError) return error;
 
   const detail = error instanceof Error ? error.message : "Unknown network error.";
   return new OpenAiVisualAnalysisRequestError(
-    `OpenAI visual analysis request failed: ${detail}`,
+    `${providerLabel} visual analysis request failed: ${detail}`,
     null,
     true,
     false
@@ -418,12 +432,16 @@ function buildPrompt(
     "Text evidence:",
     ...textEvidence.map(
       (evidence) =>
-        `- [${evidence.sourceType}:${evidence.sourceId}] ${evidence.text.slice(0, MAX_EVIDENCE_CHARACTERS)}`
+        `- [${evidence.sourceType}:${evidence.sourceId}] ${truncateByCodePoint(evidence.text, MAX_EVIDENCE_CHARACTERS)}`
     ),
     "",
     "Available source asset paths:",
     ...visualAssets.map((asset) => `- ${asset.assetStoragePath}`)
   ].join("\n");
+}
+
+function truncateByCodePoint(value: string, maxCharacters: number): string {
+  return Array.from(value).slice(0, maxCharacters).join("");
 }
 
 function deduplicateEvidence<T extends { text: string }>(
@@ -571,7 +589,7 @@ export function extractResponseText(payload: unknown): string {
   }
 
   if (!isRecord(payload) || !Array.isArray(payload.output)) {
-    throw new Error("OpenAI visual analysis response did not include output text.");
+    throw new Error("Brand visual analysis response did not include output text.");
   }
 
   for (const item of payload.output) {
@@ -588,14 +606,14 @@ export function extractResponseText(payload: unknown): string {
     }
   }
 
-  throw new Error("OpenAI visual analysis response did not include output text.");
+  throw new Error("Brand visual analysis response did not include output text.");
 }
 
 export function parseBrandSignalAnalysisJson(text: string): BrandSignalAnalysis {
   const parsed = JSON.parse(text) as unknown;
 
   if (!isRecord(parsed)) {
-    throw new Error("OpenAI visual analysis returned invalid JSON.");
+    throw new Error("Brand visual analysis returned invalid JSON.");
   }
 
   return {

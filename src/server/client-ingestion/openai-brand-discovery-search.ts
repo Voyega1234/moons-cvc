@@ -5,6 +5,7 @@ type FetchLike = typeof fetch;
 export interface OpenAiBrandDiscoverySearchOptions {
   apiKey: string;
   model?: string;
+  provider?: "openai" | "openrouter";
   endpoint?: string;
   fetchImpl?: FetchLike;
   maxAttempts?: number;
@@ -12,7 +13,7 @@ export interface OpenAiBrandDiscoverySearchOptions {
 }
 
 export interface OpenAiBrandDiscoveryResult {
-  provider: "openai";
+  provider: "openai" | "openrouter";
   model: string;
   outputText: string;
   citations: { title: string; url: string }[];
@@ -20,11 +21,13 @@ export interface OpenAiBrandDiscoveryResult {
 }
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
-const DEFAULT_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 
 export class OpenAiBrandDiscoverySearch implements SearchFallbackClient {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly provider: "openai" | "openrouter";
   private readonly endpoint: string;
   private readonly fetchImpl: FetchLike;
   private readonly maxAttempts: number;
@@ -33,15 +36,27 @@ export class OpenAiBrandDiscoverySearch implements SearchFallbackClient {
   constructor({
     apiKey,
     model = DEFAULT_MODEL,
-    endpoint = DEFAULT_ENDPOINT,
+    provider = "openai",
+    endpoint,
     fetchImpl = fetch,
     maxAttempts = 2,
     retryDelayMs = 250
   }: OpenAiBrandDiscoverySearchOptions) {
-    if (!apiKey.trim()) throw new Error("OPENAI_API_KEY is required.");
+    if (!apiKey.trim()) {
+      throw new Error(
+        provider === "openrouter"
+          ? "OPENROUTER_API_KEY is required."
+          : "OPENAI_API_KEY is required."
+      );
+    }
     this.apiKey = apiKey;
     this.model = model;
-    this.endpoint = endpoint;
+    this.provider = provider;
+    this.endpoint =
+      endpoint ??
+      (provider === "openrouter"
+        ? OPENROUTER_RESPONSES_ENDPOINT
+        : OPENAI_RESPONSES_ENDPOINT);
     this.fetchImpl = fetchImpl;
     this.maxAttempts = Math.max(1, Math.floor(maxAttempts));
     this.retryDelayMs = Math.max(0, retryDelayMs);
@@ -79,38 +94,46 @@ export class OpenAiBrandDiscoverySearch implements SearchFallbackClient {
         body: JSON.stringify({
           model: this.model,
           store: false,
-          tools: [
-            {
-              type: "web_search",
-              search_context_size: "medium",
-              user_location: {
-                type: "approximate",
-                country: "TH",
-                city: "Bangkok",
-                region: "Bangkok",
-                timezone: "Asia/Bangkok"
-              }
-            }
-          ],
+          tools:
+            this.provider === "openrouter"
+              ? [
+                  {
+                    type: "openrouter:web_search",
+                    parameters: {
+                      search_context_size: "medium",
+                      max_total_results: 10,
+                      user_location: thailandLocation
+                    }
+                  }
+                ]
+              : [
+                  {
+                    type: "web_search",
+                    search_context_size: "medium",
+                    user_location: thailandLocation
+                  }
+                ],
           tool_choice: "required",
-          include: ["web_search_call.action.sources"],
+          ...(this.provider === "openai"
+            ? { include: ["web_search_call.action.sources"] }
+            : {}),
           input: buildDiscoveryPrompt(input)
         })
       });
     } catch (error) {
       throw new OpenAiBrandDiscoveryError(
-        `OpenAI brand discovery request failed: ${readableError(error)}`,
+        `${providerLabel(this.provider)} brand discovery request failed: ${readableError(error)}`,
         null,
         true
       );
     }
 
-    if (!response.ok) throw await readRequestError(response);
+    if (!response.ok) throw await readRequestError(response, this.provider);
 
     const payload = (await response.json()) as unknown;
     const extracted = extractOpenAiBrandDiscoveryOutput(payload);
     return {
-      provider: "openai",
+      provider: this.provider,
       model: this.model,
       ...extracted,
       rawPayload: payload
@@ -180,13 +203,15 @@ function collectCitations(
 ): void {
   if (!Array.isArray(value)) return;
   for (const entry of value) {
-    if (!isRecord(entry) || typeof entry.url !== "string") continue;
+    if (!isRecord(entry)) continue;
+    const citation = isRecord(entry.url_citation) ? entry.url_citation : entry;
+    if (typeof citation.url !== "string") continue;
     citations.push({
       title:
-        typeof entry.title === "string" && entry.title.trim()
-          ? entry.title.trim()
-          : entry.url,
-      url: entry.url
+        typeof citation.title === "string" && citation.title.trim()
+          ? citation.title.trim()
+          : citation.url,
+      url: citation.url
     });
   }
 }
@@ -214,7 +239,8 @@ class OpenAiBrandDiscoveryError extends Error {
 }
 
 async function readRequestError(
-  response: Response
+  response: Response,
+  provider: "openai" | "openrouter"
 ): Promise<OpenAiBrandDiscoveryError> {
   const requestId = response.headers.get("x-request-id")?.trim();
   const rawBody = await response.text();
@@ -225,12 +251,24 @@ async function readRequestError(
   const detailText = [detail.code, detail.message].filter(Boolean).join(" — ");
   return new OpenAiBrandDiscoveryError(
     detailText
-      ? `OpenAI brand discovery failed (${context}): ${detailText}`
-      : `OpenAI brand discovery failed (${context}).`,
+      ? `${providerLabel(provider)} brand discovery failed (${context}): ${detailText}`
+      : `${providerLabel(provider)} brand discovery failed (${context}).`,
     response.status,
     isRetryableStatus(response.status)
   );
 }
+
+function providerLabel(provider: "openai" | "openrouter"): string {
+  return provider === "openrouter" ? "OpenRouter" : "OpenAI";
+}
+
+const thailandLocation = {
+  type: "approximate",
+  country: "TH",
+  city: "Bangkok",
+  region: "Bangkok",
+  timezone: "Asia/Bangkok"
+} as const;
 
 function parseErrorDetail(rawBody: string): { code: string; message: string } {
   try {

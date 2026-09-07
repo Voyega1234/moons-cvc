@@ -19,10 +19,9 @@ export interface ClientIngestionWorkerEnv {
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   APIFY_TOKEN?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_BRAND_ANALYSIS_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_BRAND_ANALYSIS_MODEL?: string;
+  OPENROUTER_TERRA_MODEL?: string;
   GEMINI_API_KEY?: string;
   GEMINI_GROUNDING_MODEL?: string;
 }
@@ -64,20 +63,6 @@ export function buildClientIngestionWorkerDependencies({
   const requiredEnv = readRequiredClientIngestionWorkerEnv(env);
 
   const geminiApiKey = env.GEMINI_API_KEY?.trim();
-  const openRouterVisualAnalysisModel =
-    env.OPENROUTER_BRAND_ANALYSIS_MODEL?.trim();
-  const openRouterApiKey = env.OPENROUTER_API_KEY?.trim();
-  const visualAnalyzerConfig =
-    openRouterVisualAnalysisModel && openRouterApiKey
-      ? {
-          apiKey: openRouterApiKey,
-          model: openRouterVisualAnalysisModel,
-          endpoint: OPENROUTER_RESPONSES_ENDPOINT
-        }
-      : {
-          apiKey: requiredEnv.OPENAI_API_KEY,
-          model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL
-        };
 
   return {
     queue: new SupabaseClientIngestionJobQueue(supabase),
@@ -91,12 +76,16 @@ export function buildClientIngestionWorkerDependencies({
       fetchImpl
     }),
     visualAnalyzer: new OpenAiBrandVisualAnalyzer({
-      ...visualAnalyzerConfig,
+      apiKey: requiredEnv.OPENROUTER_API_KEY,
+      model: requiredEnv.OPENROUTER_BRAND_ANALYSIS_MODEL,
+      provider: "openrouter",
+      endpoint: OPENROUTER_RESPONSES_ENDPOINT,
       fetchImpl
     }),
     brandDiscoverySearch: new OpenAiBrandDiscoverySearch({
-      apiKey: requiredEnv.OPENAI_API_KEY,
-      model: requiredEnv.OPENAI_BRAND_ANALYSIS_MODEL,
+      apiKey: requiredEnv.OPENROUTER_API_KEY,
+      model: requiredEnv.OPENROUTER_BRAND_ANALYSIS_MODEL,
+      provider: "openrouter",
       fetchImpl
     }),
     ...(geminiApiKey
@@ -128,31 +117,35 @@ export async function runClientIngestionWorkerOnce({
 
 export function readRequiredClientIngestionWorkerEnv(
   env: ClientIngestionWorkerEnv
-): Required<
-  Pick<
-    ClientIngestionWorkerEnv,
-    | "SUPABASE_URL"
-    | "SUPABASE_SERVICE_ROLE_KEY"
-    | "APIFY_TOKEN"
-    | "OPENAI_API_KEY"
-    | "OPENAI_BRAND_ANALYSIS_MODEL"
-  >
-> {
+): {
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+  APIFY_TOKEN: string;
+  OPENROUTER_API_KEY: string;
+  OPENROUTER_BRAND_ANALYSIS_MODEL: string;
+} {
   const SUPABASE_URL = readRequiredEnv(env.SUPABASE_URL, "SUPABASE_URL");
   const SUPABASE_SERVICE_ROLE_KEY = readRequiredEnv(
     env.SUPABASE_SERVICE_ROLE_KEY,
     "SUPABASE_SERVICE_ROLE_KEY"
   );
   const APIFY_TOKEN = readRequiredEnv(env.APIFY_TOKEN, "APIFY_TOKEN");
-  const OPENAI_API_KEY = readRequiredEnv(env.OPENAI_API_KEY, "OPENAI_API_KEY");
+  const OPENROUTER_API_KEY = readRequiredEnv(
+    env.OPENROUTER_API_KEY,
+    "OPENROUTER_API_KEY"
+  );
+  const OPENROUTER_BRAND_ANALYSIS_MODEL = readRequiredEnv(
+    env.OPENROUTER_BRAND_ANALYSIS_MODEL?.trim() ||
+      env.OPENROUTER_TERRA_MODEL?.trim(),
+    "OPENROUTER_BRAND_ANALYSIS_MODEL or OPENROUTER_TERRA_MODEL"
+  );
 
   return {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
     APIFY_TOKEN,
-    OPENAI_API_KEY,
-    OPENAI_BRAND_ANALYSIS_MODEL:
-      env.OPENAI_BRAND_ANALYSIS_MODEL?.trim() || "gpt-5.6-terra"
+    OPENROUTER_API_KEY,
+    OPENROUTER_BRAND_ANALYSIS_MODEL
   };
 }
 

@@ -6,7 +6,8 @@ const env = {
   SUPABASE_ANON_KEY: "anon-key",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
   APIFY_TOKEN: "apify-token",
-  OPENAI_API_KEY: "openai-key"
+  OPENROUTER_API_KEY: "openrouter-key",
+  OPENROUTER_TERRA_MODEL: "openai/gpt-test"
 };
 
 function authorizedFetch(): typeof fetch {

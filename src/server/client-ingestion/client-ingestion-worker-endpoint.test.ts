@@ -5,7 +5,8 @@ const env = {
   SUPABASE_URL: "https://example.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
   APIFY_TOKEN: "apify-token",
-  OPENAI_API_KEY: "openai-key",
+  OPENROUTER_API_KEY: "openrouter-key",
+  OPENROUTER_TERRA_MODEL: "openai/gpt-test",
   CLIENT_INGESTION_WORKER_TOKEN: "worker-token"
 };
 
