@@ -154,6 +154,10 @@ export function toThumbnailSupabaseAssetUrl(
     url.search = "";
     url.searchParams.set("width", String(width));
     url.searchParams.set("quality", String(quality));
+    // Supabase's resize mode defaults to "cover" (crops to fill both
+    // dimensions). Only width is set here, so force "contain" or a tall/wide
+    // original gets cropped to a square instead of scaled down in full.
+    url.searchParams.set("resize", "contain");
     return url.toString();
   } catch {
     return value;

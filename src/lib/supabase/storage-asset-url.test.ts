@@ -95,7 +95,7 @@ describe("Supabase storage asset URLs", () => {
         { width: 320 }
       )
     ).toBe(
-      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/brand-kit/logo%20final.png?width=320&quality=60"
+      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/brand-kit/logo%20final.png?width=320&quality=60&resize=contain"
     );
   });
 
@@ -106,7 +106,7 @@ describe("Supabase storage asset URLs", () => {
         { width: 100, quality: 90 }
       )
     ).toBe(
-      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/logo.png?width=100&quality=90"
+      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/logo.png?width=100&quality=90&resize=contain"
     );
   });
 
