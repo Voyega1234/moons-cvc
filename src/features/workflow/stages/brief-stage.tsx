@@ -8,6 +8,7 @@ import { creativeMaterialRoles, inferredReferenceImageRole, MAX_HOOK_MATERIALS, 
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import { useOptionalAuth } from "../../../app/providers/auth-provider";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
+import { toThumbnailSupabaseAssetUrl } from "../../../lib/supabase/storage-asset-url";
 import { downloadGoogleDriveMaterial, loadGoogleDriveMaterialFolder, openGoogleDriveMaterialFolder, type GoogleDriveMaterialFolder, type GoogleDriveMaterialImage } from "../../../services/google-drive/google-drive-materials";
 import { getFileNames } from "../../../shared/utils/files";
 import { pluralize } from "../../../shared/utils/text";
@@ -333,7 +334,7 @@ function AssetPreviewImage({
         </span>
       ) : null}
       <img
-        src={src}
+        src={toThumbnailSupabaseAssetUrl(src, { width: 320 })}
         alt={alt}
         loading="lazy"
         onLoad={() => setStatus("loaded")}

@@ -4,7 +4,8 @@ import type { Database } from "./database.types";
 import {
   parseSupabaseSignedStorageUrl,
   refreshSupabaseSignedAssetUrl,
-  toPermanentSupabaseAssetUrl
+  toPermanentSupabaseAssetUrl,
+  toThumbnailSupabaseAssetUrl
 } from "./storage-asset-url";
 
 describe("Supabase storage asset URLs", () => {
@@ -85,5 +86,32 @@ describe("Supabase storage asset URLs", () => {
   it("leaves ordinary external image URLs unchanged when converting to a permanent URL", () => {
     const value = "https://images.example.com/logo.png";
     expect(toPermanentSupabaseAssetUrl(value)).toBe(value);
+  });
+
+  it("rewrites a public URL to the resized render/image endpoint", () => {
+    expect(
+      toThumbnailSupabaseAssetUrl(
+        "https://project.supabase.co/storage/v1/object/public/brand-assets/client/brand-kit/logo%20final.png",
+        { width: 320 }
+      )
+    ).toBe(
+      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/brand-kit/logo%20final.png?width=320&quality=60"
+    );
+  });
+
+  it("honors a custom quality for the thumbnail render", () => {
+    expect(
+      toThumbnailSupabaseAssetUrl(
+        "https://project.supabase.co/storage/v1/object/public/brand-assets/client/logo.png",
+        { width: 100, quality: 90 }
+      )
+    ).toBe(
+      "https://project.supabase.co/storage/v1/render/image/public/brand-assets/client/logo.png?width=100&quality=90"
+    );
+  });
+
+  it("leaves ordinary external image URLs unchanged when generating a thumbnail", () => {
+    const value = "https://images.example.com/logo.png";
+    expect(toThumbnailSupabaseAssetUrl(value, { width: 320 })).toBe(value);
   });
 });

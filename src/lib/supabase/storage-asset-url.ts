@@ -8,6 +8,7 @@ export interface SupabaseStorageLocation {
 
 const SIGNED_OBJECT_PREFIX = "/storage/v1/object/sign/";
 const PUBLIC_OBJECT_PREFIX = "/storage/v1/object/public/";
+const PUBLIC_RENDER_PREFIX = "/storage/v1/render/image/public/";
 const DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 const REFRESH_EARLY_SECONDS = 5 * 60;
 const refreshedUrlCache = new Map<
@@ -95,6 +96,64 @@ export function toPermanentSupabaseAssetUrl(value: string): string {
       PUBLIC_OBJECT_PREFIX +
       encodedPath;
     url.search = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function parsePublicSupabaseStorageUrl(
+  value: string
+): SupabaseStorageLocation | null {
+  try {
+    const url = new URL(value);
+    const prefixIndex = url.pathname.indexOf(PUBLIC_OBJECT_PREFIX);
+    if (prefixIndex < 0) return null;
+
+    const location = url.pathname.slice(
+      prefixIndex + PUBLIC_OBJECT_PREFIX.length
+    );
+    const separatorIndex = location.indexOf("/");
+    if (separatorIndex <= 0 || separatorIndex === location.length - 1) {
+      return null;
+    }
+
+    return {
+      bucket: decodeURIComponent(location.slice(0, separatorIndex)),
+      path: decodeURIComponent(location.slice(separatorIndex + 1))
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rewrites a permanent `.../object/public/{bucket}/{path}` URL to Supabase's
+ * Image Transformation (`render/image`) endpoint so the browser downloads a
+ * resized, compressed preview instead of the full original file — asset
+ * library grids were fetching multi-MB originals just to show ~150px
+ * thumbnails. Requires a Supabase plan with Image Transformations enabled.
+ * No-op for non-image, non-Supabase-public URLs (e.g. data: URLs).
+ */
+export function toThumbnailSupabaseAssetUrl(
+  value: string,
+  { width, quality = 60 }: { width: number; quality?: number }
+): string {
+  const location = parsePublicSupabaseStorageUrl(value);
+  if (!location) return value;
+
+  try {
+    const url = new URL(value);
+    const encodedPath = [location.bucket, ...location.path.split("/")]
+      .map(encodeURIComponent)
+      .join("/");
+    url.pathname =
+      url.pathname.slice(0, url.pathname.indexOf(PUBLIC_OBJECT_PREFIX)) +
+      PUBLIC_RENDER_PREFIX +
+      encodedPath;
+    url.search = "";
+    url.searchParams.set("width", String(width));
+    url.searchParams.set("quality", String(quality));
     return url.toString();
   } catch {
     return value;
