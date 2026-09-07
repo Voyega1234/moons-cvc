@@ -4185,10 +4185,6 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           onOutputSizeChange={(size) =>
             dispatch({ type: "set-output-size", size })
           }
-          usePlaceholderCopy={state.usePlaceholderCopy}
-          onUsePlaceholderCopyChange={(value) =>
-            dispatch({ type: "set-use-placeholder-copy", value })
-          }
           visualInputs={{
             referenceCount: preflightReferenceImages.length,
             materialCount: selectedUploadedMaterials(state).length,

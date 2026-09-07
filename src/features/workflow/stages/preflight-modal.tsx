@@ -200,8 +200,6 @@ export function PreflightModal({
   onArtworkModeChange,
   outputSize,
   onOutputSizeChange,
-  usePlaceholderCopy = false,
-  onUsePlaceholderCopyChange = () => undefined,
   onCancel,
   onContinue,
   onApplyFinding,
@@ -230,8 +228,6 @@ export function PreflightModal({
   onArtworkModeChange: (mode: ArtworkMode) => void;
   outputSize: ArtworkOutputSize;
   onOutputSizeChange: (size: ArtworkOutputSize) => void;
-  usePlaceholderCopy?: boolean;
-  onUsePlaceholderCopyChange?: (value: boolean) => void;
   onCancel: () => void;
   onContinue: () => void;
   onApplyFinding?: (
@@ -925,28 +921,6 @@ export function PreflightModal({
                     ))}
                   </select>
                 </label>
-                <button
-                  className={`preflight-context-option ${
-                    usePlaceholderCopy ? "on" : ""
-                  }`}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={usePlaceholderCopy}
-                  onClick={() =>
-                    onUsePlaceholderCopyChange(!usePlaceholderCopy)
-                  }
-                >
-                  <span className="preflight-context-check" aria-hidden="true">
-                    ✓
-                  </span>
-                  <span>
-                    <b>Use placeholder copy</b>
-                    <small>
-                      Renders generic labels (Headline, Subheadline, Bullet,
-                      CTA) instead of the real copy
-                    </small>
-                  </span>
-                </button>
               </div>
             </section>
 

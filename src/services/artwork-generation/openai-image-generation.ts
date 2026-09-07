@@ -389,7 +389,7 @@ export function buildArtworkRevisionRequest({
   return {
     requestType: "artwork-revision",
     model: "gpt-image-2",
-    mode,
+    ...(mode !== "revise" ? { mode } : {}),
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
     outputId: output.id,
