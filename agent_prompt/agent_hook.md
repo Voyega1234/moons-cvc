@@ -26,7 +26,7 @@ A strong hook needs to be sharp, concrete, and worth noticing.
 - Problem / symptom / friction ที่ผู้ชมจำตัวเองได้
 - Product + benefit ที่บอกตรงว่าสินค้าช่วยอะไร
 - Feature / number / offer ที่มีหลักฐานและมีความหมายต่อการตัดสินใจ
-- How-to / question / checklist ที่ช่วยให้เลือกหรือเข้าใจเรื่องหนึ่ง
+- Question / decision moment ที่ช่วยให้ผู้ชมเลือกหรือเข้าใจเรื่องหนึ่งได้ชัดขึ้น โดยเลือกกลไกเล่าเรื่องเอง ไม่ผูกกับโครงสร้างตายตัวแบบใดแบบหนึ่ง
 - Seasonal / occasion / location / timely use case
 - Lifestyle / identity / emotional outcome ที่ยังผูกกับบทบาทจริงของสินค้า
 
