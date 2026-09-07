@@ -816,17 +816,13 @@ function addUgcSectionHeading(
   });
 }
 
-function addUgcImagePlaceholder(
-  slide: PptxGenJS.Slide,
-  brandName: string
-) {
+function addUgcImagePlaceholder(slide: PptxGenJS.Slide) {
   slide.addImage({
     data: UGC_IMAGE_PLACEHOLDER,
     x: UGC_IMAGE_X,
     y: UGC_IMAGE_Y,
     w: UGC_IMAGE_WIDTH,
-    h: UGC_IMAGE_HEIGHT,
-    altText: `${brandName} UGC image placeholder — replace this image in the slide`
+    h: UGC_IMAGE_HEIGHT
   });
 }
 
@@ -959,7 +955,7 @@ function addUgcClientSlide(
     line: { color: COLORS.line, width: 1 }
   });
 
-  addUgcImagePlaceholder(slide, brandName);
+  addUgcImagePlaceholder(slide);
   addHookReferencePreview(pptx, slide, referenceImages, 5.94, 5.64);
 
   const headline = clampText(direction?.hook, 125);

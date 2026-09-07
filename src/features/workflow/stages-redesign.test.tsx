@@ -3975,9 +3975,9 @@ describe("redesigned workflow stages", () => {
       x: 3.02,
       y: 1.18,
       w: 4.24,
-      h: 5.3,
-      altText: "BoneFit UGC image placeholder — replace this image in the slide"
+      h: 5.3
     });
+    expect(preview?.options?.altText).toBe("");
     expect(
       Number(preview?.options?.w) / Number(preview?.options?.h)
     ).toBeCloseTo(4 / 5);
