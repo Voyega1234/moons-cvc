@@ -264,7 +264,6 @@ export async function runClientIngestionJob(
   let ads: readonly NormalizedFacebookAdLibraryItem[] = [];
   let postSource: SavedBrandSource | null = null;
   let adSource: SavedBrandSource | null = null;
-  let facebookSourceErrorDetected = false;
 
   if (hasFacebookUrl) {
     await enrichFacebookPageDetails({
@@ -280,22 +279,24 @@ export async function runClientIngestionJob(
     try {
       const postsPayload = await apify.scrapeFacebookPosts(client.facebookUrl);
       const sourceError = getFacebookSourceError(postsPayload);
-      facebookSourceErrorDetected ||= Boolean(sourceError);
-      posts = sourceError ? [] : normalizeFacebookPosts(postsPayload);
+      posts = normalizeFacebookPosts(postsPayload);
+      const sourceResultStatus = sourceError
+        ? posts.length
+          ? "partial"
+          : "failed"
+        : posts.length
+          ? "succeeded"
+          : "partial";
       postSource = await store.saveBrandSource({
         clientId: client.id,
         jobId: job.id,
         sourceType: "facebook_posts",
         sourceUrl: client.facebookUrl,
-        status: sourceError ? "failed" : posts.length ? "succeeded" : "partial",
+        status: sourceResultStatus,
         rawPayload: postsPayload,
         errorMessage: sourceError
       });
-      sourceStatus.facebook_posts = sourceError
-        ? "failed"
-        : posts.length
-          ? "succeeded"
-          : "partial";
+      sourceStatus.facebook_posts = sourceResultStatus;
     } catch (error) {
       sourceStatus.facebook_posts = "failed";
       await store.saveBrandSource({
@@ -313,22 +314,24 @@ export async function runClientIngestionJob(
     try {
       const adsPayload = await apify.scrapeFacebookAdsLibrary(client.facebookUrl);
       const sourceError = getFacebookSourceError(adsPayload);
-      facebookSourceErrorDetected ||= Boolean(sourceError);
-      ads = sourceError ? [] : normalizeFacebookAdsLibraryItems(adsPayload);
+      ads = normalizeFacebookAdsLibraryItems(adsPayload);
+      const sourceResultStatus = sourceError
+        ? ads.length
+          ? "partial"
+          : "failed"
+        : ads.length
+          ? "succeeded"
+          : "partial";
       adSource = await store.saveBrandSource({
         clientId: client.id,
         jobId: job.id,
         sourceType: "facebook_ads_library",
         sourceUrl: client.facebookUrl,
-        status: sourceError ? "failed" : ads.length ? "succeeded" : "partial",
+        status: sourceResultStatus,
         rawPayload: adsPayload,
         errorMessage: sourceError
       });
-      sourceStatus.facebook_ads_library = sourceError
-        ? "failed"
-        : ads.length
-          ? "succeeded"
-          : "partial";
+      sourceStatus.facebook_ads_library = sourceResultStatus;
     } catch (error) {
       sourceStatus.facebook_ads_library = "failed";
       await store.saveBrandSource({
@@ -350,11 +353,6 @@ export async function runClientIngestionJob(
     text: string;
   }[] = [];
   if (hasFacebookUrl && !posts.length && !ads.length) {
-    if (facebookSourceErrorDetected) {
-      await failJob(store, job, client, FACEBOOK_ACCESS_ERROR, sourceStatus);
-      return emptyResult(false);
-    }
-
     if (searchFallback) {
       await setStatus(store, job, client, "searching_fallback", sourceStatus);
       try {

@@ -426,6 +426,59 @@ describe("runClientIngestionJob", () => {
     });
   });
 
+  it("keeps valid posts when Apify appends an error row and skips private Ads Library data", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/page/posts/1",
+          text: "Usable organic post"
+        },
+        {
+          url: "https://www.facebook.com/api/graphql/",
+          error: "no_items",
+          errorDescription: "Empty or private data for provided input"
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/private-page",
+          error: "Page is private",
+          errorCode: "PAGE_PRIVATE"
+        }
+      ])
+    };
+    const store = createStore();
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/client"
+      },
+      { apify, store, imageMirror: { mirror: vi.fn() } }
+    );
+
+    expect(result.postsSaved).toBe(1);
+    expect(result.adsSaved).toBe(0);
+    expect(store.posts).toHaveLength(1);
+    expect(store.sources).toEqual([
+      expect.objectContaining({
+        sourceType: "facebook_posts",
+        status: "partial",
+        errorMessage: "Empty or private data for provided input"
+      }),
+      expect.objectContaining({
+        sourceType: "facebook_ads_library",
+        status: "failed",
+        errorMessage: "PAGE_PRIVATE: Page is private"
+      })
+    ]);
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "needs_review"
+    });
+  });
+
   it("marks the client failed with a Facebook access message when both Facebook sources fail and no fallback exists", async () => {
     const apify: ApifyClient = {
       scrapeFacebookPosts: vi.fn(async () => {
@@ -566,7 +619,92 @@ describe("runClientIngestionJob", () => {
     });
   });
 
-  it("notifies about the Facebook URL instead of using fallback for actor access errors", async () => {
+  it("continues from questionnaire evidence when Facebook sources report private data", async () => {
+    const apify: ApifyClient = {
+      scrapeFacebookPosts: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/private-page",
+          error: "no_items",
+          errorDescription: "Empty or private data for provided input"
+        }
+      ]),
+      scrapeFacebookAdsLibrary: vi.fn(async () => [
+        {
+          url: "https://www.facebook.com/private-page",
+          error: "Page is private",
+          errorCode: "PAGE_PRIVATE"
+        }
+      ])
+    };
+    const store = createStore();
+    store.listManualBrandInputs = vi.fn(async () => [
+      {
+        sourceId: "questionnaire-1",
+        sourceUrl: "https://portal.example.com",
+        text: "Brand Name: Client One. Category: Wellness."
+      }
+    ]);
+    const visualAnalyzer: BrandVisualAnalyzer = {
+      analyze: vi.fn(async () => ({
+        brandKitEntries: [],
+        learning: [],
+        products: [],
+        visualGuidance: {
+          mood: [],
+          colorPalette: [],
+          layoutPatterns: [],
+          textOverlay: [],
+          typographyFeel: [],
+          productPersonEnvironment: [],
+          dos: [],
+          donts: [],
+          sourceAssetPaths: []
+        },
+        needsReview: false
+      }))
+    };
+    const brandMemoryWriter: BrandMemoryWriter = {
+      write: vi.fn(async () => undefined)
+    };
+
+    const result = await runClientIngestionJob(
+      { id: "job-1", clientId: "client-1" },
+      {
+        id: "client-1",
+        name: "Client One",
+        facebookUrl: "https://www.facebook.com/private-page"
+      },
+      {
+        apify,
+        store,
+        imageMirror: { mirror: vi.fn() },
+        visualAnalyzer,
+        brandMemoryWriter
+      }
+    );
+
+    expect(visualAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textEvidence: [
+          expect.objectContaining({
+            sourceType: "manual_input",
+            sourceId: "questionnaire-1"
+          })
+        ]
+      })
+    );
+    expect(brandMemoryWriter.write).toHaveBeenCalled();
+    expect(store.clientStatuses.at(-1)).toMatchObject({
+      status: "needs_review"
+    });
+    expect(result).toMatchObject({
+      postsSaved: 0,
+      adsSaved: 0,
+      completed: false
+    });
+  });
+
+  it("tries fallback before reporting actor access errors when no evidence is usable", async () => {
     const apify: ApifyClient = {
       scrapeFacebookPosts: vi.fn(async () => [
         {
@@ -610,12 +748,19 @@ describe("runClientIngestionJob", () => {
       usedFallbackSearch: false,
       completed: false
     });
-    expect(searchFallback.search).not.toHaveBeenCalled();
+    expect(searchFallback.search).toHaveBeenCalledWith({
+      clientName: "Client One",
+      facebookUrl: "https://www.facebook.com/unavailable-page"
+    });
     expect(store.posts).toEqual([]);
     expect(store.ads).toEqual([]);
     expect(store.sources).toEqual([
       expect.objectContaining({ status: "failed" }),
-      expect.objectContaining({ status: "failed" })
+      expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({
+        sourceType: "google_search",
+        status: "partial"
+      })
     ]);
     expect(store.clientStatuses.at(-1)).toMatchObject({
       status: "failed",
