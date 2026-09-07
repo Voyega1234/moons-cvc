@@ -527,7 +527,7 @@ function parseReferenceImages(
   const items = value.map((item) => {
     if (!isRecord(item)) return null;
     const id = parseString(item.id);
-    const url = parseString(item.url);
+    const url = parseAssetUrl(item.url);
     const label = parseString(item.label, true);
     if (!id || !url || label === null) return null;
     const role = referenceImageRoles.find((candidate) => candidate === item.role);
@@ -571,7 +571,7 @@ function parseUploadedMaterials(
     const mediaType = parseString(item.mediaType);
     const role = parseString(item.role);
     const description = parseString(item.description, true);
-    const url = parseString(item.url);
+    const url = parseAssetUrl(item.url);
     const storagePath =
       item.storagePath === undefined ? undefined : parseString(item.storagePath);
     const storageBucket =
