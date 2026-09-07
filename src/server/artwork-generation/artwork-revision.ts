@@ -139,11 +139,34 @@ async function generateRevisedArtwork({
   supabaseUrl,
   fetchImpl
 }: Parameters<typeof reviseArtworkOutput>[0]) {
+  if (input.mode === "ugc-thumbnail") {
+    const referenceImages = await resolveReferenceImages(
+      input.referenceImages ?? [],
+      fetchImpl,
+      storage,
+      supabaseUrl
+    );
+    const image = await editImageWithAspectRatio({
+      apiKey,
+      model,
+      prompt: input.instructions,
+      aspectRatio: gptImageAspectRatioForOutputSize(input.output.size),
+      quality: "medium",
+      referenceImages,
+      fetchImpl
+    });
+    return { image, effectiveInstructions: input.instructions };
+  }
+
+  const sourceImageUrl = input.sourceImageUrl;
+  if (!sourceImageUrl) {
+    throw new Error("A source image is required for this revision.");
+  }
   const [sourceImage, ...additionalReferences] = await resolveReferenceImages(
     [
       {
         kind: "url",
-        url: input.sourceImageUrl,
+        url: sourceImageUrl,
         label: "Image 1 — current artwork"
       },
       ...(input.referenceImages ?? [])

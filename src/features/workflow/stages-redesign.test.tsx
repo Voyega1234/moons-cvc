@@ -3842,7 +3842,7 @@ describe("redesigned workflow stages", () => {
     expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
-  it("exports an editable UGC image placeholder with production-ready scene scripts", async () => {
+  it("exports a UGC storyline slide with production-ready scene scripts and no placeholder image", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -3970,17 +3970,7 @@ describe("redesigned workflow stages", () => {
     const preview = storyboardSlide?._slideObjects.find(
       (object) => object._type === "image"
     );
-    expect(preview).toBeDefined();
-    expect(preview?.options).toMatchObject({
-      x: 3.02,
-      y: 1.18,
-      w: 4.24,
-      h: 5.3
-    });
-    expect(preview?.options?.altText).toBe("");
-    expect(
-      Number(preview?.options?.w) / Number(preview?.options?.h)
-    ).toBeCloseTo(4 / 5);
+    expect(preview).toBeUndefined();
     const spokenScript = storyboardSlide?._slideObjects.find((object) =>
       object.text?.some((run) => run.text.includes("เช้านี้เหลือเวลาไม่ถึง 10 นาที"))
     );

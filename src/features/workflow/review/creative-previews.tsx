@@ -20,6 +20,17 @@ import {
 
 type CreativeDirection = WorkflowState["directions"][number];
 
+const AUTO_CAPTION_MAX_CHARS = 30;
+
+function autoCaptionSnippet(hook: string | undefined): string {
+  const trimmed = hook?.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= AUTO_CAPTION_MAX_CHARS) return trimmed;
+  const words = trimmed.slice(0, AUTO_CAPTION_MAX_CHARS + 1).split(/\s+/);
+  words.pop();
+  return `${words.join(" ")}…`;
+}
+
 export type UgcPreviewImageMap = Readonly<Record<string, string>>;
 
 export async function captureUgcTemplatePreviewImages(
@@ -58,12 +69,14 @@ export function UgcTemplatePreview({
   direction,
   compact = false,
   brandName = "Creative Compass",
-  captureId
+  captureId,
+  imageUrl
 }: {
   direction: CreativeDirection | undefined;
   compact?: boolean;
   brandName?: string;
   captureId?: string;
+  imageUrl?: string;
 }) {
   const creatorHandle = brandName
     .toLowerCase()
@@ -72,6 +85,7 @@ export function UgcTemplatePreview({
   const caption =
     direction?.caption?.trim() ||
     (direction ? directionSubheadline(direction) : "Creator-led script direction");
+  const autoCaption = autoCaptionSnippet(direction?.hook);
 
   return (
     <div
@@ -82,7 +96,18 @@ export function UgcTemplatePreview({
       aria-label="TikTok native UGC preview"
       data-ugc-preview-id={captureId}
     >
-      <div className="tiktok-draft-phone">
+      <div
+        className={`tiktok-draft-phone ${imageUrl ? "has-photo" : ""}`}
+        style={
+          imageUrl
+            ? {
+                backgroundImage: `url(${imageUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center"
+              }
+            : undefined
+        }
+      >
         <div className="tiktok-draft-status" aria-hidden="true">
           <span>9:41</span>
           <span className="tiktok-draft-device-status">
@@ -97,6 +122,11 @@ export function UgcTemplatePreview({
         <strong className="tiktok-draft-hook">
           {direction?.hook ?? "UGC hook"}
         </strong>
+        {autoCaption ? (
+          <p className="tiktok-draft-autocaption" aria-hidden="true">
+            {autoCaption}
+          </p>
+        ) : null}
         <div className="tiktok-draft-side" aria-hidden="true">
           <div>
             <span>
@@ -257,6 +287,7 @@ export function CreativePreviewModal({
               direction={direction}
               brandName={brandName}
               captureId={output.id}
+              imageUrl={output.assetUrl}
             />
           ) : output.assetUrl ? (
             <img src={output.assetUrl} alt={direction?.hook ?? title} />

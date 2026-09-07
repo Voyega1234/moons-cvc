@@ -139,6 +139,7 @@ function CreativeVisual({
         brandName={state.brand?.name}
         compact={compact}
         captureId={output.id}
+        imageUrl={output.assetUrl}
       />
     );
   }

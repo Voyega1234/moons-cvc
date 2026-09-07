@@ -58,7 +58,18 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
     album = { format, outputIds };
   }
 
-  const mode = value.mode === "placeholder" ? "placeholder" : "revise";
+  const mode =
+    value.mode === "placeholder"
+      ? "placeholder"
+      : value.mode === "ugc-thumbnail"
+        ? "ugc-thumbnail"
+        : "revise";
+  const sourceImageUrl =
+    mode === "ugc-thumbnail"
+      ? typeof value.sourceImageUrl === "string"
+        ? value.sourceImageUrl
+        : undefined
+      : readString(value.sourceImageUrl, "sourceImageUrl");
 
   return {
     requestType: "artwork-revision",
@@ -73,7 +84,7 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
         ? 2
         : readPositiveInteger(value.assetVersion, "assetVersion"),
     format: readString(value.format, "format"),
-    sourceImageUrl: readString(value.sourceImageUrl, "sourceImageUrl"),
+    ...(sourceImageUrl !== undefined ? { sourceImageUrl } : {}),
     instructions,
     referenceImages: Array.isArray(value.referenceImages)
       ? (value.referenceImages as ArtworkRevisionRequest["referenceImages"])

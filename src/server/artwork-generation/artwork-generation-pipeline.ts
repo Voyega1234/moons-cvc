@@ -261,7 +261,7 @@ export async function handleArtworkGenerationRequest({
             affectedOutputIds: outputs.map((output) => output.id),
             instructions: revisionInput.instructions,
             effectiveInstructions,
-            previousAssetUrl: revisionInput.sourceImageUrl,
+            previousAssetUrl: revisionInput.sourceImageUrl ?? null,
             newAssetUrl: outputs[0]?.assetUrl ?? null
           }
         });

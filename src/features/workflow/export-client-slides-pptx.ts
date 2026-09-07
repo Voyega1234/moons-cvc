@@ -50,12 +50,6 @@ const THAI_TEXT_PATTERN = /[\u0E00-\u0E7F]/;
 const SLIDE_FONT_FACE = "Sarabun";
 const UGC_LEFT_COLUMN_X = 0.38;
 const UGC_LEFT_COLUMN_WIDTH = 2.52;
-const UGC_IMAGE_X = 3.02;
-const UGC_IMAGE_Y = 1.18;
-const UGC_IMAGE_WIDTH = 4.24;
-const UGC_IMAGE_HEIGHT = 5.3;
-const UGC_IMAGE_PLACEHOLDER =
-  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iMTAwMCIgdmlld0JveD0iMCAwIDgwMCAxMDAwIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjEwMDAiIHJ4PSIyNCIgZmlsbD0iI0Y1RjZGQSIvPjxyZWN0IHg9IjI0IiB5PSIyNCIgd2lkdGg9Ijc1MiIgaGVpZ2h0PSI5NTIiIHJ4PSIxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjI1QkZGIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1kYXNoYXJyYXk9IjE4IDE0Ii8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjI1QkZGIiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjI5MCIgeT0iMzEwIiB3aWR0aD0iMjIwIiBoZWlnaHQ9IjE4MCIgcng9IjE2Ii8+PHBhdGggZD0iTTMxMCA0NTRsNjItNjQgNDggNDQgMzgtMzQgMzIgMzAiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIzNjAiIHI9IjE4Ii8+PC9nPjx0ZXh0IHg9IjQwMCIgeT0iNTgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxOTFCMjciPlJFUExBQ0UgSU1BR0U8L3RleHQ+PHRleHQgeD0iNDAwIiB5PSI2MzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzcwNzQ4NyI+UmlnaHQtY2xpY2sg4oaSIFJlcGxhY2UgaW1hZ2U8L3RleHQ+PHRleHQgeD0iNDAwIiB5PSI2NzUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMiIgZmlsbD0iIzcwNzQ4NyI+VUdDIMK3IDQ6NSBwbGFjZWhvbGRlcjwvdGV4dD48L3N2Zz4=";
 const UGC_SCRIPT_BODY_FONT_SIZE = 10;
 const UGC_SCRIPT_COLUMN_X = 7.48;
 const UGC_SCRIPT_COLUMN_WIDTH = 5.45;
@@ -816,16 +810,6 @@ function addUgcSectionHeading(
   });
 }
 
-function addUgcImagePlaceholder(slide: PptxGenJS.Slide) {
-  slide.addImage({
-    data: UGC_IMAGE_PLACEHOLDER,
-    x: UGC_IMAGE_X,
-    y: UGC_IMAGE_Y,
-    w: UGC_IMAGE_WIDTH,
-    h: UGC_IMAGE_HEIGHT
-  });
-}
-
 function addHookReferencePreview(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
@@ -955,7 +939,6 @@ function addUgcClientSlide(
     line: { color: COLORS.line, width: 1 }
   });
 
-  addUgcImagePlaceholder(slide);
   addHookReferencePreview(pptx, slide, referenceImages, 5.94, 5.64);
 
   const headline = clampText(direction?.hook, 125);

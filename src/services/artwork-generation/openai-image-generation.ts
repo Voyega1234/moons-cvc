@@ -168,14 +168,14 @@ export interface ArtworkGenerationResponse {
 export interface ArtworkRevisionRequest {
   requestType: "artwork-revision";
   model: "gpt-image-2";
-  mode?: "revise" | "placeholder";
+  mode?: "revise" | "placeholder" | "ugc-thumbnail";
   clientId: string;
   runId: string;
   outputId: string;
   directionId: string;
   assetVersion: number;
   format: string;
-  sourceImageUrl: string;
+  sourceImageUrl?: string;
   instructions: string;
   referenceImages?: readonly ArtworkReferenceImage[];
   album?: {
@@ -219,6 +219,7 @@ export async function generateArtworkForSelectedHooks({
     referenceImages
   });
   const templateOutputs = buildUgcTemplateOutputs(run);
+  const ugcDirections = selectedUgcDirections(run);
   const shouldResume = run.artworkGenerationStatus === "failed";
   const selectedDirectionIds = new Set(
     run.directions
@@ -254,24 +255,61 @@ export async function generateArtworkForSelectedHooks({
     return outputs;
   }
 
-  const payloads = await mapWithConcurrency(
-    requests,
-    ARTWORK_REQUEST_CONCURRENCY,
-    async (request) => {
+  const [payloads, ugcThumbnails] = await Promise.all([
+    mapWithConcurrency(requests, ARTWORK_REQUEST_CONCURRENCY, async (request) => {
       const payload = await requestArtworkGeneration({ request, run });
       const outputs = payload.outputs.map(normalizeArtworkOutput);
       onBatch?.(outputs);
       completed += request.selectedHooks.length;
       onProgress?.(completed, total);
       return payload;
-    }
+    }),
+    mapWithConcurrency(
+      ugcDirections,
+      ARTWORK_REQUEST_CONCURRENCY,
+      async (direction) => {
+        try {
+          let output: CreativeOutput;
+          try {
+            output = await generateUgcThumbnail({ run, direction });
+          } catch (firstError) {
+            console.warn(
+              `UGC thumbnail generation failed once for "${direction.hook}" (${direction.id}); retrying.`,
+              firstError
+            );
+            output = await generateUgcThumbnail({ run, direction });
+          }
+          onBatch?.([output]);
+          return output;
+        } catch (error) {
+          console.warn(
+            `UGC thumbnail generation failed for "${direction.hook}" (${direction.id}) after retrying; keeping the template preview. Use "Regenerate draft" on the card to try again.`,
+            error
+          );
+          return undefined;
+        } finally {
+          completed += 1;
+          onProgress?.(completed, total);
+        }
+      }
+    )
+  ]);
+  const resolvedUgcOutputs = ugcThumbnails.filter(
+    (output): output is CreativeOutput => Boolean(output)
+  );
+  const fallbackTemplateOutputs = templateOutputs.filter(
+    (template) =>
+      !resolvedUgcOutputs.some(
+        (output) => output.directionId === template.directionId
+      )
   );
   return sortOutputsBySelectedDirection(run, [
     ...existingOutputs,
     ...payloads.flatMap((payload) =>
       payload.outputs.map(normalizeArtworkOutput)
     ),
-    ...templateOutputs
+    ...resolvedUgcOutputs,
+    ...fallbackTemplateOutputs
   ]);
 }
 
@@ -670,32 +708,118 @@ export function buildArtworkGenerationRequests({
   });
 }
 
-function buildUgcTemplateOutputs(run: WorkflowState): readonly CreativeOutput[] {
+function selectedUgcDirections(run: WorkflowState): readonly CreativeDirection[] {
   const completedDirectionIds = new Set(
     run.artworkGenerationStatus === "failed"
       ? run.outputs.map((output) => output.directionId)
       : []
   );
-  return run.directions
-    .map((direction, index) => ({ direction, index }))
-    .filter(
-      ({ direction, index }) =>
-        direction.selected &&
-        directionServiceAt(run, direction, index) === "ugc-video" &&
-        !completedDirectionIds.has(direction.id)
-    )
-    .map(({ direction }, index) => ({
-      id: `ugc-template-${direction.id}-${index + 1}`,
-      directionId: direction.id,
-      format: outputFormatForService("ugc-video"),
-      status: "draft" as const,
-      clientStatus: "queued" as const,
-      provider: "template",
-      model: "compass-ugc-template",
-      revisionCount: 0,
-      approval: emptyApprovalGate,
-      approvalComments: emptyApprovalComments
-    }));
+  return run.directions.filter(
+    (direction, index) =>
+      direction.selected &&
+      directionServiceAt(run, direction, index) === "ugc-video" &&
+      !completedDirectionIds.has(direction.id)
+  );
+}
+
+function buildUgcTemplateOutputs(run: WorkflowState): readonly CreativeOutput[] {
+  return selectedUgcDirections(run).map((direction, index) => ({
+    id: `ugc-template-${direction.id}-${index + 1}`,
+    directionId: direction.id,
+    format: outputFormatForService("ugc-video"),
+    status: "draft" as const,
+    clientStatus: "queued" as const,
+    provider: "template",
+    model: "compass-ugc-template",
+    revisionCount: 0,
+    approval: emptyApprovalGate,
+    approvalComments: emptyApprovalComments
+  }));
+}
+
+function buildUgcThumbnailInstructions(
+  direction: Pick<CreativeDirection, "hook" | "ugcBrief">
+): string {
+  const brief = direction.ugcBrief;
+  const openingScene = brief?.scenes[0];
+  const sceneVisual = openingScene?.visual?.trim();
+  const mood = brief?.moodAndTone?.trim();
+  const style = brief?.productionStyle?.trim();
+  const referenceDirection = brief?.referenceDirection?.trim();
+
+  return [
+    "Create one photorealistic still image to use as the cover/thumbnail photo for a TikTok video (UGC-style creator content). This is a single hero photo, not a video frame collage.",
+    sceneVisual
+      ? `Depict this moment: ${sceneVisual}`
+      : `Depict a real person naturally using or reacting to the product, matching the idea: ${direction.hook.trim()}`,
+    ...(mood ? [`Mood and tone: ${mood}`] : []),
+    ...(style ? [`Production style: ${style}`] : []),
+    ...(referenceDirection
+      ? [`Visual reference direction: ${referenceDirection}`]
+      : []),
+    "",
+    "REALISM REQUIREMENTS (critical — this must not look AI-generated):",
+    "- Shot on a smartphone: candid handheld phone-camera photo, natural lens characteristics, not a studio photoshoot.",
+    "- Natural, unstaged lighting appropriate to the scene (e.g. window light, overcast daylight, indoor ambient light) — never flawless three-point studio lighting.",
+    "- Real, textured human skin: visible pores, natural skin tone variation, minor imperfections. Do not smooth or airbrush the skin.",
+    "- Natural, candid expression and body language — not a posed stock-photo smile.",
+    "- Casual, slightly imperfect composition — not perfectly centered or symmetrical.",
+    "- Avoid: plastic/waxy skin, doll-like or lifeless eyes, overly symmetrical features, uncanny valley look, glossy studio finish.",
+    "",
+    "Do not add any text, captions, subtitles, or logos anywhere in the image — this must be a clean photo with zero text; captions are added separately afterward.",
+    "Keep the product clearly visible and identifiable if it appears in the scene, matching its real appearance from the reference images.",
+    "Match the brand's visual identity (color palette, setting, mood) from the reference images without literally copying their layout."
+  ].join("\n");
+}
+
+const UGC_THUMBNAIL_OUTPUT_SIZE: ArtworkOutputSize = "2160x3840";
+
+export function buildUgcThumbnailRequest({
+  run,
+  direction
+}: {
+  run: WorkflowState;
+  direction: CreativeDirection;
+}): ArtworkRevisionRequest {
+  return {
+    requestType: "artwork-revision",
+    model: "gpt-image-2",
+    mode: "ugc-thumbnail",
+    clientId: run.brand?.id ?? "unbranded",
+    runId: run.id,
+    outputId: `ugc-thumbnail-${direction.id}-1`,
+    directionId: direction.id,
+    assetVersion: 1,
+    format: outputFormatForService("ugc-video"),
+    instructions: buildUgcThumbnailInstructions(direction),
+    referenceImages: [
+      ...brandLogoReferences(run),
+      ...withoutLogoReferences(
+        artworkReferencesFromSelections(run.referenceImages)
+      ),
+      ...brandGuidelineReferences(run),
+      ...creativeMaterialReferences(run)
+    ],
+    output: {
+      size: UGC_THUMBNAIL_OUTPUT_SIZE,
+      format: "png"
+    }
+  };
+}
+
+export async function generateUgcThumbnail({
+  run,
+  direction
+}: {
+  run: WorkflowState;
+  direction: CreativeDirection;
+}): Promise<CreativeOutput> {
+  const request = buildUgcThumbnailRequest({ run, direction });
+  const [generated] = await requestArtworkRevision(request);
+  if (!generated) {
+    throw new Error("UGC thumbnail generation returned no output.");
+  }
+  return normalizeArtworkOutput(generated);
 }
 
 function sortOutputsBySelectedDirection(

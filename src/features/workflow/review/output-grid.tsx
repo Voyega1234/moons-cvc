@@ -9,6 +9,7 @@ import { directionSubheadline } from "../../../domain/subheadline-highlight";
 import { CREATIVE_STRATEGIST_AGENT_NAME, type CreativeQualityReport } from "../../../domain/quality-check";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
 import {
+  generateUgcThumbnail,
   PLACEHOLDER_INSTRUCTIONS,
   placeholderizeAlbumOutputImages,
   placeholderizeOutputImage,
@@ -289,7 +290,7 @@ export function OutputGrid({
                 const downloading = downloadingOutputId === output.id;
                 const downloadable = album
                   ? reviewOutputs.every((candidate) => candidate.assetUrl)
-                  : Boolean(output.assetUrl) && !isUgcOutput(output);
+                  : Boolean(output.assetUrl);
                 return (
                   <article
                     className={`output-card compass-build-review-card ${qaReport && !hasGuidedImprovement ? "ready qa-passed" : ""} ${qaReport && hasGuidedImprovement ? "attn qa-attention" : ""}`}
@@ -339,6 +340,7 @@ export function OutputGrid({
                             direction={direction}
                             brandName={state.brand?.name}
                             captureId={output.id}
+                            imageUrl={output.assetUrl}
                           />
                         ) : output.assetUrl ? (
                           <img
@@ -726,6 +728,7 @@ function OutputRegenerateModal({
   const [attaching, setAttaching] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const album = isAlbumOutput(output);
+  const isFirstUgcThumbnail = isUgcOutput(output) && !output.assetUrl;
   const busy = phase !== "idle";
   const versions = outputAssetVersions(output);
   const selectedAsset =
@@ -790,6 +793,39 @@ function OutputRegenerateModal({
     setPhase("regenerating");
     setError(null);
     setNotice(null);
+
+    if (isFirstUgcThumbnail) {
+      try {
+        const generated = await generateUgcThumbnail({ run, direction });
+        if (!generated.assetUrl) {
+          throw new Error("Thumbnail generation did not return an image.");
+        }
+        await createCheckpoint?.("regenerate", run.id);
+        dispatch({
+          type: "replace-output-asset",
+          id: output.id,
+          assetUrl: generated.assetUrl,
+          ...(generated.assetStoragePath
+            ? { assetStoragePath: generated.assetStoragePath }
+            : {}),
+          ...(generated.assetBucket
+            ? { assetBucket: generated.assetBucket }
+            : {})
+        });
+        playGenerationSuccessSound();
+        setNotice("Generated a new UGC thumbnail.");
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not generate the UGC thumbnail."
+        );
+      } finally {
+        setPhase("idle");
+      }
+      return;
+    }
+
     const additionalReferenceImages: readonly ArtworkReferenceImage[] =
       referenceAttachment
         ? [
@@ -1006,6 +1042,7 @@ function OutputRegenerateModal({
                     direction={direction}
                     brandName={run.brand?.name}
                     captureId={output.id}
+                    imageUrl={selectedAsset?.assetUrl ?? output.assetUrl}
                   />
                 ) : selectedAsset?.assetUrl ? (
                   <img
@@ -1075,12 +1112,16 @@ function OutputRegenerateModal({
             aria-label={album ? "Regeneration instructions" : "Revision instructions"}
             value={prompt}
             disabled={busy}
-            placeholder="Describe what you want to change..."
+            placeholder={
+              isFirstUgcThumbnail
+                ? "Optional: add guidance for the photo, or leave blank to generate one..."
+                : "Describe what you want to change..."
+            }
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !busy) {
                 event.preventDefault();
-                if (prompt.trim()) {
+                if (prompt.trim() || isFirstUgcThumbnail) {
                   void handleRegenerate();
                 }
               }
@@ -1100,7 +1141,9 @@ function OutputRegenerateModal({
               className="output-chat-send-button"
               type="button"
               aria-label={album ? "Regenerate album" : "Regenerate image"}
-              disabled={busy || attaching || !prompt.trim()}
+              disabled={
+                busy || attaching || (!isFirstUgcThumbnail && !prompt.trim())
+              }
               onClick={() => void handleRegenerate()}
             >
               {busy ? <Spinner /> : <ArrowUp size={18} weight="bold" />}
@@ -1112,9 +1155,11 @@ function OutputRegenerateModal({
             {phase === "regenerating"
               ? "Generating a new version..."
               : notice ??
-                (album
-                  ? `${artworkModeLabel(run.artworkMode)} mode · the selected version guides this revision.`
-                  : "Select any version above, then describe the next change.")}
+                (isFirstUgcThumbnail
+                  ? "No thumbnail yet — press send to generate one."
+                  : album
+                    ? `${artworkModeLabel(run.artworkMode)} mode · the selected version guides this revision.`
+                    : "Select any version above, then describe the next change.")}
           </span>
         </div>
         {error ? <p className="repository-message error">{error}</p> : null}
