@@ -951,29 +951,41 @@ function addUgcReferenceVideoPanel(
   x: number,
   y: number,
   w: number,
-  brief: UgcVideoBrief
+  brief: UgcVideoBrief,
+  mockupImageData?: string
 ) {
   const boxHeight = w * 1.72;
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x,
-    y,
-    w,
-    h: boxHeight,
-    rectRadius: 0.1,
-    fill: { color: COLORS.ink },
-    line: { color: COLORS.ink }
-  });
-  slide.addText("▶", {
-    x,
-    y: y + boxHeight / 2 - 0.4,
-    w,
-    h: 0.8,
-    margin: 0,
-    fontSize: 30,
-    color: COLORS.paper,
-    align: "center",
-    valign: "middle"
-  });
+  if (mockupImageData) {
+    slide.addImage({
+      data: mockupImageData,
+      x,
+      y,
+      w,
+      h: boxHeight,
+      sizing: { type: "contain", w, h: boxHeight }
+    });
+  } else {
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x,
+      y,
+      w,
+      h: boxHeight,
+      rectRadius: 0.1,
+      fill: { color: COLORS.ink },
+      line: { color: COLORS.ink }
+    });
+    slide.addText("▶", {
+      x,
+      y: y + boxHeight / 2 - 0.4,
+      w,
+      h: 0.8,
+      margin: 0,
+      fontSize: 30,
+      color: COLORS.paper,
+      align: "center",
+      valign: "middle"
+    });
+  }
   const url = brief.referenceVideoUrl;
   const linkText = url
     ? clampText(brief.referenceVideoLabel || url, 60)
@@ -998,7 +1010,8 @@ function addUgcClientSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
   direction: CreativeDirection | undefined,
-  brandName: string
+  brandName: string,
+  mockupImageData?: string
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
   const personaLabel = clampText(brief.persona, 40) || "Persona";
@@ -1091,15 +1104,21 @@ function addUgcClientSlide(
     brief.dontGuidelines?.length ? brief.dontGuidelines : ["ไม่มีข้อมูล"]
   );
 
-  // Column 3 — Reference Video
-  const col3HeadingY = addUgcBriefColumn(pptx, slide, col3X, "Reference Video");
+  // Column 3 — our own creative mockup when captured, else the external reference video
+  const col3HeadingY = addUgcBriefColumn(
+    pptx,
+    slide,
+    col3X,
+    mockupImageData ? "Creative Mockup" : "Reference Video"
+  );
   addUgcReferenceVideoPanel(
     pptx,
     slide,
     col3X + 0.22,
     col3HeadingY,
     UGC_BRIEF_COLUMN_WIDTH - 0.44,
-    brief
+    brief,
+    mockupImageData
   );
 
   slide.addText("Prepared by Convert Cake", {
@@ -1679,12 +1698,13 @@ function addClientSlide(
   imageData: readonly string[] = [],
   albumMasterData?: string,
   referenceImageData: readonly string[] = [],
-  extractedCopy?: ExtractedArtworkCopy
+  extractedCopy?: ExtractedArtworkCopy,
+  ugcMockupImageData?: string
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
   if (isUgcOutput(output)) {
-    addUgcClientSlide(pptx, slide, direction, brandName);
+    addUgcClientSlide(pptx, slide, direction, brandName, ugcMockupImageData);
     return;
   }
   addSinglePageArtworkSlide(
@@ -2266,6 +2286,7 @@ async function buildClientSlidesPptx(
     bodyFontFace: SLIDE_FONT_FACE
   };
   const extractedCopyByOutputId = await resolveExtractedArtworkCopy(items);
+  const ugcMockupImageByOutputId = await resolveUgcMockupImages(items);
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
     let albumMasterData: string | undefined;
@@ -2307,11 +2328,52 @@ async function buildClientSlidesPptx(
       imageData,
       albumMasterData,
       referenceImageData,
-      extractedCopyByOutputId.get(item.output.id)
+      extractedCopyByOutputId.get(item.output.id),
+      ugcMockupImageByOutputId.get(item.output.id)
     );
   }
 
   return pptx;
+}
+
+/**
+ * Screenshots the live TikTok-style UGC preview (already built for the Build
+ * page, see captureUgcTemplatePreviewImages) so the client slide shows the
+ * actual creative mockup instead of a generic placeholder. Requires the
+ * Create/Build page's UGC preview cards to be mounted in the DOM — when
+ * they're not (a different page, a headless run), this degrades to the
+ * existing placeholder instead of failing the export.
+ */
+async function resolveUgcMockupImages(
+  items: readonly ClientSlideItem[]
+): Promise<Map<string, string>> {
+  const ugcOutputIds = items
+    .filter((item) => isUgcOutput(item.output))
+    .map((item) => item.output.id);
+
+  if (!ugcOutputIds.length) return new Map();
+
+  try {
+    const { captureUgcTemplatePreviewImages } = await import(
+      "./review/creative-previews"
+    );
+    const images = await Promise.race([
+      captureUgcTemplatePreviewImages(ugcOutputIds),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error("UGC mockup capture timed out.")),
+          3000
+        )
+      )
+    ]);
+    return new Map(Object.entries(images));
+  } catch (error) {
+    console.warn(
+      "UGC mockup capture failed; slide falls back to a placeholder.",
+      error
+    );
+    return new Map();
+  }
 }
 
 /**
