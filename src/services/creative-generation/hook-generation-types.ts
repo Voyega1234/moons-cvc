@@ -266,11 +266,28 @@ function normalizeUgcVideoBrief(
             textOverlay:
               typeof item.textOverlay === "string"
                 ? item.textOverlay.trim()
-                : fallbackScene.textOverlay
+                : fallbackScene.textOverlay,
+            ...(typeof item.highlightedPhrase === "string" &&
+            item.highlightedPhrase.trim()
+              ? { highlightedPhrase: item.highlightedPhrase.trim() }
+              : {})
           }
         ];
       })
     : [];
+
+  const stringArray = (field: string): readonly string[] | undefined => {
+    const value = record[field];
+    if (!Array.isArray(value)) return undefined;
+    const items = value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+    return items.length ? items : undefined;
+  };
+  const optionalText = (field: string): string | undefined => {
+    const value = record[field];
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  };
 
   return {
     product: text("product", "สินค้า/บริการตาม Brief"),
@@ -282,7 +299,22 @@ function normalizeUgcVideoBrief(
       "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ"
     ),
     referenceDirection: text("referenceDirection", fallback.visual),
-    scenes: scenes.length === 4 ? scenes : fallbackScenes
+    scenes: scenes.length ? scenes : fallbackScenes,
+    ...(optionalText("topic") ? { topic: optionalText("topic") } : {}),
+    ...(optionalText("persona") ? { persona: optionalText("persona") } : {}),
+    ...(optionalText("dresscode") ? { dresscode: optionalText("dresscode") } : {}),
+    ...(stringArray("doGuidelines")
+      ? { doGuidelines: stringArray("doGuidelines") }
+      : {}),
+    ...(stringArray("dontGuidelines")
+      ? { dontGuidelines: stringArray("dontGuidelines") }
+      : {}),
+    ...(optionalText("referenceVideoUrl")
+      ? { referenceVideoUrl: optionalText("referenceVideoUrl") }
+      : {}),
+    ...(optionalText("referenceVideoLabel")
+      ? { referenceVideoLabel: optionalText("referenceVideoLabel") }
+      : {})
   };
 }
 
