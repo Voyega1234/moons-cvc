@@ -1236,16 +1236,6 @@ async function runUgcBriefDirection({
       ugcBrief = parseUgcBriefResult(extractResponseText(payload));
     }
 
-    if (containsForbiddenThaiFirstPerson(ugcBrief)) {
-      finalInputText = buildUgcBriefNaturalnessRetryPrompt(
-        finalInputText,
-        `มีคำว่า "ฉัน"`
-      );
-      payload = await requestUgcBrief(finalInputText);
-      ugcBrief = parseUgcBriefResult(extractResponseText(payload));
-    }
-    assertNoForbiddenThaiFirstPerson(ugcBrief, "UGC brief");
-
     return {
       directionId: direction.id,
       inputText: finalInputText,
@@ -1291,20 +1281,6 @@ function buildUgcBriefPrompt(
     `CTA: ${direction.cta}`,
     `Caption: ${direction.caption}`,
     `Visual: ${direction.visual}`
-  ].join("\n");
-}
-
-function buildUgcBriefNaturalnessRetryPrompt(
-  inputText: string,
-  validationError: string
-): string {
-  return [
-    inputText,
-    "",
-    "# THAI NATURALNESS CORRECTION — REQUIRED",
-    `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
-    "แก้ตามกฎภาษาไทยใน agent_ugc_brief.md.",
-    "เขียนใหม่ทั้ง JSON โดยรักษา Scene, Fact และ Schema เดิม."
   ].join("\n");
 }
 
