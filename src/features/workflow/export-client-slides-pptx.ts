@@ -395,7 +395,7 @@ export function resolvedUgcBrief(
       objective: cleanText(direction?.why, "สื่อสารแนวคิดให้เข้าใจและจดจำได้เร็ว"),
       moodAndTone: cleanText(direction?.visual, "เป็นธรรมชาติ กระชับ และน่าเชื่อถือ"),
       dresscode: "ชุดลำลองทั่วไป เหมาะกับบริบทของ Direction",
-      persona: cleanText(direction?.why, "กลุ่มเป้าหมายหลักของแบรนด์"),
+      persona: "กลุ่มเป้าหมายหลักของแบรนด์",
       productionStyle: "Creator-led vertical video ถ่ายแบบเป็นธรรมชาติและตัดต่อกระชับ",
       referenceDirection: cleanText(
         direction?.visual,
@@ -962,7 +962,7 @@ function addUgcReferenceVideoPanel(
       y,
       w,
       h: boxHeight,
-      sizing: { type: "contain", w, h: boxHeight }
+      sizing: { type: "cover", w, h: boxHeight }
     });
   } else {
     slide.addShape(pptx.ShapeType.roundRect, {
@@ -1225,16 +1225,16 @@ function addUgcScriptCard(
       h: 0.24,
       margin: 0,
       ...localizedTextStyle(title),
-      fontSize: 10.5,
+      fontSize: 11.5,
       breakLine: false,
       fit: "shrink"
     }
   );
 
-  let cursorY = y + 0.5;
+  let cursorY = y + 0.52;
   const visual = clampText(scene.visual, 140);
-  const visualLines = estimatedWrappedLines(visual, contentW, 8.6);
-  const visualHeight = Math.max(0.2, (visualLines * 8.6 * 1.3) / 72);
+  const visualLines = estimatedWrappedLines(visual, contentW, 9.5);
+  const visualHeight = Math.max(0.22, (visualLines * 9.5 * 1.3) / 72);
   slide.addText(
     [
       { text: "Visual: ", options: { bold: true, italic: true, color: COLORS.muted } },
@@ -1247,7 +1247,7 @@ function addUgcScriptCard(
       h: visualHeight,
       margin: 0,
       ...localizedTextStyle(visual),
-      fontSize: 8.6,
+      fontSize: 9.5,
       valign: "top",
       breakLine: false
     }
@@ -1258,34 +1258,34 @@ function addUgcScriptCard(
     x: contentX,
     y: cursorY,
     w: contentW,
-    h: 0.18,
+    h: 0.2,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 9,
+    fontSize: 10.5,
     bold: true,
     color: COLORS.violet,
     breakLine: false
   });
-  cursorY += 0.22;
+  cursorY += 0.24;
   const scriptLine = clampText(scene.scriptLines[0], 220);
   const scriptRuns = buildHighlightedTextRuns(scriptLine, scene.highlightedPhrase);
-  const scriptLines = estimatedWrappedLines(scriptLine, contentW, 10);
-  const scriptHeight = Math.max(0.3, (scriptLines * 10 * 1.35) / 72);
+  const scriptLines = estimatedWrappedLines(scriptLine, contentW, 12);
+  const scriptHeight = Math.max(0.32, (scriptLines * 12 * 1.35) / 72);
   slide.addText(scriptRuns, {
     x: contentX,
     y: cursorY,
     w: contentW,
-    h: Math.min(scriptHeight, y + UGC_SCRIPT_CARD_HEIGHT - cursorY - 0.5),
+    h: Math.min(scriptHeight, y + UGC_SCRIPT_CARD_HEIGHT - cursorY - 0.52),
     margin: 0,
     ...localizedTextStyle(scriptLine),
-    fontSize: 10,
+    fontSize: 12,
     color: COLORS.ink,
     valign: "top",
     breakLine: false,
     fit: "shrink"
   });
 
-  const overlayY = y + UGC_SCRIPT_CARD_HEIGHT - 0.42;
+  const overlayY = y + UGC_SCRIPT_CARD_HEIGHT - 0.46;
   slide.addText(
     [
       {
@@ -1298,10 +1298,10 @@ function addUgcScriptCard(
       x: contentX,
       y: overlayY,
       w: contentW,
-      h: 0.34,
+      h: 0.38,
       margin: 0,
       ...localizedTextStyle(scene.textOverlay),
-      fontSize: 8,
+      fontSize: 9,
       valign: "top",
       breakLine: false,
       fit: "shrink"
