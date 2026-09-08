@@ -226,7 +226,7 @@ describe("useGenerateMoreHooks", () => {
         now: "2026-08-10T00:00:00.000Z"
       }),
       hookGenerationModels: [
-        "google/gemini-3.6-flash",
+        "google/gemini-3.8-flash",
         "qwen/qwen3.8-max"
       ] as const,
       directions: buildDirectionFixtures("Compared")
@@ -259,7 +259,7 @@ describe("useGenerateMoreHooks", () => {
         type: "generate-more-directions",
         directions: [
           expect.objectContaining({
-            generationModel: "google/gemini-3.6-flash"
+            generationModel: "google/gemini-3.8-flash"
           }),
           expect.objectContaining({
             generationModel: "qwen/qwen3.8-max"

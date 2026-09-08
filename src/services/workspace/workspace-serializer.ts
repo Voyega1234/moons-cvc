@@ -149,7 +149,7 @@ function parseRun(value: unknown): WorkflowState | null {
   const hookIdeaMode = storedHookIdeaMode ? "fresh-research" : null;
   const storedHookGenerationModel =
     value.hookGenerationModel === undefined
-      ? "google/gemini-3.6-flash"
+      ? "google/gemini-3.8-flash"
       : parseHookGenerationModel(value.hookGenerationModel);
   const hookGenerationModel = migrateHookGenerationModel(
     storedHookGenerationModel

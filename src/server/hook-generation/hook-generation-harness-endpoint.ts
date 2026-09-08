@@ -141,7 +141,7 @@ interface ResearchAudit {
   citationUrls: readonly string[];
 }
 
-const DEFAULT_HOOK_MODEL = "google/gemini-3.6-flash";
+const DEFAULT_HOOK_MODEL = "google/gemini-3.8-flash";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";

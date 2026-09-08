@@ -33,7 +33,7 @@ describe("useGenerateHooks harness resilience", () => {
         now: "2026-08-11T06:10:00.000Z"
       }),
       hookGenerationModels: [
-        "google/gemini-3.6-flash",
+        "google/gemini-3.8-flash",
         "qwen/qwen3.8-max",
         "sakana/sakana-namazu",
         "openai/gpt-5.6-terra",
@@ -75,7 +75,7 @@ describe("useGenerateHooks harness resilience", () => {
         now: "2026-08-11T06:00:00.000Z"
       }),
       hookGenerationModels: [
-        "google/gemini-3.6-flash",
+        "google/gemini-3.8-flash",
         "qwen/qwen3.8-max"
       ]
     };
@@ -96,7 +96,7 @@ describe("useGenerateHooks harness resilience", () => {
         type: "generate-directions",
         directions: [
           expect.objectContaining({
-            generationModel: "google/gemini-3.6-flash"
+            generationModel: "google/gemini-3.8-flash"
           })
         ]
       })

@@ -275,10 +275,10 @@ describe("workflowReducer", () => {
 
   it("defaults hook generation to OpenRouter Gemini and allows OpenAI", () => {
     expect(initialWorkflowState.hookGenerationModel).toBe(
-      "google/gemini-3.6-flash"
+      "google/gemini-3.8-flash"
     );
     expect(initialWorkflowState.hookGenerationModels).toEqual([
-      "google/gemini-3.6-flash"
+      "google/gemini-3.8-flash"
     ]);
 
     const updated = workflowReducer(initialWorkflowState, {

@@ -1068,7 +1068,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       plugins?: readonly Record<string, unknown>[];
       provider?: { require_parameters?: boolean };
     };
-    expect(generationBody.model).toBe("google/gemini-3.6-flash");
+    expect(generationBody.model).toBe("google/gemini-3.8-flash");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
     expect(generationBody.messages[0]?.content).toHaveLength(1);
     expect(generationBody.response_format).toMatchObject({
