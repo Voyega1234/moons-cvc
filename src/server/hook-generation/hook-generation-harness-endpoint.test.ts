@@ -595,7 +595,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(prompt).toContain("# Required output mix");
     expect(prompt).toContain("# Format");
-    expect(prompt).toContain("scriptLines คือคำพูดจริง");
+    expect(prompt).toContain("ugcBrief: ห้ามเจนที่นี่เด็ดขาดทุก service");
     expect(JSON.stringify(directionSchema.properties)).toContain("scriptLines");
     expect(JSON.stringify(directionSchema.properties)).toContain("textOverlay");
 
@@ -893,7 +893,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
-      .mockResolvedValueOnce(new Response("Server error", { status: 500 }))
+      .mockResolvedValueOnce(openAiUgcBriefResponse())
       .mockResolvedValueOnce(new Response("Server error", { status: 500 }));
 
     const response = await handleHookGenerationHarnessRequest({

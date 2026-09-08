@@ -1690,16 +1690,14 @@ function buildDirectHookGenerationPrompt(
     "subheadline เป็น optional: ใช้เฉพาะเมื่อเพิ่มรายละเอียดรองที่จำเป็นจริง; หาก Headline ยืนได้ด้วยตัวเองให้ส่ง null.",
     "",
     "# Format",
-    "- visual: ไม่ถูกใช้ในการ generate ภาพจริงเลย (ศิลป์ตัดสินใจแยกต่างหากทั้งหมดโดย Art Director agent คนละตัว) ห้ามเสียเวลาคิด ให้ตอบเป็น string ว่างเสมอ (\"\").",
-    "- single-static และ resize: formatBeats = [], albumFormat = null และ ugcBrief = null.",
+    "- visual (field ระดับ Direction นี้เท่านั้น ไม่เกี่ยวกับ UGC ใดๆ): ไม่ถูกใช้ในการ generate ภาพจริงเลย (ศิลป์ตัดสินใจแยกต่างหากทั้งหมดโดย Art Director agent คนละตัว) ห้ามเสียเวลาคิด ให้ตอบเป็น string ว่างเสมอ (\"\").",
+    "- ugcBrief: ห้ามเจนที่นี่เด็ดขาดทุก service รวมถึง ugc-video ให้เป็น null เสมอ — Brief และ Script เต็มรูปแบบของ UGC ถูกสร้างแยกต่างหากทั้งหมดโดย agent อีกตัว (agent_ugc_brief.md) หลังขั้นตอนนี้.",
+    "- single-static และ resize: formatBeats = [], albumFormat = null.",
     albumHookInstruction(
       input.albumFormat ?? defaultAlbumFormatPreference
     ),
-    "- album-post: ugcBrief = null.",
-    "- ugc-video: albumFormat = null, ugcBrief ต้องมีข้อมูลครบ และ scenes ต้องมี 4 ฉากตามลำดับ HOOK, DEVELOPMENT, PROOF / BENEFIT, CTA.",
-    "- แต่ละ UGC scene: scriptLines คือคำพูดจริงที่ผู้พูดสามารถอ่านหน้ากล้องได้ 1–2 ประโยค ห้ามใส่คำสั่งกล้องหรือคำอธิบายภาพ; visual คือสิ่งที่ต้องถ่าย; textOverlay คือข้อความสั้นที่ขึ้นบนจอ; duration คือช่วงเวลาของฉาก.",
-    "- UGC formatBeats ให้เป็นชื่อ Storyline สั้น ๆ 4 ข้อที่ตรงกับ scenes และห้ามนำคำอธิบาย Visual มาปนกับบทพูด.",
-    "- motion-static: albumFormat = null, ugcBrief = null และ formatBeats ไม่มีจำนวนบังคับ."
+    "- ugc-video: albumFormat = null, formatBeats ให้เป็นชื่อ Storyline สั้น ๆ 4 ข้อที่สรุปจังหวะเนื้อเรื่องคร่าวๆ (ใช้เป็น context สำรองเท่านั้น ไม่ใช่บทพูดจริง).",
+    "- motion-static: albumFormat = null และ formatBeats ไม่มีจำนวนบังคับ."
   ].join("\n");
 }
 
@@ -2374,16 +2372,8 @@ function parseHookGenerationResult(text: string): HookGenerationResult {
         albumFormat
       );
       const ugcBrief =
-        service === "ugc-video"
-          ? readUgcVideoBrief(direction.ugcBrief, `directions[${index}].ugcBrief`, {
-              hook,
-              concept,
-              why,
-              visual,
-              cta,
-              caption,
-              formatBeats
-            })
+        service === "ugc-video" && direction.ugcBrief != null
+          ? readUgcVideoBrief(direction.ugcBrief, `directions[${index}].ugcBrief`)
           : undefined;
       const id = readString(direction.id, `directions[${index}].id`);
       const sourceCandidateId =
@@ -2643,62 +2633,7 @@ function validateFormatBeats(
   return normalized;
 }
 
-function readUgcVideoBrief(
-  value: unknown,
-  field: string,
-  fallback: {
-    hook: string;
-    concept: string;
-    why: string;
-    visual: string;
-    cta: string;
-    caption: string;
-    formatBeats: readonly string[];
-  }
-): UgcVideoBrief {
-  const fallbackScenes = [
-    {
-      title: "HOOK",
-      duration: "0–5 วินาที",
-      scriptLines: [fallback.hook],
-      visual: fallback.visual,
-      textOverlay: fallback.hook
-    },
-    {
-      title: "DEVELOPMENT",
-      duration: "5–15 วินาที",
-      scriptLines: [fallback.concept],
-      visual: fallback.visual,
-      textOverlay: fallback.formatBeats[1] ?? fallback.concept
-    },
-    {
-      title: "PROOF / BENEFIT",
-      duration: "15–25 วินาที",
-      scriptLines: [fallback.why],
-      visual: fallback.visual,
-      textOverlay: fallback.why
-    },
-    {
-      title: "CTA",
-      duration: "25–30 วินาที",
-      scriptLines: [fallback.cta],
-      visual: fallback.visual,
-      textOverlay: fallback.cta
-    }
-  ];
-
-  if (value === undefined) {
-    return {
-      product: "สินค้า/บริการตาม Brief",
-      duration: "15–30 วินาที",
-      objective: fallback.why,
-      moodAndTone: fallback.visual,
-      productionStyle: "Creator-led vertical video ที่เป็นธรรมชาติและตัดต่อกระชับ",
-      referenceDirection: fallback.visual,
-      scenes: fallbackScenes
-    };
-  }
-
+function readUgcVideoBrief(value: unknown, field: string): UgcVideoBrief {
   const record = readRecord(value, field);
   if (!Array.isArray(record.scenes) || record.scenes.length < 1) {
     throw new Error(`${field}.scenes must contain at least 1 scene.`);
