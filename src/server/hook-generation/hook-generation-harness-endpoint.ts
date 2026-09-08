@@ -80,6 +80,7 @@ export interface HookGenerationHarnessEndpointOptions {
   loadHookResearchPrompt?: () => Promise<string>;
   loadHookTopicsPrompt?: () => Promise<string>;
   loadSubheadlineHighlightPrompt?: () => Promise<string>;
+  loadUgcBriefPrompt?: () => Promise<string>;
   loadUgcScriptPrompt?: () => Promise<string>;
   loadPastPostExamples?: (input: {
     clientId: string;
@@ -177,6 +178,7 @@ export async function handleHookGenerationHarnessRequest({
   loadHookResearchPrompt = defaultLoadHookResearchPrompt,
   loadHookTopicsPrompt = defaultLoadHookTopicsPrompt,
   loadSubheadlineHighlightPrompt = defaultLoadSubheadlineHighlightPrompt,
+  loadUgcBriefPrompt = defaultLoadUgcBriefPrompt,
   loadUgcScriptPrompt = defaultLoadUgcScriptPrompt,
   loadPastPostExamples = defaultLoadPastPostExamples,
   writeDebugLog = writeHookGenerationDebugLog
@@ -335,10 +337,22 @@ export async function handleHookGenerationHarnessRequest({
       prompt: subheadlineHighlightPrompt,
       fetchImpl: providerFetchImpl
     });
+    const ugcBriefPrompt = await loadUgcBriefPrompt();
+    const { directions: briefedDirections } = await runUgcBriefStep({
+      directions: highlightedDirections,
+      input,
+      researchDossier: researchTrace.output,
+      pastPosts,
+      apiKey: generationApiKey,
+      model,
+      provider: generationProvider,
+      prompt: ugcBriefPrompt,
+      fetchImpl: providerFetchImpl
+    });
     const ugcScriptPrompt = await loadUgcScriptPrompt();
     const { directions: finalDirections, traces: ugcScriptTraces } =
       await runUgcScriptStep({
-        directions: highlightedDirections,
+        directions: briefedDirections,
         input,
         researchDossier: researchTrace.output,
         pastPosts,
@@ -403,6 +417,13 @@ async function defaultLoadSubheadlineHighlightPrompt(): Promise<string> {
 async function defaultLoadUgcScriptPrompt(): Promise<string> {
   return readFile(
     join(process.cwd(), "agent_prompt", "agent_ugc_script.md"),
+    "utf8"
+  );
+}
+
+async function defaultLoadUgcBriefPrompt(): Promise<string> {
+  return readFile(
+    join(process.cwd(), "agent_prompt", "agent_ugc_brief.md"),
     "utf8"
   );
 }
@@ -1036,6 +1057,204 @@ function buildUgcScriptNaturalnessRetryPrompt(
     `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
     "แก้ตามกฎภาษาไทยใน agent_ugc_script.md.",
     "เขียนใหม่ทั้ง JSON โดยรักษา Beat, Fact และ Schema เดิม."
+  ].join("\n");
+}
+
+interface UgcBriefTrace {
+  directionId: string;
+  inputText: string;
+  rawResponse: unknown;
+  ugcBrief?: UgcVideoBrief;
+  error?: string;
+}
+
+async function runUgcBriefStep({
+  directions,
+  input,
+  researchDossier,
+  pastPosts,
+  apiKey,
+  model,
+  provider,
+  prompt,
+  fetchImpl
+}: {
+  directions: readonly GeneratedDirection[];
+  input: HookGenerationHarnessRequest;
+  researchDossier: HookResearchDossier;
+  pastPosts: readonly PastPostExample[];
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  prompt: string;
+  fetchImpl: FetchLike;
+}): Promise<{
+  directions: readonly GeneratedDirection[];
+  traces: readonly UgcBriefTrace[];
+}> {
+  const ugcDirections = directions.filter(
+    (direction) => direction.service === "ugc-video"
+  );
+  if (!ugcDirections.length) {
+    return { directions, traces: [] };
+  }
+
+  const traces = await mapWithConcurrency(
+    ugcDirections,
+    HOOK_GENERATION_CONCURRENCY,
+    (direction) =>
+      runUgcBriefDirection({
+        direction,
+        ugcBriefPrompt: prompt,
+        researchDossier,
+        pastPosts,
+        input,
+        apiKey,
+        model,
+        provider,
+        fetchImpl
+      })
+  );
+
+  const ugcBriefByDirectionId = new Map(
+    traces
+      .filter(
+        (trace): trace is UgcBriefTrace & { ugcBrief: UgcVideoBrief } =>
+          Boolean(trace.ugcBrief)
+      )
+      .map((trace) => [trace.directionId, trace.ugcBrief])
+  );
+
+  return {
+    directions: directions.map((direction) =>
+      ugcBriefByDirectionId.has(direction.id)
+        ? { ...direction, ugcBrief: ugcBriefByDirectionId.get(direction.id) }
+        : direction
+    ),
+    traces
+  };
+}
+
+async function runUgcBriefDirection({
+  direction,
+  ugcBriefPrompt,
+  researchDossier,
+  pastPosts,
+  input,
+  apiKey,
+  model,
+  provider,
+  fetchImpl
+}: {
+  direction: GeneratedDirection;
+  ugcBriefPrompt: string;
+  researchDossier: HookResearchDossier;
+  pastPosts: readonly PastPostExample[];
+  input: HookGenerationHarnessRequest;
+  apiKey: string;
+  model: string;
+  provider: "openai" | "openrouter";
+  fetchImpl: FetchLike;
+}): Promise<UgcBriefTrace> {
+  const inputText = buildUgcBriefPrompt(
+    direction,
+    ugcBriefPrompt,
+    researchDossier,
+    pastPosts,
+    input
+  );
+  const requestUgcBrief = (requestInputText: string) =>
+    withTransientRetry(() =>
+      callResponsesApi({
+        apiKey,
+        model,
+        fetchImpl,
+        content: [{ type: "input_text", text: requestInputText }],
+        schemaName: "moons_ugc_brief",
+        schema: ugcBriefSchema,
+        reasoningEffort:
+          provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
+        provider
+      })
+    );
+
+  // Failures here degrade gracefully: this direction keeps the deterministic
+  // fallback brief the client already synthesizes (resolvedUgcBrief), instead
+  // of failing the whole run.
+  try {
+    let finalInputText = inputText;
+    let payload = await requestUgcBrief(finalInputText);
+    let ugcBrief = parseUgcBriefResult(extractResponseText(payload));
+
+    if (containsForbiddenThaiFirstPerson(ugcBrief)) {
+      finalInputText = buildUgcBriefNaturalnessRetryPrompt(
+        finalInputText,
+        `มีคำว่า "ฉัน"`
+      );
+      payload = await requestUgcBrief(finalInputText);
+      ugcBrief = parseUgcBriefResult(extractResponseText(payload));
+    }
+    assertNoForbiddenThaiFirstPerson(ugcBrief, "UGC brief");
+
+    return {
+      directionId: direction.id,
+      inputText: finalInputText,
+      rawResponse: payload,
+      ugcBrief
+    };
+  } catch (error) {
+    console.warn(
+      `UGC brief generation failed for direction ${direction.id}: ${readableError(error)}`
+    );
+    return {
+      directionId: direction.id,
+      inputText,
+      rawResponse: undefined,
+      error: readableError(error)
+    };
+  }
+}
+
+function buildUgcBriefPrompt(
+  direction: GeneratedDirection,
+  ugcBriefPrompt: string,
+  researchDossier: HookResearchDossier,
+  pastPosts: readonly PastPostExample[],
+  input: HookGenerationHarnessRequest
+): string {
+  const pastPostsBlock = buildPastPostsCaptionStyleBlock(pastPosts);
+  return [
+    ugcBriefPrompt,
+    "",
+    "# Runtime contract",
+    "Research และ Direction ถูกเลือกไว้แล้วโดย Hook Agent ห้ามเปลี่ยน Insight หรือมุมขายของ Direction นี้.",
+    "",
+    buildInputBlock(input),
+    "",
+    hookResearchDossierBlock(researchDossier),
+    ...(pastPostsBlock ? ["", pastPostsBlock] : []),
+    "",
+    "# Selected direction",
+    `Hook: ${direction.hook}`,
+    `Concept: ${direction.concept}`,
+    `Why: ${direction.why}`,
+    `CTA: ${direction.cta}`,
+    `Caption: ${direction.caption}`,
+    `Visual: ${direction.visual}`
+  ].join("\n");
+}
+
+function buildUgcBriefNaturalnessRetryPrompt(
+  inputText: string,
+  validationError: string
+): string {
+  return [
+    inputText,
+    "",
+    "# THAI NATURALNESS CORRECTION — REQUIRED",
+    `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
+    "แก้ตามกฎภาษาไทยใน agent_ugc_brief.md.",
+    "เขียนใหม่ทั้ง JSON โดยรักษา Scene, Fact และ Schema เดิม."
   ].join("\n");
 }
 
@@ -1743,6 +1962,72 @@ const ugcScriptSchema = {
   ]
 } as const;
 
+const UGC_BRIEF_SCENE_COUNT = 6;
+
+const ugcBriefSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    product: { type: "string" },
+    duration: { type: "string" },
+    objective: { type: "string" },
+    moodAndTone: { type: "string" },
+    productionStyle: { type: "string" },
+    referenceDirection: { type: "string" },
+    topic: { type: "string" },
+    persona: { type: "string" },
+    dresscode: { type: "string" },
+    doGuidelines: stringArraySchema,
+    dontGuidelines: stringArraySchema,
+    referenceVideoUrl: { type: ["string", "null"] },
+    scenes: {
+      type: "array",
+      minItems: UGC_BRIEF_SCENE_COUNT,
+      maxItems: UGC_BRIEF_SCENE_COUNT,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string" },
+          duration: { type: "string" },
+          scriptLines: {
+            type: "array",
+            minItems: 1,
+            maxItems: 1,
+            items: { type: "string" }
+          },
+          highlightedPhrase: { type: ["string", "null"] },
+          visual: { type: "string" },
+          textOverlay: { type: "string" }
+        },
+        required: [
+          "title",
+          "duration",
+          "scriptLines",
+          "highlightedPhrase",
+          "visual",
+          "textOverlay"
+        ]
+      }
+    }
+  },
+  required: [
+    "product",
+    "duration",
+    "objective",
+    "moodAndTone",
+    "productionStyle",
+    "referenceDirection",
+    "topic",
+    "persona",
+    "dresscode",
+    "doGuidelines",
+    "dontGuidelines",
+    "referenceVideoUrl",
+    "scenes"
+  ]
+} as const;
+
 function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
   if (!isRecord(value)) throw new Error("Invalid hook generation request.");
 
@@ -2206,6 +2491,58 @@ function parseUgcScriptResult(
   };
 }
 
+function parseUgcBriefResult(text: string): UgcVideoBrief {
+  const parsed = JSON.parse(unwrapJsonCodeFence(text)) as unknown;
+  const value = readRecord(parsed, "ugcBrief");
+
+  const scenesValue = value.scenes;
+  if (!Array.isArray(scenesValue) || scenesValue.length !== UGC_BRIEF_SCENE_COUNT) {
+    throw new Error(`ugcBrief.scenes must contain exactly ${UGC_BRIEF_SCENE_COUNT} scenes.`);
+  }
+  const scenes = scenesValue.map((item, index) => {
+    const sceneField = `ugcBrief.scenes[${index}]`;
+    const scene = readRecord(item, sceneField);
+    const scriptLines = readStringArray(scene.scriptLines, `${sceneField}.scriptLines`)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (scriptLines.length !== 1) {
+      throw new Error(`${sceneField}.scriptLines must contain exactly 1 line.`);
+    }
+    return {
+      title: readString(scene.title, `${sceneField}.title`),
+      duration: readString(scene.duration, `${sceneField}.duration`),
+      scriptLines,
+      visual: readString(scene.visual, `${sceneField}.visual`),
+      textOverlay: readString(scene.textOverlay, `${sceneField}.textOverlay`),
+      ...(typeof scene.highlightedPhrase === "string" &&
+      scene.highlightedPhrase.trim()
+        ? { highlightedPhrase: scene.highlightedPhrase.trim() }
+        : {})
+    };
+  });
+
+  return {
+    product: readString(value.product, "ugcBrief.product"),
+    duration: readString(value.duration, "ugcBrief.duration"),
+    objective: readString(value.objective, "ugcBrief.objective"),
+    moodAndTone: readString(value.moodAndTone, "ugcBrief.moodAndTone"),
+    productionStyle: readString(value.productionStyle, "ugcBrief.productionStyle"),
+    referenceDirection: readString(
+      value.referenceDirection,
+      "ugcBrief.referenceDirection"
+    ),
+    scenes,
+    topic: readString(value.topic, "ugcBrief.topic"),
+    persona: readString(value.persona, "ugcBrief.persona"),
+    dresscode: readString(value.dresscode, "ugcBrief.dresscode"),
+    doGuidelines: readStringArray(value.doGuidelines, "ugcBrief.doGuidelines"),
+    dontGuidelines: readStringArray(value.dontGuidelines, "ugcBrief.dontGuidelines"),
+    ...(typeof value.referenceVideoUrl === "string" && value.referenceVideoUrl.trim()
+      ? { referenceVideoUrl: value.referenceVideoUrl.trim() }
+      : {})
+  };
+}
+
 function readUgcScriptSpeaker(value: unknown, field: string): UgcScriptSpeaker {
   if (
     typeof value !== "string" ||
@@ -2322,8 +2659,8 @@ function readUgcVideoBrief(
   }
 
   const record = readRecord(value, field);
-  if (!Array.isArray(record.scenes) || record.scenes.length !== 4) {
-    throw new Error(`${field}.scenes must contain exactly 4 scenes.`);
+  if (!Array.isArray(record.scenes) || record.scenes.length < 1) {
+    throw new Error(`${field}.scenes must contain at least 1 scene.`);
   }
   const scenes = record.scenes.map((scene, index) => {
     const sceneField = `${field}.scenes[${index}]`;
@@ -2342,7 +2679,11 @@ function readUgcVideoBrief(
       duration: readString(item.duration, `${sceneField}.duration`),
       scriptLines,
       visual: readString(item.visual, `${sceneField}.visual`),
-      textOverlay: readString(item.textOverlay, `${sceneField}.textOverlay`)
+      textOverlay: readString(item.textOverlay, `${sceneField}.textOverlay`),
+      ...(typeof item.highlightedPhrase === "string" &&
+      item.highlightedPhrase.trim()
+        ? { highlightedPhrase: item.highlightedPhrase.trim() }
+        : {})
     };
   });
   return {
@@ -2358,7 +2699,35 @@ function readUgcVideoBrief(
       record.referenceDirection,
       `${field}.referenceDirection`
     ),
-    scenes
+    scenes,
+    ...(typeof record.topic === "string" && record.topic.trim()
+      ? { topic: record.topic.trim() }
+      : {}),
+    ...(typeof record.persona === "string" && record.persona.trim()
+      ? { persona: record.persona.trim() }
+      : {}),
+    ...(typeof record.dresscode === "string" && record.dresscode.trim()
+      ? { dresscode: record.dresscode.trim() }
+      : {}),
+    ...(Array.isArray(record.doGuidelines)
+      ? { doGuidelines: readStringArray(record.doGuidelines, `${field}.doGuidelines`) }
+      : {}),
+    ...(Array.isArray(record.dontGuidelines)
+      ? {
+          dontGuidelines: readStringArray(
+            record.dontGuidelines,
+            `${field}.dontGuidelines`
+          )
+        }
+      : {}),
+    ...(typeof record.referenceVideoUrl === "string" &&
+    record.referenceVideoUrl.trim()
+      ? { referenceVideoUrl: record.referenceVideoUrl.trim() }
+      : {}),
+    ...(typeof record.referenceVideoLabel === "string" &&
+    record.referenceVideoLabel.trim()
+      ? { referenceVideoLabel: record.referenceVideoLabel.trim() }
+      : {})
   };
 }
 

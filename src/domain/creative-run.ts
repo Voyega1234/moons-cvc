@@ -447,6 +447,8 @@ export interface UgcVideoScene {
   scriptLines: readonly string[];
   visual: string;
   textOverlay: string;
+  /** Exact substring of scriptLines[0] to render highlighted, same convention as CreativeDirection.subheadlineHighlight. */
+  highlightedPhrase?: string;
 }
 
 export interface UgcVideoBrief {
@@ -457,6 +459,13 @@ export interface UgcVideoBrief {
   productionStyle: string;
   referenceDirection: string;
   scenes: readonly UgcVideoScene[];
+  topic?: string;
+  persona?: string;
+  dresscode?: string;
+  doGuidelines?: readonly string[];
+  dontGuidelines?: readonly string[];
+  referenceVideoUrl?: string;
+  referenceVideoLabel?: string;
 }
 
 export const ugcScriptSpeakers = [

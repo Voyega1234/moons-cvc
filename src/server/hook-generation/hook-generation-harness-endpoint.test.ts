@@ -261,6 +261,44 @@ function openAiUgcScriptResponse() {
   );
 }
 
+function openAiUgcBriefResponse() {
+  const scene = (title: string, duration: string, line: string) => ({
+    title,
+    duration,
+    scriptLines: [line],
+    highlightedPhrase: null,
+    visual: "Creator พูดกับกล้องในบริบทที่เกี่ยวข้อง",
+    textOverlay: line
+  });
+  return new Response(
+    JSON.stringify({
+      output_text: JSON.stringify({
+        product: "ทดสอบแบรนด์",
+        duration: "45-54 วินาที",
+        objective: "สื่อสารการใช้งานจริง",
+        moodAndTone: "จริงใจ เป็นกันเอง",
+        productionStyle: "มือถือ handheld แสงธรรมชาติ",
+        referenceDirection: "ภาพแนวตั้งแบบ native social",
+        topic: "การเลือกใช้งานจริงในครัว",
+        persona: "คนทำอาหารที่บ้านเป็นประจำ",
+        dresscode: "ชุดลำลองทั่วไป",
+        doGuidelines: ["เปิดด้วย Hook ที่ตรงประเด็น"],
+        dontGuidelines: ["หลีกเลี่ยงคำพูดที่เกินจริง"],
+        referenceVideoUrl: null,
+        scenes: [
+          scene("Hook", "00:00-00:06", "ใกล้สิ้นปีแบบนี้ ครัวยุ่งมาก"),
+          scene("Relatable Problem", "00:06-00:14", "หากระทะดีๆ ยากมาก"),
+          scene("Product Discovery", "00:14-00:24", "จนมาเจอกระทะรุ่นนี้"),
+          scene("Offer & Proof", "00:24-00:36", "ใช้งานจริงมาหลายเดือนแล้ว"),
+          scene("Conversion CTA", "00:36-00:46", "ทักถามรุ่นกระทะได้เลย"),
+          scene("End Card & Disclaimer", "00:46-00:54", "เงื่อนไขเป็นไปตามที่บริษัทกำหนด")
+        ]
+      })
+    }),
+    { status: 200 }
+  );
+}
+
 function openAiStaticDirection() {
   return {
     id: "shared-research-hook",
@@ -804,6 +842,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
+      .mockResolvedValueOnce(openAiUgcBriefResponse())
       .mockResolvedValueOnce(openAiUgcScriptResponse());
 
     const response = await handleHookGenerationHarnessRequest({
@@ -817,7 +856,7 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     const responseBody = await response.clone().json();
     expect(response.status, JSON.stringify(responseBody)).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
     const directionRetryBody = JSON.parse(
       String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as { input: unknown };
@@ -831,10 +870,10 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
     expect((body as { directions: { formatBeats: string[] }[] }).directions[0]?.formatBeats).toHaveLength(4);
     const ugcScriptRequestBody = JSON.parse(
-      String(fetchMock.mock.calls[5]?.[1]?.body)
+      String(fetchMock.mock.calls[6]?.[1]?.body)
     ) as { input: unknown };
     expect(JSON.stringify(ugcScriptRequestBody.input)).toContain(
-      "UGC SCRIPT WRITER"
+      "UGC MYTH-BUSTING SCRIPT WRITER"
     );
     const scriptInput = JSON.stringify(ugcScriptRequestBody.input);
     expect(scriptInput).toContain("# Selected UGC brief");
@@ -1373,7 +1412,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(researchPrompt).not.toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
     expect(generationPrompt).toContain(
-      "# Past posts — brand voice and caption style evidence"
+      "# Past posts — caption style evidence only"
     );
     expect(generationPrompt).toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
     expect(generationPrompt).toContain("เบื้องหลังงานวันนี้");

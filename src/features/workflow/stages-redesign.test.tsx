@@ -3644,13 +3644,18 @@ describe("redesigned workflow stages", () => {
       state,
       async (url) => `data:image/png;base64,${btoa(url)}`
     );
+    const items = createStageClientSlideItems(state);
+    // UGC creatives export as two slides (brief + script grid) instead of one.
+    const ugcItemCount = items.filter((item) =>
+      item.output.format.toUpperCase().includes("UGC")
+    ).length;
     expect(
       (
         pptx as unknown as {
           _slides: readonly unknown[];
         }
       )._slides
-    ).toHaveLength(createStageClientSlideItems(state).length);
+    ).toHaveLength(items.length + ugcItemCount);
   });
 
   it("keeps Google Slides export enabled for viewers", () => {
@@ -3842,7 +3847,7 @@ describe("redesigned workflow stages", () => {
     expect(captionText?.options.h).toBeCloseTo(5.55);
   });
 
-  it("exports a UGC storyline slide with production-ready scene scripts and no placeholder image", async () => {
+  it("exports a UGC brief slide and a script grid slide with production-ready scene content and no placeholder image", async () => {
     const base = buildCreativeState();
     const firstDirection = base.directions[0];
     const firstOutput = base.outputs[0];
@@ -3859,39 +3864,59 @@ describe("redesigned workflow stages", () => {
       formatBeats: ["เปิดด้วยเวลาที่ใกล้หมด", "สาธิตทำไข่ข้น", "ชิมและปิดด้วย CTA"],
       ugcBrief: {
         product: "Korea King Colormic 24cm",
-        duration: "15–30 วินาที",
+        duration: "45–54 วินาที",
         objective: "ทำให้คนเห็นว่ากระทะเหมาะกับเมนูเช้าที่ทำได้เร็ว",
         moodAndTone: "สดใส เป็นธรรมชาติ คล่องตัว",
+        dresscode: "ชุดลำลองทั่วไปในครัว",
+        persona: "คนทำงานที่รีบทำอาหารเช้าก่อนออกจากบ้าน",
         productionStyle: "Handheld creator POV สลับ close-up อาหาร",
         referenceDirection: "UGC ครัวเช้า แสงธรรมชาติ และ text overlay สั้น",
+        topic: "ทำไข่ข้นเช้าที่รีบด้วยกระทะที่หยิบใช้ได้คล่อง",
+        doGuidelines: ["เปิดด้วยเวลาที่ใกล้หมดให้ชัดใน 6 วินาทีแรก"],
+        dontGuidelines: ["หลีกเลี่ยงคำพูดที่ฟังดูเกินจริง"],
+        referenceVideoUrl: undefined,
         scenes: [
           {
-            title: "HOOK",
-            duration: "0–5 วินาที",
+            title: "Hook",
+            duration: "00:00-00:06",
             scriptLines: ["เช้านี้เหลือเวลาไม่ถึง 10 นาที แต่ยังอยากกินไข่ข้นดี ๆ อยู่ไหม?"],
             visual: "เปิดนาฬิกาแล้วหันมาพูดกับกล้อง",
             textOverlay: "มื้อเช้าใน 10 นาที"
           },
           {
-            title: "DEVELOPMENT",
-            duration: "5–15 วินาที",
+            title: "Relatable Problem",
+            duration: "00:06-00:14",
+            scriptLines: ["เร่งรีบแบบนี้กระทะติดอาหารก็ยิ่งเสียเวลาไปอีก"],
+            visual: "หันมาพูดกับกล้องพร้อมทำหน้ารีบ",
+            textOverlay: "รีบขนาดนี้ กระทะติดไม่ได้เลย"
+          },
+          {
+            title: "Product Discovery",
+            duration: "00:14-00:24",
             scriptLines: ["แค่เทไข่ลงกระทะ Colormic แล้วคนเบา ๆ ก็ได้เนื้อไข่นุ่มข้น"],
             visual: "สาธิตเทไข่และคนในกระทะ",
             textOverlay: "ทำง่าย ไม่ติดกระทะ"
           },
           {
-            title: "PROOF / BENEFIT",
-            duration: "15–25 วินาที",
+            title: "Offer & Proof",
+            duration: "00:24-00:36",
             scriptLines: ["กระทะร้อนทั่วถึง ทำให้ไข่สุกสวยโดยไม่ต้องใช้น้ำมันเยอะ"],
             visual: "ถ่าย close-up เนื้อไข่ข้นและผิวกระทะ",
             textOverlay: "ร้อนทั่วถึง ใช้น้ำมันน้อย"
           },
           {
-            title: "CTA",
-            duration: "25–30 วินาที",
+            title: "Conversion CTA",
+            duration: "00:36-00:46",
             scriptLines: ["เช้าที่รีบก็ยังอร่อยได้ เลือก Colormic 24cm ไว้ติดครัวเลย"],
             visual: "ยกจานขึ้นชิมแล้วชูกระทะให้เห็น",
             textOverlay: "เลือก Colormic 24cm"
+          },
+          {
+            title: "End Card & Disclaimer",
+            duration: "00:46-00:54",
+            scriptLines: ["เงื่อนไขเป็นไปตามที่บริษัทกำหนด"],
+            visual: "โชว์โลโก้แบรนด์และแพ็กเกจ",
+            textOverlay: "เงื่อนไขเป็นไปตามที่บริษัทกำหนด"
           }
         ]
       }
@@ -3923,68 +3948,56 @@ describe("redesigned workflow stages", () => {
       async () =>
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC"
     );
-    const [storyboardSlide, ...extraSlides] = (
-      pptx as unknown as {
-        _slides: Array<{
-          _slideObjects: Array<{
-            _type: string;
-            text?: Array<{ text: string }>;
-            options?: {
-              x?: number;
-              y?: number;
-              w?: number;
-              h?: number;
-              fontSize?: number;
-              altText?: string;
-            };
-          }>;
-        }>;
-      }
+    type SlideObject = {
+      _type: string;
+      text?: Array<{ text: string }>;
+    };
+    type Slide = { _slideObjects: SlideObject[] };
+    const [briefSlide, scriptSlide, ...extraSlides] = (
+      pptx as unknown as { _slides: Slide[] }
     )._slides;
-    const storyboardText =
-      storyboardSlide?._slideObjects
+    const slideText = (slide: Slide | undefined) =>
+      slide?._slideObjects
         .flatMap((object) => object.text?.map((run) => run.text) ?? [])
         .join("\n") ?? "";
+    const briefText = slideText(briefSlide);
+    const scriptText = slideText(scriptSlide);
 
     expect(extraSlides).toHaveLength(0);
-    expect(storyboardText).toContain("SHORT VIDEO STORYLINE");
-    expect(storyboardText).not.toContain("Following");
-    expect(storyboardText).not.toContain("For You");
-    expect(storyboardText).not.toContain("@bonefitcreator");
-    expect(storyboardText).not.toContain("Original sound · BoneFit");
-    expect(storyboardText).toContain("Headline:");
-    expect(storyboardText).toContain("Concept Idea:");
-    expect(storyboardText).toContain("Storyline:");
-    expect(storyboardText).toContain("Mood and Tone:");
-    expect(storyboardText).toContain("Script:");
-    expect(storyboardText).toContain("15–30 วินาที");
-    expect(storyboardText).toContain("Scene 1: HOOK");
-    expect(storyboardText).toContain("Scene 2: DEVELOPMENT");
-    expect(storyboardText).toContain("Scene 3: PROOF / BENEFIT");
-    expect(storyboardText).toContain("Scene 4: CTA");
-    expect(storyboardText).toContain("เช้านี้เหลือเวลาไม่ถึง 10 นาที");
-    expect(storyboardText).toContain("Visual:");
-    expect(storyboardText).toContain("Text Overlay:");
-    expect(storyboardText).not.toContain("CREATIVE DIRECTION");
-    expect(storyboardText).not.toContain("ARTWORK & CAPTION");
-    const preview = storyboardSlide?._slideObjects.find(
+
+    expect(briefText).toContain("UGC AD VIDEO");
+    expect(briefText).toContain("BRIEF OVERVIEW");
+    expect(briefText).toContain("DO & DON'T GUIDELINES");
+    expect(briefText).toContain("Reference Video");
+    expect(briefText).toContain("Korea King Colormic 24cm");
+    expect(briefText).not.toContain("Following");
+    expect(briefText).not.toContain("For You");
+    expect(briefText).not.toContain("@bonefitcreator");
+    expect(briefText).not.toContain("Original sound · BoneFit");
+    expect(briefText).not.toContain("CREATIVE DIRECTION");
+    expect(briefText).not.toContain("ARTWORK & CAPTION");
+
+    expect(scriptText).toContain("SHORT VIDEO SCRIPT");
+    expect(scriptText).toContain("HOOK");
+    expect(scriptText).toContain("RELATABLE PROBLEM");
+    expect(scriptText).toContain("PRODUCT DISCOVERY");
+    expect(scriptText).toContain("OFFER & PROOF");
+    expect(scriptText).toContain("CONVERSION CTA");
+    expect(scriptText).toContain("END CARD & DISCLAIMER");
+    expect(scriptText).toContain("เช้านี้เหลือเวลาไม่ถึง 10 นาที");
+    expect(scriptText).toContain("Visual:");
+    expect(scriptText).toContain("Script:");
+    expect(scriptText).toContain("On-Screen Text:");
+
+    const briefImage = briefSlide?._slideObjects.find(
       (object) => object._type === "image"
     );
-    expect(preview).toBeUndefined();
-    const spokenScript = storyboardSlide?._slideObjects.find((object) =>
-      object.text?.some((run) => run.text.includes("เช้านี้เหลือเวลาไม่ถึง 10 นาที"))
+    const scriptImage = scriptSlide?._slideObjects.find(
+      (object) => object._type === "image"
     );
-    expect(spokenScript?.options?.fontSize).toBe(10);
-    const scriptBodyObjects = storyboardSlide?._slideObjects.filter(
-      (object) =>
-        (object.options?.x === 7.48 || object.options?.x === 11.9) &&
-        Number(object.options?.y) >= 1.2 &&
-        Number(object.options?.y) < 7
-    );
-    expect(scriptBodyObjects).toHaveLength(20);
-    expect(
-      scriptBodyObjects?.every((object) => object.options?.fontSize === 10)
-    ).toBe(true);
+    expect(briefImage).toBeUndefined();
+    expect(scriptImage).toBeUndefined();
+
     const exportedDeck = await pptx.write({
       outputType: "uint8array",
       compression: true

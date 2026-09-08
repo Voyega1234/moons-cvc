@@ -1,7 +1,11 @@
 import PptxGenJS from "pptxgenjs";
 import { describe, expect, it, vi } from "vitest";
 import type { UgcScriptDocument } from "../../domain/creative-run";
-import { addUgcScriptRows, buildUgcScriptRows } from "./export-client-slides-pptx";
+import {
+  addUgcScriptRows,
+  buildUgcScriptRows,
+  resolvedUgcBrief
+} from "./export-client-slides-pptx";
 
 function ugcScript(overrides: Partial<UgcScriptDocument> = {}): UgcScriptDocument {
   return {
@@ -14,6 +18,24 @@ function ugcScript(overrides: Partial<UgcScriptDocument> = {}): UgcScriptDocumen
     ...overrides
   };
 }
+
+describe("resolvedUgcBrief", () => {
+  it("synthesizes the fixed 6-beat fallback with generic guidelines when no ugcBrief was generated", () => {
+    const brief = resolvedUgcBrief(undefined, "Test Brand");
+
+    expect(brief.product).toBe("Test Brand");
+    expect(brief.scenes.map((scene) => scene.title)).toEqual([
+      "Hook",
+      "Relatable Problem",
+      "Product Discovery",
+      "Offer & Proof",
+      "Conversion CTA",
+      "End Card & Disclaimer"
+    ]);
+    expect(brief.doGuidelines?.length).toBeGreaterThan(0);
+    expect(brief.dontGuidelines?.length).toBeGreaterThan(0);
+  });
+});
 
 describe("buildUgcScriptRows", () => {
   it("flattens a beat into a heading row plus one row per dialogue line", () => {

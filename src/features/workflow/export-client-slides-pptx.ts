@@ -52,9 +52,6 @@ const COLORS = {
 
 const THAI_TEXT_PATTERN = /[\u0E00-\u0E7F]/;
 const SLIDE_FONT_FACE = "Sarabun";
-const UGC_LEFT_COLUMN_X = 0.38;
-const UGC_LEFT_COLUMN_WIDTH = 2.52;
-const UGC_SCRIPT_BODY_FONT_SIZE = 10;
 const UGC_SCRIPT_COLUMN_X = 7.48;
 const UGC_SCRIPT_COLUMN_WIDTH = 5.45;
 const UGC_SCRIPT_COLUMN_TOP = 1.2;
@@ -184,34 +181,6 @@ function estimatedWrappedLines(
   const charactersPerLine = Math.max(
     18,
     Math.floor((widthInches * 72) / (fontSize * 0.68))
-  );
-  return value.split("\n").reduce((total, line) => {
-    const weightedLength = Array.from(line).reduce(
-      (length, character) =>
-        length + (THAI_TEXT_PATTERN.test(character) ? 1.08 : 1),
-      0
-    );
-    return total + Math.max(1, Math.ceil(weightedLength / charactersPerLine));
-  }, 0);
-}
-
-/**
- * estimatedWrappedLines is calibrated for continuous Thai prose (Concept
- * Idea, Mood and Tone) and assumes Latin characters are roughly as wide as
- * Thai ones. Storyline bullets mix short English beat titles ("Hook",
- * "Product Intro", "Misconception #1") with a Thai description, so that
- * assumption over-counts wraps and inflates the section's height. Use a
- * narrower per-character width tuned for this Latin-heavy short-line content
- * instead.
- */
-function estimatedStorylineLines(
-  value: string,
-  widthInches: number,
-  fontSize: number
-): number {
-  const charactersPerLine = Math.max(
-    18,
-    Math.floor((widthInches * 72) / (fontSize * 0.44))
   );
   return value.split("\n").reduce((total, line) => {
     const weightedLength = Array.from(line).reduce(
@@ -407,7 +376,7 @@ function addCaptionBlock(
   });
 }
 
-function resolvedUgcBrief(
+export function resolvedUgcBrief(
   direction: CreativeDirection | undefined,
   brandName: string
 ): UgcVideoBrief {
@@ -415,131 +384,70 @@ function resolvedUgcBrief(
   return (
     direction?.ugcBrief ?? {
       product: brandName,
-      duration: "15–30 วินาที",
+      duration: "45–54 วินาที",
       objective: cleanText(direction?.why, "สื่อสารแนวคิดให้เข้าใจและจดจำได้เร็ว"),
       moodAndTone: cleanText(direction?.visual, "เป็นธรรมชาติ กระชับ และน่าเชื่อถือ"),
+      dresscode: "ชุดลำลองทั่วไป เหมาะกับบริบทของ Direction",
+      persona: cleanText(direction?.why, "กลุ่มเป้าหมายหลักของแบรนด์"),
       productionStyle: "Creator-led vertical video ถ่ายแบบเป็นธรรมชาติและตัดต่อกระชับ",
       referenceDirection: cleanText(
         direction?.visual,
         "ภาพแนวตั้งแบบ native social ที่ดูจริงและไม่จัดฉากเกินไป"
       ),
+      topic: cleanText(direction?.concept, "แนวคิดหลักของ Direction นี้"),
+      doGuidelines: [
+        "เปิดด้วย Hook ที่ตรงประเด็นภายใน 6 วินาทีแรก",
+        "ใช้น้ำเสียงเป็นธรรมชาติเหมือนเล่าสู่กันฟัง",
+        "ปิดท้ายด้วย CTA ที่ชัดเจน"
+      ],
+      dontGuidelines: [
+        "หลีกเลี่ยงคำพูดที่ฟังดูเกินจริงหรือรับประกันผลลัพธ์",
+        "ห้ามเปิดคลิปด้วยภาพลักษณ์ที่ดูเป็นทางการเกินไป"
+      ],
       scenes: [
         {
-          title: "HOOK",
-          duration: "0–5 วินาที",
+          title: "Hook",
+          duration: "00:00-00:06",
           scriptLines: [cleanText(direction?.hook)],
           visual: cleanText(direction?.visual),
           textOverlay: cleanText(direction?.hook)
         },
         {
-          title: "DEVELOPMENT",
-          duration: "5–15 วินาที",
+          title: "Relatable Problem",
+          duration: "00:06-00:14",
+          scriptLines: [cleanText(beats[0], direction?.concept)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(beats[0], direction?.concept)
+        },
+        {
+          title: "Product Discovery",
+          duration: "00:14-00:24",
           scriptLines: [cleanText(direction?.concept)],
           visual: cleanText(direction?.visual),
           textOverlay: cleanText(beats[1], direction?.concept)
         },
         {
-          title: "PROOF / BENEFIT",
-          duration: "15–25 วินาที",
+          title: "Offer & Proof",
+          duration: "00:24-00:36",
           scriptLines: [cleanText(direction?.why)],
           visual: cleanText(direction?.visual),
           textOverlay: cleanText(direction?.why)
         },
         {
-          title: "CTA",
-          duration: "25–30 วินาที",
+          title: "Conversion CTA",
+          duration: "00:36-00:46",
           scriptLines: [cleanText(direction?.cta)],
           visual: cleanText(direction?.visual),
           textOverlay: cleanText(direction?.cta)
+        },
+        {
+          title: "End Card & Disclaimer",
+          duration: "00:46-00:54",
+          scriptLines: [cleanText(direction?.contactLine, direction?.cta)],
+          visual: cleanText(direction?.visual),
+          textOverlay: cleanText(direction?.contactLine, direction?.cta)
         }
       ]
-    }
-  );
-}
-
-function addUgcScriptScene(
-  slide: PptxGenJS.Slide,
-  index: number,
-  scene: UgcVideoScene,
-  y: number,
-  h: number
-) {
-  const sceneTitle = `Scene ${index}: ${scene.title}`;
-  slide.addText(sceneTitle, {
-    x: 7.48,
-    y,
-    w: 5.45,
-    h: 0.22,
-    margin: 0,
-    ...localizedTextStyle(sceneTitle),
-    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
-    bold: true,
-    color: COLORS.ink,
-    breakLine: false
-  });
-  slide.addText(scene.duration, {
-    x: 11.9,
-    y,
-    w: 1.03,
-    h: 0.22,
-    margin: 0,
-    ...localizedTextStyle(scene.duration),
-    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
-    color: COLORS.muted,
-    align: "right",
-    breakLine: false,
-  });
-  const script = clampText(
-    scene.scriptLines.map((line) => `• ${line}`).join("\n"),
-    190
-  );
-  slide.addText(script, {
-    x: 7.48,
-    y: y + 0.27,
-    w: 5.45,
-    h: Math.max(0.4, h - 0.94),
-    margin: 0,
-    ...localizedTextStyle(script),
-    fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false
-  });
-  const visual = clampText(scene.visual, 115);
-  slide.addText(
-    [
-      { text: "Visual: ", options: { bold: true, color: COLORS.violet } },
-      { text: visual, options: { color: COLORS.ink } }
-    ],
-    {
-      x: 7.48,
-      y: y + h - 0.64,
-      w: 5.45,
-      h: 0.3,
-      margin: 0,
-      ...localizedTextStyle(visual),
-      fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
-      breakLine: false
-    }
-  );
-  const overlay = clampText(scene.textOverlay || "ไม่ใช้ข้อความบนจอ", 90);
-  slide.addText(
-    [
-      {
-        text: "Text Overlay: ",
-        options: { bold: true, color: COLORS.violet }
-      },
-      { text: overlay, options: { color: COLORS.ink } }
-    ],
-    {
-      x: 7.48,
-      y: y + h - 0.31,
-      w: 5.45,
-      h: 0.3,
-      margin: 0,
-      ...localizedTextStyle(overlay),
-      fontSize: UGC_SCRIPT_BODY_FONT_SIZE,
-      breakLine: false
     }
   );
 }
@@ -832,73 +740,6 @@ export function addUgcScriptRows(
   }
 }
 
-function addUgcSectionHeading(
-  slide: PptxGenJS.Slide,
-  text: string,
-  y: number
-) {
-  slide.addText(text, {
-    x: UGC_LEFT_COLUMN_X,
-    y,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: 0.26,
-    margin: 0,
-    ...localizedTextStyle(text),
-    fontSize: 15.5,
-    bold: true,
-    color: COLORS.violet,
-    breakLine: false
-  });
-}
-
-function addHookReferencePreview(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
-  data: readonly string[],
-  x: number,
-  y: number
-) {
-  if (!data.length) return;
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x,
-    y,
-    w: 1.16,
-    h: 1.27,
-    rectRadius: 0.08,
-    fill: { color: COLORS.paper, transparency: 3 },
-    line: { color: COLORS.line, width: 1 }
-  });
-  slide.addText("REFERENCE", {
-    x: x + 0.08,
-    y: y + 0.06,
-    w: 1,
-    h: 0.13,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 5.8,
-    bold: true,
-    color: COLORS.muted,
-    charSpacing: 0.7,
-    align: "center"
-  });
-  const columns = data.length === 1 ? 1 : 2;
-  const rows = Math.ceil(data.length / columns);
-  const gap = 0.04;
-  const cellWidth = (1 - gap * (columns - 1)) / columns;
-  const cellHeight = (0.96 - gap * (rows - 1)) / rows;
-  data.forEach((image, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    slide.addImage({
-      data: image,
-      x: x + 0.08 + column * (cellWidth + gap),
-      y: y + 0.23 + row * (cellHeight + gap),
-      w: cellWidth,
-      h: cellHeight,
-      altText: `Hook reference image ${index + 1}`
-    });
-  });
-}
 
 function addHookReferencePanel(
   pptx: PptxGenJS,
@@ -943,246 +784,521 @@ function addHookReferencePanel(
   });
 }
 
-function addUgcClientSlide(
+const UGC_BRIEF_MARGIN_X = 0.4;
+const UGC_BRIEF_COLUMN_GAP = 0.28;
+const UGC_BRIEF_COLUMN_WIDTH =
+  (13.33 - UGC_BRIEF_MARGIN_X * 2 - UGC_BRIEF_COLUMN_GAP * 2) / 3;
+const UGC_BRIEF_COLUMN_TOP = 1.12;
+const UGC_BRIEF_COLUMN_BOTTOM = 7.05;
+
+function addUgcSlideHeader(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
-  direction: CreativeDirection | undefined,
-  brandName: string,
-  referenceImages: readonly string[] = []
+  title: string
 ) {
-  const brief = resolvedUgcBrief(direction, brandName);
   slide.background = { color: COLORS.paper };
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.36,
-    y: 0.28,
+    y: 0.3,
     w: 0.08,
     h: 0.3,
     fill: { color: COLORS.violet },
     line: { color: COLORS.violet }
   });
-  slide.addText("SHORT VIDEO STORYLINE", {
+  slide.addText(title, {
     x: 0.54,
-    y: 0.25,
-    w: 4.3,
+    y: 0.27,
+    w: 8.4,
     h: 0.36,
     margin: 0,
-    fontFace: SLIDE_FONT_FACE,
+    ...localizedTextStyle(title),
     fontSize: 18,
     bold: true,
     color: COLORS.ink,
-    breakLine: false
+    breakLine: false,
+    fit: "shrink"
   });
   slide.addShape(pptx.ShapeType.line, {
     x: 0.35,
-    y: 0.69,
+    y: 0.75,
     w: 12.63,
     h: 0,
     line: { color: COLORS.line, width: 1 }
   });
+}
 
-  addHookReferencePreview(pptx, slide, referenceImages, 5.94, 5.64);
-
-  const headline = clampText(direction?.hook, 125);
-  slide.addText(
-    [
-      { text: "Headline: ", options: { bold: true, color: COLORS.violet } },
-      { text: headline, options: { color: COLORS.ink } }
-    ],
-    {
-      x: UGC_LEFT_COLUMN_X,
-      y: 0.92,
-      w: UGC_LEFT_COLUMN_WIDTH,
-      h: 0.72,
-      margin: 0,
-      ...localizedTextStyle(headline),
-      fontSize: 10.2,
-      breakLine: false,
-      valign: "top",
-      fit: "shrink"
-    }
-  );
-  slide.addText(
-    [
-      { text: "Time: ", options: { bold: true, color: COLORS.ink } },
-      { text: brief.duration, options: { color: COLORS.ink } }
-    ],
-    {
-      x: UGC_LEFT_COLUMN_X,
-      y: 1.73,
-      w: UGC_LEFT_COLUMN_WIDTH,
-      h: 0.22,
-      margin: 0,
-      ...localizedTextStyle(brief.duration),
-      fontSize: 10,
-      breakLine: false
-    }
-  );
-  // The whole left column below the headline flows top-to-bottom: each
-  // section's actual wrapped height (not a size tuned for the old fixed
-  // 4-item Storyline list) pushes the next section's divider/heading/text,
-  // so short content pulls everything up and long content pushes it down —
-  // no fixed y-value can overlap or leave a gap for the section above it.
-  const CONCEPT_HEADING_Y = 2.08;
-  const CONCEPT_TEXT_Y = 2.48;
-  const CONCEPT_TEXT_MAX_HEIGHT = 1.12;
-  const CONCEPT_TO_DIVIDER_GAP = 0.12;
-  const DIVIDER_TO_STORYLINE_HEADING_GAP = 0.26;
-  const STORYLINE_HEADING_TO_TEXT_GAP = 0.38;
-  const STORYLINE_MIN_HEIGHT = 0.92;
-  const STORYLINE_TO_DIVIDER_GAP = 0.1;
-  const DIVIDER_TO_MOOD_HEADING_GAP = 0.24;
-  const MOOD_HEADING_TO_TEXT_GAP = 0.4;
-  // fontSizeForFixedTextBox/estimatedWrappedLines use a 1.28 line-height
-  // factor tuned as a safety margin for picking a font size that fits a
-  // *fixed* box — harmless there since leftover space was never visible.
-  // Reusing that factor to size a *dynamic* box makes the margin visible as
-  // dead space above the next section, so this cascade uses a tighter
-  // factor instead (still >1 to keep some buffer against underestimating).
-  const LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR = 1.15;
-
-  addUgcSectionHeading(slide, "Concept Idea:", CONCEPT_HEADING_Y);
-  const concept = clampText(direction?.concept, 285);
-  const conceptFontSize = fontSizeForFixedTextBox(
-    concept,
-    UGC_LEFT_COLUMN_WIDTH,
-    CONCEPT_TEXT_MAX_HEIGHT,
-    [10, 9, 8]
-  );
-  const conceptHeight = Math.min(
-    CONCEPT_TEXT_MAX_HEIGHT,
-    Math.max(
-      0.3,
-      (estimatedWrappedLines(concept, UGC_LEFT_COLUMN_WIDTH, conceptFontSize) *
-        conceptFontSize *
-        LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR) /
-        72
-    )
-  );
-  slide.addText(concept, {
-    x: UGC_LEFT_COLUMN_X,
-    y: CONCEPT_TEXT_Y,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: conceptHeight,
+function addUgcBriefColumn(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  x: number,
+  heading: string
+): number {
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x,
+    y: UGC_BRIEF_COLUMN_TOP,
+    w: UGC_BRIEF_COLUMN_WIDTH,
+    h: UGC_BRIEF_COLUMN_BOTTOM - UGC_BRIEF_COLUMN_TOP,
+    rectRadius: 0.1,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+  slide.addText(heading, {
+    x: x + 0.22,
+    y: UGC_BRIEF_COLUMN_TOP + 0.18,
+    w: UGC_BRIEF_COLUMN_WIDTH - 0.44,
+    h: 0.24,
     margin: 0,
-    ...localizedTextStyle(concept),
-    fontSize: conceptFontSize,
-    color: COLORS.ink,
-    valign: "top",
-    breakLine: false
-  });
-  const conceptDividerY = CONCEPT_TEXT_Y + conceptHeight + CONCEPT_TO_DIVIDER_GAP;
-  slide.addShape(pptx.ShapeType.line, {
-    x: UGC_LEFT_COLUMN_X,
-    y: conceptDividerY,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: 0,
-    line: { color: COLORS.muted, width: 0.8 }
-  });
-
-  const storylineHeadingY = conceptDividerY + DIVIDER_TO_STORYLINE_HEADING_GAP;
-  const storylineTextY = storylineHeadingY + STORYLINE_HEADING_TO_TEXT_GAP;
-  addUgcSectionHeading(slide, "Storyline:", storylineHeadingY);
-  const storyline = (
-    direction?.ugcScript?.beats.length
-      ? direction.ugcScript.beats.map((beat) => `• ${beat.title}`)
-      : brief.scenes.map((scene) => `• ${scene.title}`)
-  ).join("\n");
-  const storylineLines = estimatedStorylineLines(
-    storyline,
-    UGC_LEFT_COLUMN_WIDTH - 0.1,
-    9.6
-  );
-  const storylineHeight = Math.max(
-    STORYLINE_MIN_HEIGHT,
-    (storylineLines * 9.6 * LEFT_COLUMN_CASCADE_LINE_HEIGHT_FACTOR) / 72
-  );
-  const storylineDividerY =
-    storylineTextY + storylineHeight + STORYLINE_TO_DIVIDER_GAP;
-  const moodHeadingY = storylineDividerY + DIVIDER_TO_MOOD_HEADING_GAP;
-  const moodTextY = moodHeadingY + MOOD_HEADING_TO_TEXT_GAP;
-
-  slide.addText(storyline, {
-    x: UGC_LEFT_COLUMN_X + 0.04,
-    y: storylineTextY,
-    w: UGC_LEFT_COLUMN_WIDTH - 0.1,
-    h: storylineHeight,
-    margin: 0,
-    ...localizedTextStyle(storyline),
-    fontSize: 9.6,
-    color: COLORS.ink,
-    breakLine: false,
-    valign: "top"
-  });
-  slide.addShape(pptx.ShapeType.line, {
-    x: UGC_LEFT_COLUMN_X,
-    y: storylineDividerY,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: 0,
-    line: { color: COLORS.muted, width: 0.8 }
-  });
-  addUgcSectionHeading(slide, "Mood and Tone:", moodHeadingY);
-  const mood = clampText(
-    `${brief.moodAndTone} ${brief.productionStyle}`,
-    220
-  );
-  const MOOD_TEXT_HEIGHT = 1.1;
-  slide.addText(mood, {
-    x: UGC_LEFT_COLUMN_X,
-    y: moodTextY,
-    w: UGC_LEFT_COLUMN_WIDTH,
-    h: MOOD_TEXT_HEIGHT,
-    margin: 0,
-    ...localizedTextStyle(mood),
-    fontSize: fontSizeForFixedTextBox(
-      mood,
-      UGC_LEFT_COLUMN_WIDTH,
-      MOOD_TEXT_HEIGHT,
-      [10.5, 9.5, 8.5]
-    ),
-    color: COLORS.ink,
-    breakLine: false,
-    valign: "top"
-  });
-
-  slide.addText("Script:", {
-    x: 7.48,
-    y: 0.82,
-    w: 2,
-    h: 0.34,
-    margin: 0,
-    fontFace: SLIDE_FONT_FACE,
-    fontSize: 16,
+    ...localizedTextStyle(heading),
+    fontSize: 11.5,
     bold: true,
     color: COLORS.violet,
     breakLine: false
   });
-  if (direction?.ugcScript?.beats.length) {
-    addUgcScriptRows(
-      pptx,
-      slide,
-      buildUgcScriptRows(direction.ugcScript),
-      direction.hook
-    );
-  } else {
-    brief.scenes.forEach((scene, index) => {
-      addUgcScriptScene(slide, index + 1, scene, 1.2 + index * 1.44, 1.38);
+  return UGC_BRIEF_COLUMN_TOP + 0.56;
+}
+
+function addUgcBriefField(
+  slide: PptxGenJS.Slide,
+  x: number,
+  y: number,
+  w: number,
+  label: string,
+  value: string
+): number {
+  slide.addText(label, {
+    x,
+    y,
+    w,
+    h: 0.2,
+    margin: 0,
+    ...localizedTextStyle(label),
+    fontSize: 9,
+    bold: true,
+    color: COLORS.ink,
+    breakLine: false
+  });
+  const text = clampText(value, 220);
+  const lineCount = estimatedWrappedLines(text, w, 9.5);
+  const textHeight = Math.max(0.22, (lineCount * 9.5 * 1.3) / 72);
+  slide.addText(text, {
+    x,
+    y: y + 0.22,
+    w,
+    h: textHeight,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize: 9.5,
+    color: COLORS.muted,
+    valign: "top",
+    breakLine: false
+  });
+  return y + 0.22 + textHeight + 0.14;
+}
+
+function addUgcGuidelineList(
+  slide: PptxGenJS.Slide,
+  x: number,
+  y: number,
+  w: number,
+  heading: string,
+  headingColor: string,
+  items: readonly string[]
+): number {
+  slide.addText(heading, {
+    x,
+    y,
+    w,
+    h: 0.2,
+    margin: 0,
+    ...localizedTextStyle(heading),
+    fontSize: 10,
+    bold: true,
+    color: headingColor,
+    breakLine: false
+  });
+  let cursorY = y + 0.26;
+  items.forEach((item) => {
+    const text = clampText(item, 160);
+    const lineCount = estimatedWrappedLines(text, w - 0.16, 9);
+    const itemHeight = Math.max(0.2, (lineCount * 9 * 1.3) / 72);
+    slide.addText(`•  ${text}`, {
+      x,
+      y: cursorY,
+      w,
+      h: itemHeight,
+      margin: 0,
+      ...localizedTextStyle(text),
+      fontSize: 9,
+      color: COLORS.ink,
+      valign: "top",
+      breakLine: false
+    });
+    cursorY += itemHeight + 0.08;
+  });
+  return cursorY + 0.16;
+}
+
+function addUgcReferenceVideoPanel(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  x: number,
+  y: number,
+  w: number,
+  brief: UgcVideoBrief
+) {
+  const boxHeight = w * 1.72;
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x,
+    y,
+    w,
+    h: boxHeight,
+    rectRadius: 0.1,
+    fill: { color: COLORS.ink },
+    line: { color: COLORS.ink }
+  });
+  slide.addText("▶", {
+    x,
+    y: y + boxHeight / 2 - 0.4,
+    w,
+    h: 0.8,
+    margin: 0,
+    fontSize: 30,
+    color: COLORS.paper,
+    align: "center",
+    valign: "middle"
+  });
+  const url = brief.referenceVideoUrl;
+  const linkText = url
+    ? clampText(brief.referenceVideoLabel || url, 60)
+    : "ยังไม่มีวิดีโออ้างอิง";
+  slide.addText(linkText, {
+    x,
+    y: y + boxHeight + 0.14,
+    w,
+    h: 0.4,
+    margin: 0,
+    ...localizedTextStyle(linkText),
+    fontSize: 9.5,
+    color: url ? COLORS.violet : COLORS.muted,
+    align: "center",
+    valign: "top",
+    breakLine: false,
+    ...(url ? { hyperlink: { url } } : {})
+  });
+}
+
+function addUgcClientSlide(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  direction: CreativeDirection | undefined,
+  brandName: string
+) {
+  const brief = resolvedUgcBrief(direction, brandName);
+  const personaLabel = clampText(brief.persona, 40) || "Persona";
+
+  addUgcSlideHeader(pptx, slide, `UGC AD VIDEO | PERSONA: ${personaLabel}`);
+  if (brief.referenceVideoUrl) {
+    const label = `UGC: ${clampText(brief.referenceVideoUrl, 55)}`;
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x: 9.6,
+      y: 0.24,
+      w: 3.33,
+      h: 0.42,
+      rectRadius: 0.08,
+      fill: { color: COLORS.lime },
+      line: { color: COLORS.lime }
+    });
+    slide.addText(label, {
+      x: 9.72,
+      y: 0.24,
+      w: 3.09,
+      h: 0.42,
+      margin: 0,
+      ...localizedTextStyle(label),
+      fontSize: 9,
+      bold: true,
+      color: COLORS.limeInk,
+      align: "center",
+      valign: "middle",
+      fit: "shrink",
+      hyperlink: { url: brief.referenceVideoUrl }
     });
   }
 
+  const col1X = UGC_BRIEF_MARGIN_X;
+  const col2X = col1X + UGC_BRIEF_COLUMN_WIDTH + UGC_BRIEF_COLUMN_GAP;
+  const col3X = col2X + UGC_BRIEF_COLUMN_WIDTH + UGC_BRIEF_COLUMN_GAP;
+
+  // Column 1 — Brief Overview
+  let y = addUgcBriefColumn(pptx, slide, col1X, "BRIEF OVERVIEW");
+  const fieldX = col1X + 0.22;
+  const fieldW = UGC_BRIEF_COLUMN_WIDTH - 0.44;
+  y = addUgcBriefField(slide, fieldX, y, fieldW, "Brand", brief.product);
+  y = addUgcBriefField(
+    slide,
+    fieldX,
+    y,
+    fieldW,
+    "Topic",
+    clampText(brief.topic, 220)
+  );
+  y = addUgcBriefField(slide, fieldX, y, fieldW, "Objective", brief.objective);
+  y = addUgcBriefField(
+    slide,
+    fieldX,
+    y,
+    fieldW,
+    "Mood & Tone",
+    brief.moodAndTone
+  );
+  y = addUgcBriefField(
+    slide,
+    fieldX,
+    y,
+    fieldW,
+    "Dresscode",
+    clampText(brief.dresscode, 220)
+  );
+  addUgcBriefField(slide, fieldX, y, fieldW, "Persona", clampText(brief.persona, 220));
+
+  // Column 2 — DO & DON'T Guidelines
+  const col2HeadingY = addUgcBriefColumn(pptx, slide, col2X, "DO & DON'T GUIDELINES");
+  const listX = col2X + 0.22;
+  const listW = UGC_BRIEF_COLUMN_WIDTH - 0.44;
+  const dontY = addUgcGuidelineList(
+    slide,
+    listX,
+    col2HeadingY,
+    listW,
+    "DO",
+    "1F8A4C",
+    brief.doGuidelines?.length ? brief.doGuidelines : ["ไม่มีข้อมูล"]
+  );
+  addUgcGuidelineList(
+    slide,
+    listX,
+    dontY,
+    listW,
+    "DON'T",
+    "C0392B",
+    brief.dontGuidelines?.length ? brief.dontGuidelines : ["ไม่มีข้อมูล"]
+  );
+
+  // Column 3 — Reference Video
+  const col3HeadingY = addUgcBriefColumn(pptx, slide, col3X, "Reference Video");
+  addUgcReferenceVideoPanel(
+    pptx,
+    slide,
+    col3X + 0.22,
+    col3HeadingY,
+    UGC_BRIEF_COLUMN_WIDTH - 0.44,
+    brief
+  );
+
   slide.addText("Prepared by Convert Cake", {
-    x: 7.48,
-    y: 7.12,
-    w: 2.5,
-    h: 0.14,
+    x: UGC_BRIEF_MARGIN_X,
+    y: 7.2,
+    w: 3,
+    h: 0.16,
     margin: 0,
     fontFace: SLIDE_FONT_FACE,
-    fontSize: 6.8,
+    fontSize: 7,
     bold: true,
     color: COLORS.muted
   });
   slide.addNotes(
-    `[Sources]\n- Creative direction and caption: confirmed workflow data for ${brandName}.\n- Visual: editable UGC image placeholder. Replace the placeholder image directly in the slide.`
+    `[Sources]\n- Brief overview, DO/DON'T guidelines: generated from confirmed workflow data for ${brandName}.\n- Reference video: attach the creator's actual reference clip when available.`
   );
+
+  const scriptSlide = pptx.addSlide();
+  addUgcScriptGridSlide(pptx, scriptSlide, brief, personaLabel, brandName);
+}
+
+const UGC_SCRIPT_GRID_MARGIN_X = 0.4;
+const UGC_SCRIPT_GRID_COLUMNS = 3;
+const UGC_SCRIPT_GRID_GAP_X = 0.24;
+const UGC_SCRIPT_GRID_GAP_Y = 0.22;
+const UGC_SCRIPT_GRID_TOP = 0.95;
+const UGC_SCRIPT_GRID_BOTTOM = 7.25;
+const UGC_SCRIPT_CARD_WIDTH =
+  (13.33 -
+    UGC_SCRIPT_GRID_MARGIN_X * 2 -
+    UGC_SCRIPT_GRID_GAP_X * (UGC_SCRIPT_GRID_COLUMNS - 1)) /
+  UGC_SCRIPT_GRID_COLUMNS;
+const UGC_SCRIPT_CARD_HEIGHT =
+  (UGC_SCRIPT_GRID_BOTTOM - UGC_SCRIPT_GRID_TOP - UGC_SCRIPT_GRID_GAP_Y) / 2;
+
+function addUgcScriptGridSlide(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  brief: UgcVideoBrief,
+  personaLabel: string,
+  brandName: string
+) {
+  addUgcSlideHeader(pptx, slide, `SHORT VIDEO SCRIPT — ${personaLabel}`);
+
+  brief.scenes.forEach((scene, index) => {
+    const column = index % UGC_SCRIPT_GRID_COLUMNS;
+    const row = Math.floor(index / UGC_SCRIPT_GRID_COLUMNS);
+    const x =
+      UGC_SCRIPT_GRID_MARGIN_X +
+      column * (UGC_SCRIPT_CARD_WIDTH + UGC_SCRIPT_GRID_GAP_X);
+    const y =
+      UGC_SCRIPT_GRID_TOP + row * (UGC_SCRIPT_CARD_HEIGHT + UGC_SCRIPT_GRID_GAP_Y);
+    addUgcScriptCard(pptx, slide, index + 1, scene, x, y);
+  });
+
+  slide.addText("Prepared by Convert Cake", {
+    x: UGC_SCRIPT_GRID_MARGIN_X,
+    y: 7.32,
+    w: 3,
+    h: 0.16,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 7,
+    bold: true,
+    color: COLORS.muted
+  });
+  slide.addNotes(
+    `[Sources]\n- Script beats, visuals, and on-screen text: generated from confirmed workflow data for ${brandName}.`
+  );
+}
+
+function addUgcScriptCard(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  index: number,
+  scene: UgcVideoScene,
+  x: number,
+  y: number
+) {
+  const padX = 0.2;
+  const contentX = x + padX;
+  const contentW = UGC_SCRIPT_CARD_WIDTH - padX * 2;
+
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x,
+    y,
+    w: UGC_SCRIPT_CARD_WIDTH,
+    h: UGC_SCRIPT_CARD_HEIGHT,
+    rectRadius: 0.08,
+    fill: { color: COLORS.paper },
+    line: { color: COLORS.line, width: 1 }
+  });
+
+  const title = `${String(index).padStart(2, "0")} | ${scene.title.toUpperCase()}`;
+  slide.addText(
+    [
+      { text: title, options: { bold: true, color: COLORS.violet } },
+      { text: `  ${scene.duration}`, options: { color: COLORS.muted } }
+    ],
+    {
+      x: contentX,
+      y: y + 0.16,
+      w: contentW,
+      h: 0.24,
+      margin: 0,
+      ...localizedTextStyle(title),
+      fontSize: 10.5,
+      breakLine: false,
+      fit: "shrink"
+    }
+  );
+
+  let cursorY = y + 0.5;
+  const visual = clampText(scene.visual, 140);
+  const visualLines = estimatedWrappedLines(visual, contentW, 8.6);
+  const visualHeight = Math.max(0.2, (visualLines * 8.6 * 1.3) / 72);
+  slide.addText(
+    [
+      { text: "Visual: ", options: { bold: true, italic: true, color: COLORS.muted } },
+      { text: visual, options: { italic: true, color: COLORS.ink } }
+    ],
+    {
+      x: contentX,
+      y: cursorY,
+      w: contentW,
+      h: visualHeight,
+      margin: 0,
+      ...localizedTextStyle(visual),
+      fontSize: 8.6,
+      valign: "top",
+      breakLine: false
+    }
+  );
+  cursorY += visualHeight + 0.1;
+
+  slide.addText("Script:", {
+    x: contentX,
+    y: cursorY,
+    w: contentW,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 9,
+    bold: true,
+    color: COLORS.violet,
+    breakLine: false
+  });
+  cursorY += 0.22;
+  const scriptLine = clampText(scene.scriptLines[0], 220);
+  const scriptRuns = buildHighlightedTextRuns(scriptLine, scene.highlightedPhrase);
+  const scriptLines = estimatedWrappedLines(scriptLine, contentW, 10);
+  const scriptHeight = Math.max(0.3, (scriptLines * 10 * 1.35) / 72);
+  slide.addText(scriptRuns, {
+    x: contentX,
+    y: cursorY,
+    w: contentW,
+    h: Math.min(scriptHeight, y + UGC_SCRIPT_CARD_HEIGHT - cursorY - 0.5),
+    margin: 0,
+    ...localizedTextStyle(scriptLine),
+    fontSize: 10,
+    color: COLORS.ink,
+    valign: "top",
+    breakLine: false,
+    fit: "shrink"
+  });
+
+  const overlayY = y + UGC_SCRIPT_CARD_HEIGHT - 0.42;
+  slide.addText(
+    [
+      {
+        text: "On-Screen Text: ",
+        options: { bold: true, color: COLORS.muted }
+      },
+      { text: clampText(scene.textOverlay, 110), options: { color: COLORS.ink } }
+    ],
+    {
+      x: contentX,
+      y: overlayY,
+      w: contentW,
+      h: 0.34,
+      margin: 0,
+      ...localizedTextStyle(scene.textOverlay),
+      fontSize: 8,
+      valign: "top",
+      breakLine: false,
+      fit: "shrink"
+    }
+  );
+}
+
+function buildHighlightedTextRuns(
+  text: string,
+  highlightedPhrase: string | undefined
+): { text: string; options?: { highlight?: string; bold?: boolean } }[] {
+  const phrase = highlightedPhrase?.trim();
+  if (!phrase) return [{ text }];
+  const start = text.indexOf(phrase);
+  if (start < 0) return [{ text }];
+
+  const before = text.slice(0, start);
+  const after = text.slice(start + phrase.length);
+  return [
+    ...(before ? [{ text: before }] : []),
+    { text: phrase, options: { highlight: COLORS.lime, bold: true } },
+    ...(after ? [{ text: after }] : [])
+  ];
 }
 
 function addArtworkPreview(
@@ -1561,13 +1677,7 @@ function addClientSlide(
   const { output, direction } = item;
   const slide = pptx.addSlide();
   if (isUgcOutput(output)) {
-    addUgcClientSlide(
-      pptx,
-      slide,
-      direction,
-      brandName,
-      referenceImageData
-    );
+    addUgcClientSlide(pptx, slide, direction, brandName);
     return;
   }
   addSinglePageArtworkSlide(
