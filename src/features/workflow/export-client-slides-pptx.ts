@@ -16,6 +16,10 @@ import {
   uploadPptxToGoogleSlides,
   type GoogleSlidesImportResult
 } from "../../services/google-slides/google-slides-import";
+import {
+  extractArtworkCopy,
+  type ExtractedArtworkCopy
+} from "../../services/artwork-copy-extraction/extract-artwork-copy";
 
 export interface ClientSlideItem {
   output: CreativeOutput;
@@ -328,6 +332,43 @@ function addTextBlock(
     valign: "top",
     fit: "shrink",
     paraSpaceAfter: 0
+  });
+}
+
+function addKeyMessageBlock(
+  slide: PptxGenJS.Slide,
+  points: readonly string[],
+  options: { x: number; y: number; w: number; h: number; fontSize: number }
+) {
+  const lines = points.map((point) => clampText(point, 140)).filter(Boolean);
+  if (lines.length === 0) return;
+  const text = lines.join("\n");
+  slide.addText("KEY MESSAGE", {
+    x: options.x,
+    y: options.y,
+    w: options.w,
+    h: 0.2,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
+  slide.addText(text, {
+    x: options.x,
+    y: options.y + 0.27,
+    w: options.w,
+    h: options.h - 0.27,
+    margin: 0,
+    ...localizedTextStyle(text),
+    fontSize: options.fontSize,
+    color: COLORS.ink,
+    valign: "top",
+    fit: "shrink",
+    lineSpacing: options.fontSize * 1.35,
+    paraSpaceAfter: 3,
+    bullet: { code: "2022", indent: 12 }
   });
 }
 
@@ -1271,7 +1312,8 @@ function addSinglePageArtworkSlide(
   albumFormat: AlbumFormat,
   imageData: readonly string[],
   albumMasterData?: string,
-  referenceImageData: readonly string[] = []
+  referenceImageData: readonly string[] = [],
+  extractedCopy?: ExtractedArtworkCopy
 ) {
   const { output, direction } = item;
   const albumLayout =
@@ -1285,8 +1327,8 @@ function addSinglePageArtworkSlide(
   const artworkBox = hasReferenceLayout
     ? { x: 4.04, y: 0.87, w: 5.06, h: 3.45 }
     : albumLayout
-      ? { x: 4.04, y: 0.68, w: 5.62, h: 6.14 }
-      : { x: 4.04, y: 0.68, w: 4.34, h: 6.14 };
+      ? { x: 4.04, y: 0.85, w: 5.62, h: 5.97 }
+      : { x: 4.04, y: 0.85, w: 4.34, h: 5.97 };
   const captionPanel = hasReferenceLayout
     ? { x: 9.52, y: 0.45, w: 3.36, h: 6.6 }
     : albumLayout
@@ -1312,20 +1354,18 @@ function addSinglePageArtworkSlide(
     fill: { color: COLORS.paper },
     line: { color: COLORS.line, width: 1 }
   });
-  if (hasReferenceLayout) {
-    slide.addText("CREATIVE DRAFT", {
-      x: artworkPanel.x + 0.19,
-      y: artworkPanel.y + 0.15,
-      w: artworkPanel.w - 0.38,
-      h: 0.18,
-      margin: 0,
-      fontFace: SLIDE_FONT_FACE,
-      fontSize: 8,
-      bold: true,
-      color: COLORS.muted,
-      charSpacing: 1.1
-    });
-  }
+  slide.addText("CREATIVE REFERENCE (MOCKUP)", {
+    x: artworkPanel.x + 0.19,
+    y: artworkPanel.y + 0.15,
+    w: artworkPanel.w - 0.38,
+    h: 0.18,
+    margin: 0,
+    fontFace: SLIDE_FONT_FACE,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.muted,
+    charSpacing: 1.1
+  });
   slide.addShape(pptx.ShapeType.roundRect, {
     ...captionPanel,
     rectRadius: 0.16,
@@ -1404,7 +1444,7 @@ function addSinglePageArtworkSlide(
     align: "center",
     fit: "shrink"
   });
-  const hook = clampText(direction?.hook, 170);
+  const hook = clampText(extractedCopy?.headline?.trim() || direction?.hook, 170);
   const hookFontSize = fontSizeForFixedTextBox(
     hook,
     2.84,
@@ -1428,23 +1468,19 @@ function addSinglePageArtworkSlide(
   const subheadline = direction
     ? directionSubheadline(direction as CreativeDirection)
     : "";
-  if (subheadline) {
-    addTextBlock(slide, "Sub-headline", subheadline, {
-      x: 0.55,
-      y: 2.93,
-      w: 2.84,
-      h: 0.86,
-      maxLength: 260,
-      fontSize: 11.5
-    });
-  }
-  addTextBlock(slide, "Creative concept", direction?.concept, {
+  const keyMessagePoints = extractedCopy?.keyMessage.length
+    ? extractedCopy.keyMessage
+    : direction?.supportingPoints?.length
+      ? direction.supportingPoints
+      : subheadline
+        ? [subheadline]
+        : [];
+  addKeyMessageBlock(slide, keyMessagePoints, {
     x: 0.55,
-    y: 4.03,
+    y: 2.93,
     w: 2.84,
-    h: 1.22,
-    maxLength: 260,
-    fontSize: 10.5
+    h: 2.32,
+    fontSize: 11
   });
 
   slide.addText("CALL TO ACTION", {
@@ -1468,7 +1504,10 @@ function addSinglePageArtworkSlide(
     fill: { color: COLORS.ink },
     line: { color: COLORS.ink }
   });
-  const callToAction = clampText(direction?.cta, 120);
+  const callToAction = clampText(
+    extractedCopy?.cta?.trim() || direction?.cta,
+    120
+  );
   slide.addText(callToAction, {
     x: 0.76,
     y: 6.05,
@@ -1482,6 +1521,17 @@ function addSinglePageArtworkSlide(
     align: "center",
     fit: "shrink"
   });
+
+  if (extractedCopy?.footer?.trim()) {
+    addTextBlock(slide, "Footer", extractedCopy.footer, {
+      x: 0.55,
+      y: 6.6,
+      w: 2.84,
+      h: 0.82,
+      maxLength: 500,
+      fontSize: 6.5
+    });
+  }
 
   addCaptionBlock(slide, direction?.caption, captionBox);
 
@@ -1505,7 +1555,8 @@ function addClientSlide(
   albumFormat: AlbumFormat,
   imageData: readonly string[] = [],
   albumMasterData?: string,
-  referenceImageData: readonly string[] = []
+  referenceImageData: readonly string[] = [],
+  extractedCopy?: ExtractedArtworkCopy
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
@@ -1528,7 +1579,8 @@ function addClientSlide(
     albumFormat,
     imageData,
     albumMasterData,
-    referenceImageData
+    referenceImageData,
+    extractedCopy
   );
   return;
 
@@ -2096,6 +2148,7 @@ async function buildClientSlidesPptx(
     headFontFace: SLIDE_FONT_FACE,
     bodyFontFace: SLIDE_FONT_FACE
   };
+  const extractedCopyByOutputId = await resolveExtractedArtworkCopy(items);
   for (const [index, item] of items.entries()) {
     let imageData: readonly string[] = [];
     let albumMasterData: string | undefined;
@@ -2136,11 +2189,39 @@ async function buildClientSlidesPptx(
       albumFormat,
       imageData,
       albumMasterData,
-      referenceImageData
+      referenceImageData,
+      extractedCopyByOutputId.get(item.output.id)
     );
   }
 
   return pptx;
+}
+
+/**
+ * Reads the exact copy actually rendered on each generated artwork (vision
+ * transcription), so the slide's copy column reflects the real pixels rather
+ * than the direction fields, which can drift after a free-text "Regenerate"
+ * edit. Never blocks the export: any failure just means slides fall back to
+ * direction fields, same as before this existed.
+ */
+async function resolveExtractedArtworkCopy(
+  items: readonly ClientSlideItem[]
+): Promise<Map<string, ExtractedArtworkCopy>> {
+  const outputs = items
+    .filter((item) => !isUgcOutput(item.output) && item.output.assetUrl)
+    .map((item) => ({
+      id: item.output.id,
+      assetUrl: item.output.assetUrl as string
+    }));
+
+  if (!outputs.length) return new Map();
+
+  try {
+    const results = await extractArtworkCopy(outputs);
+    return new Map(results.map((result) => [result.outputId, result]));
+  } catch {
+    return new Map();
+  }
 }
 
 export async function downloadCreateStageSlides(

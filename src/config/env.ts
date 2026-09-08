@@ -15,6 +15,7 @@ export interface PublicEnv {
   ideaPreflightEndpoint: string;
   ideaPreflightFixEndpoint: string;
   qualityCheckEndpoint: string;
+  extractArtworkCopyEndpoint: string;
   guidelineAnalysisEndpoint: string;
   clientIngestionTriggerEndpoint: string;
 }
@@ -74,6 +75,9 @@ export const env: PublicEnv = {
   qualityCheckEndpoint:
     import.meta.env.VITE_QUALITY_CHECK_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/quality-check`,
+  extractArtworkCopyEndpoint:
+    import.meta.env.VITE_EXTRACT_ARTWORK_COPY_ENDPOINT ||
+    `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/extract-artwork-copy`,
   guidelineAnalysisEndpoint:
     import.meta.env.VITE_GUIDELINE_ANALYSIS_ENDPOINT ||
     `${import.meta.env.VITE_API_BASE_URL?.trim() || "/api"}/analyze-brand-guideline`,
