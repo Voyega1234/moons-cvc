@@ -31,6 +31,8 @@ export default async function handler(
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
         OPENROUTER_HOOK_GENERATION_MODEL:
           process.env.OPENROUTER_HOOK_GENERATION_MODEL,
+        OPENROUTER_HOOK_RESEARCH_MODEL:
+          process.env.OPENROUTER_HOOK_RESEARCH_MODEL,
         HOOK_GENERATION_DEBUG_LOG_DIR: hookGenerationDebugLogDirectory(
           process.env.VERCEL_ENV
         ),

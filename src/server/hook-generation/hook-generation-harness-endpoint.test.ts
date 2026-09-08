@@ -834,8 +834,13 @@ describe("handleHookGenerationHarnessRequest", () => {
       String(fetchMock.mock.calls[5]?.[1]?.body)
     ) as { input: unknown };
     expect(JSON.stringify(ugcScriptRequestBody.input)).toContain(
-      "UGC MYTH-BUSTING SCRIPT WRITER"
+      "UGC SCRIPT WRITER"
     );
+    const scriptInput = JSON.stringify(ugcScriptRequestBody.input);
+    expect(scriptInput).toContain("# Selected UGC brief");
+    const generatedBrief = (body as { directions: { ugcBrief: { productionStyle: string; scenes: { scriptLines: string[] }[] } }[] }).directions[0]!.ugcBrief;
+    expect(scriptInput).toContain(generatedBrief.productionStyle);
+    expect(scriptInput).toContain(generatedBrief.scenes[0]!.scriptLines[0]);
     expect(
       (body as { directions: { ugcScript?: { beats: unknown[] } }[] })
         .directions[0]?.ugcScript?.beats
@@ -1090,6 +1095,86 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
+  it("routes Hook Research through OpenRouter's web plugin when OPENROUTER_HOOK_RESEARCH_MODEL is set", async () => {
+    const {
+      generationModel: _generationModel,
+      ...requestWithoutGenerationModel
+    } = singleStaticRequestBody;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(openRouterJsonResponse(validHookResearchDossier(), [
+        "https://example.com/verified-source"
+      ]))
+      .mockResolvedValueOnce(
+        openRouterJsonResponse({
+          topics: [{ topic: "หัวข้อทดสอบ 1", why: "เหตุผลทดสอบ 1" }]
+        })
+      )
+      .mockResolvedValueOnce(
+        openRouterResearchResponse([
+          {
+            id: "openrouter-hook",
+            sourceCandidateId: "candidate-1",
+            service: "single-static",
+            hook: "มุมคิดใหม่จาก OpenRouter",
+            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+            concept: "OpenRouter generation",
+            why: "Tests provider routing",
+            visual: "Clean and direct",
+            albumFormat: "three-horizontal",
+            cta: "ดูรายละเอียด",
+            caption: "แคปชั่นจากโมเดลที่เลือก",
+            score: 88,
+            reasoning: "Strong fit",
+            citations: []
+          }
+        ])
+      )
+      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(requestWithoutGenerationModel)
+      }),
+      env: {
+        OPENAI_API_KEY: "openai-key",
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_HOOK_RESEARCH_MODEL: "openai/gpt-5.6-terra"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(fetchMock.mock.calls.every(([url]) =>
+      String(url) === "https://openrouter.ai/api/v1/chat/completions"
+    )).toBe(true);
+
+    const researchBody = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as {
+      model: string;
+      tools?: unknown[];
+      tool_choice?: string;
+      plugins?: readonly { id: string; engine?: string }[];
+    };
+    expect(researchBody.model).toBe("openai/gpt-5.6-terra");
+    expect(researchBody.tools).toBeUndefined();
+    expect(researchBody.tool_choice).toBeUndefined();
+    expect(researchBody.plugins).toEqual([
+      expect.objectContaining({ id: "web", engine: "native" })
+    ]);
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
+    ).toBe("Bearer openrouter-key");
+
+    const topicBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { model: string; plugins?: unknown[] };
+    expect(topicBody.model).toBe("openai/gpt-5.6-terra");
+    expect(topicBody.plugins).toBeUndefined();
+  });
+
   it("surfaces the provider's OpenRouter 400 detail", async () => {
     const fetchMock = vi
       .fn()
@@ -1288,7 +1373,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
     expect(researchPrompt).not.toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
     expect(generationPrompt).toContain(
-      "# Past posts — caption style evidence only"
+      "# Past posts — brand voice and caption style evidence"
     );
     expect(generationPrompt).toContain("เริ่มด้วยปัญหาแบบตรง ๆ");
     expect(generationPrompt).toContain("เบื้องหลังงานวันนี้");

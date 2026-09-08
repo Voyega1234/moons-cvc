@@ -27,6 +27,7 @@ export interface HookGenerationDebugLog {
         id: "web";
         engine: "native";
         max_results: number;
+        search_prompt?: string;
       }[];
       toolChoice?: "required";
       reasoningEffort?: "medium" | "high";

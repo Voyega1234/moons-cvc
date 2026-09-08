@@ -65,6 +65,7 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_HOOK_SUPPORT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_HOOK_GENERATION_MODEL?: string;
+  OPENROUTER_HOOK_RESEARCH_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
   HOOK_GENERATION_DEBUG_LOG_DIR?: string;
@@ -158,6 +159,16 @@ const THAI_WEB_SEARCH_TOOL = {
     timezone: "Asia/Bangkok"
   }
 } as const;
+// OpenRouter's web plugin has no equivalent of OpenAI's user_location param
+// (THAI_WEB_SEARCH_TOOL above), so search_prompt is the closest substitute
+// for keeping results relevant to the Thai market.
+const THAI_WEB_SEARCH_PLUGIN = {
+  id: "web",
+  engine: "native",
+  max_results: 5,
+  search_prompt:
+    "Prioritize Thai-language sources and results relevant to Thailand."
+} as const;
 export async function handleHookGenerationHarnessRequest({
   request,
   env,
@@ -227,16 +238,28 @@ export async function handleHookGenerationHarnessRequest({
           DEFAULT_OPENAI_MODEL;
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
+    const researchOpenRouterModel = env.OPENROUTER_HOOK_RESEARCH_MODEL?.trim();
+    const researchProvider: "openai" | "openrouter" =
+      researchOpenRouterModel && env.OPENROUTER_API_KEY?.trim()
+        ? "openrouter"
+        : "openai";
+    const researchApiKey =
+      researchProvider === "openrouter"
+        ? env.OPENROUTER_API_KEY!.trim()
+        : openAiApiKey;
     const researchModel =
-      env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+      researchProvider === "openrouter"
+        ? researchOpenRouterModel!
+        : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
     const researchTrace = input.researchDossier
       ? reusedResearchTrace(input.researchDossier as HookResearchDossier)
       : await withTransientRetry(async () =>
           runHookResearchStep({
             input,
             policyPrompt: await loadHookResearchPrompt(),
-            apiKey: openAiApiKey,
+            apiKey: researchApiKey,
             model: researchModel,
+            provider: researchProvider,
             fetchImpl: providerFetchImpl
           })
         );
@@ -260,8 +283,9 @@ export async function handleHookGenerationHarnessRequest({
         input,
         policyPrompt: await loadHookTopicsPrompt(),
         researchDossier: researchTrace.output,
-        apiKey: openAiApiKey,
+        apiKey: researchApiKey,
         model: researchModel,
+        provider: researchProvider,
         fetchImpl: providerFetchImpl
       })
     );
@@ -336,6 +360,7 @@ export async function handleHookGenerationHarnessRequest({
           topicTrace,
           directTraces,
           researchModel,
+          researchProvider,
           generationProvider,
           generationModel: model,
           finalDirections,
@@ -513,12 +538,14 @@ async function runHookResearchStep({
   policyPrompt,
   apiKey,
   model,
+  provider,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
   policyPrompt: string;
   apiKey: string;
   model: string;
+  provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookResearchDossier>> {
   const inputText = buildHookResearchPrompt(policyPrompt, buildInputBlock(input));
@@ -529,10 +556,11 @@ async function runHookResearchStep({
     content: [{ type: "input_text", text: inputText }],
     schemaName: "moons_hook_research",
     schema: hookResearchSchema,
-    tools: [THAI_WEB_SEARCH_TOOL],
-    toolChoice: "required",
+    ...(provider === "openrouter"
+      ? { plugins: [THAI_WEB_SEARCH_PLUGIN] }
+      : { tools: [THAI_WEB_SEARCH_TOOL], toolChoice: "required" as const }),
     reasoningEffort: HOOK_RESEARCH_REASONING_EFFORT,
-    provider: "openai"
+    provider
   });
   return {
     inputText,
@@ -548,6 +576,7 @@ async function runHookTopicStep({
   researchDossier,
   apiKey,
   model,
+  provider,
   fetchImpl
 }: {
   input: HookGenerationHarnessRequest;
@@ -555,6 +584,7 @@ async function runHookTopicStep({
   researchDossier: HookResearchDossier;
   apiKey: string;
   model: string;
+  provider: "openai" | "openrouter";
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookTopicShortlist>> {
   const inputText = buildHookTopicsPrompt(
@@ -570,7 +600,7 @@ async function runHookTopicStep({
     schemaName: "moons_hook_topics",
     schema: hookTopicsSchema,
     reasoningEffort: "medium",
-    provider: "openai"
+    provider
   });
   return {
     inputText,
@@ -600,6 +630,7 @@ function buildDirectHookGenerationDebugLog({
   topicTrace,
   directTraces,
   researchModel,
+  researchProvider,
   generationProvider,
   generationModel,
   finalDirections,
@@ -610,6 +641,7 @@ function buildDirectHookGenerationDebugLog({
   topicTrace: TracedAgentResult<HookTopicShortlist>;
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
   researchModel: string;
+  researchProvider: "openai" | "openrouter";
   generationProvider: "openai" | "openrouter";
   generationModel: string;
   finalDirections: readonly GeneratedDirection[];
@@ -619,21 +651,29 @@ function buildDirectHookGenerationDebugLog({
     generationProvider === "openrouter"
       ? "/api/v1/chat/completions"
       : "/v1/responses";
+  const researchEndpoint =
+    researchProvider === "openrouter"
+      ? "/api/v1/chat/completions"
+      : "/v1/responses";
   return {
     kind: "hook-generation",
     createdAt: new Date().toISOString(),
     runId: input.runId,
     hookIdeaMode: input.hookIdeaMode,
     researchAgent: {
-      provider: "openai",
+      provider: researchProvider,
       model: researchModel,
       promptSource: "agent_prompt/agent_hook_research.md",
       request: {
-        endpoint: "/v1/responses",
+        endpoint: researchEndpoint,
         inputText: researchTrace.inputText,
-        tools: [THAI_WEB_SEARCH_TOOL],
-        plugins: [],
-        toolChoice: "required" as const,
+        ...(researchProvider === "openrouter"
+          ? { tools: [], plugins: [THAI_WEB_SEARCH_PLUGIN] }
+          : {
+              tools: [THAI_WEB_SEARCH_TOOL],
+              plugins: [],
+              toolChoice: "required" as const
+            }),
         reasoningEffort: HOOK_RESEARCH_REASONING_EFFORT,
         responseSchema: "moons_hook_research" as const
       },
@@ -644,11 +684,11 @@ function buildDirectHookGenerationDebugLog({
       }
     },
     topicAgent: {
-      provider: "openai",
+      provider: researchProvider,
       model: researchModel,
       promptSource: "agent_prompt/agent_hook_topics.md",
       request: {
-        endpoint: "/v1/responses",
+        endpoint: researchEndpoint,
         inputText: topicTrace.inputText,
         reasoningEffort: "medium" as const,
         responseSchema: "moons_hook_topics" as const
@@ -978,7 +1018,10 @@ function buildUgcScriptPrompt(
     `Why: ${direction.why}`,
     `CTA: ${direction.cta}`,
     `Caption: ${direction.caption}`,
-    `Visual: ${direction.visual}`
+    `Visual: ${direction.visual}`,
+    ...(direction.ugcBrief
+      ? ["", "# Selected UGC brief", JSON.stringify(direction.ugcBrief, null, 2)]
+      : [])
   ].join("\n");
 }
 
