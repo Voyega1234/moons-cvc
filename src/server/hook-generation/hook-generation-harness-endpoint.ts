@@ -1291,9 +1291,10 @@ function buildUgcBriefJsonRetryPrompt(
   return [
     inputText,
     "",
-    "# JSON COMPLETION — REQUIRED",
-    `คำตอบก่อนหน้าไม่ใช่ JSON ที่สมบูรณ์: ${parseError}`,
+    "# RESPONSE CORRECTION — REQUIRED",
+    `คำตอบก่อนหน้าไม่ผ่านการตรวจสอบ: ${parseError}`,
     "เขียน JSON object เดียวที่สมบูรณ์และปิด string/array/object ครบทุกตัว โดยรักษา Scene ทั้ง 6 รายการ, Fact และ Schema เดิม.",
+    "ทุก field ต้องมีเนื้อหาจริงที่เจาะจงกับแบรนด์นี้ ห้ามเว้นว่างหรือใส่ค่ากว้างๆ ที่ไม่มีข้อมูล แม้แต่ field เดียว.",
     "ห้ามใส่คำอธิบายนอก JSON."
   ].join("\n");
 }
@@ -2016,8 +2017,8 @@ const ugcBriefSchema = {
     topic: { type: "string" },
     persona: { type: "string" },
     dresscode: { type: "string" },
-    doGuidelines: stringArraySchema,
-    dontGuidelines: stringArraySchema,
+    doGuidelines: { type: "array", minItems: 2, items: { type: "string" } },
+    dontGuidelines: { type: "array", minItems: 2, items: { type: "string" } },
     referenceVideoUrl: { type: ["string", "null"] },
     scenes: {
       type: "array",
@@ -2540,11 +2541,11 @@ function parseUgcBriefResult(text: string): UgcVideoBrief {
       throw new Error(`${sceneField}.scriptLines must contain exactly 1 line.`);
     }
     return {
-      title: readString(scene.title, `${sceneField}.title`),
-      duration: readString(scene.duration, `${sceneField}.duration`),
+      title: readNonEmptyString(scene.title, `${sceneField}.title`),
+      duration: readNonEmptyString(scene.duration, `${sceneField}.duration`),
       scriptLines,
-      visual: readString(scene.visual, `${sceneField}.visual`),
-      textOverlay: readString(scene.textOverlay, `${sceneField}.textOverlay`),
+      visual: readNonEmptyString(scene.visual, `${sceneField}.visual`),
+      textOverlay: readNonEmptyString(scene.textOverlay, `${sceneField}.textOverlay`),
       ...(typeof scene.highlightedPhrase === "string" &&
       scene.highlightedPhrase.trim()
         ? { highlightedPhrase: scene.highlightedPhrase.trim() }
@@ -2553,21 +2554,28 @@ function parseUgcBriefResult(text: string): UgcVideoBrief {
   });
 
   return {
-    product: readString(value.product, "ugcBrief.product"),
-    duration: readString(value.duration, "ugcBrief.duration"),
-    objective: readString(value.objective, "ugcBrief.objective"),
-    moodAndTone: readString(value.moodAndTone, "ugcBrief.moodAndTone"),
-    productionStyle: readString(value.productionStyle, "ugcBrief.productionStyle"),
-    referenceDirection: readString(
+    product: readNonEmptyString(value.product, "ugcBrief.product"),
+    duration: readNonEmptyString(value.duration, "ugcBrief.duration"),
+    objective: readNonEmptyString(value.objective, "ugcBrief.objective"),
+    moodAndTone: readNonEmptyString(value.moodAndTone, "ugcBrief.moodAndTone"),
+    productionStyle: readNonEmptyString(
+      value.productionStyle,
+      "ugcBrief.productionStyle"
+    ),
+    referenceDirection: readNonEmptyString(
       value.referenceDirection,
       "ugcBrief.referenceDirection"
     ),
     scenes,
-    topic: readString(value.topic, "ugcBrief.topic"),
-    persona: readString(value.persona, "ugcBrief.persona"),
-    dresscode: readString(value.dresscode, "ugcBrief.dresscode"),
-    doGuidelines: readStringArray(value.doGuidelines, "ugcBrief.doGuidelines"),
-    dontGuidelines: readStringArray(value.dontGuidelines, "ugcBrief.dontGuidelines"),
+    topic: readNonEmptyString(value.topic, "ugcBrief.topic"),
+    persona: readNonEmptyString(value.persona, "ugcBrief.persona"),
+    dresscode: readNonEmptyString(value.dresscode, "ugcBrief.dresscode"),
+    doGuidelines: readNonEmptyStringArray(value.doGuidelines, "ugcBrief.doGuidelines", 2),
+    dontGuidelines: readNonEmptyStringArray(
+      value.dontGuidelines,
+      "ugcBrief.dontGuidelines",
+      2
+    ),
     ...(typeof value.referenceVideoUrl === "string" && value.referenceVideoUrl.trim()
       ? { referenceVideoUrl: value.referenceVideoUrl.trim() }
       : {})
@@ -2939,6 +2947,26 @@ function readStringArray(value: unknown, field: string): readonly string[] {
     throw new Error(`${field} must be a string array.`);
   }
   return value;
+}
+
+function readNonEmptyString(value: unknown, field: string): string {
+  const text = readString(value, field).trim();
+  if (!text) throw new Error(`${field} must not be empty.`);
+  return text;
+}
+
+function readNonEmptyStringArray(
+  value: unknown,
+  field: string,
+  minItems: number
+): readonly string[] {
+  const items = readStringArray(value, field)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (items.length < minItems) {
+    throw new Error(`${field} must contain at least ${minItems} items.`);
+  }
+  return items;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

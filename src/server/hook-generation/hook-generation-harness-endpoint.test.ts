@@ -282,8 +282,8 @@ function openAiUgcBriefResponse() {
         topic: "การเลือกใช้งานจริงในครัว",
         persona: "คนทำอาหารที่บ้านเป็นประจำ",
         dresscode: "ชุดลำลองทั่วไป",
-        doGuidelines: ["เปิดด้วย Hook ที่ตรงประเด็น"],
-        dontGuidelines: ["หลีกเลี่ยงคำพูดที่เกินจริง"],
+        doGuidelines: ["เปิดด้วย Hook ที่ตรงประเด็น", "ใช้น้ำเสียงเป็นธรรมชาติ"],
+        dontGuidelines: ["หลีกเลี่ยงคำพูดที่เกินจริง", "ห้ามใช้ภาพลักษณ์ที่ดูเป็นทางการเกินไป"],
         referenceVideoUrl: null,
         scenes: [
           scene("Hook", "00:00-00:06", "ใกล้สิ้นปีแบบนี้ ครัวยุ่งมาก"),
@@ -911,6 +911,65 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body.directions[0]?.ugcBrief).toBeTruthy();
     expect(body.directions[0]?.ugcScript).toBeUndefined();
+  });
+
+  it("retries the UGC brief once when a required field comes back empty", async () => {
+    const emptyPersonaResponse = new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          product: "ทดสอบแบรนด์",
+          duration: "45-54 วินาที",
+          objective: "สื่อสารการใช้งานจริง",
+          moodAndTone: "จริงใจ เป็นกันเอง",
+          productionStyle: "มือถือ handheld แสงธรรมชาติ",
+          referenceDirection: "ภาพแนวตั้งแบบ native social",
+          topic: "การเลือกใช้งานจริงในครัว",
+          persona: "",
+          dresscode: "ชุดลำลองทั่วไป",
+          doGuidelines: ["เปิดด้วย Hook ที่ตรงประเด็น", "ใช้น้ำเสียงเป็นธรรมชาติ"],
+          dontGuidelines: ["หลีกเลี่ยงคำพูดที่เกินจริง", "ห้ามใช้ภาพลักษณ์ที่ดูเป็นทางการเกินไป"],
+          referenceVideoUrl: null,
+          scenes: [
+            { title: "Hook", duration: "00:00-00:06", scriptLines: ["ใกล้สิ้นปีแบบนี้ ครัวยุ่งมาก"], highlightedPhrase: null, visual: "v", textOverlay: "t" },
+            { title: "Relatable Problem", duration: "00:06-00:14", scriptLines: ["หากระทะดีๆ ยากมาก"], highlightedPhrase: null, visual: "v", textOverlay: "t" },
+            { title: "Product Discovery", duration: "00:14-00:24", scriptLines: ["จนมาเจอกระทะรุ่นนี้"], highlightedPhrase: null, visual: "v", textOverlay: "t" },
+            { title: "Offer & Proof", duration: "00:24-00:36", scriptLines: ["ใช้งานจริงมาหลายเดือนแล้ว"], highlightedPhrase: null, visual: "v", textOverlay: "t" },
+            { title: "Conversion CTA", duration: "00:36-00:46", scriptLines: ["ทักถามรุ่นกระทะได้เลย"], highlightedPhrase: null, visual: "v", textOverlay: "t" },
+            { title: "End Card & Disclaimer", duration: "00:46-00:54", scriptLines: ["เงื่อนไขเป็นไปตามที่บริษัทกำหนด"], highlightedPhrase: null, visual: "v", textOverlay: "t" }
+          ]
+        })
+      }),
+      { status: 200 }
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
+      .mockResolvedValueOnce(emptyPersonaResponse)
+      .mockResolvedValueOnce(openAiUgcBriefResponse())
+      .mockResolvedValueOnce(openAiUgcScriptResponse());
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleUgcRequestBody)
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    const body = (await response.json()) as {
+      directions: { ugcBrief?: { persona?: string } }[];
+    };
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(body.directions[0]?.ugcBrief?.persona).toBe("คนทำอาหารที่บ้านเป็นประจำ");
+    const retryBody = JSON.parse(String(fetchMock.mock.calls[5]?.[1]?.body)) as {
+      input: unknown;
+    };
+    expect(JSON.stringify(retryBody.input)).toContain("RESPONSE CORRECTION");
   });
 
   it("retries album output when formatBeats does not match the selected layout", async () => {
