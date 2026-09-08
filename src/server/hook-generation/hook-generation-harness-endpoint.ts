@@ -1288,7 +1288,7 @@ function buildUgcBriefJsonRetryPrompt(
     "",
     "# RESPONSE CORRECTION — REQUIRED",
     `คำตอบก่อนหน้าไม่ผ่านการตรวจสอบ: ${parseError}`,
-    "เขียน JSON object เดียวที่สมบูรณ์และปิด string/array/object ครบทุกตัว โดยรักษา Scene ทั้ง 6 รายการ, Fact และ Schema เดิม.",
+    "เขียน JSON object เดียวที่สมบูรณ์และปิด string/array/object ครบทุกตัว โดยรักษาจำนวน Scene เดิม (4-6 รายการ), Fact และ Schema เดิม.",
     "ทุก field ต้องมีเนื้อหาจริงที่เจาะจงกับแบรนด์นี้ ห้ามเว้นว่างหรือใส่ค่ากว้างๆ ที่ไม่มีข้อมูล แม้แต่ field เดียว.",
     "ห้ามใส่คำอธิบายนอก JSON."
   ].join("\n");
@@ -1997,7 +1997,8 @@ const ugcScriptSchema = {
   ]
 } as const;
 
-const UGC_BRIEF_SCENE_COUNT = 6;
+const UGC_BRIEF_MIN_SCENE_COUNT = 4;
+const UGC_BRIEF_MAX_SCENE_COUNT = 6;
 
 const ugcBriefSchema = {
   type: "object",
@@ -2017,8 +2018,8 @@ const ugcBriefSchema = {
     referenceVideoUrl: { type: ["string", "null"] },
     scenes: {
       type: "array",
-      minItems: UGC_BRIEF_SCENE_COUNT,
-      maxItems: UGC_BRIEF_SCENE_COUNT,
+      minItems: UGC_BRIEF_MIN_SCENE_COUNT,
+      maxItems: UGC_BRIEF_MAX_SCENE_COUNT,
       items: {
         type: "object",
         additionalProperties: false,
@@ -2523,8 +2524,14 @@ function parseUgcBriefResult(text: string): UgcVideoBrief {
   const value = readRecord(parsed, "ugcBrief");
 
   const scenesValue = value.scenes;
-  if (!Array.isArray(scenesValue) || scenesValue.length !== UGC_BRIEF_SCENE_COUNT) {
-    throw new Error(`ugcBrief.scenes must contain exactly ${UGC_BRIEF_SCENE_COUNT} scenes.`);
+  if (
+    !Array.isArray(scenesValue) ||
+    scenesValue.length < UGC_BRIEF_MIN_SCENE_COUNT ||
+    scenesValue.length > UGC_BRIEF_MAX_SCENE_COUNT
+  ) {
+    throw new Error(
+      `ugcBrief.scenes must contain ${UGC_BRIEF_MIN_SCENE_COUNT}-${UGC_BRIEF_MAX_SCENE_COUNT} scenes.`
+    );
   }
   const scenes = scenesValue.map((item, index) => {
     const sceneField = `ugcBrief.scenes[${index}]`;

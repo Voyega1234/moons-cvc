@@ -913,6 +913,65 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(JSON.stringify(retryBody.input)).toContain("RESPONSE CORRECTION");
   });
 
+  it("accepts a UGC brief with fewer than 6 scenes", async () => {
+    const scene = (title: string, duration: string, line: string) => ({
+      title,
+      duration,
+      scriptLines: [line],
+      highlightedPhrase: null,
+      visual: "Creator พูดกับกล้องในบริบทที่เกี่ยวข้อง",
+      textOverlay: line
+    });
+    const fourSceneBriefResponse = new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          product: "ทดสอบแบรนด์",
+          duration: "38 วินาที",
+          objective: "สื่อสารการใช้งานจริง",
+          moodAndTone: "จริงใจ เป็นกันเอง",
+          productionStyle: "มือถือ handheld แสงธรรมชาติ",
+          referenceDirection: "ภาพแนวตั้งแบบ native social",
+          topic: "การเลือกใช้งานจริงในครัว",
+          persona: "คนทำอาหารที่บ้านเป็นประจำ",
+          dresscode: "ชุดลำลองทั่วไป",
+          doGuidelines: ["เปิดด้วย Hook ที่ตรงประเด็น", "ใช้น้ำเสียงเป็นธรรมชาติ"],
+          dontGuidelines: ["หลีกเลี่ยงคำพูดที่เกินจริง", "ห้ามใช้ภาพลักษณ์ที่ดูเป็นทางการเกินไป"],
+          referenceVideoUrl: null,
+          scenes: [
+            scene("Hook", "00:00-00:06", "ครัวยุ่งมากช่วงนี้"),
+            scene("Discovery", "00:06-00:20", "จนมาเจอกระทะรุ่นนี้"),
+            scene("Proof", "00:20-00:32", "ใช้งานจริงมาหลายเดือนแล้ว"),
+            scene("CTA", "00:32-00:38", "ทักถามรุ่นกระทะได้เลย")
+          ]
+        })
+      }),
+      { status: 200 }
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
+      .mockResolvedValueOnce(fourSceneBriefResponse);
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(singleUgcRequestBody)
+      }),
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    const body = (await response.json()) as {
+      directions: { ugcBrief?: { scenes?: unknown[] } }[];
+    };
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(body.directions[0]?.ugcBrief?.scenes).toHaveLength(4);
+  });
+
   it("retries album output when formatBeats does not match the selected layout", async () => {
     const fetchMock = vi
       .fn()
