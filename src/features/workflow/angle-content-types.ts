@@ -182,25 +182,27 @@ export function buildAngleExportReview(state: WorkflowState): {
   sections: ReviewIdeaSection[];
   highlightMap: ReviewHighlightMap;
 } {
-  const exportItems = state.directions.flatMap((direction, index) => {
-    const idea = directionToExportIdea(
-      direction,
-      directionServiceAt(state, direction, index),
-      state.successMetric
-    );
-    return [{
-      group: direction.selected ? "recommended" : "option",
-      idea,
-      highlight: resolveSubheadlineHighlight(
-        directionSubheadline(direction),
-        direction.subheadlineHighlight
-      )
-    }];
-  });
+  const exportItems = state.directions
+    .map((direction, index) => ({ direction, index }))
+    .filter(({ direction }) => direction.selected)
+    .flatMap(({ direction, index }) => {
+      const idea = directionToExportIdea(
+        direction,
+        directionServiceAt(state, direction, index),
+        state.successMetric
+      );
+      return [{
+        group: "recommended" as const,
+        idea,
+        highlight: resolveSubheadlineHighlight(
+          directionSubheadline(direction),
+          direction.subheadlineHighlight
+        )
+      }];
+    });
 
   const definitions = [
-    { group: "recommended", heading: "Recommended topics" },
-    { group: "option", heading: "Other options" }
+    { group: "recommended", heading: "Recommended topics" }
   ] as const;
   const sections: ReviewIdeaSection[] = [];
   const highlightMap: ReviewHighlightMap = {};
