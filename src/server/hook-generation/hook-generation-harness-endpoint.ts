@@ -980,10 +980,17 @@ async function runUgcScriptDirection({
   try {
     let finalInputText = inputText;
     let payload = await requestUgcScript(finalInputText);
-    let ugcScript = parseUgcScriptResult(
-      extractResponseText(payload),
-      direction.id
-    );
+    let ugcScript: UgcScriptDocument;
+    try {
+      ugcScript = parseUgcScriptResult(extractResponseText(payload), direction.id);
+    } catch (parseError) {
+      finalInputText = buildUgcScriptJsonRetryPrompt(
+        finalInputText,
+        readableError(parseError)
+      );
+      payload = await requestUgcScript(finalInputText);
+      ugcScript = parseUgcScriptResult(extractResponseText(payload), direction.id);
+    }
 
     if (containsForbiddenThaiFirstPerson(ugcScript)) {
       finalInputText = buildUgcScriptNaturalnessRetryPrompt(
@@ -1057,6 +1064,20 @@ function buildUgcScriptNaturalnessRetryPrompt(
     `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
     "แก้ตามกฎภาษาไทยใน agent_ugc_script.md.",
     "เขียนใหม่ทั้ง JSON โดยรักษา Beat, Fact และ Schema เดิม."
+  ].join("\n");
+}
+
+function buildUgcScriptJsonRetryPrompt(
+  inputText: string,
+  parseError: string
+): string {
+  return [
+    inputText,
+    "",
+    "# JSON COMPLETION — REQUIRED",
+    `คำตอบก่อนหน้าไม่ใช่ JSON ที่สมบูรณ์: ${parseError}`,
+    "เขียน JSON object เดียวที่สมบูรณ์และปิด string/array/object ครบทุกตัว โดยรักษา Beat, Fact และ Schema เดิม.",
+    "ห้ามใส่คำอธิบายนอก JSON."
   ].join("\n");
 }
 
@@ -1184,7 +1205,20 @@ async function runUgcBriefDirection({
   try {
     let finalInputText = inputText;
     let payload = await requestUgcBrief(finalInputText);
-    let ugcBrief = parseUgcBriefResult(extractResponseText(payload));
+    let ugcBrief: UgcVideoBrief;
+    try {
+      ugcBrief = parseUgcBriefResult(extractResponseText(payload));
+    } catch (parseError) {
+      // The 6-scene brief is large enough that a model occasionally cuts the
+      // JSON off mid-string; one retry with a completion instruction fixes
+      // this far more often than it recurs.
+      finalInputText = buildUgcBriefJsonRetryPrompt(
+        finalInputText,
+        readableError(parseError)
+      );
+      payload = await requestUgcBrief(finalInputText);
+      ugcBrief = parseUgcBriefResult(extractResponseText(payload));
+    }
 
     if (containsForbiddenThaiFirstPerson(ugcBrief)) {
       finalInputText = buildUgcBriefNaturalnessRetryPrompt(
@@ -1255,6 +1289,20 @@ function buildUgcBriefNaturalnessRetryPrompt(
     `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
     "แก้ตามกฎภาษาไทยใน agent_ugc_brief.md.",
     "เขียนใหม่ทั้ง JSON โดยรักษา Scene, Fact และ Schema เดิม."
+  ].join("\n");
+}
+
+function buildUgcBriefJsonRetryPrompt(
+  inputText: string,
+  parseError: string
+): string {
+  return [
+    inputText,
+    "",
+    "# JSON COMPLETION — REQUIRED",
+    `คำตอบก่อนหน้าไม่ใช่ JSON ที่สมบูรณ์: ${parseError}`,
+    "เขียน JSON object เดียวที่สมบูรณ์และปิด string/array/object ครบทุกตัว โดยรักษา Scene ทั้ง 6 รายการ, Fact และ Schema เดิม.",
+    "ห้ามใส่คำอธิบายนอก JSON."
   ].join("\n");
 }
 
