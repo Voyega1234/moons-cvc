@@ -1714,6 +1714,7 @@ function buildDirectHookGenerationPrompt(
     "subheadline เป็น optional: ใช้เฉพาะเมื่อเพิ่มรายละเอียดรองที่จำเป็นจริง; หาก Headline ยืนได้ด้วยตัวเองให้ส่ง null.",
     "",
     "# Format",
+    "- visual: ไม่ถูกใช้ในการ generate ภาพจริงเลย (ศิลป์ตัดสินใจแยกต่างหากทั้งหมดโดย Art Director agent คนละตัว) ห้ามเสียเวลาคิด ให้ตอบเป็น string ว่างเสมอ (\"\").",
     "- single-static และ resize: formatBeats = [], albumFormat = null และ ugcBrief = null.",
     albumHookInstruction(
       input.albumFormat ?? defaultAlbumFormatPreference
