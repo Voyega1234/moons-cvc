@@ -376,13 +376,20 @@ function addCaptionBlock(
   });
 }
 
+/**
+ * A stored ugcBrief may predate the persona/dresscode/DO-DONT/reference-video
+ * fields (or the 6-beat scene set) added later, so a real-but-partial brief
+ * is layered ON TOP of the generated fallback rather than replacing it
+ * outright — otherwise older directions render blank "—" / "ไม่มีข้อมูล"
+ * placeholders for fields their stored ugcBrief simply never had.
+ */
 export function resolvedUgcBrief(
   direction: CreativeDirection | undefined,
   brandName: string
 ): UgcVideoBrief {
   const beats = direction?.formatBeats ?? [];
-  return (
-    direction?.ugcBrief ?? {
+  const fallback: UgcVideoBrief =
+    {
       product: brandName,
       duration: "45–54 วินาที",
       objective: cleanText(direction?.why, "สื่อสารแนวคิดให้เข้าใจและจดจำได้เร็ว"),
@@ -448,8 +455,8 @@ export function resolvedUgcBrief(
           textOverlay: cleanText(direction?.contactLine, direction?.cta)
         }
       ]
-    }
-  );
+    };
+  return { ...fallback, ...direction?.ugcBrief };
 }
 
 export interface UgcScriptRow {

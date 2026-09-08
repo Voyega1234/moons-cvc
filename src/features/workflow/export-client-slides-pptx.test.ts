@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { describe, expect, it, vi } from "vitest";
-import type { UgcScriptDocument } from "../../domain/creative-run";
+import type { CreativeDirection, UgcScriptDocument } from "../../domain/creative-run";
 import {
   addUgcScriptRows,
   buildUgcScriptRows,
@@ -32,6 +32,46 @@ describe("resolvedUgcBrief", () => {
       "Conversion CTA",
       "End Card & Disclaimer"
     ]);
+    expect(brief.doGuidelines?.length).toBeGreaterThan(0);
+    expect(brief.dontGuidelines?.length).toBeGreaterThan(0);
+  });
+
+  it("backfills persona/dresscode/guideline fields a stored ugcBrief predates, without dropping its real scenes", () => {
+    const direction: CreativeDirection = {
+      id: "direction-1",
+      hook: "Hook copy",
+      concept: "Concept copy",
+      why: "Why copy",
+      visual: "Visual copy",
+      cta: "CTA copy",
+      caption: "Caption copy",
+      selected: true,
+      ugcBrief: {
+        product: "Old Brand",
+        duration: "0–30 วินาที",
+        objective: "Old objective",
+        moodAndTone: "Old mood",
+        productionStyle: "Old production style",
+        referenceDirection: "Old reference direction",
+        scenes: [
+          {
+            title: "HOOK",
+            duration: "0–5 วินาที",
+            scriptLines: ["Old hook line"],
+            visual: "Old hook visual",
+            textOverlay: "Old hook overlay"
+          }
+        ]
+      }
+    };
+
+    const brief = resolvedUgcBrief(direction, "Test Brand");
+
+    expect(brief.product).toBe("Old Brand");
+    expect(brief.scenes).toEqual(direction.ugcBrief!.scenes);
+    expect(brief.persona).toBeTruthy();
+    expect(brief.persona).not.toBe("—");
+    expect(brief.dresscode).toBeTruthy();
     expect(brief.doGuidelines?.length).toBeGreaterThan(0);
     expect(brief.dontGuidelines?.length).toBeGreaterThan(0);
   });
