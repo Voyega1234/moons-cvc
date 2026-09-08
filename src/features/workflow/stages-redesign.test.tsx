@@ -2387,7 +2387,7 @@ describe("redesigned workflow stages", () => {
         name: /Working brief/i
       }) as HTMLTextAreaElement).value
     ).toContain(
-      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity"
+      "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า"
     );
 
     await user.click(stage.getByRole("button", { name: "Use monthly quota" }));

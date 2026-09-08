@@ -88,7 +88,7 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
 }
 
 export const defaultBrief =
-  "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different.";
+  "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า และยึดข้อเท็จจริง ให้แต่ละไอเดียต่างกันที่มุมคิดหรือวิธีเล่า เขียน Headline ให้ชัด มีเสน่ห์ และตรงเสียงแบรนด์ ใช้คำเล่น ไทยผสมอังกฤษ หรือตัวเลขเมื่อช่วยให้สารน่าสนใจขึ้น ใช้ [Placeholder] สำหรับข้อมูลที่รอยืนยัน";
 
 export const defaultArtworkBrief =
   "อยากได้ภาพโฆษณาที่ดูเหมือนงานออกแบบมืออาชีพจริง ไม่ดูปลอมหรือเป็น AI Generated เลือกสไตล์ Hero Visual ให้เหมาะกับตัวตนแบรนด์และหมวดธุรกิจ — ถ้าแบรนด์เน้นความสมจริง/พรีเมียม/ไลฟ์สไตล์ ให้ใช้ภาพถ่ายจริงหรือใกล้เคียงภาพถ่ายจริงที่สุด (กล้อง, แสงจากแหล่งเดียวที่สมเหตุสมผล, texture และ imperfection ของวัสดุจริง) ถ้าแบรนด์มีอัตลักษณ์เป็น 3D/CGI/illustration อยู่แล้ว ให้ใช้สไตล์นั้นแต่ต้องเนียน สมบูรณ์ ไม่ดูเหมือน AI generated ทั่วไป จัดวางองค์ประกอบให้มี hierarchy ชัดเจนและสมดุล ไม่แน่นหรือโล่งฝั่งใดฝั่งหนึ่งโดยไม่มีเหตุผล ความหนาแน่นของข้อมูล (text, badge, callout) ให้เลือกตามความจำเป็นของงานจริง — งาน branding/awareness เรียบได้เต็มที่ ไม่แปะข้อมูลทับ key visual โดยไม่จำเป็น ส่วนงานโปรโมชั่น/ราคา/เปรียบเทียบ/technical ที่ต้องมีป้ายราคา ส่วนลด หรือรายละเอียดสนับสนุน ให้ใส่ได้ตามความจำเป็นจริง แต่จัดวางให้เป็นระเบียบแยกโซนชัดเจน ไม่รกจนแย่งความสนใจจาก key visual";

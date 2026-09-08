@@ -354,7 +354,7 @@ describe("workflowReducer", () => {
     ]);
     expect(initialWorkflowState.quantity).toBe(6);
     expect(initialWorkflowState.brief).toBe(
-      "Surprise me with fresh, brand-ownable ideas grounded in the brand’s identity, audience, product truth, and real-world context. Explore unexpected insights, use cases, product roles, or creative mechanisms—not unusual wording. Keep every headline clear, natural, and faithful to the brand’s established mood, tone, and voice. Make every direction meaningfully different."
+      "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า และยึดข้อเท็จจริง ให้แต่ละไอเดียต่างกันที่มุมคิดหรือวิธีเล่า เขียน Headline ให้ชัด มีเสน่ห์ และตรงเสียงแบรนด์ ใช้คำเล่น ไทยผสมอังกฤษ หรือตัวเลขเมื่อช่วยให้สารน่าสนใจขึ้น ใช้ [Placeholder] สำหรับข้อมูลที่รอยืนยัน"
     );
 
     const updated = workflowReducer(initialWorkflowState, {
