@@ -2214,12 +2214,21 @@ async function resolveExtractedArtworkCopy(
       assetUrl: item.output.assetUrl as string
     }));
 
-  if (!outputs.length) return new Map();
+  if (!outputs.length) {
+    console.warn(
+      "Artwork copy extraction skipped: no eligible outputs (non-UGC with an assetUrl)."
+    );
+    return new Map();
+  }
 
   try {
     const results = await extractArtworkCopy(outputs);
     return new Map(results.map((result) => [result.outputId, result]));
-  } catch {
+  } catch (error) {
+    console.error(
+      "Artwork copy extraction failed; slide copy falls back to direction fields.",
+      error
+    );
     return new Map();
   }
 }
