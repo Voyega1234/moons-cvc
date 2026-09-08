@@ -215,52 +215,6 @@ function openAiUgcDirectionResponse(hook: string) {
   );
 }
 
-function openAiUgcScriptResponse() {
-  return new Response(
-    JSON.stringify({
-      output_text: JSON.stringify({
-        format: {
-          duration: "30-35 วินาที",
-          aspectRatio: "9:16",
-          style: "Comedic myth-busting, TikTok energy"
-        },
-        castDirection: "พนักงาน: energy สูง / ลูกค้า: reaction ชัด",
-        beats: [
-          {
-            id: "beat-1",
-            role: "misconception",
-            title: "Misconception #1",
-            timecode: "0:05-0:09",
-            lines: [
-              {
-                speaker: "customer",
-                speakerLabel: "ลูกค้า",
-                line: "ต้องเปลี่ยนกระทะทั้งชุดใช่ไหม?",
-                direction: null,
-                sfx: null
-              },
-              {
-                speaker: "staff",
-                speakerLabel: "พนักงาน",
-                line: "เลือกใบเดียวก่อนก็ได้!",
-                direction: "สวนทันที",
-                sfx: "pop"
-              }
-            ],
-            cameraNotes: "Cut กลับพนักงานทันที",
-            editingNotes: null,
-            legalFlag: null
-          }
-        ],
-        shotList: ["Close-up กระทะ", "Reaction ลูกค้า"],
-        editingNotes: ["Cut เร็ว ไม่มี Dead air"],
-        legalFooter: null
-      })
-    }),
-    { status: 200 }
-  );
-}
-
 function openAiUgcBriefResponse() {
   const scene = (title: string, duration: string, line: string) => ({
     title,
@@ -842,8 +796,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(openAiUgcDirectionResponse("ฉันเลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
-      .mockResolvedValueOnce(openAiUgcBriefResponse())
-      .mockResolvedValueOnce(openAiUgcScriptResponse());
+      .mockResolvedValueOnce(openAiUgcBriefResponse());
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -856,7 +809,7 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     const responseBody = await response.clone().json();
     expect(response.status, JSON.stringify(responseBody)).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     const directionRetryBody = JSON.parse(
       String(fetchMock.mock.calls[3]?.[1]?.body)
     ) as { input: unknown };
@@ -869,32 +822,20 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: [expect.objectContaining({ formatBeats: expect.any(Array) })]
     });
     expect((body as { directions: { formatBeats: string[] }[] }).directions[0]?.formatBeats).toHaveLength(4);
-    const ugcScriptRequestBody = JSON.parse(
-      String(fetchMock.mock.calls[6]?.[1]?.body)
-    ) as { input: unknown };
-    expect(JSON.stringify(ugcScriptRequestBody.input)).toContain(
-      "UGC MYTH-BUSTING SCRIPT WRITER"
-    );
-    const scriptInput = JSON.stringify(ugcScriptRequestBody.input);
-    expect(scriptInput).toContain("# Selected UGC brief");
-    const generatedBrief = (body as { directions: { ugcBrief: { productionStyle: string; scenes: { scriptLines: string[] }[] } }[] }).directions[0]!.ugcBrief;
-    expect(scriptInput).toContain(generatedBrief.productionStyle);
-    expect(scriptInput).toContain(generatedBrief.scenes[0]!.scriptLines[0]);
     expect(
-      (body as { directions: { ugcScript?: { beats: unknown[] } }[] })
-        .directions[0]?.ugcScript?.beats
-    ).toHaveLength(1);
+      (body as { directions: { ugcScript?: unknown }[] }).directions[0]
+        ?.ugcScript
+    ).toBeUndefined();
   });
 
-  it("degrades gracefully when the UGC script agent call fails, keeping the slide-ready ugcBrief", async () => {
+  it("keeps the slide-ready ugcBrief and never generates the disabled ugcScript", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
-      .mockResolvedValueOnce(openAiUgcBriefResponse())
-      .mockResolvedValueOnce(new Response("Server error", { status: 500 }));
+      .mockResolvedValueOnce(openAiUgcBriefResponse());
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -909,6 +850,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: { ugcBrief?: unknown; ugcScript?: unknown }[];
     };
     expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(body.directions[0]?.ugcBrief).toBeTruthy();
     expect(body.directions[0]?.ugcScript).toBeUndefined();
   });
@@ -948,8 +890,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกจากการใช้งานจริง"))
       .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []))
       .mockResolvedValueOnce(emptyPersonaResponse)
-      .mockResolvedValueOnce(openAiUgcBriefResponse())
-      .mockResolvedValueOnce(openAiUgcScriptResponse());
+      .mockResolvedValueOnce(openAiUgcBriefResponse());
 
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -964,7 +905,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: { ugcBrief?: { persona?: string } }[];
     };
     expect(response.status, JSON.stringify(body)).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     expect(body.directions[0]?.ugcBrief?.persona).toBe("คนทำอาหารที่บ้านเป็นประจำ");
     const retryBody = JSON.parse(String(fetchMock.mock.calls[5]?.[1]?.body)) as {
       input: unknown;

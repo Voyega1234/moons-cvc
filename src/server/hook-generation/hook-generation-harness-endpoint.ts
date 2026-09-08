@@ -329,8 +329,7 @@ export async function handleHookGenerationHarnessRequest({
     const ugcBriefPrompt = await loadUgcBriefPrompt();
     // Subheadline highlighting and the UGC brief both derive only from
     // `directions` (not from each other's output), so they run concurrently
-    // instead of one waiting on the other. ugcScript still runs afterward,
-    // sequentially, so it can see the freshly generated brief.
+    // instead of one waiting on the other.
     const [highlightedDirections, ugcBriefStepResult] = await Promise.all([
       runSubheadlineHighlightStep({
         directions,
@@ -365,19 +364,15 @@ export async function handleHookGenerationHarnessRequest({
         ? { ...direction, ugcBrief: ugcBriefByDirectionId.get(direction.id) }
         : direction
     );
-    const ugcScriptPrompt = await loadUgcScriptPrompt();
-    const { directions: finalDirections, traces: ugcScriptTraces } =
-      await runUgcScriptStep({
-        directions: briefedDirections,
-        input,
-        researchDossier: researchTrace.output,
-        pastPosts,
-        apiKey: generationApiKey,
-        model,
-        provider: generationProvider,
-        prompt: ugcScriptPrompt,
-        fetchImpl: providerFetchImpl
-      });
+    // ugcScript generation is temporarily disabled: its output isn't wired
+    // into any slide or UI yet, so it was costing an extra API round-trip
+    // per UGC direction with nothing showing it. Left in place (prompt,
+    // schema, runUgcScriptStep, loadUgcScriptPrompt) to re-enable later,
+    // just not called.
+    void loadUgcScriptPrompt;
+    void runUgcScriptStep;
+    const finalDirections = briefedDirections;
+    const ugcScriptTraces: readonly UgcScriptTrace[] = [];
     const debugDirectory =
       env.HOOK_GENERATION_DEBUG_LOG_DIR?.trim() ||
       hookGenerationDebugLogDirectory(env.VERCEL_ENV);
