@@ -31,7 +31,12 @@ function autoCaptionSnippet(hook: string | undefined): string {
   return `${words.join(" ")}…`;
 }
 
-export type UgcPreviewImageMap = Readonly<Record<string, string>>;
+export interface UgcPreviewImage {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+export type UgcPreviewImageMap = Readonly<Record<string, UgcPreviewImage>>;
 
 export async function captureUgcTemplatePreviewImages(
   outputIds: readonly string[]
@@ -42,7 +47,7 @@ export async function captureUgcTemplatePreviewImages(
 
   await document.fonts?.ready;
   const { default: html2canvas } = await import("html2canvas");
-  const images: Record<string, string> = {};
+  const images: Record<string, UgcPreviewImage> = {};
 
   for (const outputId of [...new Set(outputIds)]) {
     const preview = Array.from(
@@ -59,7 +64,16 @@ export async function captureUgcTemplatePreviewImages(
       scale: Math.max(2, Math.min(3, window.devicePixelRatio || 1)),
       useCORS: true
     });
-    images[outputId] = canvas.toDataURL("image/png");
+    // pptxgenjs cannot detect a data-URL image's natural pixel size on its
+    // own (that code path is unimplemented in the installed version), so
+    // its "cover"/"contain" sizing silently degrades to a plain stretch.
+    // Capture the canvas's real dimensions here so the slide can size the
+    // image box to the same ratio instead, avoiding that distortion.
+    images[outputId] = {
+      dataUrl: canvas.toDataURL("image/png"),
+      width: canvas.width,
+      height: canvas.height
+    };
   }
 
   return images;

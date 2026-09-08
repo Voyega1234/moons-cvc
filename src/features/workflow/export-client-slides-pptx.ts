@@ -10,6 +10,7 @@ import {
   type UgcVideoScene
 } from "../../domain/creative-run";
 import { directionSubheadline } from "../../domain/subheadline-highlight";
+import type { UgcPreviewImage } from "./review/creative-previews";
 import type { WorkflowState } from "./model";
 import { approvalRolesForOutput } from "./rules";
 import {
@@ -951,18 +952,27 @@ function addUgcReferenceVideoPanel(
   x: number,
   y: number,
   w: number,
+  maxHeight: number,
   brief: UgcVideoBrief,
-  mockupImageData?: string
+  mockupImage?: UgcPreviewImage
 ) {
-  const boxHeight = w * 1.72;
-  if (mockupImageData) {
+  const boxHeight = mockupImage
+    ? Math.min(w * (mockupImage.height / mockupImage.width), maxHeight)
+    : Math.min(w * 1.72, maxHeight);
+  if (mockupImage) {
+    // pptxgenjs cannot read a data-URL image's natural size, so "cover"/
+    // "contain" sizing silently stretches it to whatever box it's given.
+    // Size the box itself to the captured image's real aspect ratio
+    // (computed above) and place it plainly instead — undistorted, and
+    // centered in the column when it's narrower than the full width.
+    const displayWidth = boxHeight * (mockupImage.width / mockupImage.height);
+    const imageX = x + Math.max(0, (w - displayWidth) / 2);
     slide.addImage({
-      data: mockupImageData,
-      x,
+      data: mockupImage.dataUrl,
+      x: imageX,
       y,
-      w,
-      h: boxHeight,
-      sizing: { type: "cover", w, h: boxHeight }
+      w: Math.min(displayWidth, w),
+      h: boxHeight
     });
   } else {
     slide.addShape(pptx.ShapeType.roundRect, {
@@ -1011,7 +1021,7 @@ function addUgcClientSlide(
   slide: PptxGenJS.Slide,
   direction: CreativeDirection | undefined,
   brandName: string,
-  mockupImageData?: string
+  mockupImage?: UgcPreviewImage
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
   const personaLabel = clampText(brief.persona, 40) || "Persona";
@@ -1109,7 +1119,7 @@ function addUgcClientSlide(
     pptx,
     slide,
     col3X,
-    mockupImageData ? "Creative Mockup" : "Reference Video"
+    mockupImage ? "Creative Mockup" : "Reference Video"
   );
   addUgcReferenceVideoPanel(
     pptx,
@@ -1117,8 +1127,9 @@ function addUgcClientSlide(
     col3X + 0.22,
     col3HeadingY,
     UGC_BRIEF_COLUMN_WIDTH - 0.44,
+    UGC_BRIEF_COLUMN_BOTTOM - col3HeadingY - 0.45,
     brief,
-    mockupImageData
+    mockupImage
   );
 
   slide.addText("Prepared by Convert Cake", {
@@ -1699,12 +1710,12 @@ function addClientSlide(
   albumMasterData?: string,
   referenceImageData: readonly string[] = [],
   extractedCopy?: ExtractedArtworkCopy,
-  ugcMockupImageData?: string
+  ugcMockupImage?: UgcPreviewImage
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
   if (isUgcOutput(output)) {
-    addUgcClientSlide(pptx, slide, direction, brandName, ugcMockupImageData);
+    addUgcClientSlide(pptx, slide, direction, brandName, ugcMockupImage);
     return;
   }
   addSinglePageArtworkSlide(
@@ -2346,7 +2357,7 @@ async function buildClientSlidesPptx(
  */
 async function resolveUgcMockupImages(
   items: readonly ClientSlideItem[]
-): Promise<Map<string, string>> {
+): Promise<Map<string, UgcPreviewImage>> {
   const ugcOutputIds = items
     .filter((item) => isUgcOutput(item.output))
     .map((item) => item.output.id);
