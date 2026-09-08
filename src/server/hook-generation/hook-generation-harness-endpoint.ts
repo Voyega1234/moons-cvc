@@ -326,29 +326,45 @@ export async function handleHookGenerationHarnessRequest({
         `Hook generation returned ${directions.length} of ${input.quantity} requested ideas. Please retry the run.`
       );
     }
-    const highlightedDirections = await runSubheadlineHighlightStep({
-      directions,
-      apiKey:
-        generationProvider === "openrouter"
-          ? generationApiKey
-          : openAiApiKey,
-      model: generationProvider === "openrouter" ? model : supportModel,
-      provider: generationProvider,
-      prompt: subheadlineHighlightPrompt,
-      fetchImpl: providerFetchImpl
-    });
     const ugcBriefPrompt = await loadUgcBriefPrompt();
-    const { directions: briefedDirections } = await runUgcBriefStep({
-      directions: highlightedDirections,
-      input,
-      researchDossier: researchTrace.output,
-      pastPosts,
-      apiKey: generationApiKey,
-      model,
-      provider: generationProvider,
-      prompt: ugcBriefPrompt,
-      fetchImpl: providerFetchImpl
-    });
+    // Subheadline highlighting and the UGC brief both derive only from
+    // `directions` (not from each other's output), so they run concurrently
+    // instead of one waiting on the other. ugcScript still runs afterward,
+    // sequentially, so it can see the freshly generated brief.
+    const [highlightedDirections, ugcBriefStepResult] = await Promise.all([
+      runSubheadlineHighlightStep({
+        directions,
+        apiKey:
+          generationProvider === "openrouter"
+            ? generationApiKey
+            : openAiApiKey,
+        model: generationProvider === "openrouter" ? model : supportModel,
+        provider: generationProvider,
+        prompt: subheadlineHighlightPrompt,
+        fetchImpl: providerFetchImpl
+      }),
+      runUgcBriefStep({
+        directions,
+        input,
+        researchDossier: researchTrace.output,
+        pastPosts,
+        apiKey: generationApiKey,
+        model,
+        provider: generationProvider,
+        prompt: ugcBriefPrompt,
+        fetchImpl: providerFetchImpl
+      })
+    ]);
+    const ugcBriefByDirectionId = new Map(
+      ugcBriefStepResult.directions
+        .filter((direction) => direction.ugcBrief)
+        .map((direction) => [direction.id, direction.ugcBrief])
+    );
+    const briefedDirections = highlightedDirections.map((direction) =>
+      ugcBriefByDirectionId.has(direction.id)
+        ? { ...direction, ugcBrief: ugcBriefByDirectionId.get(direction.id) }
+        : direction
+    );
     const ugcScriptPrompt = await loadUgcScriptPrompt();
     const { directions: finalDirections, traces: ugcScriptTraces } =
       await runUgcScriptStep({
