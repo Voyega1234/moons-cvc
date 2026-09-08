@@ -1525,11 +1525,11 @@ function addSinglePageArtworkSlide(
   if (extractedCopy?.footer?.trim()) {
     addTextBlock(slide, "Footer", extractedCopy.footer, {
       x: 0.55,
-      y: 6.6,
+      y: 6.53,
       w: 2.84,
-      h: 0.82,
+      h: 0.9,
       maxLength: 500,
-      fontSize: 6.5
+      fontSize: 8.5
     });
   }
 
