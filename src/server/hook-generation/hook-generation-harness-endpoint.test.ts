@@ -373,6 +373,23 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status).toBe(401);
   });
 
+  it("reports OPENAI_API_KEY as missing when the request resolves to the OpenAI branch", async () => {
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(requestBody)
+      }),
+      env: {},
+      fetchImpl: vi.fn() as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "OPENAI_API_KEY is required."
+    });
+  });
+
   it("returns one reusable Research dossier without running the Hook Agent", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse());
     const response = await handleHookGenerationHarnessRequest({
@@ -1271,6 +1288,61 @@ describe("handleHookGenerationHarnessRequest", () => {
     ) as { model: string; plugins?: unknown[] };
     expect(topicBody.model).toBe("openai/gpt-5.6-terra");
     expect(topicBody.plugins).toBeUndefined();
+  });
+
+  it("succeeds with no OPENAI_API_KEY at all when generation and research both resolve to OpenRouter", async () => {
+    const {
+      generationModel: _generationModel,
+      ...requestWithoutGenerationModel
+    } = singleStaticRequestBody;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(openRouterJsonResponse(validHookResearchDossier(), [
+        "https://example.com/verified-source"
+      ]))
+      .mockResolvedValueOnce(
+        openRouterJsonResponse({
+          topics: [{ topic: "หัวข้อทดสอบ 1", why: "เหตุผลทดสอบ 1" }]
+        })
+      )
+      .mockResolvedValueOnce(
+        openRouterResearchResponse([
+          {
+            id: "openrouter-hook",
+            sourceCandidateId: "candidate-1",
+            service: "single-static",
+            hook: "มุมคิดใหม่จาก OpenRouter",
+            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
+            concept: "OpenRouter generation",
+            why: "Tests provider routing",
+            visual: "Clean and direct",
+            albumFormat: "three-horizontal",
+            cta: "ดูรายละเอียด",
+            caption: "แคปชั่นจากโมเดลที่เลือก",
+            score: 88,
+            reasoning: "Strong fit",
+            citations: []
+          }
+        ])
+      )
+      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
+
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify(requestWithoutGenerationModel)
+      }),
+      env: {
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_HOOK_RESEARCH_MODEL: "openai/gpt-5.6-terra"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(fetchMock.mock.calls.every(([url]) =>
+      String(url) === "https://openrouter.ai/api/v1/chat/completions"
+    )).toBe(true);
   });
 
   it("surfaces the provider's OpenRouter 400 detail", async () => {

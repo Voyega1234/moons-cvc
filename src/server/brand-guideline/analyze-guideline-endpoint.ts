@@ -5,6 +5,8 @@ type FetchLike = typeof fetch;
 export interface AnalyzeGuidelineEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_GUIDELINE_ANALYSIS_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_GUIDELINE_ANALYSIS_MODEL?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
 }
@@ -28,6 +30,7 @@ interface GuidelineAnalysis {
 
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENROUTER_RESPONSES_ENDPOINT = "https://openrouter.ai/api/v1/responses";
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export async function handleAnalyzeGuidelineRequest({
@@ -40,10 +43,23 @@ export async function handleAnalyzeGuidelineRequest({
   }
 
   try {
-    const apiKey = env.OPENAI_API_KEY?.trim();
+    const openRouterModel = env.OPENROUTER_GUIDELINE_ANALYSIS_MODEL?.trim();
+    const provider = openRouterModel && env.OPENROUTER_API_KEY?.trim()
+      ? "openrouter"
+      : "openai";
+    const apiKey =
+      provider === "openrouter"
+        ? env.OPENROUTER_API_KEY?.trim()
+        : env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            provider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -54,9 +70,13 @@ export async function handleAnalyzeGuidelineRequest({
     }
 
     const input = parseRequestBody(await request.json());
-    const model = env.OPENAI_GUIDELINE_ANALYSIS_MODEL?.trim() || DEFAULT_MODEL;
+    const model =
+      provider === "openrouter"
+        ? openRouterModel!
+        : env.OPENAI_GUIDELINE_ANALYSIS_MODEL?.trim() || DEFAULT_MODEL;
 
     const payload = await callResponsesApi({
+      provider,
       apiKey,
       model,
       fetchImpl,
@@ -77,16 +97,23 @@ export async function handleAnalyzeGuidelineRequest({
 }
 
 async function callResponsesApi({
+  provider,
   apiKey,
   model,
   fetchImpl,
   input
 }: {
+  provider: "openai" | "openrouter";
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
   input: AnalyzeGuidelineRequest;
 }): Promise<unknown> {
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const attachment: Record<string, unknown> =
     input.text !== undefined
       ? { type: "input_text", text: `Guideline text:\n${input.text}` }
@@ -101,7 +128,7 @@ async function callResponsesApi({
             detail: "auto"
           };
 
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -129,16 +156,21 @@ async function callResponsesApi({
 
   if (!response.ok) {
     throw new Error(
-      await readableOpenAiError(response, "OpenAI guideline analysis")
+      await readableOpenAiError(
+        response,
+        `${providerLabel} guideline analysis`,
+        providerLabel
+      )
     );
   }
 
-  return readJsonResponse(response, "OpenAI guideline analysis");
+  return readJsonResponse(response, `${providerLabel} guideline analysis`);
 }
 
 async function readableOpenAiError(
   response: Response,
-  label: string
+  label: string,
+  providerLabel: "OpenAI" | "OpenRouter" = "OpenAI"
 ): Promise<string> {
   const body = await response.text();
 
@@ -156,7 +188,7 @@ async function readableOpenAiError(
   }
 
   if (response.status === 429) {
-    return `${label} failed: rate limit or quota exceeded (429). Wait a moment and try again, or check the OpenAI account's usage/billing limits.`;
+    return `${label} failed: rate limit or quota exceeded (429). Wait a moment and try again, or check the ${providerLabel} account's usage/billing limits.`;
   }
 
   return `${label} failed: ${response.status}`;

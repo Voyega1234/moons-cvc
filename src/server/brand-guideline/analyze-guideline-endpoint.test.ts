@@ -75,6 +75,41 @@ describe("handleAnalyzeGuidelineRequest", () => {
     });
   });
 
+  it("routes to OpenRouter when OPENROUTER_GUIDELINE_ANALYSIS_MODEL is configured", async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>
+      });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            summary: "อบอุ่น เป็นกันเอง",
+            generationContext: "Tone: warm and approachable",
+            primaryColors: [],
+            secondaryColors: []
+          })
+        }),
+        { status: 200 }
+      );
+    });
+
+    const response = await handleAnalyzeGuidelineRequest({
+      request: buildRequest({ text: "We are warm and approachable." }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        OPENROUTER_API_KEY: "or-test-key",
+        OPENROUTER_GUIDELINE_ANALYSIS_MODEL: "openai/gpt-5.6-terra"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch
+    });
+
+    expect(response.status).toBe(200);
+    expect(calls[0]?.url).toBe("https://openrouter.ai/api/v1/responses");
+    expect(calls[0]?.body.model).toBe("openai/gpt-5.6-terra");
+  });
+
   it("sends an image as input_image", async () => {
     const calls: { body: Record<string, unknown> }[] = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {

@@ -169,12 +169,6 @@ export async function handleArtworkGenerationRequest({
 
   try {
     const apiKey = env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-      return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
-        500
-      );
-    }
     const imageApiKey = env.OPENROUTER_API_KEY?.trim();
     if (!imageApiKey) {
       return jsonResponse(
@@ -283,13 +277,17 @@ export async function handleArtworkGenerationRequest({
       promptProvider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
-    const requiresPromptModel =
-      !input.referenceLed &&
-      input.artworkMode !== "standard" &&
-      input.artworkMode !== "direct-final-artwork";
-    if (!promptApiKey && requiresPromptModel) {
+    const requiresPromptApiKey =
+      !input.referenceLed && input.artworkMode !== "direct-final-artwork";
+    if (!promptApiKey && requiresPromptApiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENROUTER_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            promptProvider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -311,17 +309,38 @@ export async function handleArtworkGenerationRequest({
       referenceInterpreterProvider === "openrouter"
         ? env.OPENROUTER_API_KEY!.trim()
         : apiKey;
+    if (!referenceInterpreterApiKey && input.referenceLed) {
+      return jsonResponse(
+        {
+          ok: false,
+          error:
+            referenceInterpreterProvider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
+        500
+      );
+    }
+    // Album-panel-separation QC always runs on OpenAI regardless of
+    // promptProvider (see applyAlbumPanelSeparationQc), so album generation
+    // needs OPENAI_API_KEY even when the rest of the request is OpenRouter.
+    if (!apiKey && input.service === "album-post") {
+      return jsonResponse(
+        { ok: false, error: "OPENAI_API_KEY is required for album generation." },
+        500
+      );
+    }
 
     const outputs = await generateOutputsForSelectedHooks({
       input,
-      apiKey,
+      apiKey: apiKey ?? "",
       imageApiKey,
       model,
       promptModel,
       promptProvider,
-      promptApiKey: promptApiKey ?? apiKey,
+      promptApiKey: promptApiKey ?? apiKey ?? "",
       creativeStrategyModel,
-      referenceInterpreterApiKey,
+      referenceInterpreterApiKey: referenceInterpreterApiKey ?? "",
       referenceInterpreterModel,
       referenceInterpreterProvider,
       debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),

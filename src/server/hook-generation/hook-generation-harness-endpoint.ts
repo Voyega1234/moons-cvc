@@ -189,12 +189,6 @@ export async function handleHookGenerationHarnessRequest({
 
   try {
     const openAiApiKey = env.OPENAI_API_KEY?.trim();
-    if (!openAiApiKey) {
-      return jsonResponse(
-        { ok: false, error: "OPENAI_API_KEY is required." },
-        500
-      );
-    }
 
     const auth = await resolveConvertCakeAuthorization(request, env, fetchImpl);
     if (!auth.authorized) {
@@ -228,7 +222,13 @@ export async function handleHookGenerationHarnessRequest({
         : openAiApiKey;
     if (!generationApiKey) {
       return jsonResponse(
-        { ok: false, error: "OPENROUTER_API_KEY is required." },
+        {
+          ok: false,
+          error:
+            generationProvider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
         500
       );
     }
@@ -249,6 +249,18 @@ export async function handleHookGenerationHarnessRequest({
       researchProvider === "openrouter"
         ? env.OPENROUTER_API_KEY!.trim()
         : openAiApiKey;
+    if (!researchApiKey) {
+      return jsonResponse(
+        {
+          ok: false,
+          error:
+            researchProvider === "openrouter"
+              ? "OPENROUTER_API_KEY is required."
+              : "OPENAI_API_KEY is required."
+        },
+        500
+      );
+    }
     const researchModel =
       researchProvider === "openrouter"
         ? researchOpenRouterModel!
@@ -333,10 +345,7 @@ export async function handleHookGenerationHarnessRequest({
     const [highlightedDirections, ugcBriefStepResult] = await Promise.all([
       runSubheadlineHighlightStep({
         directions,
-        apiKey:
-          generationProvider === "openrouter"
-            ? generationApiKey
-            : openAiApiKey,
+        apiKey: generationApiKey,
         model: generationProvider === "openrouter" ? model : supportModel,
         provider: generationProvider,
         prompt: subheadlineHighlightPrompt,
