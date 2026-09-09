@@ -2436,6 +2436,61 @@ describe("handleArtworkGenerationRequest", () => {
     expect(generationCalls[0]).not.toContain("CAMPAIGN INPUT TO PREFLIGHT");
   });
 
+  it("routes Standard preflight through OpenRouter when OPENROUTER_IMAGE_PROMPT_MODEL is configured", async () => {
+    const preflightCalls: Array<{ url: string; model: string }> = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/api/v1/images")) {
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body)) as {
+          model: string;
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === "moons_campaign_input_preflight") {
+          preflightCalls.push({ url: href, model: body.model });
+        }
+        return standardAgentResponse(init);
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: buildRequest({ authorization: "Bearer user-token" }),
+      env: {
+        OPENAI_API_KEY: "openai-key",
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_IMAGE_PROMPT_MODEL: "google/gemini-3.8-flash",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(preflightCalls).toEqual([
+      {
+        url: "https://openrouter.ai/api/v1/responses",
+        model: "google/gemini-3.8-flash"
+      }
+    ]);
+  });
+
   it("uses Terra on OpenAI for Standard preflight even when Claude is selected elsewhere", async () => {
     const openRouterCalls: string[] = [];
     const preflightCalls: Array<{

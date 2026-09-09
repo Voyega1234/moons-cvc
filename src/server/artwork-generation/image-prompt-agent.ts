@@ -257,6 +257,8 @@ export async function buildStandardImagePrompt(
 
 export async function preflightCampaignInput({
   apiKey,
+  model,
+  provider = "openai",
   fetchImpl,
   input,
   writeTrace,
@@ -264,13 +266,22 @@ export async function preflightCampaignInput({
   usePlaceholderCopy = false
 }: {
   apiKey: string;
+  model?: string;
+  provider?: ImagePromptProvider;
   fetchImpl: FetchLike;
   input: ImagePromptAgentInput;
   writeTrace?: ImagePromptAgentTraceWriter;
   loadPrompt?: () => Promise<string>;
   usePlaceholderCopy?: boolean;
 }): Promise<CampaignInputPreflight> {
-  const model = PREFLIGHT_MODEL;
+  const resolvedModel = model?.trim() || PREFLIGHT_MODEL;
+  const endpoint =
+    provider === "openrouter"
+      ? OPENROUTER_RESPONSES_ENDPOINT
+      : OPENAI_RESPONSES_ENDPOINT;
+  const endpointPath =
+    provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const inputText = [
     (await loadPrompt()).trim(),
     "",
@@ -288,14 +299,14 @@ export async function preflightCampaignInput({
   ].join("\n");
 
   try {
-    const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+    const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model,
+        model: resolvedModel,
         store: false,
         input: [
           {
@@ -316,20 +327,20 @@ export async function preflightCampaignInput({
     if (!response.ok) {
       const detail = await readProviderErrorDetail(response);
       throw new Error(
-        `OpenAI campaign input preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+        `${providerLabel} campaign input preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
       );
     }
     const payload = await readJsonResponse(
       response,
-      "OpenAI campaign input preflight"
+      `${providerLabel} campaign input preflight`
     );
     const parsed = JSON.parse(extractResponseText(payload)) as unknown;
     const result = parseCampaignInputPreflight(parsed);
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
-      provider: "openai",
-      endpoint: "/v1/responses",
-      model,
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
       mode: "standard",
       stage: "campaign-input-preflight",
       status: "succeeded",
@@ -340,9 +351,9 @@ export async function preflightCampaignInput({
   } catch (error) {
     await writeTraceSafely(writeTrace, {
       createdAt: new Date().toISOString(),
-      provider: "openai",
-      endpoint: "/v1/responses",
-      model,
+      provider,
+      endpoint: endpointPath,
+      model: resolvedModel,
       mode: "standard",
       stage: "campaign-input-preflight",
       status: "failed",

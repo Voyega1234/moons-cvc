@@ -267,10 +267,12 @@ export async function handleArtworkGenerationRequest({
 
     if (!input) throw new Error("Invalid artwork generation request.");
     const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
+    const openRouterImagePromptModel = env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim();
     const promptProvider: ImagePromptProvider =
       !input.referenceLed &&
-      input.artworkMode !== "standard" &&
-      input.imagePromptModel === "anthropic/claude-sonnet-4.6"
+      (input.artworkMode === "standard"
+        ? Boolean(openRouterImagePromptModel && env.OPENROUTER_API_KEY?.trim())
+        : input.imagePromptModel === "anthropic/claude-sonnet-4.6")
         ? "openrouter"
         : "openai";
     const promptApiKey =
@@ -2028,6 +2030,8 @@ async function resolveImagePrompt({
   if (input.artworkMode === "standard") {
     const campaignInput = await preflightCampaignInput({
       apiKey: promptApiKey,
+      model: promptProvider === "openrouter" ? promptModel : undefined,
+      provider: promptProvider,
       fetchImpl,
       writeTrace: async (trace) => {
         await writeDebugLog(
