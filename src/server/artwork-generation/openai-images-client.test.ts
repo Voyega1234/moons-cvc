@@ -44,7 +44,7 @@ describe("OpenAI image prompt limit", () => {
 
     await generateImage({
       apiKey: "test-key",
-      model: "gpt-image-2",
+      model: "gpt-image-2.5-flare",
       prompt: oversizedPrompt,
       size: "1024x1024",
       fetchImpl: fetchImpl as unknown as typeof fetch
@@ -66,7 +66,7 @@ describe("OpenAI image prompt limit", () => {
 
     await editImage({
       apiKey: "test-key",
-      model: "gpt-image-2",
+      model: "gpt-image-2.5-flare",
       prompt: oversizedPrompt,
       size: "1024x1024",
       referenceImages: [

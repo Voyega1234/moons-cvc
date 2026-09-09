@@ -9,7 +9,7 @@ import {
 } from "./selected-hook-learning";
 
 const input: ArtworkGenerationRequest = {
-  model: "gpt-image-2",
+  model: "gpt-image-2.5-flare",
   artworkMode: "design-system",
   imagePromptModel: "gpt-5.6-terra",
   runId: "run-korea-king-1",
@@ -54,7 +54,7 @@ const outputs: ArtworkGenerationResponse["outputs"] = [
     assetBucket: "creative-assets",
     assetStoragePath: "korea-king/run-korea-king-1/outputs/hook-1-v1.png",
     provider: "openai",
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     revisionCount: 0,
     approval: {
       graphicDesign: null,

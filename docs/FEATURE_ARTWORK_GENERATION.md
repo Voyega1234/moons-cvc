@@ -138,7 +138,7 @@ shape documented below.
 Use OpenAI image model:
 
 ```text
-gpt-image-2
+gpt-image-2.5-flare
 ```
 
 Official guide:
@@ -153,7 +153,7 @@ Frontend sends:
 
 ```ts
 type ArtworkGenerationRequest = {
-  model: "gpt-image-2";
+  model: "gpt-image-2.5-flare";
   artworkMode: "standard" | "design-system" | "reference-library";
   imagePromptModel: "gpt-5.6-terra" | "anthropic/claude-sonnet-4.6";
   runId: string;
@@ -215,7 +215,7 @@ type ArtworkGenerationResponse = {
     assetStoragePath?: string;
     assetBucket?: "creative-assets";
     provider?: "openai";
-    model?: "gpt-image-2";
+    model?: "gpt-image-2.5-flare";
     revisionCount: number;
   }[];
 };
@@ -248,7 +248,7 @@ Backend flow (as implemented in
    `artworkMode`. Standard assembles `agent_image.md` plus Compact Campaign
    Input locally without a model call. Modes with an upstream creative or
    prompt agent call that model and fail closed if the required call fails.
-3. Call OpenAI `gpt-image-2` — `generateImage()` (text-only) or `editImage()`
+3. Call OpenAI `gpt-image-2.5-flare` — `generateImage()` (text-only) or `editImage()`
    (when `referenceImages` is non-empty, via `/v1/images/edits` multipart
    form) in `src/server/artwork-generation/openai-images-client.ts`, using
    the prompt from step 2.
@@ -369,7 +369,7 @@ retains its full authoritative runtime block and keeps the approved Hook fixed
 while evaluating distinct visual executions internally.
 
 For modes that use a prompt-agent call, a failure or timeout makes the endpoint
-fail closed before calling `gpt-image-2`. A sanitized provider response detail
+fail closed before calling `gpt-image-2.5-flare`. A sanitized provider response detail
 is recorded in the debug trace and returned as the request error. Standard has
 no prompt-agent call to fail or fall back from.
 
@@ -386,7 +386,7 @@ artwork confirmation step and the choice persists on the creative run:
 
 This selection changes only the model that writes the production prompt for
 the modes that use it. Standard hides the selector and ignores the persisted
-`imagePromptModel`; final artwork goes directly to OpenAI `gpt-image-2`. Older
+`imagePromptModel`; final artwork goes directly to OpenAI `gpt-image-2.5-flare`. Older
 saved workspaces and older API requests without `imagePromptModel` still
 default to `gpt-5.6-terra` for compatibility.
 

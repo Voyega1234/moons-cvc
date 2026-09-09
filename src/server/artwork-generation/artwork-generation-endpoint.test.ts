@@ -13,7 +13,7 @@ import {
 import { splitAlbumMaster } from "./album-master";
 
 const requestBody = {
-  model: "gpt-image-2",
+  model: "gpt-image-2.5-flare",
   artworkMode: "standard",
   imagePromptModel: "gpt-5.6-terra",
   runId: "run-1",
@@ -1058,7 +1058,7 @@ describe("handleArtworkGenerationRequest", () => {
         headers: { authorization: "Bearer user-token" },
         body: JSON.stringify({
           requestType: "artwork-revision",
-          model: "gpt-image-2",
+          model: "gpt-image-2.5-flare",
           clientId: "flora",
           runId: "run-1",
           outputId: "hook-1-v1",
@@ -1089,7 +1089,7 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(editBody?.model).toBe("openai/gpt-image-2");
+    expect(editBody?.model).toBe("openai/gpt-image-2.5-flare");
     expect(editBody?.quality).toBe("medium");
     expect(editBody?.input_references).toHaveLength(1);
     const prompt = String(editBody?.prompt);
@@ -1155,7 +1155,7 @@ describe("handleArtworkGenerationRequest", () => {
       headers: { authorization: "Bearer user-token" },
       body: JSON.stringify({
         requestType: "artwork-revision",
-        model: "gpt-image-2",
+        model: "gpt-image-2.5-flare",
         clientId: "flora",
         runId: "run-1",
         outputId: "hook-1-album-1-v1",
@@ -1266,7 +1266,7 @@ describe("handleArtworkGenerationRequest", () => {
       clientStatus: "queued",
       assetBucket: "creative-assets",
       provider: "openai",
-      model: "gpt-image-2"
+      model: "gpt-image-2.5-flare"
     });
     expect(payload.outputs[0]?.assetUrl).toContain("creative-assets");
     expect(uploads).toHaveLength(1);
@@ -1286,13 +1286,13 @@ describe("handleArtworkGenerationRequest", () => {
         stage: "campaign-input-preflight"
       }),
       expect.objectContaining({
-        model: "gpt-image-2",
+        model: "gpt-image-2.5-flare",
         runId: "run-1",
         directionId: "hook-1",
         request: expect.objectContaining({
           endpoint: "/api/v1/images",
           body: expect.objectContaining({
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-flare",
             prompt: expect.stringContaining(
               "สร้างภาพโฆษณาที่สมบูรณ์จาก Campaign Input"
             ),
@@ -1302,7 +1302,7 @@ describe("handleArtworkGenerationRequest", () => {
       }),
       expect.objectContaining({
         kind: "image-output",
-        model: "gpt-image-2",
+        model: "gpt-image-2.5-flare",
         runId: "run-1",
         directionId: "hook-1",
         response: expect.objectContaining({

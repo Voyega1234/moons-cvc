@@ -103,7 +103,7 @@ describe("createAiUsageTrackingFetch", () => {
     await trackedFetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       body: JSON.stringify({
-        model: "gpt-image-2",
+        model: "gpt-image-2.5-flare",
         prompt: "secret image prompt",
         n: 1,
         size: "1024x1536",
@@ -115,7 +115,7 @@ describe("createAiUsageTrackingFetch", () => {
       operation: "artwork-generation",
       stage: "image-generation",
       modality: "image",
-      model: "gpt-image-2",
+      model: "gpt-image-2.5-flare",
       input_tokens: 900,
       input_text_tokens: 200,
       input_image_tokens: 700,

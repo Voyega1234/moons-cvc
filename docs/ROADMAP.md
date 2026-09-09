@@ -335,7 +335,7 @@ Then implement / complete:
 
 ### B3. Artwork, caption, and QA
 
-Status: built without Creative Compass — `gpt-image-2` direct (text-to-image
+Status: built without Creative Compass — `gpt-image-2.5-flare` direct (text-to-image
 and reference-image edit), caption generation grounded in real historical
 posts, and an AI vision quality-check agent are all live. See
 `docs/FEATURE_ARTWORK_GENERATION.md` and `docs/FEATURE_HOOK_GENERATION.md`.

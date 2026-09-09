@@ -107,7 +107,7 @@ export interface GenerateArtworkForSelectedHooksInput {
 }
 
 export interface ArtworkGenerationRequest {
-  model: "gpt-image-2";
+  model: "gpt-image-2.5-flare";
   artworkMode: ArtworkMode;
   referenceLed?: boolean;
   usePlaceholderCopy?: boolean;
@@ -167,7 +167,7 @@ export interface ArtworkGenerationResponse {
 
 export interface ArtworkRevisionRequest {
   requestType: "artwork-revision";
-  model: "gpt-image-2";
+  model: "gpt-image-2.5-flare";
   mode?: "revise" | "placeholder" | "ugc-thumbnail";
   clientId: string;
   runId: string;
@@ -426,7 +426,7 @@ export function buildArtworkRevisionRequest({
 
   return {
     requestType: "artwork-revision",
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     ...(mode !== "revise" ? { mode } : {}),
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
@@ -564,7 +564,7 @@ export function buildArtworkRegenerationRequest({
     throw new Error("UGC uses the editable 9:16 template, not image generation.");
   }
   return {
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
     albumFormat: run.albumFormat,
@@ -783,7 +783,7 @@ export function buildUgcThumbnailRequest({
 }): ArtworkRevisionRequest {
   return {
     requestType: "artwork-revision",
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     mode: "ugc-thumbnail",
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
@@ -859,7 +859,7 @@ function buildArtworkRequest({
 }): ArtworkGenerationRequest {
 
   return {
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     artworkMode: run.artworkMode,
     ...(referenceLed ? { referenceLed: true } : {}),
     ...(run.usePlaceholderCopy ? { usePlaceholderCopy: true } : {}),
@@ -1184,7 +1184,7 @@ function buildDraftOutputs(
     status: "draft",
     clientStatus: "queued",
     provider: "openai",
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-flare",
     revisionCount: 0,
     approval: emptyApprovalGate,
     approvalComments: emptyApprovalComments

@@ -442,7 +442,7 @@ lime/orange semantic accents, soft borders, and medium information density.
   fallback behavior.
 - Angles now includes a persisted **Image prompt model** selector. GPT 5.6 via
   OpenAI is the default; users can choose Claude Sonnet 4.6 via OpenRouter.
-  The selection changes only prompt writing, not the final `gpt-image-2`
+  The selection changes only prompt writing, not the final `gpt-image-2.5-flare`
   artwork call. Older saved runs default safely to GPT 5.6. OpenRouter requires
   the server-only `OPENROUTER_API_KEY`, and prompt debug logs identify the
   selected provider without storing credentials.
@@ -598,7 +598,7 @@ lime/orange semantic accents, soft borders, and medium information density.
     Markdown sources are bundled for Vercel.
   - Removed the prompt-agent's silent deterministic fallback on 2026-07-14.
     OpenAI/OpenRouter prompt-agent failures now stop the artwork run before
-    `gpt-image-2`, retain a sanitized provider error in the debug trace, and
+    `gpt-image-2.5-flare`, retain a sanitized provider error in the debug trace, and
     surface that failure to the caller instead of generating with unintended
     instructions. Focused verification passes 3 files / 28 tests plus
     TypeScript.

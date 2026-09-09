@@ -279,7 +279,7 @@ VITE_N8N_ARTWORK_WEBHOOK_URL=<n8n-artwork-webhook-url>
 Users select the image prompt writer in Angles. GPT 5.6 is the default and uses
 `OPENAI_API_KEY`; Claude Sonnet 4.6 uses `OPENROUTER_API_KEY` through
 OpenRouter. Both model environment variables are optional deployment
-overrides. The selected prompt writer creates the actual `gpt-image-2` prompt
+overrides. The selected prompt writer creates the actual `gpt-image-2.5-flare` prompt
 from the hook, brief, brand context, and references. See
 `docs/FEATURE_ARTWORK_GENERATION.md` for the full request contract.
 
