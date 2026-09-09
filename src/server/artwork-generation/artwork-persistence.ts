@@ -59,6 +59,14 @@ export async function persistArtworkOutput({
   const { data: publicUrlResult } = storage.storage
     .from(ARTWORK_BUCKET)
     .getPublicUrl(assetStoragePath);
+  // Direction IDs can be reused across a run (e.g. after hooks are
+  // regenerated), which can make two unrelated generations land on the same
+  // {directionId}-v{assetVersion}.png storage path. Upsert then overwrites
+  // that file with new bytes, but the URL is unchanged, so the browser (and
+  // any CDN) keeps serving whatever it cached for that exact URL earlier in
+  // the same session. A cache-busting query param forces a fresh fetch every
+  // time regardless of whether the path collided.
+  const assetUrl = `${publicUrlResult.publicUrl}?v=${Date.now()}`;
 
   const imageOutputDebug = buildImageOutputDebugBundle({
     model,
@@ -80,7 +88,7 @@ export async function persistArtworkOutput({
     format,
     status: "ready",
     clientStatus: "queued",
-    assetUrl: publicUrlResult.publicUrl,
+    assetUrl,
     assetStoragePath,
     assetBucket: ARTWORK_BUCKET,
     provider: "openai",
