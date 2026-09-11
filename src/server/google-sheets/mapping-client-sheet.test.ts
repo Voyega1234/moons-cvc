@@ -154,6 +154,29 @@ describe("readMappingClientsFromGoogleSheet", () => {
       encodeURIComponent("'Active Clients'")
     );
   });
+
+  it('accepts a "Company ID" header as the renamed Client ID column', async () => {
+    const publishedUrl =
+      "https://docs.google.com/spreadsheets/d/e/published-id/pub?gid=1&single=true&output=csv";
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        ["No,Company ID,Status,Service Status", "1,Vitalife,Active,"].join(
+          "\n"
+        ),
+        { headers: { "Content-Type": "text/csv" } }
+      )
+    );
+
+    await expect(
+      readMappingClientsFromGoogleSheet({
+        sheetUrl: publishedUrl,
+        accessToken: "",
+        fetchImpl
+      })
+    ).resolves.toMatchObject({
+      clients: [{ clientId: "Vitalife", status: "Active", serviceStatus: "" }]
+    });
+  });
 });
 
 describe("readOnboardingQuestionnaireFromGoogleSheet", () => {

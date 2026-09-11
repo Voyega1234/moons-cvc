@@ -102,15 +102,17 @@ function mappingSheetResultFromRows(
   sheetTitle: string
 ): MappingSheetResult {
   const headerIndex = rows.findIndex(
-    (row) => findColumnIndex(row, "Client ID") >= 0
+    (row) => findColumnIndex(row, CLIENT_ID_HEADER_NAMES) >= 0
   );
   if (headerIndex < 0) {
-    throw new Error('Google Sheet must contain a "Client ID" column.');
+    throw new Error(
+      'Google Sheet must contain a "Client ID" (or "Company ID") column.'
+    );
   }
   const header = rows[headerIndex] ?? [];
   const dataRows = rows.slice(headerIndex + 1);
   const indexes = {
-    clientId: findColumnIndex(header, "Client ID"),
+    clientId: findColumnIndex(header, CLIENT_ID_HEADER_NAMES),
     status: findColumnIndex(header, "Status"),
     serviceStatus: findColumnIndex(header, "Service Status"),
     clientPortal: findColumnIndex(header, "Client Portal")
@@ -731,10 +733,17 @@ function readRows(payload: Record<string, unknown>): string[][] {
   );
 }
 
-function findColumnIndex(header: readonly string[], name: string): number {
-  const normalizedName = name.trim().toLowerCase();
-  return header.findIndex(
-    (value) => value.trim().toLowerCase() === normalizedName
+const CLIENT_ID_HEADER_NAMES = ["Client ID", "Company ID"] as const;
+
+function findColumnIndex(
+  header: readonly string[],
+  name: string | readonly string[]
+): number {
+  const normalizedNames = (Array.isArray(name) ? name : [name]).map(
+    (candidate) => candidate.trim().toLowerCase()
+  );
+  return header.findIndex((value) =>
+    normalizedNames.includes(value.trim().toLowerCase())
   );
 }
 
