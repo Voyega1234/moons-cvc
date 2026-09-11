@@ -1,4 +1,5 @@
 import type { ArtworkOutputSize } from "../../domain/creative-run.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 export interface GeneratedImage {
   base64: string;
@@ -77,7 +78,13 @@ export async function editImage({
             "base64"
           )}`
         }
-      }))
+      })),
+      trace: {
+        trace_name: "moons_image_edit",
+        generation_name: "moons_image_edit",
+        feature: "artwork-generation",
+        environment: openRouterTraceEnvironment()
+      }
     })
   });
 
@@ -179,7 +186,13 @@ export async function editImageWithAspectRatio({
             "base64"
           )}`
         }
-      }))
+      })),
+      trace: {
+        trace_name: "moons_image_edit_aspect_ratio",
+        generation_name: "moons_image_edit_aspect_ratio",
+        feature: "artwork-generation",
+        environment: openRouterTraceEnvironment()
+      }
     })
   });
 
@@ -215,7 +228,13 @@ export async function generateImage({
       prompt: fitOpenAIImagePrompt(prompt),
       n: 1,
       size,
-      quality: "medium"
+      quality: "medium",
+      trace: {
+        trace_name: "moons_image_generate",
+        generation_name: "moons_image_generate",
+        feature: "artwork-generation",
+        environment: openRouterTraceEnvironment()
+      }
     })
   });
 

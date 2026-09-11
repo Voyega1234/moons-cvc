@@ -4,6 +4,7 @@ import type {
   BrandVisualGuidance,
   MirroredBrandVisualAsset
 } from "./client-ingestion-harness.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -180,7 +181,17 @@ export class OpenAiBrandVisualAnalyzer implements BrandVisualAnalyzer {
               strict: true,
               schema: brandVisualAnalysisSchema
             }
-          }
+          },
+          ...(this.providerLabel === "OpenRouter"
+            ? {
+                trace: {
+                  trace_name: "brand_visual_analysis",
+                  generation_name: "brand_visual_analysis",
+                  feature: "client-ingestion",
+                  environment: openRouterTraceEnvironment()
+                }
+              }
+            : {})
         }),
         signal: controller.signal
       });

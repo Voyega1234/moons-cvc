@@ -1,4 +1,5 @@
 import type { SearchFallbackClient } from "./client-ingestion-harness.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -117,7 +118,17 @@ export class OpenAiBrandDiscoverySearch implements SearchFallbackClient {
           ...(this.provider === "openai"
             ? { include: ["web_search_call.action.sources"] }
             : {}),
-          input: buildDiscoveryPrompt(input)
+          input: buildDiscoveryPrompt(input),
+          ...(this.provider === "openrouter"
+            ? {
+                trace: {
+                  trace_name: "moons_brand_discovery_search",
+                  generation_name: "moons_brand_discovery_search",
+                  feature: "client-ingestion",
+                  environment: openRouterTraceEnvironment()
+                }
+              }
+            : {})
         })
       });
     } catch (error) {

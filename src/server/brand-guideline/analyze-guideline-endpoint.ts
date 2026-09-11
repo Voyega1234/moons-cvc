@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -150,7 +151,17 @@ async function callResponsesApi({
           strict: true,
           schema: analysisSchema
         }
-      }
+      },
+      ...(provider === "openrouter"
+        ? {
+            trace: {
+              trace_name: "moons_guideline_analysis",
+              generation_name: "moons_guideline_analysis",
+              feature: "brand-guideline",
+              environment: openRouterTraceEnvironment()
+            }
+          }
+        : {})
     })
   });
 

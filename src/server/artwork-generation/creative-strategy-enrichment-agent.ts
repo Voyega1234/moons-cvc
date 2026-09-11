@@ -4,6 +4,7 @@ import type {
   ImagePromptAgentHook,
   ImagePromptProvider
 } from "./image-prompt-agent.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -206,7 +207,17 @@ export async function enrichCreativeStrategy({
               strict: true,
               schema: enrichmentSchema
             }
-          }
+          },
+          ...(provider === "openrouter"
+            ? {
+                trace: {
+                  trace_name: "moons_creative_strategy_enrichment",
+                  generation_name: "moons_creative_strategy_enrichment",
+                  feature: "artwork-generation",
+                  environment: openRouterTraceEnvironment()
+                }
+              }
+            : {})
         })
       });
 

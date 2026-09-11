@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 type CheckId = "quality" | "spelling" | "policy";
@@ -175,7 +176,17 @@ async function callResponsesApi({
           strict: true,
           schema: resultsSchema
         }
-      }
+      },
+      ...(provider === "openrouter"
+        ? {
+            trace: {
+              trace_name: "moons_idea_preflight",
+              generation_name: "moons_idea_preflight",
+              feature: "quality-check",
+              environment: openRouterTraceEnvironment()
+            }
+          }
+        : {})
     })
   });
 

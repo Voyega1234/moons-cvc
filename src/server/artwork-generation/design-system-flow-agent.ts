@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AlbumFormat } from "../../domain/creative-run.js";
 import type { ImagePromptProvider } from "./image-prompt-agent.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -365,7 +366,17 @@ async function callStructuredAgent<T>({
             strict: true,
             schema
           }
-        }
+        },
+        ...(provider === "openrouter"
+          ? {
+              trace: {
+                trace_name: schemaName,
+                generation_name: schemaName,
+                feature: "artwork-generation",
+                environment: openRouterTraceEnvironment()
+              }
+            }
+          : {})
       })
     });
 

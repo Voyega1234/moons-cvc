@@ -5,6 +5,7 @@ import type {
   ImagePromptProvider
 } from "./image-prompt-agent.js";
 import type { ReferenceImageInput } from "./openai-images-client.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -113,7 +114,17 @@ export async function interpretReferenceDesign({
             strict: true,
             schema: referenceDesignGrammarSchema
           }
-        }
+        },
+        ...(provider === "openrouter"
+          ? {
+              trace: {
+                trace_name: "moons_reference_design_grammar",
+                generation_name: "moons_reference_design_grammar",
+                feature: "artwork-generation",
+                environment: openRouterTraceEnvironment()
+              }
+            }
+          : {})
       })
     });
 

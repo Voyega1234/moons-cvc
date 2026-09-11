@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 type ReviewDecision = "approved" | "rejected" | null;
@@ -144,7 +145,17 @@ async function callResponsesApi({
           strict: true,
           schema: suggestionsSchema
         }
-      }
+      },
+      ...(provider === "openrouter"
+        ? {
+            trace: {
+              trace_name: "moons_brand_learning_suggestions",
+              generation_name: "moons_brand_learning_suggestions",
+              feature: "brand-learning",
+              environment: openRouterTraceEnvironment()
+            }
+          }
+        : {})
     })
   });
 

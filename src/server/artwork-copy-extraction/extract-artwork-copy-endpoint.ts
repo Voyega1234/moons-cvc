@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -112,6 +113,12 @@ async function callResponsesApi({
           strict: true,
           schema: resultsSchema
         }
+      },
+      trace: {
+        trace_name: "moons_artwork_copy_extraction",
+        generation_name: "moons_artwork_copy_extraction",
+        feature: "artwork-copy-extraction",
+        environment: openRouterTraceEnvironment()
       }
     })
   });

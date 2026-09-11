@@ -30,6 +30,7 @@ import {
   resolveConvertCakeAuthorization
 } from "../shared/convert-cake-auth.js";
 import { createAiUsageTrackingFetch } from "../shared/ai-usage-recorder.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 import {
   hookGenerationDebugLogDirectory,
   writeHookGenerationDebugLog,
@@ -1571,6 +1572,12 @@ async function callResponsesApi({
               strict: true,
               schema: openRouterCompatibleSchema(schema)
             }
+          },
+          trace: {
+            trace_name: schemaName,
+            generation_name: schemaName,
+            feature: "hook-generation",
+            environment: openRouterTraceEnvironment()
           }
         }
       : {

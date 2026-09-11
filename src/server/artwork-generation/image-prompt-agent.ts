@@ -6,6 +6,7 @@ import {
   type ArtworkMode
 } from "../../domain/creative-run.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -150,6 +151,9 @@ export async function generateImagePrompt({
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const isDesignSystemMode =
     mode === "design-system" || mode === "design-system-new";
+  const schemaName = isDesignSystemMode
+    ? "moons_creative_visual_concept"
+    : "moons_image_generation_prompt";
   const inputText = isDesignSystemMode
     ? renderLegacyV6CreativeConceptPrompt(
         await loadCreativeGraphicDesignerPrompt(),
@@ -188,15 +192,23 @@ export async function generateImagePrompt({
         text: {
           format: {
             type: "json_schema",
-            name: isDesignSystemMode
-              ? "moons_creative_visual_concept"
-              : "moons_image_generation_prompt",
+            name: schemaName,
             strict: true,
             schema: isDesignSystemMode
               ? creativeConceptSchema
               : standardImagePromptSchema
           }
-        }
+        },
+        ...(provider === "openrouter"
+          ? {
+              trace: {
+                trace_name: schemaName,
+                generation_name: schemaName,
+                feature: "artwork-generation",
+                environment: openRouterTraceEnvironment()
+              }
+            }
+          : {})
       })
     });
 
@@ -321,7 +333,17 @@ export async function preflightCampaignInput({
             strict: true,
             schema: campaignInputPreflightSchema
           }
-        }
+        },
+        ...(provider === "openrouter"
+          ? {
+              trace: {
+                trace_name: "moons_campaign_input_preflight",
+                generation_name: "moons_campaign_input_preflight",
+                feature: "artwork-generation",
+                environment: openRouterTraceEnvironment()
+              }
+            }
+          : {})
       })
     });
     if (!response.ok) {
@@ -426,7 +448,17 @@ export async function generateProductionBrief({
             strict: true,
             schema: standardImagePromptSchema
           }
-        }
+        },
+        ...(provider === "openrouter"
+          ? {
+              trace: {
+                trace_name: "moons_image_generation_prompt",
+                generation_name: "moons_image_generation_prompt",
+                feature: "artwork-generation",
+                environment: openRouterTraceEnvironment()
+              }
+            }
+          : {})
       })
     });
 

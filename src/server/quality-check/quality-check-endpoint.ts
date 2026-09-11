@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 import { isActiveBrandKitItem } from "../../domain/brand.js";
 import {
   CREATIVE_STRATEGIST_AGENT_NAME,
@@ -175,7 +176,17 @@ async function callResponsesApi({
           strict: true,
           schema: resultsSchema
         }
-      }
+      },
+      ...(provider === "openrouter"
+        ? {
+            trace: {
+              trace_name: "moons_quality_check",
+              generation_name: "moons_quality_check",
+              feature: "quality-check",
+              environment: openRouterTraceEnvironment()
+            }
+          }
+        : {})
     })
   });
 

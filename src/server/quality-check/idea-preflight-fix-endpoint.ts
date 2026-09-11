@@ -1,4 +1,5 @@
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 type CheckId = "quality" | "spelling" | "policy";
@@ -129,6 +130,12 @@ async function callChatCompletions({
           strict: true,
           schema: fixSchema
         }
+      },
+      trace: {
+        trace_name: "moons_idea_preflight_fix",
+        generation_name: "moons_idea_preflight_fix",
+        feature: "quality-check",
+        environment: openRouterTraceEnvironment()
       }
     })
   });

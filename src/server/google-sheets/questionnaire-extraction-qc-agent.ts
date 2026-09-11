@@ -4,6 +4,7 @@ import {
   questionnaireKnownFieldKeys,
   type QuestionnaireExtractionReviewInput
 } from "./mapping-client-sheet.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -94,7 +95,17 @@ export async function reviewQuestionnaireExtractionWithLuna({
           strict: true,
           schema: extractionSchema(allowedKeys)
         }
-      }
+      },
+      ...(provider === "openrouter"
+        ? {
+            trace: {
+              trace_name: "moons_questionnaire_extraction_qc",
+              generation_name: "moons_questionnaire_extraction_qc",
+              feature: "google-sheets",
+              environment: openRouterTraceEnvironment()
+            }
+          }
+        : {})
     })
   });
 

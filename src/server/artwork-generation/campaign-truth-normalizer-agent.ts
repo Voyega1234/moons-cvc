@@ -5,6 +5,7 @@ import type {
   ImagePromptProvider
 } from "./image-prompt-agent.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
+import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 type FetchLike = typeof fetch;
 
@@ -232,7 +233,17 @@ export async function normalizeCampaignTruth({
               strict: true,
               schema: campaignPacketSchema
             }
-          }
+          },
+          ...(provider === "openrouter"
+            ? {
+                trace: {
+                  trace_name: "moons_authoritative_campaign_packet",
+                  generation_name: "moons_authoritative_campaign_packet",
+                  feature: "artwork-generation",
+                  environment: openRouterTraceEnvironment()
+                }
+              }
+            : {})
         })
       });
 
