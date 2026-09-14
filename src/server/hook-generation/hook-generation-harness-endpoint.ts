@@ -1,3 +1,4 @@
+import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -500,6 +501,11 @@ async function runGenerationStep({
     topicShortlist,
     pastPosts
   );
+  const HOOK_GENERATION_MAX_TOKENS_CEILING = 24000;
+  let currentMaxTokens = Math.min(
+    HOOK_GENERATION_MAX_TOKENS_CEILING,
+    4000 + input.quantity * 1000
+  );
   const requestDirections = (requestInputText: string) =>
     callResponsesApi({
       apiKey,
@@ -508,15 +514,17 @@ async function runGenerationStep({
       content: [{ type: "input_text", text: requestInputText }],
       schemaName: "moons_hook_generation",
       schema: hookGenerationSchema,
+      maxTokens: currentMaxTokens,
       reasoningEffort:
         provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
       provider
     });
   let finalInputText = inputText;
-  let payload = await requestDirections(finalInputText);
+  let payload: unknown;
   let result: HookGenerationResult | undefined;
   let albumPanelCountRepairAttempts = 0;
   let thaiNaturalnessRepairAttempts = 0;
+  let truncationRepairAttempts = 0;
   const THAI_NATURALNESS_MAX_RETRIES = 3;
 
   for (
@@ -525,8 +533,20 @@ async function runGenerationStep({
     attempt += 1
   ) {
     try {
+      payload ??= await requestDirections(finalInputText);
       result = parseHookGenerationResult(extractResponseText(payload));
     } catch (error) {
+      if (
+        truncationRepairAttempts < 1 &&
+        isTruncatedResponseError(error) &&
+        currentMaxTokens < HOOK_GENERATION_MAX_TOKENS_CEILING
+      ) {
+        truncationRepairAttempts += 1;
+        currentMaxTokens = HOOK_GENERATION_MAX_TOKENS_CEILING;
+        payload = undefined;
+        continue;
+      }
+
       if (
         albumPanelCountRepairAttempts >= 2 ||
         !isAlbumPanelCountContractError(error)
@@ -1411,6 +1431,13 @@ function buildThaiNaturalnessRetryPrompt(
   ].join("\n");
 }
 
+function isTruncatedResponseError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /response was truncated before it finished/.test(error.message)
+  );
+}
+
 function isAlbumPanelCountContractError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -1526,6 +1553,7 @@ async function callResponsesApi({
   tools,
   plugins,
   toolChoice,
+  maxTokens = 16000,
   reasoningEffort,
   provider = "openai"
 }: {
@@ -1538,6 +1566,7 @@ async function callResponsesApi({
   tools?: readonly Record<string, unknown>[];
   plugins?: readonly Record<string, unknown>[];
   toolChoice?: "required";
+  maxTokens?: number;
   reasoningEffort?: "medium" | "high";
   provider?: "openai" | "openrouter";
 }): Promise<unknown> {
@@ -1550,6 +1579,7 @@ async function callResponsesApi({
     provider === "openrouter"
       ? {
           model,
+          max_tokens: maxTokens,
           messages: [
             {
               role: "user",
@@ -1563,7 +1593,7 @@ async function callResponsesApi({
               )
             }
           ],
-          ...(plugins?.length ? { plugins } : {}),
+          plugins: [...(plugins ?? []), { id: "response-healing" }],
           provider: { require_parameters: true },
           response_format: {
             type: "json_schema",
@@ -1630,7 +1660,7 @@ async function callResponsesApi({
         const inlinedContent = await inlineRemoteImages(content, fetchImpl);
         response = await send(inlinedContent);
         if (response.ok) {
-          return readJsonResponse(response, `${providerLabel} hook harness`);
+          return readCompleteJsonResponse(response, `${providerLabel} ${schemaName} (${model})`);
         }
         detail = await readProviderErrorDetail(response);
       } catch (error) {
@@ -1643,7 +1673,30 @@ async function callResponsesApi({
     );
   }
 
-  return readJsonResponse(response, `${providerLabel} hook harness`);
+  const label = `${providerLabel} ${schemaName} (${model})`;
+  try {
+    return await readCompleteJsonResponse(response, label);
+  } catch (error) {
+    // One fresh attempt for invalid/empty model text; never replay HTTP failures,
+    // refusals, or tool calls. Token exhaustion is handled by the idea budget retry.
+    if (provider !== "openrouter" || !(error instanceof StructuredOutputError) ||
+        !["invalid_json", "empty_output"].includes(error.code)) throw error;
+    const retryResponse = await send(content);
+    if (!retryResponse.ok) {
+      const detail = await readProviderErrorDetail(retryResponse);
+      throw new Error(`${label} failed: ${retryResponse.status}${detail ? ` — ${detail}` : ""}`);
+    }
+    return readCompleteJsonResponse(retryResponse, label);
+  }
+}
+
+async function readCompleteJsonResponse(
+  response: Response,
+  providerLabel: string
+): Promise<unknown> {
+  const payload = await readJsonResponse(response, providerLabel);
+  extractStructuredJsonText(payload, providerLabel);
+  return payload;
 }
 
 function openRouterCompatibleSchema(value: unknown): unknown {
@@ -2770,38 +2823,7 @@ function parseSubheadlineHighlights(
 }
 
 function extractResponseText(payload: unknown): string {
-  if (isRecord(payload) && typeof payload.output_text === "string") {
-    return payload.output_text;
-  }
-
-  if (isRecord(payload) && Array.isArray(payload.choices)) {
-    for (const choice of payload.choices) {
-      if (!isRecord(choice) || !isRecord(choice.message)) continue;
-      if (typeof choice.message.content === "string") {
-        return choice.message.content;
-      }
-    }
-  }
-
-  if (!isRecord(payload) || !Array.isArray(payload.output)) {
-    throw new Error("Hook generation response did not include output text.");
-  }
-
-  for (const item of payload.output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) continue;
-
-    for (const content of item.content) {
-      if (
-        isRecord(content) &&
-        content.type === "output_text" &&
-        typeof content.text === "string"
-      ) {
-        return content.text;
-      }
-    }
-  }
-
-  throw new Error("Hook generation response did not include output text.");
+  return extractStructuredJsonText(payload, "Hook generation");
 }
 
 async function readProviderErrorDetail(response: Response): Promise<string> {

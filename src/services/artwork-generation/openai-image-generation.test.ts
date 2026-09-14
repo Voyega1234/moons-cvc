@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  generateArtworkForSelectedHooks,
   artworkReferencesFromSelections,
   buildArtworkGenerationRequest,
   buildArtworkGenerationRequests,
@@ -901,4 +902,23 @@ describe("buildArtworkGenerationRequest", () => {
     expect(n8nRequest.selectedHooks).toEqual(request.selectedHooks);
     expect(n8nRequest.brandMemory).toEqual(request.brandMemory);
   });
+});
+
+
+it("reports a gateway timeout without automatically generating the images again", async () => {
+  const { env } = await import("../../config/env");
+  const previousMode = env.artworkGenerationMode;
+  const previousEndpoint = env.artworkGenerationEndpoint;
+  const fetchMock = vi.fn().mockResolvedValue(new Response("Gateway Timeout", {
+    status: 504, headers: { "content-type": "text/plain; charset=utf-8" }
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  Object.assign(env, { artworkGenerationMode: "openai", artworkGenerationEndpoint: "/api/artwork-generation" });
+  try {
+    await expect(generateArtworkForSelectedHooks({ run })).rejects.toThrow("timed out (HTTP 504)");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.assign(env, { artworkGenerationMode: previousMode, artworkGenerationEndpoint: previousEndpoint });
+    vi.unstubAllGlobals();
+  }
 });

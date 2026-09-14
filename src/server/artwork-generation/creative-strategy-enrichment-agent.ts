@@ -1,3 +1,4 @@
+import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -583,23 +584,7 @@ async function readJsonResponse(response: Response): Promise<unknown> {
 }
 
 function extractResponseText(payload: unknown): string {
-  if (!isRecord(payload)) {
-    throw new Error("Creative strategy enrichment returned an invalid response.");
-  }
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text;
-  }
-  if (Array.isArray(payload.output)) {
-    for (const item of payload.output) {
-      if (!isRecord(item) || !Array.isArray(item.content)) continue;
-      for (const content of item.content) {
-        if (isRecord(content) && typeof content.text === "string") {
-          return content.text;
-        }
-      }
-    }
-  }
-  throw new Error("Creative strategy enrichment returned no output text.");
+  return extractStructuredJsonText(payload, "Creative strategy enrichment");
 }
 
 async function writeTraceSafely(

@@ -1,3 +1,4 @@
+import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -216,24 +217,7 @@ function parseReferenceDesignGrammar(value: unknown): ReferenceDesignGrammar {
 }
 
 function extractResponseText(payload: unknown): string {
-  if (isRecord(payload) && typeof payload.output_text === "string") {
-    return payload.output_text;
-  }
-  if (isRecord(payload) && Array.isArray(payload.output)) {
-    for (const item of payload.output) {
-      if (!isRecord(item) || !Array.isArray(item.content)) continue;
-      for (const content of item.content) {
-        if (
-          isRecord(content) &&
-          content.type === "output_text" &&
-          typeof content.text === "string"
-        ) {
-          return content.text;
-        }
-      }
-    }
-  }
-  throw new Error("Reference interpreter response did not include output text.");
+  return extractStructuredJsonText(payload, "Reference interpreter");
 }
 
 async function responseDetail(response: Response): Promise<string> {

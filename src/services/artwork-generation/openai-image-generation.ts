@@ -1222,6 +1222,9 @@ async function readJsonResponse<T>(
   response: Response,
   label: string
 ): Promise<T> {
+  if (response.status === 504) {
+    throw new Error(`${label} timed out (HTTP 504) before generation completed. This is a server timeout, not a JSON format error. Check saved outputs before retrying.`);
+  }
   const text = await response.text();
   if (!text.trim()) {
     throw new Error(`${label} returned an empty response body.`);

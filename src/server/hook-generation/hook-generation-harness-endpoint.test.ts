@@ -1073,6 +1073,53 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
+  it.each(["truncated", "malformed", "empty"])("recovers once from %s idea output", async (failure) => {
+    const first = failure === "truncated"
+      ? { choices: [{ finish_reason: "length", message: { content: '{"directions":[' } }] }
+      : { choices: [{ finish_reason: "stop", message: { content: failure === "empty" ? null : '{"directions":[' } }] };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify(first)))
+      .mockResolvedValueOnce(openRouterResearchResponse([openAiStaticDirection()]))
+      .mockResolvedValueOnce(openRouterHighlightResponse("shared-research-hook", []));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+      }),
+      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+    });
+    expect(await response.json()).toMatchObject({ directions: [expect.objectContaining({ id: "shared-research-hook", caption: openAiStaticDirection().caption })] });
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body))).filter((body) => body.response_format?.json_schema.name === "moons_hook_generation");
+    expect(bodies[1].max_tokens).toBe(failure === "truncated" ? 24000 : bodies[0].max_tokens);
+  });
+
+  it("stops after one malformed-output retry and identifies the agent and model", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse()).mockResolvedValueOnce(validHookTopicShortlistResponse()).mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"directions":[' } }] })));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+      }),
+      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("moons_hook_generation (google/gemini-3.8-flash) returned malformed JSON") });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(["length", "content_filter", "tool_calls"])("does not loop on terminal %s output", async (finishReason) => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse()).mockResolvedValueOnce(validHookTopicShortlistResponse()).mockImplementation(async () => new Response(JSON.stringify({ choices: [{ finish_reason: finishReason, message: { content: null } }] })));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+      }), env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+    });
+    expect(response.status).toBe(500);
+    expect(fetchMock).toHaveBeenCalledTimes(finishReason === "length" ? 4 : 3);
+  });
+
   it("defaults the direct creative pass to OpenRouter when no model is selected", async () => {
     const {
       generationModel: _generationModel,
@@ -1181,7 +1228,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(directionSchema.properties.directions.items.required).toEqual(
       Object.keys(directionSchema.properties.directions.items.properties)
     );
-    expect(generationBody.plugins).toBeUndefined();
+    expect(generationBody.plugins).toEqual([{ id: "response-healing" }]);
     expect(generationBody.provider).toEqual({ require_parameters: true });
     const highlightBody = JSON.parse(
       String(fetchMock.mock.calls[3]?.[1]?.body)
@@ -1277,7 +1324,8 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(researchBody.tools).toBeUndefined();
     expect(researchBody.tool_choice).toBeUndefined();
     expect(researchBody.plugins).toEqual([
-      expect.objectContaining({ id: "web", engine: "native" })
+      expect.objectContaining({ id: "web", engine: "native" }),
+      { id: "response-healing" }
     ]);
     expect(
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
@@ -1287,7 +1335,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       String(fetchMock.mock.calls[1]?.[1]?.body)
     ) as { model: string; plugins?: unknown[] };
     expect(topicBody.model).toBe("openai/gpt-5.6-terra");
-    expect(topicBody.plugins).toBeUndefined();
+    expect(topicBody.plugins).toEqual([{ id: "response-healing" }]);
   });
 
   it("succeeds with no OPENAI_API_KEY at all when generation and research both resolve to OpenRouter", async () => {
@@ -1387,7 +1435,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const openRouterBody = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as { plugins?: unknown; tools?: unknown; tool_choice?: unknown };
-    expect(openRouterBody.plugins).toBeUndefined();
+    expect(openRouterBody.plugins).toEqual([{ id: "response-healing" }]);
     expect(openRouterBody.tools).toBeUndefined();
     expect(openRouterBody.tool_choice).toBeUndefined();
   });
@@ -1574,7 +1622,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({
       ok: false,
-      error: "OpenAI hook harness returned an empty response body."
+      error: "OpenAI moons_hook_research (gpt-5.6-terra) returned an empty response body."
     });
   });
 

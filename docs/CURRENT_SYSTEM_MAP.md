@@ -550,3 +550,26 @@ After the first extraction:
 | `src/features/workflow/review/output-grid.tsx` | 662 |
 | `src/features/workflow/review/creative-previews.tsx` | 177 |
 | `src/features/workflow/review/output-groups.ts` | 125 |
+
+## Generation JSON transport and timeouts (2026-09-14)
+
+`src/server/shared/structured-output.ts` reads final structured text for Hook and
+Artwork text agents. It joins output text blocks, skips reasoning/tool arguments,
+unwraps JSON fences, and distinguishes malformed JSON, missing final text,
+truncation, refusal, and provider failure before domain validation. It never
+repairs missing business data. Hook transport errors identify the schema and model.
+OpenRouter Hook chat requests retain strict JSON Schema and required-parameter
+routing and add the `response-healing` plugin alongside existing search plugins.
+A malformed or empty final text response gets at most one fresh transport retry;
+HTTP errors, refusals, and tool-only responses are not replayed by that retry.
+The initial idea request now runs inside its existing truncation recovery block,
+so token exhaustion can actually trigger its one retry at the 24,000-token ceiling.
+Artwork text agents continue using the Responses API; chat-only healing settings
+are not added to those requests.
+
+Artwork's function duration is 900 seconds in both `api/artwork-generation.ts`
+and `vercel.json`, matching the existing long-running Hook configuration. This
+requires a Vercel plan/runtime supporting that duration and a new deployment.
+It mitigates the former 300-second limit; it does not make long image requests
+independent of HTTP timeouts. The client describes HTTP 504 as a generation
+server timeout and does not automatically resubmit image generation.

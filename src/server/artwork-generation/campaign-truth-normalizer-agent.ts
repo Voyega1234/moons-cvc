@@ -1,3 +1,4 @@
+import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -626,22 +627,7 @@ async function readProviderErrorDetail(response: Response): Promise<string> {
 }
 
 function extractResponseText(payload: unknown): string {
-  if (!isRecord(payload)) throw new Error("Normalizer response was malformed.");
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text;
-  }
-  if (!Array.isArray(payload.output)) {
-    throw new Error("Normalizer response did not include output text.");
-  }
-  for (const item of payload.output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) continue;
-    for (const content of item.content) {
-      if (isRecord(content) && typeof content.text === "string") {
-        return content.text;
-      }
-    }
-  }
-  throw new Error("Normalizer response did not include output text.");
+  return extractStructuredJsonText(payload, "Campaign truth normalizer");
 }
 
 async function writeTraceSafely(

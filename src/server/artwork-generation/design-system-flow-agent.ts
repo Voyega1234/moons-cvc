@@ -1,3 +1,4 @@
+import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AlbumFormat } from "../../domain/creative-run.js";
@@ -621,25 +622,7 @@ async function readJsonResponse(
 }
 
 function extractResponseText(payload: unknown): string {
-  if (isRecord(payload) && typeof payload.output_text === "string") {
-    return payload.output_text;
-  }
-  if (!isRecord(payload) || !Array.isArray(payload.output)) {
-    throw new Error("Agent response did not include output text.");
-  }
-  for (const item of payload.output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) continue;
-    for (const content of item.content) {
-      if (
-        isRecord(content) &&
-        content.type === "output_text" &&
-        typeof content.text === "string"
-      ) {
-        return content.text;
-      }
-    }
-  }
-  throw new Error("Agent response did not include output text.");
+  return extractStructuredJsonText(payload, "Artwork agent");
 }
 
 async function readProviderErrorDetail(response: Response): Promise<string> {

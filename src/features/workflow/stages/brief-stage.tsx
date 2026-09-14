@@ -307,20 +307,42 @@ export const creativeMaterialRoleLabels: Record<CreativeMaterialRole, string> = 
 };
 
 
-function AssetPreviewImage({
-  src,
-  alt
-}: {
-  src: string;
-  alt: string;
-}) {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
-    "loading"
-  );
+export function AssetPreviewImage({ src, alt }: { src: string; alt: string }) {
+  // A different source gets a fresh load lifecycle; effects must not reset a
+  // successful cached-image load back to "loading".
+  return <AssetPreviewImageRequest key={src} src={src} alt={alt} />;
+}
+
+function AssetPreviewImageRequest({ src, alt }: { src: string; alt: string }) {
+  const thumbnail = toThumbnailSupabaseAssetUrl(src, { width: 320 });
+  const [imageSrc, setImageSrc] = useState(thumbnail);
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  const handleFailure = () => {
+    if (imageSrc !== src) {
+      setImageSrc(src);
+      setStatus("loading");
+    } else {
+      setStatus("error");
+    }
+  };
 
   useEffect(() => {
-    setStatus("loading");
-  }, [src]);
+    if (status !== "loading") return;
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setStatus("loaded");
+      return;
+    }
+    // Image transformations can stall even while the original is available.
+    // Bound both attempts so a failed preview never leaves a permanent skeleton.
+    const timer = window.setTimeout(() => {
+      if (imageSrc !== src) setImageSrc(src);
+      else setStatus("error");
+    }, imageSrc !== src ? 8000 : 20000);
+    return () => window.clearTimeout(timer);
+  }, [imageSrc, src, status]);
 
   return (
     <div className={`compass-asset-preview ${status}`}>
@@ -328,16 +350,18 @@ function AssetPreviewImage({
         <span className="compass-asset-preview-skeleton" aria-hidden="true" />
       ) : null}
       {status === "error" ? (
-        <span className="compass-asset-preview-error">
+        <span className="compass-asset-preview-error" role="status">
           <ImageBroken aria-hidden="true" size={24} weight="duotone" />
           Preview unavailable
         </span>
       ) : null}
       <img
-        src={toThumbnailSupabaseAssetUrl(src, { width: 320 })}
+        key={imageSrc}
+        ref={imageRef}
+        src={imageSrc}
         alt={alt}
         onLoad={() => setStatus("loaded")}
-        onError={() => setStatus("error")}
+        onError={handleFailure}
       />
     </div>
   );
