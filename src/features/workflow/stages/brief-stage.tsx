@@ -336,7 +336,6 @@ function AssetPreviewImage({
       <img
         src={toThumbnailSupabaseAssetUrl(src, { width: 320 })}
         alt={alt}
-        loading="lazy"
         onLoad={() => setStatus("loaded")}
         onError={() => setStatus("error")}
       />
