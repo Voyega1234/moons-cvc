@@ -1,6 +1,8 @@
 import type { ArtworkOutputSize } from "../../domain/creative-run.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
+export type ImageGenerationSize = ArtworkOutputSize | "2048x1024" | "1024x2048";
+
 export interface GeneratedImage {
   base64: string;
   mimeType: string;
@@ -10,7 +12,7 @@ export interface GenerateImageOptions {
   apiKey: string;
   model: string;
   prompt: string;
-  size: ArtworkOutputSize;
+  size: ImageGenerationSize;
   fetchImpl: typeof fetch;
 }
 
@@ -45,7 +47,7 @@ export interface EditImageOptions {
   apiKey: string;
   model: string;
   prompt: string;
-  size: ArtworkOutputSize;
+  size: ImageGenerationSize;
   quality?: "low" | "medium" | "high" | "auto";
   referenceImages: readonly ReferenceImageInput[];
   fetchImpl: typeof fetch;

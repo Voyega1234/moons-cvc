@@ -573,3 +573,52 @@ requires a Vercel plan/runtime supporting that duration and a new deployment.
 It mitigates the former 300-second limit; it does not make long image requests
 independent of HTTP timeouts. The client describes HTTP 504 as a generation
 server timeout and does not automatically resubmit image generation.
+
+## Independent Album panel experiment (2026-09-15)
+
+Set server `ALBUM_GENERATION_MODE=independent-panels` to try the generation-only
+experiment in `album-panels.ts`. With the setting absent, the existing Album
+master/crop path remains active. `api/artwork-generation.ts` forwards the setting.
+The existing artwork prompt/preflight is shared across a deterministic sequence
+of the selected Hook's headline, supporting beats and closing CTA. The cover is
+generated first; each supporting image receives that finished cover as a style
+reference alongside the approved input assets. No additional planning agent is
+introduced. Each image is requested at its native panel ratio, checked for that
+ratio, and persisted without cropping or resizing. Standard's existing per-image
+visual QC policy remains active (including the existing auto-edit-off setting).
+`usePlaceholderCopy` is preserved in the per-panel sequence.
+
+`composeAlbumPreview` creates a 2046-square preview from completed panels using
+contain resizing. That preview preserves the existing master URL/storage contract;
+it is never used to produce the new generation's full-resolution panel files.
+The experiment does not yet change Album revision/placeholder editing: those
+still edit and split the master, and can reintroduce the original crop risks.
+Do not treat the experiment as a completed replacement for the whole Album flow.
+There is no new cross-panel semantic QC gate; compare style and copy visually.
+Wrong image ratios or a failed panel stop generation before assets are persisted.
+
+`npm run test -- src/server/artwork-generation/album-panels.test.ts` covers native
+ratios, cover-reference propagation, pixel-preserving panel output, preview
+placement, missing content, placeholder copy and wrong-ratio rejection. The endpoint
+suite also covers the opt-in route and stable output/master IDs. A local trial can
+be run with `scripts/trial-independent-album.ts <input.json> <output-directory>`
+through vite-node with `OPENROUTER_API_KEY`; it writes local files and usage logs,
+without changing saved runs. The standalone trial does not run production QC.
+
+### Authored storyboard trial
+
+The local Album trial script optionally accepts `artDirection` with `sharedStyle`
+and one `{ index, message, scene, composition }` entry per panel. `album-panels.ts`
+validates the complete mapping before any image request. With a storyboard,
+rendering attaches only the original approved references, never the generated
+cover. Shared text rules carry palette, type, light and material treatment;
+each shot receives its own scene/composition and the other scenes as exclusions.
+This tests distinct visual arguments rather than camera variations on one cover.
+Without a storyboard the existing experimental cover-reference behavior remains.
+
+Storyboards are currently authored inputs to `scripts/trial-independent-album.ts`,
+not output from a new agent and not wired into the workflow request schema/UI.
+The Convert Cake Ads and C Law storyboard trial inputs preserve the preceding
+trial copy for visual comparison. Tests cover shot mapping, original-reference
+preservation and rejection of incomplete plans before image requests. Visual
+comparison is still required; textual shot instructions are not a semantic gate.

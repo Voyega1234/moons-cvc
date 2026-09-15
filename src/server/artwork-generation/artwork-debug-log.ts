@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ArtworkOutputSize } from "../../domain/creative-run.js";
+import type { ImageGenerationSize } from "./openai-images-client.js";
 import type { ArtworkGenerationRequest } from "../../services/artwork-generation/openai-image-generation.js";
 import type {
   CreativeStrategyEnrichment,
@@ -27,7 +27,7 @@ interface ImageRequestDebugLog {
           model: string;
           prompt: string;
           n: 1;
-          size: ArtworkOutputSize;
+          size: ImageGenerationSize;
           quality: "medium";
         };
       }
@@ -36,7 +36,7 @@ interface ImageRequestDebugLog {
         body: {
           model: string;
           prompt: string;
-          size: ArtworkOutputSize;
+          size: ImageGenerationSize;
           quality?: "medium";
           inputReferences: readonly {
             label?: string;
@@ -184,7 +184,7 @@ export function buildImageRequestDebugBundle({
   runId: string;
   hook: { id: string };
   prompt: string;
-  size: ArtworkOutputSize;
+  size: ImageGenerationSize;
   quality?: "medium";
   references: readonly ReferenceImageInput[];
 }): {

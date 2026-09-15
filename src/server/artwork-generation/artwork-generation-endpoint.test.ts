@@ -1393,6 +1393,43 @@ describe("handleArtworkGenerationRequest", () => {
     });
   });
 
+  it("persists independent panels and an assembled preview when the Album experiment is enabled", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const { client } = fakeStorage();
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+      if (href.includes("/v1/responses")) return standardAgentResponse(init);
+      if (href.includes("/api/v1/images")) {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        const [width, height] = body.size.split("x").map(Number);
+        const bytes = await sharp({ create: { width, height, channels: 3, background: "red" } }).png().toBuffer();
+        return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ ...requestBody, service: "album-post",
+          selectedHooks: [{ ...requestBody.selectedHooks[0], formatBeats: ["First benefit", "Closing benefit"] }] })
+      }),
+      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key",
+        SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon-key",
+        ALBUM_GENERATION_MODE: "independent-panels" },
+      fetchImpl: fetchMock as unknown as typeof fetch, createStorageClient: () => client
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(bodies.map(body => body.size)).toEqual(["2048x1024", "1024x1024", "1024x1024"]);
+    const payload = await response.json();
+    expect(payload.outputs.map((output: { id: string }) => output.id)).toEqual([
+      "hook-1-album-1-v1", "hook-1-album-2-v1", "hook-1-album-3-v1"
+    ]);
+    expect(payload.outputs.every((output: { albumMasterAssetStoragePath: string }) =>
+      output.albumMasterAssetStoragePath === "flora/run-1/outputs/hook-1-album-master-v1.png")).toBe(true);
+  });
+
   it("generates a three-panel master and keeps both the master and adaptive crops", async () => {
     const imageBodies: Record<string, unknown>[] = [];
     const uploaded: { path: string; body: Buffer }[] = [];

@@ -1,3 +1,4 @@
+import { generateIndependentAlbumPanels } from "./album-panels.js";
 import { createClient } from "@supabase/supabase-js";
 import {
   albumLayoutPrompt,
@@ -82,6 +83,7 @@ import {
   editImage,
   generateImage,
   type GeneratedImage,
+  type ImageGenerationSize,
   type ReferenceImageInput
 } from "./openai-images-client.js";
 import {
@@ -131,6 +133,7 @@ export interface ArtworkGenerationEndpointEnv {
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
   OPENROUTER_REFERENCE_INTERPRETER_MODEL?: string;
   ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
+  ALBUM_GENERATION_MODE?: string;
   CREATIVE_LEARNING_CAPTURE_ENABLED?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
@@ -334,6 +337,7 @@ export async function handleArtworkGenerationRequest({
     }
 
     const outputs = await generateOutputsForSelectedHooks({
+      independentAlbumPanels: env.ALBUM_GENERATION_MODE === "independent-panels",
       input,
       apiKey: apiKey ?? "",
       imageApiKey,
@@ -409,6 +413,7 @@ function defaultCreateLearningCandidateStore({
 }
 
 async function generateOutputsForSelectedHooks({
+  independentAlbumPanels,
   input,
   apiKey,
   imageApiKey,
@@ -426,6 +431,7 @@ async function generateOutputsForSelectedHooks({
   supabaseUrl,
   fetchImpl
 }: {
+  independentAlbumPanels: boolean;
   input: ArtworkGenerationRequest;
   apiKey: string;
   imageApiKey: string;
@@ -469,6 +475,7 @@ async function generateOutputsForSelectedHooks({
     ARTWORK_GENERATION_CONCURRENCY,
     (hook) =>
       generateOutputForHook({
+        independentAlbumPanels,
         input,
         hook,
         apiKey,
@@ -579,6 +586,7 @@ function buildLockedCampaignInput(
 }
 
 async function generateOutputForHook({
+  independentAlbumPanels,
   input,
   hook,
   apiKey,
@@ -599,6 +607,7 @@ async function generateOutputForHook({
   storage,
   fetchImpl
 }: {
+  independentAlbumPanels: boolean;
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
   apiKey: string;
@@ -774,6 +783,32 @@ async function generateOutputForHook({
       : !input.referenceLed && input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
+  if (isAlbum && independentAlbumPanels) {
+    const assetVersion = input.assetVersion ?? 1;
+    const { panels, masterBytes } = await generateIndependentAlbumPanels({
+      hook, format: albumFormat, prompt: composeImagePrompt(promptParts),
+      usePlaceholderCopy: input.usePlaceholderCopy,
+      references: generationReferences, apiKey: imageApiKey, model, runId: input.runId,
+      fetchImpl, debugLogDirectory, writeDebugLog,
+      reviewPanel: (image, size, index) => applyPostGenerationVisualQc({
+        input, hook: { ...hook, id: `${hook.id}-album-${index}` }, image,
+        setDirection, shotOpportunity, apiKey, imageApiKey, model,
+        promptModel, promptProvider, promptApiKey, generationSize: size,
+        debugLogDirectory, writeDebugLog, fetchImpl
+      })
+    });
+    const persist = (id: string, imageBytes: Buffer) => persistArtworkOutput({
+      input, hook: { ...hook, id }, outputId: `${id}-v${assetVersion}`,
+      directionId: hook.id, assetVersion, format, model, imageBytes,
+      mimeType: "image/png", storage, debugLogDirectory, writeDebugLog
+    });
+    const master = await persist(`${hook.id}-album-master`, masterBytes);
+    return Promise.all(panels.map(async (panel) => ({
+      ...await persist(`${hook.id}-album-${panel.index}`, panel.bytes),
+      albumMasterAssetUrl: master.assetUrl,
+      albumMasterAssetStoragePath: master.assetStoragePath
+    })));
+  }
   if (isAlbum) {
     const assetVersion = input.assetVersion ?? 1;
     const masterPrompt = composeImagePrompt(
@@ -989,7 +1024,7 @@ async function applyPostGenerationVisualQc({
   promptModel?: string;
   promptProvider: ImagePromptProvider;
   promptApiKey: string;
-  generationSize: ArtworkOutputSize;
+  generationSize: ImageGenerationSize;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
   fetchImpl: FetchLike;

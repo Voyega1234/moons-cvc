@@ -24,6 +24,7 @@ export default async function handler(
     request: toFetchRequest(request),
     env: {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      ALBUM_GENERATION_MODE: process.env.ALBUM_GENERATION_MODE,
       OPENAI_IMAGE_GENERATION_MODEL: process.env.OPENAI_IMAGE_GENERATION_MODEL,
       OPENAI_IMAGE_PROMPT_MODEL: process.env.OPENAI_IMAGE_PROMPT_MODEL,
       OPENAI_CREATIVE_STRATEGY_MODEL:
