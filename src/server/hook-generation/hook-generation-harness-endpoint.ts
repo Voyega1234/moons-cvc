@@ -1407,7 +1407,10 @@ async function withTransientRetry<T>(task: () => Promise<T>): Promise<T> {
     return await task();
   } catch (error) {
     const message = readableError(error);
-    if (!/\b(429|500|502|503|504)\b/.test(message)) throw error;
+    const isTransientHttpError = /\b(429|500|502|503|504)\b/.test(message);
+    const isTransientProviderError =
+      error instanceof StructuredOutputError && error.code === "provider_error";
+    if (!isTransientHttpError && !isTransientProviderError) throw error;
     await new Promise((resolve) => setTimeout(resolve, 600));
     return task();
   }
