@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { extractStructuredJsonText } from "./structured-output";
 
 describe("structured output transport", () => {
+  it("keeps bounded provider diagnostics without leaking metadata or credentials", () => {
+    expect(() => extractStructuredJsonText({ status: "failed", error: {
+      code: "server_error", message: "Upstream unavailable at https://example.com?token=secret Bearer secret sk-private-key",
+      metadata: { raw: "private prompt" }
+    } }, "Reference")).toThrow("Reference returned a provider error (server_error). Upstream unavailable at [URL] Bearer [redacted] [redacted]");
+  });
   it("joins final text blocks and skips reasoning", () => {
     expect(extractStructuredJsonText({ output_text: "", output: [
       { type: "reasoning", summary: [{ text: "private reasoning" }] },

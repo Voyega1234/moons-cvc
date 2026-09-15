@@ -622,3 +622,19 @@ The Convert Cake Ads and C Law storyboard trial inputs preserve the preceding
 trial copy for visual comparison. Tests cover shot mapping, original-reference
 preservation and rejection of incomplete plans before image requests. Visual
 comparison is still required; textual shot instructions are not a semantic gate.
+
+## Reference interpreter provider failures
+
+`reference-interpreter.ts` now makes at most two attempts for explicitly
+transient provider failures (429, selected 5xx and known server/rate-limit error
+codes), including error envelopes delivered with HTTP 200. It waits 500 ms
+before the single retry and traces each attempt separately. It never bypasses
+the interpreter, switches the requested model, or retries image generation.
+Authentication, credits, content refusal, invalid requests, unknown error codes
+and malformed/incomplete grammar still fail without a retry.
+
+`shared/structured-output.ts` preserves a bounded provider error code/message
+on `StructuredOutputError`, excluding raw metadata and redacting URLs, bearer
+credentials and sk-prefixed keys. Interpreter diagnostics identify the provider
+and model. Older failure logs retained only the generic message, so the exact
+upstream cause of those historical incidents cannot be reconstructed from them.

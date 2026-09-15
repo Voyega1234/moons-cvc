@@ -1,7 +1,8 @@
 export class StructuredOutputError extends Error {
   constructor(
     public readonly code: "truncated" | "invalid_json" | "empty_output" | "provider_error" | "refusal" | "tool_calls",
-    message: string
+    message: string,
+    public readonly providerCode?: string
   ) {
     super(message);
     this.name = "StructuredOutputError";
@@ -15,7 +16,18 @@ export function extractStructuredJsonText(payload: unknown, label: string): stri
   const choice = choices[0];
   const message = isRecord(choice?.message) ? choice.message : {};
   if (record.error || choice?.error || record.status === "failed" || choice?.finish_reason === "error") {
-    throw new StructuredOutputError("provider_error", `${label} returned a provider error.`);
+    const error = record.error || choice?.error;
+    const providerCode = isRecord(error) && (typeof error.code === "string" || typeof error.code === "number")
+      ? String(error.code).replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 80) : undefined;
+    const message = isRecord(error) && typeof error.message === "string" ? error.message : "";
+    // Never include provider metadata/raw payloads (they can echo images or prompts).
+    const detail = message.replace(/https?:\/\/\S+/gi, "[URL]")
+      .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+      .replace(/\bsk-[\w-]+/g, "[redacted]")
+      .replace(/\s+/g, " ").trim().slice(0, 300);
+    throw new StructuredOutputError("provider_error",
+      `${label} returned a provider error${providerCode ? ` (${providerCode})` : ""}.${detail ? ` ${detail}` : ""}`,
+      providerCode);
   }
   const incompleteReason = isRecord(record.incomplete_details) ? record.incomplete_details.reason : undefined;
   if (incompleteReason === "content_filter") {

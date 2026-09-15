@@ -2,6 +2,45 @@ import { describe, expect, it, vi } from "vitest";
 import { interpretReferenceDesign } from "./reference-interpreter";
 
 describe("interpretReferenceDesign", () => {
+  const input = {
+    apiKey: "test", provider: "openrouter" as const, model: "test/model", mode: "standard" as const,
+    references: [{ bytes: Buffer.from("ref"), mimeType: "image/png" }],
+    campaign: { concept: "Idea", objective: "Objective", headline: "Headline", targetRatio: "1:1" },
+    loadPrompt: async () => "Interpret the reference."
+  };
+  const validGrammar = {
+    artworkConcept: "A", keyVisualGrammar: "B", compositionGrammar: "C", graphicDeviceLogic: "D",
+    hierarchyAndDensity: "E", secondaryAndFooterGrammar: "F", conceptTranslation: "G", preserve: [], replace: []
+  };
+  it.each([true, false])("retries one transient provider failure, HTTP-200 envelope: %s", async (envelope) => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "failed", error: { code: "server_error", message: "Temporarily unavailable" } }), { status: envelope ? 200 : 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ output_text: JSON.stringify(validGrammar) })));
+    const writeTrace = vi.fn();
+    expect(await interpretReferenceDesign({ ...input, fetchImpl, writeTrace })).toEqual(validGrammar);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0]?.[1]).toEqual(fetchImpl.mock.calls[1]?.[1]);
+    expect(writeTrace.mock.calls.map(call => call[0].status)).toEqual(["failed", "succeeded"]);
+  });
+  it("stops after the second transient failure", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: 503, message: "Unavailable" } })));
+    await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow("test/model");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it.each(["invalid_api_key", "insufficient_credits", "content_filter", "invalid_request_error", "unknown"])("does not retry terminal or unclassified errors: %s", async code => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code, message: "Provider rejected request" } })));
+    await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow(code);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { output_text: "malformed" },
+    { output: [{ content: [{ type: "refusal", refusal: "Cannot comply" }] }] },
+    { output_text: JSON.stringify({ ...validGrammar, keyVisualGrammar: "" }) }
+  ])("does not hide content or grammar failures by retrying", async payload => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload)));
+    await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
   it("sends only the Primary reference to vision and returns structured design grammar", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
       new Response(

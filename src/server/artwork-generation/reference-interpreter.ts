@@ -1,4 +1,4 @@
-import { extractStructuredJsonText } from "../shared/structured-output.js";
+import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -84,87 +84,96 @@ export async function interpretReferenceDesign({
     )
   ].join("\n");
 
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model,
-        store: false,
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: inputText },
-              ...references.map((reference) => ({
-                type: "input_image" as const,
-                image_url: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
-                detail: "high" as const
-              }))
-            ]
-          }
-        ],
-        reasoning: { effort: "low" },
-        text: {
-          format: {
-            type: "json_schema",
-            name: "moons_reference_design_grammar",
-            strict: true,
-            schema: referenceDesignGrammarSchema
-          }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
         },
-        ...(provider === "openrouter"
-          ? {
-              trace: {
-                trace_name: "moons_reference_design_grammar",
-                generation_name: "moons_reference_design_grammar",
-                feature: "artwork-generation",
-                environment: openRouterTraceEnvironment()
-              }
+        body: JSON.stringify({
+          model,
+          store: false,
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: inputText },
+                ...references.map((reference) => ({
+                  type: "input_image" as const,
+                  image_url: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
+                  detail: "high" as const
+                }))
+              ]
             }
-          : {})
-      })
-    });
+          ],
+          reasoning: { effort: "low" },
+          text: {
+            format: {
+              type: "json_schema",
+              name: "moons_reference_design_grammar",
+              strict: true,
+              schema: referenceDesignGrammarSchema
+            }
+          },
+          ...(provider === "openrouter"
+            ? {
+                trace: {
+                  trace_name: "moons_reference_design_grammar",
+                  generation_name: "moons_reference_design_grammar",
+                  feature: "artwork-generation",
+                  environment: openRouterTraceEnvironment()
+                }
+              }
+            : {})
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(
-        `${providerLabel} reference interpreter failed: ${response.status}${await responseDetail(response)}`
+      if (!response.ok) {
+        throw new StructuredOutputError("provider_error",
+          `${providerLabel} reference interpreter (${model}) failed: ${response.status}${await responseDetail(response)}`,
+          String(response.status)
+        );
+      }
+
+      const payload = (await response.json()) as unknown;
+      const grammar = parseReferenceDesignGrammar(
+        JSON.parse(extractStructuredJsonText(payload, `${providerLabel} reference interpreter (${model})`)) as unknown
       );
+      await writeTrace?.({
+        createdAt: new Date().toISOString(),
+        provider,
+        endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
+        model,
+        mode,
+        stage: "reference-interpreter",
+        status: "succeeded",
+        inputText,
+        responsePrompt: JSON.stringify(grammar)
+      });
+      return grammar;
+    } catch (error) {
+      await writeTrace?.({
+        createdAt: new Date().toISOString(),
+        provider,
+        endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
+        model,
+        mode,
+        stage: "reference-interpreter",
+        status: "failed",
+        inputText,
+        error: error instanceof Error ? error.message : "Unknown interpreter error."
+      });
+      if (attempt === 0 && error instanceof StructuredOutputError && error.code === "provider_error" &&
+        /^(429|500|502|503|504|server_error|internal_error|internal_server_error|overloaded_error|rate_limit_exceeded|rate_limit_error|service_unavailable)$/.test(error.providerCode ?? "")) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        continue;
+      }
+      throw error;
     }
-
-    const payload = (await response.json()) as unknown;
-    const grammar = parseReferenceDesignGrammar(
-      JSON.parse(extractResponseText(payload)) as unknown
-    );
-    await writeTrace?.({
-      createdAt: new Date().toISOString(),
-      provider,
-      endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
-      model,
-      mode,
-      stage: "reference-interpreter",
-      status: "succeeded",
-      inputText,
-      responsePrompt: JSON.stringify(grammar)
-    });
-    return grammar;
-  } catch (error) {
-    await writeTrace?.({
-      createdAt: new Date().toISOString(),
-      provider,
-      endpoint: provider === "openrouter" ? "/api/v1/responses" : "/v1/responses",
-      model,
-      mode,
-      stage: "reference-interpreter",
-      status: "failed",
-      inputText,
-      error: error instanceof Error ? error.message : "Unknown interpreter error."
-    });
-    throw error;
   }
+  throw new Error("Reference interpreter exhausted its provider attempts.");
 }
 
 const referenceDesignGrammarSchema = {
@@ -214,10 +223,6 @@ function parseReferenceDesignGrammar(value: unknown): ReferenceDesignGrammar {
     throw new Error("Reference interpreter returned invalid preserve/replace rules.");
   }
   return value as unknown as ReferenceDesignGrammar;
-}
-
-function extractResponseText(payload: unknown): string {
-  return extractStructuredJsonText(payload, "Reference interpreter");
 }
 
 async function responseDetail(response: Response): Promise<string> {
