@@ -160,10 +160,10 @@ describe("dedicated Hook Research Agent pipeline", () => {
 
     expect(writeDebugLog).toHaveBeenCalledTimes(1);
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
-    expect(debugEntry?.researchAgent.request.responseSchema).toBe(
+    expect(debugEntry?.researchAgent?.request.responseSchema).toBe(
       "moons_hook_research"
     );
-    expect(debugEntry?.topicAgent.request.responseSchema).toBe(
+    expect(debugEntry?.topicAgent?.request.responseSchema).toBe(
       "moons_hook_topics"
     );
     expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([]);

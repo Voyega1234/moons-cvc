@@ -41,7 +41,7 @@ export interface HookGenerationDebugLog {
         citationUrls: readonly string[];
       };
     };
-  };
+  } | null;
   topicAgent: {
     provider: "openai" | "openrouter";
     model: string;
@@ -56,7 +56,7 @@ export interface HookGenerationDebugLog {
       parsed: unknown;
       raw: unknown;
     };
-  };
+  } | null;
   hookAgent: {
     provider: "openai" | "openrouter";
     model: string;
@@ -65,20 +65,14 @@ export interface HookGenerationDebugLog {
       request: {
         endpoint: "/v1/responses" | "/api/v1/chat/completions";
         inputText: string;
-        tools: readonly {
-          type: "web_search_preview";
-          user_location: {
-            type: "approximate";
-            country: "TH";
-            timezone: "Asia/Bangkok";
-          };
-        }[];
+        tools: readonly Record<string, unknown>[];
         plugins: readonly {
           id: "web";
           engine: "native";
           max_results: number;
         }[];
-        toolChoice?: "required";
+        toolChoice?: "required" | "auto";
+        maxToolCalls?: number;
         reasoningEffort?: "medium" | "high";
         attachedImages: readonly {
           id: string;
@@ -118,6 +112,7 @@ export interface HookGenerationDebugLog {
       };
     }[];
   };
+  captionAgent?: { model: string; promptSource: string; inputText: string; rawResponse: unknown };
   finalResponse: unknown;
 }
 

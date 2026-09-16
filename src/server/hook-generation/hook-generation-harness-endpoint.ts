@@ -1,4 +1,5 @@
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
+import { openRouterCompatibleSchema } from "../shared/openrouter-schema.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -58,6 +59,8 @@ import {
   type PastPostExample,
   type PastPostsClient
 } from "./past-posts.js";
+
+import { hookCaptionsSchema, mergeHookCaptions } from "./hook-captions.js";
 
 type FetchLike = typeof fetch;
 
@@ -146,6 +149,9 @@ interface ResearchAudit {
 const DEFAULT_HOOK_MODEL = "google/gemini-3.8-flash";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
+// gemini-3.8-flash forces reasoning on every call; captions don't need that
+// so they use the non-reasoning flash variant to avoid the extra latency.
+const HOOK_CAPTION_MODEL = "google/gemini-3.6-flash";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
   "https://openrouter.ai/api/v1/chat/completions";
@@ -162,6 +168,14 @@ const THAI_WEB_SEARCH_TOOL = {
     timezone: "Asia/Bangkok"
   }
 } as const;
+const HOOK_NATIVE_SEARCH_TOOL = {
+  type: "openrouter:web_search",
+  parameters: {
+    engine: "native",
+    user_location: { type: "approximate", country: "TH", timezone: "Asia/Bangkok" }
+  }
+} as const;
+
 // OpenRouter's web plugin has no equivalent of OpenAI's user_location param
 // (THAI_WEB_SEARCH_TOOL above), so search_prompt is the closest substitute
 // for keeping results relevant to the Thai market.
@@ -251,7 +265,9 @@ export async function handleHookGenerationHarnessRequest({
       researchProvider === "openrouter"
         ? env.OPENROUTER_API_KEY!.trim()
         : openAiApiKey;
-    if (!researchApiKey) {
+    const nativeHookSearch =
+      generationProvider === "openrouter" && !input.researchOnly;
+    if (!nativeHookSearch && !researchApiKey) {
       return jsonResponse(
         {
           ok: false,
@@ -267,13 +283,15 @@ export async function handleHookGenerationHarnessRequest({
       researchProvider === "openrouter"
         ? researchOpenRouterModel!
         : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
-    const researchTrace = input.researchDossier
+    const researchTrace = nativeHookSearch
+      ? null
+      : input.researchDossier
       ? reusedResearchTrace(input.researchDossier as HookResearchDossier)
       : await withTransientRetry(async () =>
           runHookResearchStep({
             input,
             policyPrompt: await loadHookResearchPrompt(),
-            apiKey: researchApiKey,
+            apiKey: researchApiKey!,
             model: researchModel,
             provider: researchProvider,
             fetchImpl: providerFetchImpl
@@ -282,7 +300,7 @@ export async function handleHookGenerationHarnessRequest({
     if (input.researchOnly) {
       return jsonResponse({
         ok: true,
-        researchDossier: researchTrace.output
+        researchDossier: researchTrace!.output
       });
     }
 
@@ -294,20 +312,26 @@ export async function handleHookGenerationHarnessRequest({
         })
       : [];
 
-    const topicTrace = await withTransientRetry(async () =>
-      runHookTopicStep({
-        input,
-        policyPrompt: await loadHookTopicsPrompt(),
-        researchDossier: researchTrace.output,
-        apiKey: researchApiKey,
-        model: researchModel,
-        provider: researchProvider,
-        fetchImpl: providerFetchImpl
-      })
-    );
+    const topicTrace = nativeHookSearch
+      ? null
+      : await withTransientRetry(async () =>
+          runHookTopicStep({
+            input,
+            policyPrompt: await loadHookTopicsPrompt(),
+            researchDossier: researchTrace!.output,
+            apiKey: researchApiKey!,
+            model: researchModel,
+            provider: researchProvider,
+            fetchImpl: providerFetchImpl
+          })
+        );
 
     const agentHookPrompt =
       input.agentHookPrompt?.trim() || (await loadAgentHookPrompt());
+    // Direct OpenAI retains its combined output contract during the OpenRouter trial.
+    const generationPrompt = generationProvider === "openai"
+      ? `${agentHookPrompt}\n\n${(await readFile(join(process.cwd(), "agent_prompt", "agent_hook_caption.md"), "utf8")).split("## Caption")[1] ?? ""}`
+      : agentHookPrompt;
     const subheadlineHighlightPrompt =
       await loadSubheadlineHighlightPrompt();
     const generationBatches = buildHookGenerationBatches(input);
@@ -318,9 +342,9 @@ export async function handleHookGenerationHarnessRequest({
         withTransientRetry(() =>
           runGenerationStep({
             input: batch,
-            agentHookPrompt,
-            researchDossier: researchTrace.output,
-            topicShortlist: topicTrace.output,
+            agentHookPrompt: generationPrompt,
+            researchDossier: researchTrace?.output ?? null,
+            topicShortlist: topicTrace?.output ?? null,
             pastPosts,
             apiKey: generationApiKey,
             model,
@@ -329,16 +353,54 @@ export async function handleHookGenerationHarnessRequest({
           })
         )
     );
-    const directions = makeDirectionIdsUnique(
+    const ideaDirections = makeDirectionIdsUnique(
       directTraces.flatMap((trace) => trace.output.directions)
     ).slice(0, input.quantity);
     if (
       input.quantity > HOOK_GENERATION_BATCH_SIZE &&
-      directions.length < input.quantity
+      ideaDirections.length < input.quantity
     ) {
       throw new Error(
-        `Hook generation returned ${directions.length} of ${input.quantity} requested ideas. Please retry the run.`
+        `Hook generation returned ${ideaDirections.length} of ${input.quantity} requested ideas. Please retry the run.`
       );
+    }
+    let captionTrace: { inputText: string; rawResponse: unknown } | undefined;
+    let directions = ideaDirections;
+    if (nativeHookSearch) {
+      const captionPrompt = await readFile(join(process.cwd(), "agent_prompt", "agent_hook_caption.md"), "utf8");
+      const captionBatches: typeof ideaDirections[] = [];
+      for (let offset = 0; offset < ideaDirections.length; offset += HOOK_GENERATION_BATCH_SIZE) {
+        captionBatches.push(ideaDirections.slice(offset, offset + HOOK_GENERATION_BATCH_SIZE));
+      }
+      const captionResults = await mapWithConcurrency(captionBatches, HOOK_GENERATION_CONCURRENCY, async (batch) => {
+        const inputText = [
+          captionPrompt,
+          buildInputBlock(input),
+          buildPastPostsCaptionStyleBlock(pastPosts),
+          "# Selected directions (preserve IDs and strategic meaning)",
+          JSON.stringify(batch.map(({ id, service, hook, subheadline, concept, supportingPoints, formatBeats, cta, ctaActionType, ctaDestination, contactLine, citations }) => ({
+            id, service, hook, subheadline, concept, supportingPoints, formatBeats, cta, ctaActionType, ctaDestination, contactLine, citations
+          }))),
+          "# Search evidence returned to the Hook Agent",
+          JSON.stringify(directTraces.map((trace) => captionSearchEvidence(trace.rawResponse)))
+        ].join("\n\n");
+        const rawResponse = await withTransientRetry(() => callResponsesApi({
+          apiKey: generationApiKey, model: HOOK_CAPTION_MODEL, provider: generationProvider,
+          fetchImpl: providerFetchImpl, content: [{ type: "input_text", text: inputText }],
+          schemaName: "moons_hook_captions", schema: hookCaptionsSchema,
+          maxTokens: Math.min(24000, 1500 + batch.length * 1400)
+        }));
+        return {
+          inputText,
+          rawResponse,
+          directions: mergeHookCaptions(batch, JSON.parse(unwrapJsonCodeFence(extractResponseText(rawResponse))))
+        };
+      });
+      directions = captionResults.flatMap((result) => result.directions);
+      captionTrace = {
+        inputText: captionResults.map((result) => result.inputText).join("\n\n# Next caption batch\n\n"),
+        rawResponse: captionResults.length === 1 ? captionResults[0]!.rawResponse : captionResults.map((result) => result.rawResponse)
+      };
     }
     const ugcBriefPrompt = await loadUgcBriefPrompt();
     // Subheadline highlighting and the UGC brief both derive only from
@@ -356,7 +418,7 @@ export async function handleHookGenerationHarnessRequest({
       runUgcBriefStep({
         directions,
         input,
-        researchDossier: researchTrace.output,
+        researchDossier: researchTrace?.output ?? null,
         pastPosts,
         apiKey: generationApiKey,
         model,
@@ -400,7 +462,8 @@ export async function handleHookGenerationHarnessRequest({
           generationProvider,
           generationModel: model,
           finalDirections,
-          ugcScriptTraces
+          ugcScriptTraces,
+          captionTrace
         })
       );
     }
@@ -486,8 +549,8 @@ async function runGenerationStep({
 }: {
   input: HookGenerationHarnessRequest;
   agentHookPrompt: string;
-  researchDossier: HookResearchDossier;
-  topicShortlist: HookTopicShortlist;
+  researchDossier: HookResearchDossier | null;
+  topicShortlist: HookTopicShortlist | null;
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
@@ -499,7 +562,7 @@ async function runGenerationStep({
     agentHookPrompt,
     researchDossier,
     topicShortlist,
-    pastPosts
+    provider === "openrouter" ? [] : pastPosts
   );
   const HOOK_GENERATION_MAX_TOKENS_CEILING = 24000;
   let currentMaxTokens = Math.min(
@@ -513,8 +576,11 @@ async function runGenerationStep({
       fetchImpl,
       content: [{ type: "input_text", text: requestInputText }],
       schemaName: "moons_hook_generation",
-      schema: hookGenerationSchema,
+      schema: provider === "openrouter" ? hookIdeasSchema : hookGenerationSchema,
       maxTokens: currentMaxTokens,
+      ...(provider === "openrouter"
+        ? { tools: [HOOK_NATIVE_SEARCH_TOOL], toolChoice: "auto" as const, maxToolCalls: 3 }
+        : {}),
       reasoningEffort:
         provider === "openai" ? HOOK_GENERATION_REASONING_EFFORT : undefined,
       provider
@@ -696,17 +762,19 @@ function buildDirectHookGenerationDebugLog({
   generationProvider,
   generationModel,
   finalDirections,
-  ugcScriptTraces
+  ugcScriptTraces,
+  captionTrace
 }: {
   input: HookGenerationHarnessRequest;
-  researchTrace: TracedAgentResult<HookResearchDossier>;
-  topicTrace: TracedAgentResult<HookTopicShortlist>;
+  researchTrace: TracedAgentResult<HookResearchDossier> | null;
+  topicTrace: TracedAgentResult<HookTopicShortlist> | null;
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
   researchModel: string;
   researchProvider: "openai" | "openrouter";
   generationProvider: "openai" | "openrouter";
   generationModel: string;
   finalDirections: readonly GeneratedDirection[];
+  captionTrace?: { inputText: string; rawResponse: unknown };
   ugcScriptTraces: readonly UgcScriptTrace[];
 }): HookGenerationDebugLog {
   const endpoint =
@@ -722,7 +790,7 @@ function buildDirectHookGenerationDebugLog({
     createdAt: new Date().toISOString(),
     runId: input.runId,
     hookIdeaMode: input.hookIdeaMode,
-    researchAgent: {
+    researchAgent: researchTrace ? {
       provider: researchProvider,
       model: researchModel,
       promptSource: "agent_prompt/agent_hook_research.md",
@@ -744,8 +812,8 @@ function buildDirectHookGenerationDebugLog({
         raw: researchTrace.rawResponse,
         researchAudit: researchTrace.researchAudit
       }
-    },
-    topicAgent: {
+    } : null,
+    topicAgent: topicTrace ? {
       provider: researchProvider,
       model: researchModel,
       promptSource: "agent_prompt/agent_hook_topics.md",
@@ -759,7 +827,7 @@ function buildDirectHookGenerationDebugLog({
         parsed: topicTrace.output,
         raw: topicTrace.rawResponse
       }
-    },
+    } : null,
     hookAgent: {
       provider: generationProvider,
       model: generationModel,
@@ -768,8 +836,9 @@ function buildDirectHookGenerationDebugLog({
         request: {
           endpoint,
           inputText: trace.inputText,
-          tools: [],
+          tools: generationProvider === "openrouter" ? [HOOK_NATIVE_SEARCH_TOOL] : [],
           plugins: [],
+          ...(generationProvider === "openrouter" ? { toolChoice: "auto" as const, maxToolCalls: 3 } : {}),
           ...(generationProvider === "openai"
             ? { reasoningEffort: HOOK_GENERATION_REASONING_EFFORT }
             : {}),
@@ -808,6 +877,7 @@ function buildDirectHookGenerationDebugLog({
           }
         }
       : {}),
+    ...(captionTrace ? { captionAgent: { model: HOOK_CAPTION_MODEL, promptSource: "agent_prompt/agent_hook_caption.md", ...captionTrace } } : {}),
     finalResponse: { directions: finalDirections }
   };
 }
@@ -1143,7 +1213,7 @@ async function runUgcBriefStep({
 }: {
   directions: readonly GeneratedDirection[];
   input: HookGenerationHarnessRequest;
-  researchDossier: HookResearchDossier;
+  researchDossier: HookResearchDossier | null;
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
@@ -1210,7 +1280,7 @@ async function runUgcBriefDirection({
 }: {
   direction: GeneratedDirection;
   ugcBriefPrompt: string;
-  researchDossier: HookResearchDossier;
+  researchDossier: HookResearchDossier | null;
   pastPosts: readonly PastPostExample[];
   input: HookGenerationHarnessRequest;
   apiKey: string;
@@ -1283,7 +1353,7 @@ async function runUgcBriefDirection({
 function buildUgcBriefPrompt(
   direction: GeneratedDirection,
   ugcBriefPrompt: string,
-  researchDossier: HookResearchDossier,
+  researchDossier: HookResearchDossier | null,
   pastPosts: readonly PastPostExample[],
   input: HookGenerationHarnessRequest
 ): string {
@@ -1296,7 +1366,7 @@ function buildUgcBriefPrompt(
     "",
     buildInputBlock(input),
     "",
-    hookResearchDossierBlock(researchDossier),
+    ...(researchDossier ? [hookResearchDossierBlock(researchDossier)] : []),
     ...(pastPostsBlock ? ["", pastPostsBlock] : []),
     "",
     "# Selected direction",
@@ -1556,6 +1626,7 @@ async function callResponsesApi({
   tools,
   plugins,
   toolChoice,
+  maxToolCalls,
   maxTokens = 16000,
   reasoningEffort,
   provider = "openai"
@@ -1568,7 +1639,8 @@ async function callResponsesApi({
   schema: unknown;
   tools?: readonly Record<string, unknown>[];
   plugins?: readonly Record<string, unknown>[];
-  toolChoice?: "required";
+  toolChoice?: "required" | "auto";
+  maxToolCalls?: number;
   maxTokens?: number;
   reasoningEffort?: "medium" | "high";
   provider?: "openai" | "openrouter";
@@ -1597,6 +1669,9 @@ async function callResponsesApi({
             }
           ],
           plugins: [...(plugins ?? []), { id: "response-healing" }],
+          ...(tools?.length ? { tools } : {}),
+          ...(toolChoice ? { tool_choice: toolChoice } : {}),
+          ...(maxToolCalls ? { max_tool_calls: maxToolCalls } : {}),
           provider: { require_parameters: true },
           response_format: {
             type: "json_schema",
@@ -1702,40 +1777,12 @@ async function readCompleteJsonResponse(
   return payload;
 }
 
-function openRouterCompatibleSchema(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(openRouterCompatibleSchema);
-  }
-  if (!isRecord(value)) return value;
-
-  const normalized = Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== "maxItems")
-      .map(([key, item]) => [key, openRouterCompatibleSchema(item)])
-  ) as Record<string, unknown>;
-  const declaredType = normalized.type;
-  if (!Array.isArray(declaredType) || !declaredType.includes("null")) {
-    return normalized;
-  }
-
-  const nonNullTypes = declaredType.filter((type) => type !== "null");
-  const nonNullSchema = { ...normalized };
-  nonNullSchema.type =
-    nonNullTypes.length === 1 ? nonNullTypes[0] : nonNullTypes;
-  if (Array.isArray(nonNullSchema.enum)) {
-    nonNullSchema.enum = nonNullSchema.enum.filter((item) => item !== null);
-  }
-
-  return {
-    anyOf: [nonNullSchema, { type: "null" }]
-  };
-}
 
 function buildDirectHookGenerationPrompt(
   input: HookGenerationHarnessRequest,
   agentHookPrompt: string,
-  researchDossier: HookResearchDossier,
-  topicShortlist: HookTopicShortlist,
+  researchDossier: HookResearchDossier | null,
+  topicShortlist: HookTopicShortlist | null,
   pastPosts: readonly PastPostExample[]
 ): string {
   const pastPostsBlock = buildPastPostsCaptionStyleBlock(pastPosts);
@@ -1743,13 +1790,15 @@ function buildDirectHookGenerationPrompt(
     agentHookPrompt,
     "",
     "# Runtime contract",
-    "Research status: completed by the dedicated Research Agent. Hook Agent must not perform additional research.",
+    ...(!researchDossier ? ["Caption is generated in a separate step. Return caption as an empty string; do not compose it here."] : []),
+    researchDossier
+      ? "Research status: completed by the dedicated Research Agent. Hook Agent must not perform additional research."
+      : "Research status: no pre-generated dossier or topic shortlist. Native web search is available on demand; searching is optional.",
     "",
     buildInputBlock(input),
     "",
-    hookResearchDossierBlock(researchDossier),
-    "",
-    hookTopicShortlistBlock(topicShortlist),
+    ...(researchDossier ? [hookResearchDossierBlock(researchDossier)] : []),
+    ...(topicShortlist ? [hookTopicShortlistBlock(topicShortlist)] : []),
     ...(pastPostsBlock ? ["", pastPostsBlock] : []),
     "",
     "# Required output mix",
@@ -1758,7 +1807,8 @@ function buildDirectHookGenerationPrompt(
     "subheadline เป็น optional: ใช้เฉพาะเมื่อเพิ่มรายละเอียดรองที่จำเป็นจริง; หาก Headline ยืนได้ด้วยตัวเองให้ส่ง null.",
     "",
     "# Format",
-    "- visual (field ระดับ Direction นี้เท่านั้น ไม่เกี่ยวกับ UGC ใดๆ): ไม่ถูกใช้ในการ generate ภาพจริงเลย (ศิลป์ตัดสินใจแยกต่างหากทั้งหมดโดย Art Director agent คนละตัว) ห้ามเสียเวลาคิด ให้ตอบเป็น string ว่างเสมอ (\"\").",
+    "- visual (field ระดับ Direction นี้เท่านั้น ไม่เกี่ยวกับ UGC ใดๆ): ไม่ถูกใช้ในการ generate ภาพจริงเลย (รายละเอียดภาพตัดสินใจโดย Art Director agent) ให้ตอบเป็น string ว่างเสมอ (\"\").",
+    "- concept: สรุปเหตุผลที่คนสนใจและวิธีเล่าของชิ้นงาน สำหรับ static ad ให้ระบุภาพหลักที่ช่วยสารกับหน้าที่ของ Headline สั้น ๆ เพื่อส่งต่อ Art Director โดยไม่กำหนดรายละเอียดงานออกแบบ.",
     "- ugcBrief: ห้ามเจนที่นี่เด็ดขาดทุก service รวมถึง ugc-video ให้เป็น null เสมอ — Brief และ Script เต็มรูปแบบของ UGC ถูกสร้างแยกต่างหากทั้งหมดโดย agent อีกตัว (agent_ugc_brief.md) หลังขั้นตอนนี้.",
     "- single-static และ resize: formatBeats = [], albumFormat = null.",
     albumHookInstruction(
@@ -1975,6 +2025,34 @@ const hookGenerationSchema = {
 } as const;
 
 
+
+const hookIdeasSchema = {
+  ...hookGenerationSchema,
+  properties: {
+    directions: {
+      ...hookGenerationSchema.properties.directions,
+      items: {
+        ...hookGenerationSchema.properties.directions.items,
+        properties: {
+          ...hookGenerationSchema.properties.directions.items.properties,
+          caption: { type: "string", enum: [""] }
+        }
+      }
+    }
+  }
+};
+
+function captionSearchEvidence(payload: unknown): unknown[] {
+  const evidence: unknown[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (!isRecord(value)) return;
+    if (value.type === "url_citation") evidence.push(value);
+    else Object.values(value).forEach(visit);
+  };
+  visit(payload);
+  return evidence;
+}
 
 const subheadlineHighlightSchema = {
   type: "object",

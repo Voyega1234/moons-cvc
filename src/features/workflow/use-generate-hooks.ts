@@ -5,7 +5,10 @@ import type {
   HookGenerationModel,
   ServiceType
 } from "../../domain/creative-run";
-import { MAX_HOOK_GENERATION_MODELS } from "../../domain/creative-run";
+import {
+  isOpenRouterHookGenerationModel,
+  MAX_HOOK_GENERATION_MODELS
+} from "../../domain/creative-run";
 import {
   generateDirectionsWithHarness,
   generateHookResearchWithHarness
@@ -159,7 +162,9 @@ async function generateDirectionsForState(
 ) {
   const models = selectedHookGenerationModels(state);
   const compared = models.length > 1;
-  const directModels = models.filter((model) => model !== "n8n-compass-new");
+  const directModels = models.filter(
+    (model) => model !== "n8n-compass-new" && !isOpenRouterHookGenerationModel(model)
+  );
   const researchDossier =
     env.hookGenerationMode === "harness" && directModels.length
       ? await generateHookResearchWithHarness({
@@ -177,7 +182,9 @@ async function generateDirectionsForState(
         state,
         extraInstructions,
         model,
-        model === "n8n-compass-new" ? undefined : researchDossier
+        model === "n8n-compass-new" || isOpenRouterHookGenerationModel(model)
+          ? undefined
+          : researchDossier
       );
       const idPrefix = model.replaceAll(/[^a-z0-9]+/gi, "-");
       return directions.map((direction, index) => ({

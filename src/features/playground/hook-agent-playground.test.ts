@@ -46,6 +46,15 @@ describe("buildPlaygroundRequest", () => {
     expect(request.agentHookPrompt).toBe("Test prompt");
   });
 
+  it("includes extracted caption knowledge only when its document is selected", () => {
+    const source = brands[0]!;
+    const doc = { id: "content-knowledge", title: "Content knowledge from past posts", description: "case_specific: PSSE ร่วมกับ Brace; หลังถอด 24 ชั่วโมง" };
+    const brand = { ...source, library: { ...source.library, docs: [...source.library.docs, doc] } };
+    const input = { brand, includeQuestionnaire: false, includeBrief: true, brief: "Campaign", service: "single-static" as const, quantity: 1, prompt: "Prompt", generationModel: "google/gemini-3.8-flash" };
+    expect(buildPlaygroundRequest({ ...input, selectedBrandItemIds: new Set([doc.id]) }).brandLibrary.docs).toEqual([{ title: doc.title, description: doc.description }]);
+    expect(buildPlaygroundRequest({ ...input, selectedBrandItemIds: new Set() }).brandLibrary.docs).toEqual([]);
+  });
+
   it("does not restore Visual guidance into experiment input", () => {
     const source = brands[0]!;
     const visualGuidance = {
@@ -78,7 +87,7 @@ describe("buildPlaygroundRequest", () => {
 });
 
 describe("buildPlaygroundModelRequest", () => {
-  it("only sends the shared dossier when sharing is enabled", () => {
+  it("only sends a shared dossier to direct OpenAI models", () => {
     const request = { brief: "Campaign brief" };
     const dossier = {
       summary: "Shared finding",
@@ -91,7 +100,7 @@ describe("buildPlaygroundModelRequest", () => {
       buildPlaygroundModelRequest({
         request,
         runId: "run-shared",
-        model: "sakana/sakana-namazu",
+        model: "gpt-5.6-terra",
         researchDossier: dossier
       })
     ).toMatchObject({ researchDossier: dossier });
@@ -100,7 +109,7 @@ describe("buildPlaygroundModelRequest", () => {
         request,
         runId: "run-independent",
         model: "sakana/sakana-namazu",
-        researchDossier: null
+        researchDossier: dossier
       })
     ).not.toHaveProperty("researchDossier");
   });

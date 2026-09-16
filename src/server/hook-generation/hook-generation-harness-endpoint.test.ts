@@ -579,7 +579,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     );
 
     const debugEntry = writeDebugLog.mock.calls[0]?.[1];
-    expect(debugEntry?.researchAgent.request.tools).toEqual([
+    expect(debugEntry?.researchAgent?.request.tools).toEqual([
       expect.objectContaining({ type: "web_search_preview" })
     ]);
     expect(debugEntry?.hookAgent.batches[0]?.request.tools).toEqual([]);
@@ -1078,46 +1078,82 @@ describe("handleHookGenerationHarnessRequest", () => {
       ? { choices: [{ finish_reason: "length", message: { content: '{"directions":[' } }] }
       : { choices: [{ finish_reason: "stop", message: { content: failure === "empty" ? null : '{"directions":[' } }] };
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(validHookResearchResponse())
-      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify(first)))
       .mockResolvedValueOnce(openRouterResearchResponse([openAiStaticDirection()]))
+      .mockResolvedValueOnce(openRouterJsonResponse({ captions: [{ id: "shared-research-hook", caption: "Complete caption" }] }))
       .mockResolvedValueOnce(openRouterHighlightResponse("shared-research-hook", []));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
       }),
-      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+      env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
-    expect(await response.json()).toMatchObject({ directions: [expect.objectContaining({ id: "shared-research-hook", caption: openAiStaticDirection().caption })] });
+    expect(await response.json()).toMatchObject({ directions: [expect.objectContaining({ id: "shared-research-hook", caption: "Complete caption" })] });
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
-    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body))).filter((body) => body.response_format?.json_schema.name === "moons_hook_generation");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
     expect(bodies[1].max_tokens).toBe(failure === "truncated" ? 24000 : bodies[0].max_tokens);
   });
 
   it("stops after one malformed-output retry and identifies the agent and model", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse()).mockResolvedValueOnce(validHookTopicShortlistResponse()).mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"directions":[' } }] })));
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"directions":[' } }] })));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
       }),
-      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+      env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ error: expect.stringContaining("moons_hook_generation (google/gemini-3.8-flash) returned malformed JSON") });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it.each(["length", "content_filter", "tool_calls"])("does not loop on terminal %s output", async (finishReason) => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(validHookResearchResponse()).mockResolvedValueOnce(validHookTopicShortlistResponse()).mockImplementation(async () => new Response(JSON.stringify({ choices: [{ finish_reason: finishReason, message: { content: null } }] })));
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ finish_reason: finishReason, message: { content: null } }] })));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
-      }), env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
+      }), env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
     expect(response.status).toBe(500);
-    expect(fetchMock).toHaveBeenCalledTimes(finishReason === "length" ? 4 : 3);
+    expect(fetchMock).toHaveBeenCalledTimes(finishReason === "length" ? 2 : 1);
+  });
+
+  it("keeps large OpenRouter caption sets in bounded batches with complete ID coverage", async () => {
+    let generated = 0;
+    const captionSizes: number[] = [];
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const schema = body.response_format.json_schema.name;
+      if (schema === "moons_hook_generation") {
+        const count = generated === 0 ? 12 : 1;
+        return openRouterResearchResponse(Array.from({ length: count }, () => ({
+          ...openAiStaticDirection(), id: `batch-${++generated}`, sourceCandidateId: `candidate-${generated}`, caption: ""
+        })));
+      }
+      if (schema === "moons_hook_captions") {
+        const text = JSON.stringify(body.messages);
+        const ids = Array.from(text.matchAll(/batch-\d+/g), (match) => match[0]);
+        const uniqueIds = [...new Set(ids)];
+        captionSizes.push(uniqueIds.length);
+        expect(body.max_tokens).toBe(1500 + uniqueIds.length * 1400);
+        return openRouterJsonResponse({ captions: uniqueIds.map((id) => ({ id, caption: `Caption ${id}` })) });
+      }
+      return openRouterJsonResponse({ items: Array.from({ length: 13 }, (_, i) => ({ id: `batch-${i + 1}`, highlights: [] })) });
+    });
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST",
+        body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash", quantity: 13, contentTypeQuotas: [{ service: "single-static", count: 13 }] })
+      }),
+      env: { OPENROUTER_API_KEY: "test-key" },
+      fetchImpl: fetchMock as typeof fetch
+    });
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(captionSizes.sort((a, b) => a - b)).toEqual([1, 12]);
+    expect(payload.directions).toHaveLength(13);
+    expect(payload.directions.every((direction: { id: string; caption: string }) => direction.caption === `Caption ${direction.id}`)).toBe(true);
   });
 
   it("defaults the direct creative pass to OpenRouter when no model is selected", async () => {
@@ -1127,8 +1163,6 @@ describe("handleHookGenerationHarnessRequest", () => {
     } = singleStaticRequestBody;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(validHookResearchResponse())
-      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         openRouterResearchResponse([
           {
@@ -1149,6 +1183,7 @@ describe("handleHookGenerationHarnessRequest", () => {
           }
         ])
       )
+      .mockResolvedValueOnce(openRouterJsonResponse({ captions: [{ id: "openrouter-hook", caption: "Caption from separate pass" }] }))
       .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
 
     const response = await handleHookGenerationHarnessRequest({
@@ -1166,16 +1201,15 @@ describe("handleHookGenerationHarnessRequest", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-      "https://api.openai.com/v1/responses",
-      "https://api.openai.com/v1/responses",
+      "https://openrouter.ai/api/v1/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions"
     ]);
     expect(
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
-    ).toBe("Bearer openai-key");
+    ).toBe("Bearer openrouter-key");
     const generationBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as {
       model: string;
       messages: readonly {
@@ -1231,7 +1265,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationBody.plugins).toEqual([{ id: "response-healing" }]);
     expect(generationBody.provider).toEqual({ require_parameters: true });
     const highlightBody = JSON.parse(
-      String(fetchMock.mock.calls[3]?.[1]?.body)
+      String(fetchMock.mock.calls[2]?.[1]?.body)
     ) as {
       response_format: {
         json_schema: { schema: unknown };
@@ -1243,11 +1277,11 @@ describe("handleHookGenerationHarnessRequest", () => {
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { model: string; tools?: unknown[]; tool_choice?: string };
-    expect(researchBody.model).toBe("gpt-5.6-terra");
+    expect(researchBody.model).toBe("google/gemini-3.8-flash");
     expect(researchBody.tools).toEqual([
-      expect.objectContaining({ type: "web_search_preview" })
+      expect.objectContaining({ type: "openrouter:web_search", parameters: expect.objectContaining({ engine: "native" }) })
     ]);
-    expect(researchBody.tool_choice).toBe("required");
+    expect(researchBody.tool_choice).toBe("auto");
     const payload = (await response.json()) as {
       directions: { id: string; sourceCandidateId: string }[];
     };
@@ -1257,102 +1291,31 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
   });
 
-  it("routes Hook Research through OpenRouter's web plugin when OPENROUTER_HOOK_RESEARCH_MODEL is set", async () => {
-    const {
-      generationModel: _generationModel,
-      ...requestWithoutGenerationModel
-    } = singleStaticRequestBody;
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(openRouterJsonResponse(validHookResearchDossier(), [
-        "https://example.com/verified-source"
-      ]))
-      .mockResolvedValueOnce(
-        openRouterJsonResponse({
-          topics: [{ topic: "หัวข้อทดสอบ 1", why: "เหตุผลทดสอบ 1" }]
-        })
-      )
-      .mockResolvedValueOnce(
-        openRouterResearchResponse([
-          {
-            id: "openrouter-hook",
-            sourceCandidateId: "candidate-1",
-            service: "single-static",
-            hook: "มุมคิดใหม่จาก OpenRouter",
-            subheadline: "ยังคงใช้ brief และ brand context ชุดเดิม",
-            concept: "OpenRouter generation",
-            why: "Tests provider routing",
-            visual: "Clean and direct",
-            albumFormat: "three-horizontal",
-            cta: "ดูรายละเอียด",
-            caption: "แคปชั่นจากโมเดลที่เลือก",
-            score: 88,
-            reasoning: "Strong fit",
-            citations: []
-          }
-        ])
-      )
-      .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
-
+  it("keeps explicit research-only requests available through the OpenRouter web plugin", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(openRouterJsonResponse(validHookResearchDossier()));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify(requestWithoutGenerationModel)
+        body: JSON.stringify({ ...singleStaticRequestBody, researchOnly: true })
       }),
-      env: {
-        OPENAI_API_KEY: "openai-key",
-        OPENROUTER_API_KEY: "openrouter-key",
-        OPENROUTER_HOOK_RESEARCH_MODEL: "openai/gpt-5.6-terra"
-      },
+      env: { OPENAI_API_KEY: "key", OPENROUTER_API_KEY: "key", OPENROUTER_HOOK_RESEARCH_MODEL: "google/gemini-3.8-flash" },
       fetchImpl: fetchMock as unknown as typeof fetch
     });
-
-    expect(response.status, await response.clone().text()).toBe(200);
-    expect(fetchMock.mock.calls.every(([url]) =>
-      String(url) === "https://openrouter.ai/api/v1/chat/completions"
-    )).toBe(true);
-
-    const researchBody = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body)
-    ) as {
-      model: string;
-      tools?: unknown[];
-      tool_choice?: string;
-      plugins?: readonly { id: string; engine?: string }[];
-    };
-    expect(researchBody.model).toBe("openai/gpt-5.6-terra");
-    expect(researchBody.tools).toBeUndefined();
-    expect(researchBody.tool_choice).toBeUndefined();
-    expect(researchBody.plugins).toEqual([
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).plugins).toEqual([
       expect.objectContaining({ id: "web", engine: "native" }),
       { id: "response-healing" }
     ]);
-    expect(
-      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")
-    ).toBe("Bearer openrouter-key");
-
-    const topicBody = JSON.parse(
-      String(fetchMock.mock.calls[1]?.[1]?.body)
-    ) as { model: string; plugins?: unknown[] };
-    expect(topicBody.model).toBe("openai/gpt-5.6-terra");
-    expect(topicBody.plugins).toEqual([{ id: "response-healing" }]);
   });
 
-  it("succeeds with no OPENAI_API_KEY at all when generation and research both resolve to OpenRouter", async () => {
+  it("succeeds with no OPENAI_API_KEY at all and ignores a supplied dossier for native Hook search", async () => {
     const {
       generationModel: _generationModel,
       ...requestWithoutGenerationModel
     } = singleStaticRequestBody;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(openRouterJsonResponse(validHookResearchDossier(), [
-        "https://example.com/verified-source"
-      ]))
-      .mockResolvedValueOnce(
-        openRouterJsonResponse({
-          topics: [{ topic: "หัวข้อทดสอบ 1", why: "เหตุผลทดสอบ 1" }]
-        })
-      )
       .mockResolvedValueOnce(
         openRouterResearchResponse([
           {
@@ -1366,27 +1329,59 @@ describe("handleHookGenerationHarnessRequest", () => {
             visual: "Clean and direct",
             albumFormat: "three-horizontal",
             cta: "ดูรายละเอียด",
-            caption: "แคปชั่นจากโมเดลที่เลือก",
+            caption: "",
             score: 88,
             reasoning: "Strong fit",
             citations: []
           }
         ])
       )
+      .mockResolvedValueOnce(openRouterJsonResponse({ captions: [{ id: "openrouter-hook", caption: "Caption from separate pass" }] }))
       .mockResolvedValueOnce(openRouterHighlightResponse("openrouter-hook", []));
 
+    const contentDocument = {
+      title: "Content knowledge from past posts",
+      description: JSON.stringify({ status: "case_specific", scope: "PSSE ร่วมกับ Brace หลังถอด 24 ชั่วโมง", evidence: { quote: "ท่าฝึกกลับบ้าน", sourceUrl: "https://facebook.com/clinic/posts/1", publishedAt: "2026-08-03" } })
+    };
+    const writeDebugLog = vi.fn();
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify(requestWithoutGenerationModel)
+        body: JSON.stringify({ ...requestWithoutGenerationModel, brandLibrary: { ...requestWithoutGenerationModel.brandLibrary, docs: [contentDocument] }, researchDossier: validHookResearchDossier() })
       }),
       env: {
         OPENROUTER_API_KEY: "openrouter-key",
-        OPENROUTER_HOOK_RESEARCH_MODEL: "openai/gpt-5.6-terra"
       },
+      loadPastPostExamples: async () => [{ source: "ad_caption", text: "STYLE_EXAMPLE_ONLY" }],
+      writeDebugLog,
       fetchImpl: fetchMock as unknown as typeof fetch
     });
 
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const generationBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(generationBody.max_tool_calls).toBe(3);
+    expect(generationBody.max_tokens).toBe(5000);
+    expect(JSON.stringify(generationBody.messages)).not.toContain("# Past posts");
+    expect(generationBody.response_format.json_schema.schema.properties.directions.items.properties.caption).toEqual({ type: "string", enum: [""] });
+    const captionBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(captionBody.response_format.json_schema.name).toBe("moons_hook_captions");
+    expect(captionBody.tools).toBeUndefined();
+    expect(JSON.stringify(captionBody.messages)).toContain("STYLE_EXAMPLE_ONLY");
+    expect(JSON.stringify(generationBody.messages)).not.toContain("STYLE_EXAMPLE_ONLY");
+    expect(captionBody.max_tokens).toBe(2900);
+    const captionText = captionBody.messages[0].content[0].text;
+    for (const context of [generationBody.messages[0].content[0].text, captionText]) {
+      expect(context).toContain(contentDocument.title);
+      expect(context).toContain(contentDocument.description);
+    }
+    const selected = JSON.parse(captionText.split("# Selected directions (preserve IDs and strategic meaning)\n")[1].split("\n\n# Search evidence")[0]);
+    expect(selected[0].hook).toBeTruthy();
+    expect(selected[0]).not.toHaveProperty("score");
+    expect(selected[0]).not.toHaveProperty("reasoning");
+    expect(selected[0]).not.toHaveProperty("why");
+    expect(JSON.stringify(generationBody.messages)).not.toContain("# Dedicated Research Agent dossier");
+    expect(JSON.stringify(generationBody.messages)).not.toContain("# Topic Agent shortlist");
+    expect(writeDebugLog.mock.calls[0]?.[1]).toMatchObject({ researchAgent: null, topicAgent: null });
     expect(response.status, await response.clone().text()).toBe(200);
     expect(fetchMock.mock.calls.every(([url]) =>
       String(url) === "https://openrouter.ai/api/v1/chat/completions"
@@ -1396,8 +1391,6 @@ describe("handleHookGenerationHarnessRequest", () => {
   it("surfaces the provider's OpenRouter 400 detail", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(validHookResearchResponse())
-      .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1433,11 +1426,11 @@ describe("handleHookGenerationHarnessRequest", () => {
         "OpenRouter hook harness failed: 400 — Unable to download the selected material image."
     });
     const openRouterBody = JSON.parse(
-      String(fetchMock.mock.calls[2]?.[1]?.body)
+      String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { plugins?: unknown; tools?: unknown; tool_choice?: unknown };
     expect(openRouterBody.plugins).toEqual([{ id: "response-healing" }]);
-    expect(openRouterBody.tools).toBeUndefined();
-    expect(openRouterBody.tool_choice).toBeUndefined();
+    expect(openRouterBody.tools).toEqual([expect.objectContaining({ type: "openrouter:web_search" })]);
+    expect(openRouterBody.tool_choice).toBe("auto");
   });
 
   it("sends questionnaire, full brand library, brief, and research context but not brand memory, past posts, or attachments", async () => {
@@ -1599,7 +1592,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(generationPrompt).toContain(
       "whether they appear inline or as a final block"
     );
-    expect(generationPrompt).toContain("contact/footer → hashtags");
+    expect(generationPrompt).toContain("Use information architecture only from examples with a matching purpose.");
     expect(generationPrompt).toContain(
       "Do not copy an old phrase, idea, offer, claim, hashtag, contact detail"
     );

@@ -137,7 +137,10 @@ export function HookAgentPlayground() {
   const systemBrands = useMemo(() => filterSystemBrands(brands), [brands]);
   const brand =
     systemBrands.find((candidate) => candidate.id === brandId) ?? null;
-  const brandSystemItems = activeBrandKitItems(brand?.library.brand ?? []);
+  const brandSystemItems = [
+    ...activeBrandKitItems(brand?.library.brand ?? []),
+    ...(brand?.library.docs ?? [])
+  ];
   const filteredBrands = useMemo(
     () => filterPlaygroundBrands(systemBrands, brandQuery, brand?.name),
     [brand?.name, brandQuery, systemBrands]
@@ -299,7 +302,9 @@ export function HookAgentPlayground() {
   async function runComparison() {
     if (!brand || !canRun) return;
     setRunning(true);
-    setRunningPhase(useSharedResearchDossier ? "research" : "models");
+    const shareResearch =
+      useSharedResearchDossier && models.some((model) => !isOpenRouterModelId(model));
+    setRunningPhase(shareResearch ? "research" : "models");
     setRunErrors([]);
     setResults([]);
     setResearchDossier(null);
@@ -307,7 +312,7 @@ export function HookAgentPlayground() {
     try {
       const runKey = Date.now();
       let sharedDossier: HookResearchDossier | null = null;
-      if (useSharedResearchDossier) {
+      if (shareResearch) {
         const researchResponse = await fetch(
           env.hookGenerationHarnessEndpoint,
           {
@@ -628,7 +633,7 @@ export function HookAgentPlayground() {
                     <b>Optional sources</b>
                     <small>
                       {brandSystemItems.length
-                        ? `${brandSystemItems.length} brand system items`
+                        ? `${brandSystemItems.length} brand context items`
                         : "No additional sources"}
                     </small>
                   </span>
@@ -641,7 +646,7 @@ export function HookAgentPlayground() {
                         key={item.id}
                         checked={selectedBrandItemIds.has(item.id)}
                         label={item.title}
-                        helper="Brand system"
+                        helper={brand?.library.docs.some((doc) => doc.id === item.id) ? "Brand document" : "Brand system"}
                         onChange={() => toggleBrandItem(item.id)}
                       />
                     ))}
@@ -782,9 +787,9 @@ export function HookAgentPlayground() {
         <ResearchDossierPanel
           dossier={researchDossier}
           loading={runningPhase === "research"}
-          modelCount={models.length}
-          enabled={useSharedResearchDossier}
-          disabled={running}
+          modelCount={models.filter((model) => !isOpenRouterModelId(model)).length}
+          enabled={useSharedResearchDossier && models.some((model) => !isOpenRouterModelId(model))}
+          disabled={running || models.every(isOpenRouterModelId)}
           onEnabledChange={(enabled) => {
             setUseSharedResearchDossier(enabled);
             if (!enabled) setResearchDossier(null);
@@ -1026,14 +1031,15 @@ function ResearchDossierPanel({
         <div>
           <Sparkle aria-hidden="true" size={18} />
           <div>
-            <h2>Shared Research Dossier</h2>
+            <h2>{modelCount ? "Shared Research Dossier" : "Native search on demand"}</h2>
             <p>
               {enabled
-                ? "Generated once, then reused unchanged across every Hook model."
-                : "Each Hook model will generate its own Research dossier."}
+                ? "Generated once for direct OpenAI models. OpenRouter models search on demand."
+                : "OpenRouter models start from your brief and use native search when needed."}
             </p>
           </div>
         </div>
+        {modelCount > 0 && (
         <div className="playground-research-actions">
           <button
             type="button"
@@ -1051,10 +1057,11 @@ function ResearchDossierPanel({
               : "Not shared"}
           </span>
         </div>
+        )}
       </header>
       {!enabled ? (
         <div className="playground-research-empty">
-          Shared dossier is off. Every selected model will research separately.
+          OpenRouter models choose whether to search. Direct OpenAI models retain their research step.
         </div>
       ) : loading ? (
         <div className="playground-research-loading">
@@ -1203,7 +1210,9 @@ export function buildPlaygroundRequest({
         description
       })),
       products: [] as readonly unknown[],
-      docs: [] as readonly unknown[],
+      docs: (brand?.library.docs ?? [])
+        .filter((item) => selectedBrandItemIds.has(item.id))
+        .map(({ title, description }) => ({ title, description })),
       refs: [] as readonly unknown[]
     }
   };
@@ -1224,7 +1233,7 @@ export function buildPlaygroundModelRequest({
     ...request,
     runId,
     generationModel: model,
-    ...(researchDossier ? { researchDossier } : {})
+    ...(researchDossier && !isOpenRouterModelId(model) ? { researchDossier } : {})
   };
 }
 

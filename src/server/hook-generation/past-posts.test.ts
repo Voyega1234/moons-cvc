@@ -120,7 +120,7 @@ describe("selectPastPostsForCaption", () => {
     ]);
   });
 
-  it("fills the sample from whichever source is available", () => {
+  it("does not fill missing ad examples with extra organic posts", () => {
     const posts = Array.from({ length: 8 }, (_, index) => ({
       source: "organic_post" as const,
       text: `Organic ${index + 1}`
@@ -128,11 +128,7 @@ describe("selectPastPostsForCaption", () => {
 
     expect(selectPastPostsForCaption(posts).map((post) => post.text)).toEqual([
       "Organic 1",
-      "Organic 2",
-      "Organic 3",
-      "Organic 4",
-      "Organic 5",
-      "Organic 6"
+      "Organic 2"
     ]);
   });
 });
@@ -154,7 +150,7 @@ describe("buildPastPostsCaptionStyleBlock", () => {
     );
     expect(block).toContain("hashtag fingerprint");
     expect(block).toContain("whether they appear inline or as a final block");
-    expect(block).toContain("opener → context/story → benefits or proof");
+    expect(block).toContain("Organic educational or announcement posts inform voice and formatting, not the length or story structure of paid ads.");
     expect(block).toContain(
       "Do not copy an old phrase, idea, offer, claim, hashtag, contact detail"
     );

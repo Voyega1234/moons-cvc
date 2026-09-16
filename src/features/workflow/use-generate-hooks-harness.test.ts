@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 describe("useGenerateHooks harness resilience", () => {
-  it("starts all five selected models concurrently after shared Research", async () => {
+  it("starts all five OpenRouter models concurrently without preliminary Research", async () => {
     const state = {
       ...createInitialWorkflowState({
         id: "five-model-run",
@@ -68,7 +68,7 @@ describe("useGenerateHooks harness resilience", () => {
     );
   });
 
-  it("shares one Research dossier and keeps successful results when one model fails", async () => {
+  it("skips preliminary Research and keeps successful results when one model fails", async () => {
     const state = {
       ...createInitialWorkflowState({
         id: "shared-research-run",
@@ -101,15 +101,15 @@ describe("useGenerateHooks harness resilience", () => {
         ]
       })
     );
-    expect(generateHookResearchWithHarness).toHaveBeenCalledTimes(1);
+    expect(generateHookResearchWithHarness).not.toHaveBeenCalled();
     expect(generateDirectionsWithHarness).toHaveBeenCalledTimes(2);
     expect(generateDirectionsWithHarness).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ researchDossier: dossier })
+      expect.objectContaining({ researchDossier: undefined })
     );
     expect(generateDirectionsWithHarness).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ researchDossier: dossier })
+      expect.objectContaining({ researchDossier: undefined })
     );
   });
 });
