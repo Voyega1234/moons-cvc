@@ -560,8 +560,8 @@ truncation, refusal, and provider failure before domain validation. It never
 repairs missing business data. Hook transport errors identify the schema and model.
 OpenRouter Hook chat requests retain strict JSON Schema and required-parameter
 routing and add the `response-healing` plugin alongside existing search plugins.
-A malformed or empty final text response gets at most one fresh transport retry;
-HTTP errors, refusals, and tool-only responses are not replayed by that retry.
+Malformed/empty final text and transient HTTP failures use the shared three-attempt
+agent retry; refusals and tool-only responses are not replayed.
 The initial idea request now runs inside its existing truncation recovery block,
 so token exhaustion can actually trigger its one retry at the 24,000-token ceiling.
 Artwork text agents continue using the Responses API; chat-only healing settings
@@ -625,16 +625,33 @@ comparison is still required; textual shot instructions are not a semantic gate.
 
 ## Reference interpreter provider failures
 
-`reference-interpreter.ts` now makes at most two attempts for explicitly
-transient provider failures (429, selected 5xx and known server/rate-limit error
-codes), including error envelopes delivered with HTTP 200. It waits 500 ms
-before the single retry and traces each attempt separately. It never bypasses
+`reference-interpreter.ts` uses `shared/ai-retry.ts` for up to three attempts
+with 1s/2s delays on transient failures, malformed JSON and empty answers,
+including error envelopes delivered with HTTP 200. It traces each attempt separately. It never bypasses
 the interpreter, switches the requested model, or retries image generation.
-Authentication, credits, content refusal, invalid requests, unknown error codes
-and malformed/incomplete grammar still fail without a retry.
+Authentication, credits, content refusal, invalid requests and invalid/incomplete
+grammar still fail without a retry. Unknown provider failures may be retried
+within the same three-attempt bound.
 
 `shared/structured-output.ts` preserves a bounded provider error code/message
 on `StructuredOutputError`, excluding raw metadata and redacting URLs, bearer
 credentials and sk-prefixed keys. Interpreter diagnostics identify the provider
 and model. Older failure logs retained only the generic message, so the exact
 upstream cause of those historical incidents cannot be reconstructed from them.
+
+
+## Shared AI retry policy (2026-09-16)
+
+`src/server/shared/ai-retry.ts` owns three-attempt retry with 1s/2s backoff.
+Hook agent steps, Artwork prompt/strategy/normalizer/reference/QC agents and
+individual image generate/edit calls use it. It retries transient HTTP/network
+failures, generic provider errors, malformed JSON and empty final output.
+Credit and billing errors are checked before 429/provider retry classification;
+authentication, invalid requests and content refusal fail immediately. Domain
+validation and Hook token-budget correction retain their existing separate rules.
+Hook's nested JSON transport retry was removed to avoid multiplying attempts.
+Image retries happen before persistence and do not replay the full pipeline or
+regenerate previously completed images. A retry may still incur provider usage
+if the previous remote attempt completed without delivering its response.
+The policy reduces transient failures but does not guarantee success during a
+persistent outage or after the hosting request deadline.

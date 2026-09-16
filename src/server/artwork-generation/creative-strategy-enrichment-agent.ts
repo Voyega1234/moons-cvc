@@ -1,3 +1,4 @@
+import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -183,6 +184,7 @@ export async function enrichCreativeStrategy({
   const evidence = buildCreativeStrategyEvidence(input);
   const inputText = buildInputText(await loadPrompt(), input, evidence);
 
+  return withAiRetry(async () => {
   try {
     let requestText = inputText;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -223,8 +225,11 @@ export async function enrichCreativeStrategy({
       });
 
       if (!response.ok) {
+        const failure: unknown = await response.json().catch(() => null);
+        const detail = isRecord(failure) && isRecord(failure.error) && typeof failure.error.message === "string"
+          ? failure.error.message.replace(/https?:\/\/\S+/gi, "[URL]").slice(0, 300) : "Provider request failed";
         throw new Error(
-          `${providerLabel} creative strategy enrichment failed: ${response.status}`
+          `${providerLabel} creative strategy enrichment failed: ${response.status} — ${detail}`
         );
       }
 
@@ -270,6 +275,7 @@ export async function enrichCreativeStrategy({
     });
     throw error;
   }
+  });
 }
 
 function isRetryableClaimConsistencyError(error: unknown): boolean {

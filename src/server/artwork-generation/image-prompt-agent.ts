@@ -1,3 +1,4 @@
+import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -167,6 +168,7 @@ export async function generateImagePrompt({
         )
       : await buildStandardImagePrompt(input, loadAgentImagePrompt);
 
+  return withAiRetry(async () => {
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -253,6 +255,7 @@ export async function generateImagePrompt({
     });
     throw error;
   }
+  });
 }
 
 export async function buildStandardImagePrompt(
@@ -311,6 +314,7 @@ export async function preflightCampaignInput({
     JSON.stringify(buildCompactCampaignInput(input), null, 2)
   ].join("\n");
 
+  return withAiRetry(async () => {
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -385,6 +389,7 @@ export async function preflightCampaignInput({
     });
     throw error;
   }
+  });
 }
 
 export async function generateProductionBrief({
@@ -419,6 +424,7 @@ export async function generateProductionBrief({
     compiledDesignSystemPrompt
   );
 
+  return withAiRetry(async () => {
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -510,6 +516,7 @@ export async function generateProductionBrief({
     });
     throw error;
   }
+  });
 }
 
 async function writeTraceSafely(

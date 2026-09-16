@@ -22,24 +22,30 @@ describe("interpretReferenceDesign", () => {
     expect(fetchImpl.mock.calls[0]?.[1]).toEqual(fetchImpl.mock.calls[1]?.[1]);
     expect(writeTrace.mock.calls.map(call => call[0].status)).toEqual(["failed", "succeeded"]);
   });
-  it("stops after the second transient failure", async () => {
+  it("stops after the third transient failure", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: 503, message: "Unavailable" } })));
     await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow("test/model");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
-  it.each(["invalid_api_key", "insufficient_credits", "content_filter", "invalid_request_error", "unknown"])("does not retry terminal or unclassified errors: %s", async code => {
+  it.each(["invalid_api_key", "insufficient_credits", "content_filter", "invalid_request_error"])("does not retry terminal or unclassified errors: %s", async code => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code, message: "Provider rejected request" } })));
     await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow(code);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
   it.each([
-    { output_text: "malformed" },
     { output: [{ content: [{ type: "refusal", refusal: "Cannot comply" }] }] },
     { output_text: JSON.stringify({ ...validGrammar, keyVisualGrammar: "" }) }
   ])("does not hide content or grammar failures by retrying", async payload => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload)));
     await expect(interpretReferenceDesign({ ...input, fetchImpl })).rejects.toThrow();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("recovers from malformed reference JSON without bypassing the interpreter", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ output_text: '{"artworkConcept":"cut' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ output_text: JSON.stringify(validGrammar) })));
+    expect(await interpretReferenceDesign({ ...input, fetchImpl })).toEqual(validGrammar);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
   it("sends only the Primary reference to vision and returns structured design grammar", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>

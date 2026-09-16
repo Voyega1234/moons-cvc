@@ -1,3 +1,5 @@
+import { withAiRetry } from "../shared/ai-retry.js";
+import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import type { ArtworkOutputSize } from "../../domain/creative-run.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
@@ -62,6 +64,7 @@ export async function editImage({
   referenceImages,
   fetchImpl
 }: EditImageOptions): Promise<GeneratedImage> {
+  return withAiRetry<GeneratedImage>(async () => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -94,7 +97,7 @@ export async function editImage({
 
   if (!response.ok) {
     throw new Error(
-      readErrorMessage(payload) ?? `OpenRouter image edit failed: ${response.status}`
+      `OpenRouter image edit failed: ${response.status} — ${readErrorMessage(payload) ?? "Provider request failed"}`
     );
   }
 
@@ -102,6 +105,7 @@ export async function editImage({
     base64: extractB64Json(payload),
     mimeType: "image/png"
   };
+  });
 }
 
 export type GptImageAspectRatio =
@@ -170,6 +174,7 @@ export async function editImageWithAspectRatio({
   referenceImages,
   fetchImpl
 }: EditImageWithAspectRatioOptions): Promise<GeneratedImage> {
+  return withAiRetry<GeneratedImage>(async () => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -202,7 +207,7 @@ export async function editImageWithAspectRatio({
 
   if (!response.ok) {
     throw new Error(
-      readErrorMessage(payload) ?? `OpenRouter image edit failed: ${response.status}`
+      `OpenRouter image edit failed: ${response.status} — ${readErrorMessage(payload) ?? "Provider request failed"}`
     );
   }
 
@@ -210,6 +215,7 @@ export async function editImageWithAspectRatio({
     base64: extractB64Json(payload),
     mimeType: "image/png"
   };
+  });
 }
 
 export async function generateImage({
@@ -219,6 +225,7 @@ export async function generateImage({
   size,
   fetchImpl
 }: GenerateImageOptions): Promise<GeneratedImage> {
+  return withAiRetry<GeneratedImage>(async () => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -244,7 +251,7 @@ export async function generateImage({
 
   if (!response.ok) {
     throw new Error(
-      readErrorMessage(payload) ?? `OpenRouter image generation failed: ${response.status}`
+      `OpenRouter image generation failed: ${response.status} — ${readErrorMessage(payload) ?? "Provider request failed"}`
     );
   }
 
@@ -252,29 +259,33 @@ export async function generateImage({
     base64: extractB64Json(payload),
     mimeType: "image/png"
   };
+  });
 }
 
 function extractB64Json(payload: unknown): string {
+  if (isRecord(payload) && payload.error) {
+    extractStructuredJsonText(payload, "OpenRouter image generation");
+  }
   if (isRecord(payload) && Array.isArray(payload.data)) {
     const first = payload.data[0];
-    if (isRecord(first) && typeof first.b64_json === "string") {
+    if (isRecord(first) && typeof first.b64_json === "string" && first.b64_json.trim()) {
       return first.b64_json;
     }
   }
 
-  throw new Error("OpenRouter image generation did not return image data.");
+  throw new StructuredOutputError("empty_output", "OpenRouter image generation did not return image data.");
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text.trim()) {
-    throw new Error("OpenRouter image generation returned an empty response body.");
+    throw new StructuredOutputError(response.ok ? "empty_output" : "provider_error", `OpenRouter image generation failed: ${response.status} — empty response body`, response.ok ? undefined : String(response.status));
   }
 
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new Error("OpenRouter image generation returned a non-JSON response.");
+    throw new StructuredOutputError(response.ok ? "invalid_json" : "provider_error", `OpenRouter image generation failed: ${response.status} — non-JSON response`, response.ok ? undefined : String(response.status));
   }
 }
 

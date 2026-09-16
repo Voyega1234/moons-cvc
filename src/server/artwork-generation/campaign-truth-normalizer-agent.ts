@@ -1,3 +1,4 @@
+import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -209,6 +210,7 @@ export async function normalizeCampaignTruth({
     )
   ].join("\n");
 
+  return withAiRetry(async () => {
   try {
     let requestText = inputText;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -303,6 +305,7 @@ export async function normalizeCampaignTruth({
     });
     throw error;
   }
+  });
 }
 
 interface CampaignEvidence {

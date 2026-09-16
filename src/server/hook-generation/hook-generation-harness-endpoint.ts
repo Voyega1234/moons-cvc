@@ -1,4 +1,5 @@
-import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
+import { withAiRetry as withTransientRetry } from "../shared/ai-retry.js";
+import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { openRouterCompatibleSchema } from "../shared/openrouter-schema.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -1472,19 +1473,6 @@ async function mapWithConcurrency<Input, Output>(
   return results;
 }
 
-async function withTransientRetry<T>(task: () => Promise<T>): Promise<T> {
-  try {
-    return await task();
-  } catch (error) {
-    const message = readableError(error);
-    const isTransientHttpError = /\b(429|500|502|503|504)\b/.test(message);
-    const isTransientProviderError =
-      error instanceof StructuredOutputError && error.code === "provider_error";
-    if (!isTransientHttpError && !isTransientProviderError) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    return task();
-  }
-}
 
 function containsForbiddenThaiFirstPerson(value: unknown): boolean {
   return JSON.stringify(value).includes("ฉัน");
@@ -1751,21 +1739,7 @@ async function callResponsesApi({
     );
   }
 
-  const label = `${providerLabel} ${schemaName} (${model})`;
-  try {
-    return await readCompleteJsonResponse(response, label);
-  } catch (error) {
-    // One fresh attempt for invalid/empty model text; never replay HTTP failures,
-    // refusals, or tool calls. Token exhaustion is handled by the idea budget retry.
-    if (provider !== "openrouter" || !(error instanceof StructuredOutputError) ||
-        !["invalid_json", "empty_output"].includes(error.code)) throw error;
-    const retryResponse = await send(content);
-    if (!retryResponse.ok) {
-      const detail = await readProviderErrorDetail(retryResponse);
-      throw new Error(`${label} failed: ${retryResponse.status}${detail ? ` — ${detail}` : ""}`);
-    }
-    return readCompleteJsonResponse(retryResponse, label);
-  }
+  return readCompleteJsonResponse(response, `${providerLabel} ${schemaName} (${model})`);
 }
 
 async function readCompleteJsonResponse(

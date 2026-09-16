@@ -1095,7 +1095,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(bodies[1].max_tokens).toBe(failure === "truncated" ? 24000 : bodies[0].max_tokens);
   });
 
-  it("stops after one malformed-output retry and identifies the agent and model", async () => {
+  it("stops after two malformed-output retries and identifies the agent and model", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"directions":[' } }] })));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
@@ -1105,7 +1105,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ error: expect.stringContaining("moons_hook_generation (google/gemini-3.8-flash) returned malformed JSON") });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it.each(["length", "content_filter", "tool_calls"])("does not loop on terminal %s output", async (finishReason) => {

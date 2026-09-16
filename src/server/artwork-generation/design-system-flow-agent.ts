@@ -1,3 +1,4 @@
+import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -337,6 +338,7 @@ async function callStructuredAgent<T>({
     })
   );
 
+  return withAiRetry(async () => {
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -419,6 +421,7 @@ async function callStructuredAgent<T>({
     });
     throw error;
   }
+  });
 }
 
 function parseCreativeSetDirection(

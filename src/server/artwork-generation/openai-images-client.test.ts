@@ -83,3 +83,18 @@ describe("OpenAI image prompt limit", () => {
     );
   });
 });
+
+
+it.each([504, 429])("retries image timeout but stops immediately for exhausted credits (HTTP %s)", async status => {
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: status === 429 ? "You have no credits remaining" : "The operation was aborted" } }), { status }))
+    .mockResolvedValueOnce(imageResponse());
+  const result = generateImage({ apiKey: "test", model: "test/model", prompt: "Image", size: "1024x1024", fetchImpl });
+  if (status === 429) {
+    await expect(result).rejects.toThrow("no credits remaining");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  } else {
+    expect(await result).toMatchObject({ mimeType: "image/png" });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  }
+});

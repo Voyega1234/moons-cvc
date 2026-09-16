@@ -1,3 +1,4 @@
+import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -84,7 +85,7 @@ export async function interpretReferenceDesign({
     )
   ].join("\n");
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  return withAiRetry(async () => {
     try {
       const response = await fetchImpl(endpoint, {
         method: "POST",
@@ -165,15 +166,9 @@ export async function interpretReferenceDesign({
         inputText,
         error: error instanceof Error ? error.message : "Unknown interpreter error."
       });
-      if (attempt === 0 && error instanceof StructuredOutputError && error.code === "provider_error" &&
-        /^(429|500|502|503|504|server_error|internal_error|internal_server_error|overloaded_error|rate_limit_exceeded|rate_limit_error|service_unavailable)$/.test(error.providerCode ?? "")) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        continue;
-      }
       throw error;
     }
-  }
-  throw new Error("Reference interpreter exhausted its provider attempts.");
+  });
 }
 
 const referenceDesignGrammarSchema = {
