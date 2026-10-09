@@ -867,7 +867,7 @@ describe("workspace serializer", () => {
     });
   });
 
-  it("round-trips production-ready UGC scene scripts", () => {
+  it.each([0, 1, 4, 5])("loads UGC briefs with %i scenes only when non-empty", (sceneCount) => {
     const workspace = createInitialWorkspaceState({
       runId: "ugc-scenes",
       now: "2026-08-11T10:00:00.000Z"
@@ -899,15 +899,13 @@ describe("workspace serializer", () => {
                 moodAndTone: "สดใส เป็นธรรมชาติ",
                 productionStyle: "Creator-led vertical video",
                 referenceDirection: "ครัวเช้า",
-                scenes: ["HOOK", "DEVELOPMENT", "PROOF / BENEFIT", "CTA"].map(
-                  (title, index) => ({
-                    title,
-                    duration: `${index * 5}–${(index + 1) * 5} วินาที`,
-                    scriptLines: [`บทพูดจริงซีน ${index + 1}`],
-                    visual: `ภาพซีน ${index + 1}`,
-                    textOverlay: `ข้อความซีน ${index + 1}`
-                  })
-                )
+                scenes: Array.from({ length: sceneCount }, (_, index) => ({
+                  title: index === 0 ? "HOOK" : `Scene ${index + 1}`,
+                  duration: `${index * 5}–${(index + 1) * 5} วินาที`,
+                  scriptLines: [`บทพูดจริงซีน ${index + 1}`],
+                  visual: `ภาพซีน ${index + 1}`,
+                  textOverlay: `ข้อความซีน ${index + 1}`
+                }))
               }
             }
           ]
@@ -919,8 +917,12 @@ describe("workspace serializer", () => {
       serializeWorkspace(withUgcScenes, "2026-08-11T10:01:00.000Z")
     );
 
+    if (sceneCount === 0) {
+      expect(restored).toBeNull();
+      return;
+    }
     expect(restored?.runsById["ugc-scenes"]?.directions[0]?.ugcBrief?.scenes)
-      .toHaveLength(4);
+      .toEqual(withUgcScenes.runsById[run.id]?.directions[0]?.ugcBrief?.scenes);
     expect(
       restored?.runsById["ugc-scenes"]?.directions[0]?.ugcBrief?.scenes[0]
     ).toMatchObject({

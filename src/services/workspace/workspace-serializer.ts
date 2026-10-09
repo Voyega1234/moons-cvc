@@ -847,7 +847,7 @@ function parseUgcVideoBrief(value: unknown): UgcVideoBrief | null {
 }
 
 function parseUgcVideoScenes(value: unknown): UgcVideoBrief["scenes"] | null {
-  if (!Array.isArray(value) || value.length !== 4) return null;
+  if (!Array.isArray(value) || value.length < 1) return null;
   const scenes = value.map((scene) => {
     if (!isRecord(scene)) return null;
     const title = parseString(scene.title);
