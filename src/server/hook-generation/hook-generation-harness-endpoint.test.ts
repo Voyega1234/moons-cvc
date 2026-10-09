@@ -1156,6 +1156,75 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(payload.directions.every((direction: { id: string; caption: string }) => direction.caption === `Caption ${direction.id}`)).toBe(true);
   });
 
+  it.each(["gemini", "vertex"] as const)("runs all Gemini Hook passes through %s without OpenRouter credentials", async (provider) => {
+    const direction = {
+      id: "native-hook", sourceCandidateId: "candidate-1", service: "single-static",
+      hook: "มุมคิดใหม่", subheadline: "รายละเอียดเพิ่มเติม", concept: "Native idea",
+      why: "Relevant", visual: "", albumFormat: "three-horizontal", cta: "ดูรายละเอียด",
+      caption: "", score: 88, reasoning: "Strong fit", citations: []
+    };
+    const outputs = [{ directions: [direction] }, { captions: [{ id: direction.id, caption: "Native caption" }] },
+      { items: [{ id: direction.id, highlights: [] }] }];
+    const fetchMock = vi.fn<typeof fetch>();
+    outputs.forEach((output) => fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(output) }] } }]
+    }))));
+    const writeDebugLog = vi.fn();
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+      }),
+      env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_KEY: "gemini-key", VERTEX_API_KEY: "vertex-key", HOOK_GENERATION_DEBUG_LOG_DIR: "test" },
+      fetchImpl: fetchMock, writeDebugLog
+    });
+    expect(await response.json()).toMatchObject({ ok: true, directions: [{ id: direction.id, caption: "Native caption" }] });
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const endpoint = provider === "vertex"
+      ? "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.8-flash:generateContent"
+      : "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([endpoint, endpoint, endpoint]);
+    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-goog-api-key")).toBe(`${provider}-key`);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toHaveProperty("tools", [{ googleSearch: {} }]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).not.toHaveProperty("tools");
+    expect(writeDebugLog.mock.calls[0]![1]).toMatchObject({ researchAgent: null, topicAgent: null,
+      hookAgent: { provider, model: "gemini-3.8-flash" }, captionAgent: { model: "gemini-3.8-flash" } });
+  });
+
+  it.each([
+    ["openrouter", "google/gemini-3.8-flash"],
+    ["vertex", "anthropic/claude-sonnet-5"],
+    ["gemini", "anthropic/claude-sonnet-5"]
+  ])("keeps OpenRouter routing for mode %s and selection %s", async (mode, generationModel) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: { message: "Invalid test request" } }), { status: 400 }));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel })
+      }), env: { HOOK_GEMINI_PROVIDER: mode, OPENROUTER_API_KEY: "router-key" }, fetchImpl
+    });
+    expect(response.status).toBe(500);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer router-key");
+    expect(JSON.parse(String(init?.body)).model).toBe(generationModel);
+  });
+
+  it.each([
+    [{ HOOK_GEMINI_PROVIDER: "vertex" }, "VERTEX_API_KEY is required."],
+    [{ HOOK_GEMINI_PROVIDER: "gemini" }, "GEMINI_API_KEY is required."],
+    [{ HOOK_GEMINI_PROVIDER: "typo" }, "HOOK_GEMINI_PROVIDER must be openrouter, gemini, or vertex."]
+  ])("rejects invalid native configuration before sending a provider request", async (env, error) => {
+    const fetchImpl = vi.fn();
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+      }), env, fetchImpl
+    });
+    expect(await response.json()).toMatchObject({ ok: false, error });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("defaults the direct creative pass to OpenRouter when no model is selected", async () => {
     const {
       generationModel: _generationModel,

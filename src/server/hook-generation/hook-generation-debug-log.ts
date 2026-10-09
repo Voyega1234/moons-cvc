@@ -9,11 +9,11 @@ export interface HookGenerationDebugLog {
   runId: string;
   hookIdeaMode: string;
   researchAgent: {
-    provider: "openai" | "openrouter";
+    provider: "openai" | "openrouter" | "gemini" | "vertex";
     model: string;
     promptSource: "agent_prompt/agent_hook_research.md";
     request: {
-      endpoint: "/v1/responses" | "/api/v1/chat/completions";
+      endpoint: string;
       inputText: string;
       tools: readonly {
         type: "web_search_preview";
@@ -43,11 +43,11 @@ export interface HookGenerationDebugLog {
     };
   } | null;
   topicAgent: {
-    provider: "openai" | "openrouter";
+    provider: "openai" | "openrouter" | "gemini" | "vertex";
     model: string;
     promptSource: "agent_prompt/agent_hook_topics.md";
     request: {
-      endpoint: "/v1/responses" | "/api/v1/chat/completions";
+      endpoint: string;
       inputText: string;
       reasoningEffort?: "medium" | "high";
       responseSchema: "moons_hook_topics";
@@ -58,12 +58,12 @@ export interface HookGenerationDebugLog {
     };
   } | null;
   hookAgent: {
-    provider: "openai" | "openrouter";
+    provider: "openai" | "openrouter" | "gemini" | "vertex";
     model: string;
     promptSource: "agent_prompt/agent_hook.md";
     batches: readonly {
       request: {
-        endpoint: "/v1/responses" | "/api/v1/chat/completions";
+        endpoint: string;
         inputText: string;
         tools: readonly Record<string, unknown>[];
         plugins: readonly {
@@ -95,13 +95,13 @@ export interface HookGenerationDebugLog {
     }[];
   };
   ugcScriptAgent?: {
-    provider: "openai" | "openrouter";
+    provider: "openai" | "openrouter" | "gemini" | "vertex";
     model: string;
     promptSource: "agent_prompt/agent_ugc_script.md";
     entries: readonly {
       directionId: string;
       request: {
-        endpoint: "/v1/responses" | "/api/v1/chat/completions";
+        endpoint: string;
         inputText: string;
         responseSchema: "moons_ugc_script";
       };

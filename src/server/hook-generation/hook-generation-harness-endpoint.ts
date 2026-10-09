@@ -1,3 +1,4 @@
+import { callGoogleHookApi, googleHookEndpoint, type HookProvider } from "./google-hook-provider.js";
 import { withAiRetry as withTransientRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { openRouterCompatibleSchema } from "../shared/openrouter-schema.js";
@@ -70,6 +71,10 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_HOOK_GENERATION_MODEL?: string;
   OPENAI_HOOK_SUPPORT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
+  HOOK_GEMINI_PROVIDER?: string;
+  GEMINI_API_KEY?: string;
+  VERTEX_API_KEY?: string;
+  GEMINI_HOOK_GENERATION_MODEL?: string;
   OPENROUTER_HOOK_GENERATION_MODEL?: string;
   OPENROUTER_HOOK_RESEARCH_MODEL?: string;
   SUPABASE_URL?: string;
@@ -229,32 +234,28 @@ export async function handleHookGenerationHarnessRequest({
         operation: "hook-generation"
       }
     });
-    const generationProvider =
-      isOpenRouterHookGenerationModel(input.generationModel)
-        ? "openrouter"
-        : "openai";
-    const generationApiKey =
-      generationProvider === "openrouter"
-        ? env.OPENROUTER_API_KEY?.trim()
-        : openAiApiKey;
-    if (!generationApiKey) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            generationProvider === "openrouter"
-              ? "OPENROUTER_API_KEY is required."
-              : "OPENAI_API_KEY is required."
-        },
-        500
-      );
+    const googleMode = env.HOOK_GEMINI_PROVIDER?.trim() || "openrouter";
+    if (!["openrouter", "gemini", "vertex"].includes(googleMode)) {
+      return jsonResponse({ ok: false, error: "HOOK_GEMINI_PROVIDER must be openrouter, gemini, or vertex." }, 500);
     }
-    const model =
-      generationProvider === "openrouter"
-        ? input.generationModel
-        : env.OPENAI_HOOK_GENERATION_MODEL?.trim() ||
-          input.generationModel ||
-          DEFAULT_OPENAI_MODEL;
+    const generationProvider: HookProvider =
+      input.generationModel.startsWith("google/gemini-") && googleMode !== "openrouter"
+        ? googleMode as "gemini" | "vertex"
+        : isOpenRouterHookGenerationModel(input.generationModel) ? "openrouter" : "openai";
+    const googleProvider = generationProvider === "gemini" || generationProvider === "vertex";
+    const generationApiKey = googleProvider
+      ? (generationProvider === "vertex" ? env.VERTEX_API_KEY : env.GEMINI_API_KEY)?.trim()
+      : generationProvider === "openrouter" ? env.OPENROUTER_API_KEY?.trim() : openAiApiKey;
+    if (!generationApiKey) {
+      const keyName = generationProvider === "vertex" ? "VERTEX_API_KEY"
+        : generationProvider === "gemini" ? "GEMINI_API_KEY"
+        : generationProvider === "openrouter" ? "OPENROUTER_API_KEY" : "OPENAI_API_KEY";
+      return jsonResponse({ ok: false, error: `${keyName} is required.` }, 500);
+    }
+    const model = googleProvider
+      ? env.GEMINI_HOOK_GENERATION_MODEL?.trim() || input.generationModel.slice("google/".length)
+      : generationProvider === "openrouter" ? input.generationModel
+      : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || input.generationModel || DEFAULT_OPENAI_MODEL;
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const researchOpenRouterModel = env.OPENROUTER_HOOK_RESEARCH_MODEL?.trim();
@@ -267,7 +268,7 @@ export async function handleHookGenerationHarnessRequest({
         ? env.OPENROUTER_API_KEY!.trim()
         : openAiApiKey;
     const nativeHookSearch =
-      generationProvider === "openrouter" && !input.researchOnly;
+      generationProvider !== "openai" && !input.researchOnly;
     if (!nativeHookSearch && !researchApiKey) {
       return jsonResponse(
         {
@@ -386,7 +387,7 @@ export async function handleHookGenerationHarnessRequest({
           JSON.stringify(directTraces.map((trace) => captionSearchEvidence(trace.rawResponse)))
         ].join("\n\n");
         const rawResponse = await withTransientRetry(() => callResponsesApi({
-          apiKey: generationApiKey, model: HOOK_CAPTION_MODEL, provider: generationProvider,
+          apiKey: generationApiKey, model: googleProvider ? model : HOOK_CAPTION_MODEL, provider: generationProvider,
           fetchImpl: providerFetchImpl, content: [{ type: "input_text", text: inputText }],
           schemaName: "moons_hook_captions", schema: hookCaptionsSchema,
           maxTokens: Math.min(24000, 1500 + batch.length * 1400)
@@ -411,7 +412,7 @@ export async function handleHookGenerationHarnessRequest({
       runSubheadlineHighlightStep({
         directions,
         apiKey: generationApiKey,
-        model: generationProvider === "openrouter" ? model : supportModel,
+        model: googleProvider ? model : generationProvider === "openrouter" ? model : supportModel,
         provider: generationProvider,
         prompt: subheadlineHighlightPrompt,
         fetchImpl: providerFetchImpl
@@ -555,7 +556,7 @@ async function runGenerationStep({
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookGenerationResult>> {
   const inputText = buildDirectHookGenerationPrompt(
@@ -563,7 +564,7 @@ async function runGenerationStep({
     agentHookPrompt,
     researchDossier,
     topicShortlist,
-    provider === "openrouter" ? [] : pastPosts
+    provider !== "openai" ? [] : pastPosts
   );
   const HOOK_GENERATION_MAX_TOKENS_CEILING = 24000;
   let currentMaxTokens = Math.min(
@@ -577,9 +578,9 @@ async function runGenerationStep({
       fetchImpl,
       content: [{ type: "input_text", text: requestInputText }],
       schemaName: "moons_hook_generation",
-      schema: provider === "openrouter" ? hookIdeasSchema : hookGenerationSchema,
+      schema: provider !== "openai" ? hookIdeasSchema : hookGenerationSchema,
       maxTokens: currentMaxTokens,
-      ...(provider === "openrouter"
+      ...(provider !== "openai"
         ? { tools: [HOOK_NATIVE_SEARCH_TOOL], toolChoice: "auto" as const, maxToolCalls: 3 }
         : {}),
       reasoningEffort:
@@ -674,7 +675,7 @@ async function runHookResearchStep({
   policyPrompt: string;
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookResearchDossier>> {
   const inputText = buildHookResearchPrompt(policyPrompt, buildInputBlock(input));
@@ -713,7 +714,7 @@ async function runHookTopicStep({
   researchDossier: HookResearchDossier;
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   fetchImpl: FetchLike;
 }): Promise<TracedAgentResult<HookTopicShortlist>> {
   const inputText = buildHookTopicsPrompt(
@@ -772,16 +773,16 @@ function buildDirectHookGenerationDebugLog({
   directTraces: readonly TracedAgentResult<HookGenerationResult>[];
   researchModel: string;
   researchProvider: "openai" | "openrouter";
-  generationProvider: "openai" | "openrouter";
+  generationProvider: HookProvider;
   generationModel: string;
   finalDirections: readonly GeneratedDirection[];
   captionTrace?: { inputText: string; rawResponse: unknown };
   ugcScriptTraces: readonly UgcScriptTrace[];
 }): HookGenerationDebugLog {
   const endpoint =
-    generationProvider === "openrouter"
-      ? "/api/v1/chat/completions"
-      : "/v1/responses";
+    generationProvider === "gemini" || generationProvider === "vertex"
+      ? googleHookEndpoint(generationProvider, generationModel)
+      : generationProvider === "openrouter" ? "/api/v1/chat/completions" : "/v1/responses";
   const researchEndpoint =
     researchProvider === "openrouter"
       ? "/api/v1/chat/completions"
@@ -837,7 +838,8 @@ function buildDirectHookGenerationDebugLog({
         request: {
           endpoint,
           inputText: trace.inputText,
-          tools: generationProvider === "openrouter" ? [HOOK_NATIVE_SEARCH_TOOL] : [],
+          tools: generationProvider === "gemini" || generationProvider === "vertex"
+            ? [{ googleSearch: {} }] : generationProvider === "openrouter" ? [HOOK_NATIVE_SEARCH_TOOL] : [],
           plugins: [],
           ...(generationProvider === "openrouter" ? { toolChoice: "auto" as const, maxToolCalls: 3 } : {}),
           ...(generationProvider === "openai"
@@ -878,7 +880,7 @@ function buildDirectHookGenerationDebugLog({
           }
         }
       : {}),
-    ...(captionTrace ? { captionAgent: { model: HOOK_CAPTION_MODEL, promptSource: "agent_prompt/agent_hook_caption.md", ...captionTrace } } : {}),
+    ...(captionTrace ? { captionAgent: { model: generationProvider === "gemini" || generationProvider === "vertex" ? generationModel : HOOK_CAPTION_MODEL, promptSource: "agent_prompt/agent_hook_caption.md", ...captionTrace } } : {}),
     finalResponse: { directions: finalDirections }
   };
 }
@@ -894,7 +896,7 @@ async function runSubheadlineHighlightStep({
   directions: readonly GeneratedDirection[];
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   prompt: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
@@ -928,7 +930,7 @@ async function runSubheadlineHighlightBatch({
   directions: readonly GeneratedDirection[];
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   prompt: string;
   fetchImpl: FetchLike;
 }): Promise<readonly GeneratedDirection[]> {
@@ -994,7 +996,7 @@ async function runUgcScriptStep({
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   prompt: string;
   fetchImpl: FetchLike;
 }): Promise<{
@@ -1062,7 +1064,7 @@ async function runUgcScriptDirection({
   input: HookGenerationHarnessRequest;
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   fetchImpl: FetchLike;
 }): Promise<UgcScriptTrace> {
   const inputText = buildUgcScriptPrompt(
@@ -1218,7 +1220,7 @@ async function runUgcBriefStep({
   pastPosts: readonly PastPostExample[];
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   prompt: string;
   fetchImpl: FetchLike;
 }): Promise<{
@@ -1286,7 +1288,7 @@ async function runUgcBriefDirection({
   input: HookGenerationHarnessRequest;
   apiKey: string;
   model: string;
-  provider: "openai" | "openrouter";
+  provider: HookProvider;
   fetchImpl: FetchLike;
 }): Promise<UgcBriefTrace> {
   const inputText = buildUgcBriefPrompt(
@@ -1631,8 +1633,18 @@ async function callResponsesApi({
   maxToolCalls?: number;
   maxTokens?: number;
   reasoningEffort?: "medium" | "high";
-  provider?: "openai" | "openrouter";
+  provider?: HookProvider;
 }): Promise<unknown> {
+  if (provider === "gemini" || provider === "vertex") {
+    if (content.some((item) => item.type !== "input_text")) {
+      throw new Error("Google Hook generation supports text input only.");
+    }
+    return callGoogleHookApi({
+      provider, apiKey, model, fetchImpl, schema, schemaName, maxTokens,
+      text: content.map((item) => item.type === "input_text" ? item.text : "").join("\n\n"),
+      search: Boolean(tools?.length)
+    });
+  }
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const endpoint =
     provider === "openrouter"

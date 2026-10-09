@@ -655,3 +655,21 @@ regenerate previously completed images. A retry may still incur provider usage
 if the previous remote attempt completed without delivering its response.
 The policy reduces transient failures but does not guarantee success during a
 persistent outage or after the hosting request deadline.
+
+## Native Google Hook routing (2026-10-09)
+
+`HOOK_GEMINI_PROVIDER=openrouter|gemini|vertex` switches the server route for
+`google/gemini-*` selections in workflow and Playground; unset keeps OpenRouter.
+`gemini` uses an AI Studio `GEMINI_API_KEY`; `vertex` uses an Express Mode
+`VERTEX_API_KEY` at the global publisher endpoint. Keys stay server-side.
+`GEMINI_HOOK_GENERATION_MODEL` optionally overrides the native model ID; otherwise
+the selected ID loses its `google/` prefix. Other provider selections retain
+existing routing and persisted model IDs stay compatible when switching back.
+`server/hook-generation/google-hook-provider.ts` owns native generateContent
+transport and normalizes final text, grounding citations and truncation/refusal
+signals for existing validators/retries. Native Google uses the selected Gemini
+for Idea, Caption, Highlight and UGC passes. Ideas enable Google Search on demand;
+support passes do not enable search. Separate Caption validation remains mandatory.
+Standalone `researchOnly` retains OpenAI/OpenRouter research routing.
+Usage recording recognizes native Google endpoints and token/search metadata.
+Changing server environment requires restarting local functions or redeploying.

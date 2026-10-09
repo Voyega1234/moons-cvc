@@ -19,7 +19,7 @@ interface AiUsageEvent {
   operation: AiUsageTrackingContext["operation"];
   stage: string;
   modality: "text" | "image";
-  provider: "openai" | "openrouter";
+  provider: "openai" | "openrouter" | "gemini" | "vertex";
   model: string;
   endpoint: string;
   provider_request_id: string | null;
@@ -109,7 +109,7 @@ function parseProviderRequest(
   input: URL | RequestInfo,
   init: RequestInit | undefined
 ): {
-  provider: "openai" | "openrouter";
+  provider: "openai" | "openrouter" | "gemini" | "vertex";
   endpoint: string;
   modality: "text" | "image";
   model: string;
@@ -122,28 +122,32 @@ function parseProviderRequest(
   if (!url) return null;
   const isOpenAi = url.hostname === "api.openai.com";
   const isOpenRouter = url.hostname === "openrouter.ai";
-  if (!isOpenAi && !isOpenRouter) return null;
+  const isGemini = url.hostname === "generativelanguage.googleapis.com";
+  const isVertex = url.hostname === "aiplatform.googleapis.com";
+  const isGoogle = (isGemini || isVertex) && url.pathname.endsWith(":generateContent");
+  if (!isOpenAi && !isOpenRouter && !isGoogle) return null;
 
   const isImage =
     /^\/v1\/images\/(?:generations|edits)$/.test(url.pathname) ||
     url.pathname === "/api/v1/images";
   const isText =
     url.pathname === "/v1/responses" ||
-    url.pathname === "/api/v1/chat/completions";
+    url.pathname === "/api/v1/chat/completions" || isGoogle;
   if (!isImage && !isText) return null;
 
   const body = parseRequestBody(init?.body);
-  const model = readBodyString(body, "model") || "unknown";
+  const model = readBodyString(body, "model") || (isGoogle ? decodeURIComponent(url.pathname.split("/").at(-1)!.replace(":generateContent", "")) : "unknown");
   const schemaName =
     nestedString(body, ["text", "format", "name"]) ||
-    nestedString(body, ["response_format", "json_schema", "name"]);
+    nestedString(body, ["response_format", "json_schema", "name"]) ||
+    nestedString(body, ["labels", "moons_stage"]) || (isGoogle ? "hook-generation" : "");
   const imageOperation =
     url.pathname.endsWith("/edits") || bodyHasInputReferences(body)
       ? "image-edit"
       : "image-generation";
 
   return {
-    provider: isOpenRouter ? "openrouter" : "openai",
+    provider: isVertex ? "vertex" : isGemini ? "gemini" : isOpenRouter ? "openrouter" : "openai",
     endpoint: url.pathname,
     modality: isImage ? "image" : "text",
     model,
@@ -171,7 +175,7 @@ function buildUsageEvent({
   payload: unknown;
   durationMs: number;
 }): AiUsageEvent {
-  const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : {};
+  const usage = isRecord(payload) ? firstRecord(payload.usage, payload.usageMetadata) : {};
   const inputDetails = firstRecord(
     usage.input_tokens_details,
     usage.prompt_tokens_details
@@ -180,10 +184,10 @@ function buildUsageEvent({
     usage.output_tokens_details,
     usage.completion_tokens_details
   );
-  const inputTokens = firstNumber(usage.input_tokens, usage.prompt_tokens);
+  const inputTokens = firstNumber(usage.input_tokens, usage.prompt_tokens, usage.promptTokenCount);
   const outputTokens = firstNumber(
     usage.output_tokens,
-    usage.completion_tokens
+    usage.completion_tokens, usage.candidatesTokenCount
   );
   const responseImageCount =
     isRecord(payload) && Array.isArray(payload.data) ? payload.data.length : 0;
@@ -210,15 +214,15 @@ function buildUsageEvent({
     status: response.ok ? "succeeded" : "failed",
     duration_ms: durationMs,
     input_tokens: inputTokens,
-    cached_input_tokens: firstNumber(inputDetails.cached_tokens),
+    cached_input_tokens: firstNumber(inputDetails.cached_tokens, usage.cachedContentTokenCount),
     cache_write_tokens: firstNumber(inputDetails.cache_write_tokens),
     output_tokens: outputTokens,
-    reasoning_tokens: firstNumber(outputDetails.reasoning_tokens),
+    reasoning_tokens: firstNumber(outputDetails.reasoning_tokens, usage.thoughtsTokenCount),
     input_text_tokens: firstNumber(inputDetails.text_tokens),
     input_image_tokens: firstNumber(inputDetails.image_tokens),
     output_image_tokens: firstNumber(outputDetails.image_tokens),
     total_tokens:
-      firstNumber(usage.total_tokens) || inputTokens + outputTokens,
+      firstNumber(usage.total_tokens, usage.totalTokenCount) || inputTokens + outputTokens,
     web_search_requests: countWebSearchRequests(payload),
     image_count: response.ok
       ? responseImageCount || providerRequest.requestedImageCount
@@ -430,14 +434,19 @@ function countWebSearchRequests(payload: unknown): number {
   };
   visit(payload);
 
-  const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : {};
+  const usage = isRecord(payload) ? firstRecord(payload.usage, payload.usageMetadata) : {};
   const legacy = isRecord(usage.server_tool_use)
     ? firstNumber(usage.server_tool_use.web_search_requests)
     : 0;
   const details = isRecord(usage.server_tool_use_details)
     ? firstNumber(usage.server_tool_use_details.web_search_requests)
     : 0;
-  return Math.max(calls, legacy, details);
+  const candidates = isRecord(payload) && Array.isArray(payload.candidates) ? payload.candidates : [];
+  const googleQueries = candidates.flatMap((candidate) => {
+    const grounding = isRecord(candidate) && isRecord(candidate.groundingMetadata) ? candidate.groundingMetadata : {};
+    return Array.isArray(grounding.webSearchQueries) ? grounding.webSearchQueries : [];
+  }).filter((query) => typeof query === "string" && query.trim());
+  return Math.max(calls, legacy, details, new Set(googleQueries).size);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

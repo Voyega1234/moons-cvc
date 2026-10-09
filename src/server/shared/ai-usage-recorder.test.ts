@@ -12,6 +12,33 @@ const context = {
 };
 
 describe("createAiUsageTrackingFetch", () => {
+  it.each([
+    ["gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"],
+    ["vertex", "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.8-flash:generateContent"]
+  ])("records native %s token and search usage without storing keys or prompts", async (provider, endpoint) => {
+    let stored: unknown;
+    const payload = {
+      candidates: [{ groundingMetadata: { webSearchQueries: ["query", "query", "", "another"] } }],
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, thoughtsTokenCount: 5,
+        cachedContentTokenCount: 10, totalTokenCount: 125 }
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).includes("/rest/v1/ai_usage_events")) {
+        stored = JSON.parse(String(init?.body));
+        return new Response(null, { status: 201 });
+      }
+      return jsonResponse(payload);
+    });
+    const response = await createAiUsageTrackingFetch({ fetchImpl, context })(endpoint, {
+      method: "POST", headers: { "x-goog-api-key": "secret-key" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: "secret prompt" }] }] })
+    });
+    expect(await response.json()).toEqual(payload);
+    expect(stored).toMatchObject({ provider, model: "gemini-3.8-flash", input_tokens: 100,
+      output_tokens: 20, reasoning_tokens: 5, cached_input_tokens: 10, total_tokens: 125, web_search_requests: 2 });
+    expect(JSON.stringify(stored)).not.toContain("secret");
+  });
+
   it("persists normalized OpenAI text and search usage without prompts", async () => {
     let stored: Record<string, unknown> | null = null;
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
