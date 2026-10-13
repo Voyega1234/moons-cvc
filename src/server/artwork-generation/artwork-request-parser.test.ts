@@ -4,7 +4,7 @@ import { parseRequestBody } from "./artwork-request-parser";
 describe("parseRequestBody", () => {
   it("rejects persisted Visual guidance from artwork agent input", () => {
     const parsed = parseRequestBody({
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       artworkMode: "standard",
       imagePromptModel: "gpt-5.6-terra",
       runId: "run-1",

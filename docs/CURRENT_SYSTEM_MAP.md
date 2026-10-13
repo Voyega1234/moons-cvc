@@ -673,3 +673,11 @@ support passes do not enable search. Separate Caption validation remains mandato
 Standalone `researchOnly` retains OpenAI/OpenRouter research routing.
 Usage recording recognizes native Google endpoints and token/search metadata.
 Changing server environment requires restarting local functions or redeploying.
+
+## Artwork image model (2026-10-13)
+
+New artwork, albums, revisions, placeholder edits and UGC thumbnails default to
+`openai/gpt-image-2.5-sunburst` through OpenRouter. Request builders and queued
+output metadata live in `src/services/artwork-generation/openai-image-generation.ts`.
+`OPENAI_IMAGE_GENERATION_MODEL` remains a server-side override for generation
+and revisions; existing saved artwork retains its original model metadata.

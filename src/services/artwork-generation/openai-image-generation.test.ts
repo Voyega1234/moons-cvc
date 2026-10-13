@@ -289,7 +289,7 @@ describe("buildArtworkGenerationRequest", () => {
 
     expect(request).toEqual({
       requestType: "artwork-revision",
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       clientId: "flora",
       runId: "run-1",
       outputId: "hook-1-v1",
@@ -362,7 +362,7 @@ describe("buildArtworkGenerationRequest", () => {
       ]
     });
 
-    expect(request.model).toBe("gpt-image-2.5-flare");
+    expect(request.model).toBe("gpt-image-2.5-sunburst");
     expect(request.artworkMode).toBe("standard");
     expect(request.imagePromptModel).toBe("gpt-5.6-terra");
     expect(request.brief).toBe(run.brief);
@@ -607,7 +607,7 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.artworkMode).toBe("design-system");
-    expect(request.model).toBe("gpt-image-2.5-flare");
+    expect(request.model).toBe("gpt-image-2.5-sunburst");
     expect(request.selectedHooks).toHaveLength(1);
   });
 
@@ -617,7 +617,7 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.artworkMode).toBe("design-system-new");
-    expect(request.model).toBe("gpt-image-2.5-flare");
+    expect(request.model).toBe("gpt-image-2.5-sunburst");
     expect(request.selectedHooks).toHaveLength(1);
   });
 
@@ -639,7 +639,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(request.selectedHooks[0]?.subheadline).toBe(
       "Designed to soften the whole room"
     );
-    expect(request.model).toBe("gpt-image-2.5-flare");
+    expect(request.model).toBe("gpt-image-2.5-sunburst");
   });
 
   it("passes the selected OpenRouter prompt model without changing the image model", () => {
@@ -651,7 +651,7 @@ describe("buildArtworkGenerationRequest", () => {
     });
 
     expect(request.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
-    expect(request.model).toBe("gpt-image-2.5-flare");
+    expect(request.model).toBe("gpt-image-2.5-sunburst");
   });
 
   it("sends image requests for visual formats and keeps UGC in the local template", () => {
@@ -832,7 +832,7 @@ describe("buildArtworkGenerationRequest", () => {
       albumMasterAssetStoragePath:
         "flora/run-1/outputs/hook-1-album-master-v1.png",
       provider: "openai",
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       revisionCount: 0,
       approval: { graphicDesign: null, clientService: null, projectManager: null },
       approvalComments: { graphicDesign: "", clientService: "", projectManager: "" }
@@ -844,7 +844,7 @@ describe("buildArtworkGenerationRequest", () => {
     expect(output.albumMasterAssetStoragePath).toBe(
       "flora/run-1/outputs/hook-1-album-master-v1.png"
     );
-    expect(output.model).toBe("gpt-image-2.5-flare");
+    expect(output.model).toBe("gpt-image-2.5-sunburst");
   });
 
   it("keeps the official Brand CI logo separate from selected reference URLs in the n8n request", () => {

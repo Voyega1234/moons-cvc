@@ -44,12 +44,15 @@ describe("OpenAI image prompt limit", () => {
 
     await generateImage({
       apiKey: "test-key",
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       prompt: oversizedPrompt,
       size: "1024x1024",
       fetchImpl: fetchImpl as unknown as typeof fetch
     });
 
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)).model).toBe(
+      "openai/gpt-image-2.5-sunburst"
+    );
     expect(sentPrompt.length).toBeLessThanOrEqual(
       OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS
     );
@@ -66,7 +69,7 @@ describe("OpenAI image prompt limit", () => {
 
     await editImage({
       apiKey: "test-key",
-      model: "gpt-image-2.5-flare",
+      model: "gpt-image-2.5-sunburst",
       prompt: oversizedPrompt,
       size: "1024x1024",
       referenceImages: [
@@ -78,6 +81,9 @@ describe("OpenAI image prompt limit", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch
     });
 
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)).model).toBe(
+      "openai/gpt-image-2.5-sunburst"
+    );
     expect(sentPrompt.length).toBeLessThanOrEqual(
       OPENAI_IMAGE_PROMPT_SAFE_CHARACTERS
     );
