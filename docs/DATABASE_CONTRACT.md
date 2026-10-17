@@ -409,6 +409,25 @@ than assuming the repo state matches production.
     snapshots, team profiles, client membership visibility, single-owner RLS,
     optimistic version checks, and atomic handoff history.
 
+`supabase/migrations/202610170001_private_clients.sql` restricts DOS LIFE
+(`dos-life-d8eded63`) and FixFit (`fixfit-7f57de77`) to the verified
+`wave@convertcake.com` account ID. Restrictive policies cover clients,
+client-scoped tables, run-scoped tables and Storage object paths even when an
+existing permissive policy allows an admin or owner. Other clients retain their
+existing permissions. A run trigger also blocks authenticated SECURITY DEFINER
+handoff/recovery calls from assigning private runs to another account. Trusted
+service-role workers retain their existing access.
+
+Run `supabase/tests/private_clients.sql` as postgres to check every existing
+team account under the authenticated role; the check rolls back all test
+changes. Public Storage URLs issued previously remain public. Existing external
+copies or browser memory cannot be revoked through database RLS. At rollout,
+no other user's persisted workspace contained either private client.
+Applied to the live project `cfislibqbzcquplksmqt` on 2026-10-18 (Asia/Bangkok),
+after explicit approval of the database, Storage and handoff scope. The SQL
+access check passed for every existing team profile; local PostgreSQL checks,
+`npm run typecheck` and `npm run build` also passed.
+
 Seed prototype clients with:
 
 ```text
