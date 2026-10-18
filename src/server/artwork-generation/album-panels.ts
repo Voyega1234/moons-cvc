@@ -7,6 +7,21 @@ import { buildImageRequestDebugBundle, type ArtworkGenerationDebugLogger } from 
 
 type Hook = ArtworkGenerationRequest["selectedHooks"][number];
 
+export function albumPanelSize(format: AlbumFormat, index: number): ImageGenerationSize {
+  return index > 1 || format === "four-grid" ? "1024x1024"
+    : format === "three-horizontal" ? "2048x1024"
+    : format === "three-vertical" ? "1024x2048" : "1024x1536";
+}
+
+export async function validateAlbumPanel(bytes: Buffer, size: ImageGenerationSize, index: number) {
+  const metadata = await sharp(bytes).metadata();
+  const [width, height] = size.split("x").map(Number);
+  if (!metadata.width || !metadata.height || !width || !height ||
+    Math.abs(metadata.width / metadata.height - width / height) > 0.02) {
+    throw new Error(`Album panel ${index} returned an incorrect aspect ratio; refusing to crop its content.`);
+  }
+}
+
 export interface AlbumArtDirection {
   sharedStyle: string;
   panels: readonly {
@@ -23,10 +38,7 @@ export function albumPanelPlan(hook: Hook, format: AlbumFormat, usePlaceholderCo
     throw new Error(`Album requires ${count - 1} supporting content beats.`);
   }
   return Array.from({ length: count }, (_, index) => {
-    const size: ImageGenerationSize = index > 0 || format === "four-grid"
-      ? "1024x1024"
-      : format === "three-horizontal" ? "2048x1024"
-      : format === "three-vertical" ? "1024x2048" : "1024x1536";
+    const size = albumPanelSize(format, index + 1);
     return {
       index: index + 1,
       size,
@@ -117,11 +129,7 @@ export async function generateIndependentAlbumPanels({
       referenceImages: panelReferences, quality: "medium", fetchImpl });
     const reviewed = reviewPanel ? await reviewPanel(image, panel.size, panel.index) : image;
     const bytes = Buffer.from(reviewed.base64, "base64");
-    const metadata = await sharp(bytes).metadata();
-    const [width, height] = panel.size.split("x").map(Number);
-    if (!metadata.width || !metadata.height || !width || !height || Math.abs(metadata.width / metadata.height - width / height) > 0.02) {
-      throw new Error(`Album panel ${panel.index} returned an incorrect aspect ratio; refusing to crop its content.`);
-    }
+    await validateAlbumPanel(bytes, panel.size, panel.index);
     panels.push({ index: panel.index, bytes });
   }
   return { panels, masterBytes: await composeAlbumPreview(panels, format) };
