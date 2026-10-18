@@ -8,6 +8,7 @@ import { buildImageRequestDebugBundle, type ArtworkGenerationDebugLogger } from 
 type Hook = ArtworkGenerationRequest["selectedHooks"][number];
 
 export function albumPanelSize(format: AlbumFormat, index: number): ImageGenerationSize {
+  if (format === "four-horizontal") return index === 1 ? "1920x1280" : "1920x1920";
   return index > 1 || format === "four-grid" ? "1024x1024"
     : format === "three-horizontal" ? "2048x1024"
     : format === "three-vertical" ? "1024x2048" : "1024x1536";
@@ -20,6 +21,13 @@ export async function validateAlbumPanel(bytes: Buffer, size: ImageGenerationSiz
     Math.abs(metadata.width / metadata.height - width / height) > 0.02) {
     throw new Error(`Album panel ${index} returned an incorrect aspect ratio; refusing to crop its content.`);
   }
+}
+
+export async function prepareAlbumPanel(bytes: Buffer, size: ImageGenerationSize, index: number) {
+  await validateAlbumPanel(bytes, size, index);
+  if (!size.startsWith("1920x")) return bytes;
+  const [width, height] = size.split("x").map(Number);
+  return sharp(bytes).resize(width, height, { fit: "contain", background: "#ffffff" }).png().toBuffer();
 }
 
 export interface AlbumArtDirection {
@@ -128,8 +136,7 @@ export async function generateIndependentAlbumPanels({
     const image = await editImage({ apiKey, model, prompt: panelPrompt, size: panel.size,
       referenceImages: panelReferences, quality: "medium", fetchImpl });
     const reviewed = reviewPanel ? await reviewPanel(image, panel.size, panel.index) : image;
-    const bytes = Buffer.from(reviewed.base64, "base64");
-    await validateAlbumPanel(bytes, panel.size, panel.index);
+    const bytes = await prepareAlbumPanel(Buffer.from(reviewed.base64, "base64"), panel.size, panel.index);
     panels.push({ index: panel.index, bytes });
   }
   return { panels, masterBytes: await composeAlbumPreview(panels, format) };

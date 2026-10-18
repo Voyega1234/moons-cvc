@@ -26,6 +26,7 @@ export const albumFormats = [
   "three-vertical",
   "three-horizontal",
   "four-vertical",
+  "four-horizontal",
   "four-grid"
 ] as const;
 export type AlbumFormat = (typeof albumFormats)[number];
@@ -53,6 +54,8 @@ export function albumFormatLabel(format: AlbumFormat): string {
       return "3 images · Horizontal lead";
     case "four-vertical":
       return "4 images · Vertical lead";
+    case "four-horizontal":
+      return "4 images · Horizontal lead";
     case "four-grid":
       return "4 images · Grid";
   }

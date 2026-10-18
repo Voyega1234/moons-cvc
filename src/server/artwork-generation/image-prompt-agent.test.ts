@@ -277,6 +277,11 @@ describe("generateImagePrompt", () => {
       "four-grid",
       "square cover with hook and main visual",
       '"image4": "Offer"'
+    ],
+    [
+      "four-horizontal",
+      "1920x1280 landscape cover (3:2) with hook and main visual; three 1920x1920 square supporting panels below",
+      '"image4": "Offer"'
     ]
   ] as const)(
     "describes the %s master-artboard sequence for Standard album posts",

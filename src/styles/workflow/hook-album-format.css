@@ -122,6 +122,19 @@
   grid-template-rows: repeat(2, 1fr);
 }
 
+.compass-app .album-layout-thumb.layout-four-horizontal,
+.compass-app .compass-album-format-diagram.four-horizontal,
+.compass-app .compass-album-panels.format-four-horizontal {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 2fr 1fr;
+}
+
+.compass-app .album-layout-thumb.layout-four-horizontal > :first-child,
+.compass-app .compass-album-format-diagram.four-horizontal > :first-child,
+.compass-app .compass-album-panels.format-four-horizontal > :first-child {
+  grid-column: 1 / -1;
+}
+
 .compass-app .compass-hook-album-format-modal {
   width: min(760px, calc(100vw - 32px));
   max-width: none;
@@ -173,7 +186,7 @@
   padding: 20px 22px;
   background: #f6f7fa;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 

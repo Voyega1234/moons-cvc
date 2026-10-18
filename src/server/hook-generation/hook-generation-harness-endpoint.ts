@@ -1520,7 +1520,7 @@ function buildAlbumPanelCountRetryPrompt(
     "# ALBUM PANEL COUNT CORRECTION — REQUIRED",
     `คำตอบก่อนหน้าถูกปฏิเสธ: ${validationError}`,
     "เขียนใหม่ทั้ง JSON โดยรักษา Direction, facts, quota, ids และ schema เดิม.",
-    "สำหรับ album-post เท่านั้น: three-vertical และ three-horizontal ต้องมี formatBeats 2 ข้อ; four-vertical และ four-grid ต้องมี formatBeats 3 ข้อ. หนึ่งข้อต่อหนึ่ง supporting panel และไม่นับ cover."
+    "สำหรับ album-post เท่านั้น: three-vertical และ three-horizontal ต้องมี formatBeats 2 ข้อ; four-vertical, four-horizontal และ four-grid ต้องมี formatBeats 3 ข้อ. หนึ่งข้อต่อหนึ่ง supporting panel และไม่นับ cover."
   ].join("\n");
 }
 
@@ -2312,6 +2312,7 @@ function albumHookInstruction(
       "  - three-vertical: vertical cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
       "  - three-horizontal: horizontal cover + 2 supporting panels; formatBeats ต้องมี 2 ข้อ หนึ่งข้อต่อ supporting panel.",
       "  - four-vertical: vertical cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
+      "  - four-horizontal: 1920x1280 horizontal cover (3:2) + 3 square supporting panels at 1920x1920 below; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
       "  - four-grid: cover + 3 supporting panels; formatBeats ต้องมี 3 ข้อ หนึ่งข้อต่อ supporting panel.",
       albumBeatDiversityRule
     ].join("\n");
@@ -2324,6 +2325,8 @@ function albumHookInstruction(
         ? "3 images: horizontal cover on top with two square panels below"
         : format === "four-vertical"
           ? "4 images: vertical cover on the left with three square panels on the right"
+          : format === "four-horizontal"
+            ? "4 images: 1920x1280 horizontal cover (3:2) on top with three 1920x1920 square panels below"
           : "4 images: four square panels in a 2 by 2 grid";
   const supportingPanelCount = format.startsWith("three-") ? 2 : 3;
   return [

@@ -1422,6 +1422,20 @@ function albumSlidePlacements(
       }
     ];
   }
+  if (format === "four-horizontal") {
+    const columnWidth = box.w / 3;
+    const coverHeight = box.h * 2 / 3;
+    const rowHeight = box.h / 3;
+    return [
+      { x: box.x, y: box.y, w: box.w, h: coverHeight },
+      ...[0, 1, 2].map(index => ({
+        x: box.x + columnWidth * index,
+        y: box.y + coverHeight,
+        w: columnWidth,
+        h: rowHeight
+      }))
+    ];
+  }
   if (format === "four-vertical") {
     const railWidth = box.w / 3;
     const leadWidth = box.w - railWidth;

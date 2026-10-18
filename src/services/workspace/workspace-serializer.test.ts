@@ -12,6 +12,18 @@ import {
 } from "./workspace-serializer";
 
 describe("workspace serializer", () => {
+  it("persists the four-image horizontal layout on the run and its Hook", () => {
+    const workspace = createInitialWorkspaceState({ runId: "horizontal-album", now: "2026-10-18T00:00:00Z" });
+    const run = workspace.runsById[workspace.activeRunId]!;
+    const saved = { ...workspace, runsById: { [workspace.activeRunId]: {
+      ...run, albumFormat: "four-horizontal" as const,
+      directions: [{ ...buildDirectionFixtures("Brand")[0]!, service: "album-post" as const, albumFormat: "four-horizontal" as const }]
+    } } };
+    const restored = deserializeWorkspace(serializeWorkspace(saved, "2026-10-18T00:00:00Z"));
+    expect(restored?.runsById[workspace.activeRunId]?.albumFormat).toBe("four-horizontal");
+    expect(restored?.runsById[workspace.activeRunId]?.directions[0]?.albumFormat).toBe("four-horizontal");
+  });
+
   it("preserves a per-Hook reference image", () => {
     let workspace = createInitialWorkspaceState({
       runId: "hook-reference-run",

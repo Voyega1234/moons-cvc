@@ -957,11 +957,13 @@ function albumSequenceInput(input: ImagePromptAgentInput) {
       image3: beats[2] ?? "square offer and CTA"
     };
   }
-  if (format === "four-vertical") {
+  if (format === "four-vertical" || format === "four-horizontal") {
     return {
       ...common,
       imageCount: 4,
-      image1: "portrait cover with hook and main visual",
+      image1: format === "four-horizontal"
+        ? "1920x1280 landscape cover (3:2) with hook and main visual; three 1920x1920 square supporting panels below"
+        : "portrait cover with hook and main visual",
       image2: beats[0] ?? "square opening support",
       image3: beats[1] ?? "square mechanism or proof",
       image4: beats[2] ?? "square offer and CTA"

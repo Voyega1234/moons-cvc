@@ -1035,15 +1035,18 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(payload.directions[0]?.formatBeats).toHaveLength(3);
   });
 
-  it("accepts two formatBeats for a three-panel album layout", async () => {
+  it.each([
+    ["three-horizontal", ["Panel 2", "Panel 3"]],
+    ["four-horizontal", ["Panel 2", "Panel 3", "Panel 4"]]
+  ] as const)("accepts the correct formatBeats for %s", async (albumFormat, formatBeats) => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(validHookResearchResponse())
       .mockResolvedValueOnce(validHookTopicShortlistResponse())
       .mockResolvedValueOnce(
         openAiAlbumDirectionResponse(
-          ["Panel 2", "Panel 3"],
-          "three-horizontal"
+          formatBeats,
+          albumFormat
         )
       )
       .mockResolvedValueOnce(highlightResponse("album-panel-count", []));
@@ -1068,8 +1071,8 @@ describe("handleHookGenerationHarnessRequest", () => {
       directions: { albumFormat: string; formatBeats: string[] }[];
     };
     expect(payload.directions[0]).toMatchObject({
-      albumFormat: "three-horizontal",
-      formatBeats: ["Panel 2", "Panel 3"]
+      albumFormat,
+      formatBeats
     });
   });
 

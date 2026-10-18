@@ -3,7 +3,7 @@ import { extractStructuredJsonText, StructuredOutputError } from "../shared/stru
 import type { ArtworkOutputSize } from "../../domain/creative-run.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
-export type ImageGenerationSize = ArtworkOutputSize | "2048x1024" | "1024x2048";
+export type ImageGenerationSize = ArtworkOutputSize | "2048x1024" | "1024x2048" | "1920x1280" | "1920x1920";
 
 export interface GeneratedImage {
   base64: string;

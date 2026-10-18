@@ -46,6 +46,8 @@ export function albumLayoutPrompt(format: AlbumFormat): string {
       return "Use a horizontal cover occupying the full top half and two equal supporting panels side by side across the bottom half.";
     case "four-vertical":
       return "Use a large vertical cover occupying the full left two-thirds and three equal supporting panels stacked on the right one-third.";
+    case "four-horizontal":
+      return "Use a 3:2 horizontal cover occupying the full top two-thirds and three equal square supporting panels side by side across the bottom third. Deliver the cover at 1920x1280 and each supporting panel at 1920x1920.";
     case "four-grid":
       return "Use exactly four equal panels in a strict two-by-two grid.";
   }
@@ -290,7 +292,7 @@ export async function splitAlbumMaster(
           // Preserve the aspect ratio defined by the selected Album format.
           // The crop coordinates are deterministic; resizing must not turn a
           // vertical or horizontal lead panel into a square.
-          fit: "inside"
+          fit: format === "four-horizontal" ? "fill" : "inside"
         })
         .png()
         .toBuffer()
@@ -364,6 +366,14 @@ export function detectAlbumBoundaries({
         seam + 3,
         height
       )
+    };
+  }
+  if (format === "four-horizontal") {
+    const seam = horizontal(height * (2 / 3), height * 0.2);
+    return {
+      horizontal: seam,
+      secondaryVertical: vertical(width / 3, width * 0.15, seam + 3, height),
+      vertical: vertical(width * (2 / 3), width * 0.15, seam + 3, height)
     };
   }
   if (format === "four-grid") {
@@ -556,6 +566,19 @@ export function albumCropRegions({
         half,
         960
       )
+    ];
+  }
+
+  if (format === "four-horizontal") {
+    const railHeight = Math.floor(side / 3);
+    const coverHeight = side - railHeight;
+    const column = Math.floor(side / 3);
+    const secondColumn = Math.floor(side * 2 / 3);
+    return [
+      { ...cropRegion(1, left, top, side, coverHeight, 1920), maxHeight: 1280 },
+      cropRegion(2, left, top + coverHeight, column, railHeight, 1920),
+      cropRegion(3, left + column, top + coverHeight, secondColumn - column, railHeight, 1920),
+      cropRegion(4, left + secondColumn, top + coverHeight, side - secondColumn, railHeight, 1920)
     ];
   }
 

@@ -361,6 +361,15 @@
   grid-template-rows: repeat(2, 1fr);
 }
 
+.preflight-album-board.layout-four-horizontal {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 2fr 1fr;
+}
+
+.preflight-album-board.layout-four-horizontal > div:first-child {
+  grid-column: 1 / -1;
+}
+
 .preflight-album-board > div {
   min-width: 0;
   overflow: hidden;

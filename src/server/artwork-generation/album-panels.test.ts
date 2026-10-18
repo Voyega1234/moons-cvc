@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { albumPanelPlan, composeAlbumPreview, generateIndependentAlbumPanels } from "./album-panels";
+import { albumCropRegions, splitAlbumMaster } from "./album-master";
 
 const hook = { id: "idea", hook: "Cover headline", subheadline: "Supporting line", concept: "One world",
   why: "", visual: "", caption: "", cta: "Order now", formatBeats: ["First benefit", "Second benefit", "Final benefit"] };
@@ -51,13 +52,51 @@ describe("independent Album panels", () => {
   });
   it.each([
     ["three-horizontal", "2048x1024", 3], ["three-vertical", "1024x2048", 3],
-    ["four-vertical", "1024x1536", 4], ["four-grid", "1024x1024", 4]
+    ["four-vertical", "1024x1536", 4], ["four-grid", "1024x1024", 4],
+    ["four-horizontal", "1920x1280", 4]
   ] as const)("plans native ratios and a single closing CTA for %s", (format, size, count) => {
     const plan = albumPanelPlan(hook, format);
     expect(plan).toHaveLength(count);
     expect(plan[0]?.size).toBe(size);
     expect(plan.filter(p => p.cta)).toEqual([plan[count - 1]]);
     expect(plan.slice(1).map(p => p.copy)).toEqual(hook.formatBeats.slice(0, count - 1));
+  });
+
+  it("delivers the horizontal four-image album at the requested pixels and preview positions", async () => {
+    const sizes: string[] = [];
+    const colors = ["red", "blue", "green", "yellow"];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      sizes.push(body.size);
+      const bytes = await png(sizes.length === 1 ? 96 : 64, 64, colors[sizes.length - 1]!);
+      return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
+    }) as unknown as typeof fetch;
+    const result = await generateIndependentAlbumPanels({ hook, format: "four-horizontal", prompt: "Campaign",
+      references: [], apiKey: "test", model: "test", runId: "run", fetchImpl, writeDebugLog: async () => {} });
+    expect(sizes).toEqual(["1920x1280", "1920x1920", "1920x1920", "1920x1920"]);
+    for (const [index, panel] of result.panels.entries()) {
+      expect(await sharp(panel.bytes).metadata()).toMatchObject({ width: 1920, height: index === 0 ? 1280 : 1920 });
+    }
+    const { data, info } = await sharp(result.masterBytes).raw().toBuffer({ resolveWithObject: true });
+    const pixel = (x: number, y: number) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3)];
+    expect(pixel(1000, 1000)).toEqual([255, 0, 0]);
+    expect(pixel(300, 1700)).toEqual([0, 0, 255]);
+    expect(pixel(1000, 1700)).toEqual([0, 128, 0]);
+    expect(pixel(1700, 1700)).toEqual([255, 255, 0]);
+  });
+
+  it("keeps the legacy horizontal master crops non-overlapping and exports exact panel sizes", async () => {
+    const regions = albumCropRegions({ left: 0, top: 0, side: 2046, format: "four-horizontal", boundaries: {} });
+    expect(regions.map(({ left, top, width, height }) => ({ left, top, width, height }))).toEqual([
+      { left: 0, top: 0, width: 2046, height: 1364 },
+      { left: 0, top: 1364, width: 682, height: 682 },
+      { left: 682, top: 1364, width: 682, height: 682 },
+      { left: 1364, top: 1364, width: 682, height: 682 }
+    ]);
+    const panels = await splitAlbumMaster(await png(512, 512, "red"), "four-horizontal");
+    for (const [index, panel] of panels.entries()) {
+      expect(await sharp(panel.bytes).metadata()).toMatchObject({ width: 1920, height: index === 0 ? 1280 : 1920 });
+    }
   });
 
   it("uses the completed cover for every supporting panel and preserves original image bytes", async () => {

@@ -84,7 +84,9 @@ export function AlbumFormatModal({
             >
               <AlbumFormatThumb format={format} />
               <b>{albumFormatLabel(format)}</b>
-              <small>{albumFormatPanelCount(format)} photos</small>
+              <small>{format === "four-horizontal"
+                ? "Cover 1920 × 1280 · 3 photos 1920 × 1920"
+                : `${albumFormatPanelCount(format)} photos`}</small>
             </button>
           ))}
         </div>

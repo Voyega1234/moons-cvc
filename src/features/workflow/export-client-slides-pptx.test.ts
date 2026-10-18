@@ -1,11 +1,43 @@
 import PptxGenJS from "pptxgenjs";
 import { describe, expect, it, vi } from "vitest";
-import type { CreativeDirection, UgcScriptDocument } from "../../domain/creative-run";
+import { emptyApprovalComments, emptyApprovalGate, type CreativeDirection, type UgcScriptDocument } from "../../domain/creative-run";
+import { createInitialWorkflowState } from "./reducer";
+import { buildDirectionFixtures } from "./test-fixtures";
+import * as artworkCopyExtraction from "../../services/artwork-copy-extraction/extract-artwork-copy";
 import {
   addUgcScriptRows,
+  buildCreateStageSlidesPptx,
   buildUgcScriptRows,
   resolvedUgcBrief
 } from "./export-client-slides-pptx";
+
+it("exports a 3:2 cover above three square panels on one Album slide", async () => {
+  const extractCopy = vi.spyOn(artworkCopyExtraction, "extractArtworkCopy").mockResolvedValue([]);
+  const state = createInitialWorkflowState({ id: "album", now: "2026-10-18T00:00:00Z" });
+  const direction = { ...buildDirectionFixtures("Brand")[0]!, albumFormat: "four-horizontal" as const };
+  const imageData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz4mAAAAAElFTkSuQmCC";
+  const pptx = await buildCreateStageSlidesPptx({ ...state, directions: [direction],
+    outputs: [1, 2, 3, 4].map(index => ({
+      id: `${direction.id}-album-${index}-v1`, directionId: direction.id, format: "Album post",
+      status: "draft" as const, clientStatus: "queued" as const, revisionCount: 0,
+      approval: emptyApprovalGate, approvalComments: emptyApprovalComments,
+      assetUrl: `https://example.com/album-${index}.png`
+    }))
+  }, vi.fn().mockResolvedValue(imageData));
+  const slides = (pptx as unknown as { _slides: { _slideObjects: {
+    _type: string; options: { x: number; y: number; w: number; h: number }
+  }[] }[] })._slides;
+  expect(slides).toHaveLength(1);
+  const panels = slides[0]!._slideObjects.filter(item => item._type === "image").map(item => item.options);
+  expect(panels).toHaveLength(4);
+  expect(panels[0]!.w / panels[0]!.h).toBeCloseTo(3 / 2);
+  panels.slice(1).forEach((panel, index) => {
+    expect(panel.w / panel.h).toBeCloseTo(1);
+    expect(panel.y).toBeCloseTo(panels[0]!.y + panels[0]!.h);
+    expect(panel.x).toBeCloseTo(panels[0]!.x + index * panel.w);
+  });
+  extractCopy.mockRestore();
+});
 
 function ugcScript(overrides: Partial<UgcScriptDocument> = {}): UgcScriptDocument {
   return {

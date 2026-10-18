@@ -372,6 +372,14 @@ and is checked again before any master or panel asset is persisted; a second
 failure stops Album generation. Slide export places every Album format inside a
 square preview so its native panel ratios are not stretched.
 
+The `four-horizontal` Album format adds a 1920×1280 (3:2) cover with three
+1920×1920 supporting images below it. `album-panels.ts` requests these exact
+sizes and normalizes standalone generation results without cropping; legacy
+master generation/revision splitting, Hook instructions, preflight/review layouts, saved
+workspace formats and PPTX placements also support this geometry. Its picker
+is owned by `stages/album-format-modal.tsx`; thumbnail/review styles live in
+`src/styles/workflow/hook-album-format.css`.
+
 - `standard` preflights only the Campaign Input with `gpt-5.6-sol` through
   the OpenAI Responses API using
   `agent_prompt/agent_campaign_input_preflight.md`. Sol organizes product,
