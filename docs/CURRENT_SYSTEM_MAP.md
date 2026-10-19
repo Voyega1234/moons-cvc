@@ -57,7 +57,7 @@ Async results must continue targeting the run that started the request.
 | Quality check request | `src/features/workflow/use-run-quality-check.ts` |
 | Stage configuration and labels | `src/features/workflow/config.ts` |
 | Main application composition | `src/app/App.tsx` |
-| DOS LIFE / FixFit account-only visibility | `supabase/migrations/202610170001_private_clients.sql`, `supabase/tests/private_clients.sql` |
+| DOS LIFE / FixFit / YOUเทิร์น account-only visibility | `supabase/migrations/202610170001_private_clients.sql`, `supabase/migrations/202610190001_private_you_turn.sql`, `supabase/tests/private_clients.sql` |
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
 

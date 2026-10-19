@@ -428,6 +428,16 @@ after explicit approval of the database, Storage and handoff scope. The SQL
 access check passed for every existing team profile; local PostgreSQL checks,
 `npm run typecheck` and `npm run build` also passed.
 
+`supabase/migrations/202610190001_private_you_turn.sql` extends the same three
+guards to YOUเทิร์น (`you-9135008f`). It preserves the existing policies and
+function logic, including Wave-only access, admin restrictions and handoff
+protection. Apply it after `202610170001_private_clients.sql`; the shared SQL
+access check now covers all three private clients.
+Applied to the live project on 2026-10-19 (Asia/Bangkok). Both the rollback
+trial (including a repeated migration) and the post-apply access check passed.
+The check verifies every private run's handoff restriction separately. No other
+user's persisted workspace contained YOUเทิร์น at rollout.
+
 Seed prototype clients with:
 
 ```text
