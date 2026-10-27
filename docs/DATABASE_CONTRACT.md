@@ -438,6 +438,17 @@ trial (including a repeated migration) and the post-apply access check passed.
 The check verifies every private run's handoff restriction separately. No other
 user's persisted workspace contained YOUเทิร์น at rollout.
 
+`supabase/migrations/202610270001_private_krungthai_axa_life.sql` extends
+those guards to Krungthai-AXA Life (`krungthai-axa-life-b2a19058`) after the
+YOUเทิร์น migration. Existing run ownership is preserved. The shared SQL
+check covers all four clients, verifies Wave can see every private run, and
+tests each run's handoff restriction separately (including RLS denying updates
+to runs owned by another account).
+Applied to the live project on 2026-10-27 (Asia/Bangkok), without changing run
+ownership. The rollback trial (including a repeated migration) and post-apply
+access check passed. No other user's persisted workspace contained this client
+at rollout. `npm run typecheck` and `npm run build` also passed.
+
 Seed prototype clients with:
 
 ```text
