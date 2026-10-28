@@ -30,7 +30,6 @@ export function ArtworkModeSelector({
           </button>
         ))}
       </div>
-      <small>Automatically retries failed GPT images with Nano Banana 2.1.</small>
     </div>
   );
 }
