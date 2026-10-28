@@ -2,6 +2,8 @@ import { env } from "../../config/env";
 import { activeBrandKitItems } from "../../domain/brand";
 import {
   defaultArtworkOutputSize,
+  defaultArtworkImageModel,
+  type ArtworkImageModel,
   emptyApprovalComments,
   emptyApprovalGate,
   inferredReferenceImageRole,
@@ -107,7 +109,7 @@ export interface GenerateArtworkForSelectedHooksInput {
 }
 
 export interface ArtworkGenerationRequest {
-  model: "gpt-image-2.5-sunburst";
+  model: ArtworkImageModel;
   artworkMode: ArtworkMode;
   referenceLed?: boolean;
   usePlaceholderCopy?: boolean;
@@ -167,7 +169,7 @@ export interface ArtworkGenerationResponse {
 
 export interface ArtworkRevisionRequest {
   requestType: "artwork-revision";
-  model: "gpt-image-2.5-sunburst";
+  model: ArtworkImageModel;
   mode?: "revise" | "placeholder" | "ugc-thumbnail";
   clientId: string;
   runId: string;
@@ -426,7 +428,7 @@ export function buildArtworkRevisionRequest({
 
   return {
     requestType: "artwork-revision",
-    model: "gpt-image-2.5-sunburst",
+    model: run.artworkImageModel ?? defaultArtworkImageModel,
     ...(mode !== "revise" ? { mode } : {}),
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
@@ -564,7 +566,7 @@ export function buildArtworkRegenerationRequest({
     throw new Error("UGC uses the editable 9:16 template, not image generation.");
   }
   return {
-    model: "gpt-image-2.5-sunburst",
+    model: run.artworkImageModel ?? defaultArtworkImageModel,
     artworkMode: run.artworkMode,
     imagePromptModel: run.imagePromptModel,
     albumFormat: run.albumFormat,
@@ -783,7 +785,7 @@ export function buildUgcThumbnailRequest({
 }): ArtworkRevisionRequest {
   return {
     requestType: "artwork-revision",
-    model: "gpt-image-2.5-sunburst",
+    model: run.artworkImageModel ?? defaultArtworkImageModel,
     mode: "ugc-thumbnail",
     clientId: run.brand?.id ?? "unbranded",
     runId: run.id,
@@ -859,7 +861,7 @@ function buildArtworkRequest({
 }): ArtworkGenerationRequest {
 
   return {
-    model: "gpt-image-2.5-sunburst",
+    model: run.artworkImageModel ?? defaultArtworkImageModel,
     artworkMode: run.artworkMode,
     ...(referenceLed ? { referenceLed: true } : {}),
     ...(run.usePlaceholderCopy ? { usePlaceholderCopy: true } : {}),
@@ -1183,8 +1185,8 @@ function buildDraftOutputs(
     format: outputFormatForService(service),
     status: "draft",
     clientStatus: "queued",
-    provider: "openai",
-    model: "gpt-image-2.5-sunburst",
+    provider: run.artworkImageModel?.startsWith("google/") ? "openrouter" : "openai",
+    model: run.artworkImageModel ?? defaultArtworkImageModel,
     revisionCount: 0,
     approval: emptyApprovalGate,
     approvalComments: emptyApprovalComments

@@ -1,5 +1,6 @@
 import {
   defaultArtworkMode,
+  defaultArtworkImageModel,
   defaultAlbumFormat,
   defaultAlbumFormatPreference,
   defaultArtworkOutputSize,
@@ -151,6 +152,7 @@ export function createInitialWorkflowState({
     hookGenerationModel: "google/gemini-3.8-flash",
     hookGenerationModels: defaultHookGenerationModels,
     artworkMode: defaultArtworkMode,
+    artworkImageModel: defaultArtworkImageModel,
     imagePromptModel: "gpt-5.6-terra",
     albumFormat: defaultAlbumFormatPreference,
     outputSize: defaultArtworkOutputSize,
@@ -508,6 +510,8 @@ export function workflowReducer(
         hookGenerationModels: models
       };
     }
+    case "set-artwork-image-model":
+      return { ...state, artworkImageModel: action.model };
     case "set-artwork-mode":
       return { ...state, artworkMode: action.mode };
     case "set-image-prompt-model":

@@ -91,7 +91,7 @@ export async function persistArtworkOutput({
     assetUrl,
     assetStoragePath,
     assetBucket: ARTWORK_BUCKET,
-    provider: "openai",
+    provider: model.startsWith("google/") ? "openrouter" : "openai",
     model,
     revisionCount: Math.max(0, assetVersion - 1),
     approval: emptyApprovalGate,

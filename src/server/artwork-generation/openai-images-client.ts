@@ -1,6 +1,7 @@
+import sharp from "sharp";
 import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
-import type { ArtworkOutputSize } from "../../domain/creative-run.js";
+import { fallbackArtworkImageModel, type ArtworkOutputSize } from "../../domain/creative-run.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
 export type ImageGenerationSize = ArtworkOutputSize | "2048x1024" | "1024x2048" | "1920x1280" | "1920x1920";
@@ -8,6 +9,7 @@ export type ImageGenerationSize = ArtworkOutputSize | "2048x1024" | "1024x2048" 
 export interface GeneratedImage {
   base64: string;
   mimeType: string;
+  model?: string;
 }
 
 export interface GenerateImageOptions {
@@ -64,7 +66,7 @@ export async function editImage({
   referenceImages,
   fetchImpl
 }: EditImageOptions): Promise<GeneratedImage> {
-  return withAiRetry<GeneratedImage>(async () => {
+  return withImageModelFallback(model, async (activeModel) => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -72,10 +74,9 @@ export async function editImage({
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: openRouterImageModel(model),
+      model: openRouterImageModel(activeModel),
       prompt: fitOpenAIImagePrompt(prompt),
-      size,
-      quality,
+      ...imageParameters(activeModel, size, quality),
       input_references: referenceImages.map((reference) => ({
         type: "image_url",
         image_url: {
@@ -101,10 +102,7 @@ export async function editImage({
     );
   }
 
-  return {
-    base64: extractB64Json(payload),
-    mimeType: "image/png"
-  };
+  return imageResult(payload, activeModel, size);
   });
 }
 
@@ -160,6 +158,7 @@ export interface EditImageWithAspectRatioOptions {
   model: string;
   prompt: string;
   aspectRatio: GptImageAspectRatio;
+  size?: ArtworkOutputSize;
   quality?: "auto" | "low" | "medium" | "high";
   referenceImages: readonly ReferenceImageInput[];
   fetchImpl: typeof fetch;
@@ -170,11 +169,12 @@ export async function editImageWithAspectRatio({
   model,
   prompt,
   aspectRatio,
+  size,
   quality = "high",
   referenceImages,
   fetchImpl
 }: EditImageWithAspectRatioOptions): Promise<GeneratedImage> {
-  return withAiRetry<GeneratedImage>(async () => {
+  return withImageModelFallback(model, async (activeModel) => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -182,10 +182,13 @@ export async function editImageWithAspectRatio({
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: openRouterImageModel(model),
+      model: openRouterImageModel(activeModel),
       prompt: fitOpenAIImagePrompt(prompt),
-      aspect_ratio: aspectRatio,
-      quality,
+      ...(activeModel.startsWith("google/")
+        ? size
+          ? imageParameters(activeModel, size, quality)
+          : { aspect_ratio: aspectRatio === "auto" ? "1:1" : aspectRatio, resolution: "2K" }
+        : { aspect_ratio: aspectRatio, quality }),
       input_references: referenceImages.map((reference) => ({
         type: "image_url",
         image_url: {
@@ -211,10 +214,7 @@ export async function editImageWithAspectRatio({
     );
   }
 
-  return {
-    base64: extractB64Json(payload),
-    mimeType: "image/png"
-  };
+  return imageResult(payload, activeModel, size);
   });
 }
 
@@ -225,7 +225,7 @@ export async function generateImage({
   size,
   fetchImpl
 }: GenerateImageOptions): Promise<GeneratedImage> {
-  return withAiRetry<GeneratedImage>(async () => {
+  return withImageModelFallback(model, async (activeModel) => {
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -233,11 +233,10 @@ export async function generateImage({
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: openRouterImageModel(model),
+      model: openRouterImageModel(activeModel),
       prompt: fitOpenAIImagePrompt(prompt),
       n: 1,
-      size,
-      quality: "medium",
+      ...imageParameters(activeModel, size, "medium"),
       trace: {
         trace_name: "moons_image_generate",
         generation_name: "moons_image_generate",
@@ -255,11 +254,53 @@ export async function generateImage({
     );
   }
 
-  return {
-    base64: extractB64Json(payload),
-    mimeType: "image/png"
-  };
+  return imageResult(payload, activeModel, size);
   });
+}
+
+// Keep failover inside a single image operation so completed siblings are never replayed.
+async function withImageModelFallback(
+  model: string,
+  task: (activeModel: string) => Promise<GeneratedImage>
+): Promise<GeneratedImage> {
+  try {
+    return await withAiRetry(() => task(model));
+  } catch (error) {
+    if (!openRouterImageModel(model).startsWith("openai/gpt-image-")) throw error;
+    try {
+      return await withAiRetry(() => task(fallbackArtworkImageModel));
+    } catch (fallbackError) {
+      throw new Error(`GPT Image failed: ${error instanceof Error ? error.message : String(error)}; Nano Banana 2.1 fallback failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`, { cause: fallbackError });
+    }
+  }
+}
+
+function imageParameters(model: string, size: ImageGenerationSize, quality: string) {
+  if (!model.startsWith("google/")) return { size, quality };
+  // Nano Banana accepts resolution/aspect_ratio rather than GPT's size/quality.
+  const [width, height] = size.split("x").map(Number);
+  const ratio = width! / height!;
+  const ratios: Record<string, number> = {
+    "1:1": 1, "1:4": 1 / 4, "1:8": 1 / 8, "2:3": 2 / 3,
+    "3:2": 3 / 2, "3:4": 3 / 4, "4:1": 4, "4:3": 4 / 3,
+    "4:5": 4 / 5, "5:4": 5 / 4, "8:1": 8, "9:16": 9 / 16,
+    "16:9": 16 / 9, "21:9": 21 / 9
+  };
+  const aspectRatio = Object.keys(ratios).reduce((closest, candidate) =>
+    Math.abs(ratios[candidate]! - ratio) < Math.abs(ratios[closest]! - ratio) ? candidate : closest
+  );
+  const edge = Math.max(width!, height!);
+  return { aspect_ratio: aspectRatio, resolution: edge > 2048 ? "4K" : edge > 1024 ? "2K" : "1K" };
+}
+
+async function imageResult(payload: unknown, model: string, size?: ImageGenerationSize): Promise<GeneratedImage> {
+  const base64 = extractB64Json(payload);
+  if (!model.startsWith("google/") || !size) return { base64, mimeType: "image/png", model };
+  const [width, height] = size.split("x").map(Number);
+  // Preserve the whole image when Google's native ratios differ (e.g. 2:1 Albums).
+  const bytes = await sharp(Buffer.from(base64, "base64"))
+    .resize(width, height, { fit: "contain", background: "#ffffff" }).png().toBuffer();
+  return { base64: bytes.toString("base64"), mimeType: "image/png", model };
 }
 
 function extractB64Json(payload: unknown): string {

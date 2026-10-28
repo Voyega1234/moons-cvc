@@ -10,7 +10,8 @@ import {
   albumFormatPanelCount,
   artworkOutputSizeLabel,
   artworkOutputSizes,
-  type ArtworkMode,
+  defaultArtworkImageModel,
+  type ArtworkImageModel,
   type ArtworkOutputSize,
   type CreativeDirection,
   type ServiceType
@@ -196,8 +197,8 @@ export function PreflightModal({
   contextSelection = defaultArtworkContextSelection,
   onContextSelectionChange = () => undefined,
   contextAvailability,
-  artworkMode,
-  onArtworkModeChange,
+  artworkImageModel = defaultArtworkImageModel,
+  onArtworkImageModelChange,
   outputSize,
   onOutputSizeChange,
   onCancel,
@@ -224,8 +225,8 @@ export function PreflightModal({
     brandCiCount: number;
     brandColorCount: number;
   };
-  artworkMode: ArtworkMode;
-  onArtworkModeChange: (mode: ArtworkMode) => void;
+  artworkImageModel?: ArtworkImageModel;
+  onArtworkImageModelChange: (model: ArtworkImageModel) => void;
   outputSize: ArtworkOutputSize;
   onOutputSizeChange: (size: ArtworkOutputSize) => void;
   onCancel: () => void;
@@ -892,14 +893,14 @@ export function PreflightModal({
                 <PreflightSectionTitle
                   number={visualInputs ? 4 : 3}
                   title="Artwork settings"
-                  description="Inherited from Review & continue. Change mode or size here for this build if needed."
+                  description="Inherited from Review & continue. Change model or size here for this build if needed."
                 />
               </header>
               <div className="preflight-artwork-settings-grid">
                 <ArtworkModeSelector
                   className="preflight-artwork-mode-setting"
-                  value={artworkMode}
-                  onChange={onArtworkModeChange}
+                  value={artworkImageModel}
+                  onChange={onArtworkImageModelChange}
                 />
                 <label className="confirm-generation-setting preflight-output-size-setting">
                   <span className="confirm-generation-label">

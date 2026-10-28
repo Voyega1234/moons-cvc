@@ -225,7 +225,9 @@ export async function handleArtworkGenerationRequest({
 
     if (revisionInput) {
       const model =
-        env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || revisionInput.model;
+        revisionInput.model.startsWith("google/")
+          ? revisionInput.model
+          : env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || revisionInput.model;
       const revisionOptions = {
         input: revisionInput,
         apiKey: imageApiKey,
@@ -269,7 +271,9 @@ export async function handleArtworkGenerationRequest({
     }
 
     if (!input) throw new Error("Invalid artwork generation request.");
-    const model = env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
+    const model = input.model.startsWith("google/")
+      ? input.model
+      : env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const openRouterImagePromptModel = env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim();
     const promptProvider: ImagePromptProvider =
       !input.referenceLed &&
@@ -797,14 +801,14 @@ async function generateOutputForHook({
         debugLogDirectory, writeDebugLog, fetchImpl
       })
     });
-    const persist = (id: string, imageBytes: Buffer) => persistArtworkOutput({
+    const persist = (id: string, imageBytes: Buffer, actualModel?: string) => persistArtworkOutput({
       input, hook: { ...hook, id }, outputId: `${id}-v${assetVersion}`,
-      directionId: hook.id, assetVersion, format, model, imageBytes,
+      directionId: hook.id, assetVersion, format, model: actualModel ?? model, imageBytes,
       mimeType: "image/png", storage, debugLogDirectory, writeDebugLog
     });
     const master = await persist(`${hook.id}-album-master`, masterBytes);
     return Promise.all(panels.map(async (panel) => ({
-      ...await persist(`${hook.id}-album-${panel.index}`, panel.bytes),
+      ...await persist(`${hook.id}-album-${panel.index}`, panel.bytes, panel.model),
       albumMasterAssetUrl: master.assetUrl,
       albumMasterAssetStoragePath: master.assetStoragePath
     })));
@@ -898,7 +902,7 @@ async function generateOutputForHook({
       directionId: hook.id,
       assetVersion,
       format,
-      model,
+      model: finalMasterImage.model ?? model,
       imageBytes,
       mimeType: finalMasterImage.mimeType,
       storage,
@@ -914,7 +918,7 @@ async function generateOutputForHook({
           directionId: hook.id,
           assetVersion,
           format,
-          model,
+          model: finalMasterImage.model ?? model,
           imageBytes: panel.bytes,
           mimeType: "image/png",
           storage,
@@ -986,7 +990,7 @@ async function generateOutputForHook({
       directionId: hook.id,
       assetVersion: input.assetVersion ?? 1,
       format,
-      model,
+      model: image.model ?? model,
       imageBytes: Buffer.from(image.base64, "base64"),
       mimeType: image.mimeType,
       storage,
@@ -1247,6 +1251,7 @@ async function ensureFourGridMasterAlignment({
 
   const normalizedBytes = await normalizeFourGridMaster(sourceBytes);
   return {
+    ...image,
     base64: normalizedBytes.toString("base64"),
     mimeType: "image/png"
   };

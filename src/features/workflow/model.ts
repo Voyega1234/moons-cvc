@@ -11,6 +11,7 @@ import type {
   AlbumFormatPreference,
   AngleExportGroup,
   ArtworkMode,
+  ArtworkImageModel,
   CreativeDirection,
   CreativeOutput,
   CreativeStage,
@@ -92,6 +93,7 @@ export interface WorkflowState {
   /** Models run together for Hook comparison. Falls back to hookGenerationModel. */
   hookGenerationModels?: readonly HookGenerationModel[];
   artworkMode: ArtworkMode;
+  artworkImageModel?: ArtworkImageModel;
   imagePromptModel: ImagePromptModel;
   albumFormat: AlbumFormatPreference;
   outputSize: ArtworkOutputSize;
@@ -147,6 +149,7 @@ export type WorkflowAction =
       models: readonly HookGenerationModel[];
     }
   | { type: "set-artwork-mode"; mode: ArtworkMode }
+  | { type: "set-artwork-image-model"; model: ArtworkImageModel }
   | { type: "set-image-prompt-model"; model: ImagePromptModel }
   | { type: "set-album-format"; format: AlbumFormatPreference }
   | { type: "set-output-size"; size: ArtworkOutputSize }

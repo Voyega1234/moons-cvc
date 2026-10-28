@@ -142,3 +142,25 @@ describe("independent Album panels", () => {
     await expect(composeAlbumPreview([], "four-grid")).rejects.toThrow("Incomplete");
   });
 });
+
+
+it("falls back for just one Album panel and preserves the requested 2:1 canvas", async () => {
+  const bytes = await png(160, 90, "red");
+  const models: string[] = [];
+  let rejected = false;
+  const fetchImpl = vi.fn(async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    models.push(body.model);
+    if (!rejected && models.length === 1) {
+      rejected = true;
+      return new Response(JSON.stringify({ error: { message: "safety system rejection" } }), { status: 400 });
+    }
+    const image = body.model.startsWith("google/") ? bytes : await png(64, 64, "blue");
+    return new Response(JSON.stringify({ data: [{ b64_json: image.toString("base64") }] }));
+  }) as unknown as typeof fetch;
+  const result = await generateIndependentAlbumPanels({ hook, format: "three-horizontal", prompt: "Campaign",
+    references: [], apiKey: "test", model: "gpt-image-2.5-sunburst", runId: "run", fetchImpl, writeDebugLog: async () => {} });
+  expect(models).toEqual(["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-sunburst"]);
+  expect(result.panels.map(panel => panel.model)).toEqual(["google/gemini-nano-banana-2.1", "gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst"]);
+  expect(await sharp(result.panels[0]!.bytes).metadata()).toMatchObject({ width: 2048, height: 1024 });
+});

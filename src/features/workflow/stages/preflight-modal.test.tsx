@@ -47,8 +47,8 @@ describe("PreflightModal", () => {
             avoid: []
           }
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={onCancel}
@@ -143,8 +143,8 @@ describe("PreflightModal", () => {
           brief: "Make the product benefit instantly clear.",
           brandContext: null
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -224,8 +224,8 @@ describe("PreflightModal", () => {
           brief: "Make the product benefit instantly clear.",
           brandContext: null
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -319,8 +319,8 @@ describe("PreflightModal", () => {
           brief: "Make the product benefit instantly clear.",
           brandContext: null
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -402,8 +402,8 @@ describe("PreflightModal", () => {
           brief: "Make the product benefit instantly clear.",
           brandContext: null
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -508,8 +508,8 @@ describe("PreflightModal", () => {
           brief: "Make the product benefit instantly clear.",
           brandContext: null
         }}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -585,8 +585,8 @@ describe("PreflightModal", () => {
         }}
         artworkBrief="Keep the composition calm with natural window light."
         onArtworkBriefChange={onArtworkBriefChange}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={onCancel}
@@ -649,8 +649,8 @@ describe("PreflightModal", () => {
         }}
         artworkBrief=""
         onArtworkBriefChange={vi.fn()}
-        artworkMode="design-system"
-        onArtworkModeChange={vi.fn()}
+        artworkImageModel="gpt-image-2.5-sunburst"
+        onArtworkImageModelChange={vi.fn()}
         outputSize="1088x1360"
         onOutputSizeChange={vi.fn()}
         onCancel={vi.fn()}
@@ -693,8 +693,8 @@ describe("PreflightModal", () => {
           }}
           artworkBrief={artworkBrief}
           onArtworkBriefChange={setArtworkBrief}
-          artworkMode="design-system"
-          onArtworkModeChange={() => undefined}
+          artworkImageModel="gpt-image-2.5-sunburst"
+          onArtworkImageModelChange={() => undefined}
           outputSize="1088x1360"
           onOutputSizeChange={vi.fn()}
           onCancel={() => undefined}

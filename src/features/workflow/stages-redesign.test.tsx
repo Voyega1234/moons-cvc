@@ -2638,11 +2638,11 @@ describe("redesigned workflow stages", () => {
       within(confirmation).getByRole("group", { name: "Artwork settings" })
     ).toBeTruthy();
     expect(
-      within(confirmation).getByRole("button", { name: "Design system" })
+      within(confirmation).getByRole("button", { name: "GPT Image" })
     ).toBeTruthy();
     expect(
       within(confirmation).getByText(
-        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+        "Campaign input → GPT Image → Visual QC"
       )
     ).toBeTruthy();
     expect(
@@ -3404,15 +3404,15 @@ describe("redesigned workflow stages", () => {
     );
     expect(
       within(preflight)
-        .getByRole("button", { name: "Standard" })
+        .getByRole("button", { name: "GPT Image" })
         .getAttribute("aria-pressed")
     ).toBe("true");
     await user.click(
-      within(preflight).getByRole("button", { name: "Final artwork" })
+      within(preflight).getByRole("button", { name: "Nano Banana 2.1" })
     );
     expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "direct-final-artwork"
+      type: "set-artwork-image-model",
+      model: "google/gemini-nano-banana-2.1"
     });
     fireEvent.change(artworkBrief, {
       target: { value: "Use warm afternoon light instead." }

@@ -62,7 +62,7 @@ export async function reviseArtworkOutput({
     directionId: input.directionId,
     assetVersion: input.assetVersion,
     format: input.format,
-    model,
+    model: image.model ?? model,
     imageBytes: Buffer.from(image.base64, "base64"),
     mimeType: image.mimeType,
     storage,
@@ -97,7 +97,7 @@ export async function reviseAlbumArtworkOutputs(
     directionId: input.directionId,
     assetVersion: input.assetVersion,
     format: input.format,
-    model,
+    model: image.model ?? model,
     imageBytes,
     mimeType: image.mimeType,
     storage,
@@ -115,7 +115,7 @@ export async function reviseAlbumArtworkOutputs(
         directionId: input.directionId,
         assetVersion: input.assetVersion,
         format: input.format,
-        model,
+        model: image.model ?? model,
         imageBytes: panel.bytes,
         mimeType: "image/png",
         storage,
@@ -151,6 +151,7 @@ async function generateRevisedArtwork({
       model,
       prompt: input.instructions,
       aspectRatio: gptImageAspectRatioForOutputSize(input.output.size),
+      size: input.output.size,
       quality: "medium",
       referenceImages,
       fetchImpl
@@ -188,6 +189,7 @@ async function generateRevisedArtwork({
       aspectRatio: input.album
         ? "1:1"
         : gptImageAspectRatioForOutputSize(input.output.size),
+      size: input.output.size,
       quality: "low",
       referenceImages: revisionReferences,
       fetchImpl

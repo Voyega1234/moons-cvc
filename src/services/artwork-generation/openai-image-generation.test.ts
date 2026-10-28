@@ -6,6 +6,7 @@ import {
   buildArtworkGenerationRequests,
   buildArtworkRegenerationRequest,
   buildArtworkRevisionRequest,
+  buildUgcThumbnailRequest,
   normalizeArtworkOutput
 } from "./openai-image-generation";
 import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
@@ -921,4 +922,19 @@ it("reports a gateway timeout without automatically generating the images again"
     Object.assign(env, { artworkGenerationMode: previousMode, artworkGenerationEndpoint: previousEndpoint });
     vi.unstubAllGlobals();
   }
+});
+
+
+it("uses the selected image model for generation, regeneration, edits and UGC thumbnails", () => {
+  const selectedRun: WorkflowState = { ...run, artworkImageModel: "google/gemini-nano-banana-2.1" };
+  const direction = run.directions[0]!;
+  const output = { id: "image", directionId: direction.id, format: "Single static", assetUrl: "https://example.com/image.png" } as WorkflowState["outputs"][number];
+  const requests = [
+    buildArtworkGenerationRequest({ run: selectedRun }),
+    buildArtworkRegenerationRequest({ run: selectedRun, direction, sourceImageUrl: output.assetUrl! }),
+    buildArtworkRevisionRequest({ run: selectedRun, output, instructions: "Adjust lighting" }),
+    buildUgcThumbnailRequest({ run: selectedRun, direction })
+  ];
+  expect(requests.map(request => request.model)).toEqual(Array(4).fill(selectedRun.artworkImageModel));
+  expect(buildArtworkGenerationRequest({ run }).model).toBe("gpt-image-2.5-sunburst");
 });

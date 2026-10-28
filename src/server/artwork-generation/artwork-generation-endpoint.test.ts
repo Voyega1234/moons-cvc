@@ -1992,7 +1992,7 @@ describe("handleArtworkGenerationRequest", () => {
     ]);
   });
 
-  it("returns a readable error when OpenRouter returns an empty body", async () => {
+  it("reports both provider failures when GPT and Google return empty bodies", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -2024,9 +2024,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({
       ok: false,
-      error: "OpenRouter image generation returned an empty response body."
+      error: expect.stringContaining("Nano Banana 2.1 fallback failed:")
     });
-  });
+  }, 10_000);
 
   it("attaches Standard references without adding a reference-direction wrapper", async () => {
     const editCalls: {
@@ -3529,5 +3529,42 @@ describe("handleArtworkGenerationRequest", () => {
     expect(generationCalls).toBe(1);
     expect(visualQcCalls).toBe(0);
     expect(editCalls).toHaveLength(0);
+  });
+});
+
+
+describe("artwork image model selection", () => {
+  it.each([false, true])("persists the actual model after generation (Google selected: %s)", async googleSelected => {
+    const models: string[] = [];
+    const imageBytes = await albumMasterPng();
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+      if (href.includes("/rest/v1/")) return new Response("[]");
+      if (href.endsWith("/api/v1/images")) {
+        const body = JSON.parse(String(init?.body));
+        models.push(body.model);
+        if (body.model.startsWith("openai/")) return new Response(JSON.stringify({ error: { message: "Your request was rejected by the safety system." } }), { status: 400 });
+        return new Response(JSON.stringify({ data: [{ b64_json: imageBytes.toString("base64") }] }));
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const { client, uploads } = fakeStorage();
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ ...requestBody, artworkMode: "direct-final-artwork",
+          model: googleSelected ? "google/gemini-nano-banana-2.1" : requestBody.model })
+      }),
+      env: { OPENAI_IMAGE_GENERATION_MODEL: "gpt-image-2.5-sunburst", OPENROUTER_API_KEY: "test",
+        SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
+      fetchImpl, createStorageClient: () => client
+    });
+    const payload = await response.json();
+    expect(response.status, JSON.stringify(payload)).toBe(200);
+    expect(models).toEqual(googleSelected ? ["google/gemini-nano-banana-2.1"]
+      : ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1"]);
+    expect(payload.outputs[0]).toMatchObject({ model: "google/gemini-nano-banana-2.1", provider: "openrouter" });
+    expect(uploads).toHaveLength(1);
   });
 });

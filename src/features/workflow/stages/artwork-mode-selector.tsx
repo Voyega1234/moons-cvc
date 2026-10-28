@@ -1,54 +1,36 @@
 import {
-  normalizeUserSelectableArtworkMode,
-  userSelectableArtworkModes,
-  type ArtworkMode
+  artworkImageModelLabels,
+  artworkImageModels,
+  defaultArtworkImageModel,
+  type ArtworkImageModel
 } from "../../../domain/creative-run";
 
-const artworkModeLabels: Record<
-  Exclude<ArtworkMode, "reference-library">,
-  string
-> = {
-  standard: "Standard",
-  "design-system": "Design system",
-  "design-system-new": "Design system (new)",
-  "direct-final-artwork": "Final artwork"
-};
-
 export function ArtworkModeSelector({
-  value,
+  value = defaultArtworkImageModel,
   onChange,
   className = ""
 }: {
-  value: ArtworkMode;
-  onChange: (mode: ArtworkMode) => void;
+  value?: ArtworkImageModel;
+  onChange: (model: ArtworkImageModel) => void;
   className?: string;
 }) {
-  const selectedMode = normalizeUserSelectableArtworkMode(value);
-
   return (
-    <div
-      className={`confirm-generation-setting ${className}`.trim()}
-    >
-      <span className="confirm-generation-label">Artwork mode</span>
-      <div
-        className="confirm-generation-mode-options"
-        role="group"
-        aria-label="Artwork mode"
-      >
-        {userSelectableArtworkModes.map((mode) => (
+    <div className={`confirm-generation-setting ${className}`.trim()}>
+      <span className="confirm-generation-label">Image model</span>
+      <div className="confirm-generation-mode-options" role="group" aria-label="Image model">
+        {artworkImageModels.map((model) => (
           <button
-            className={`confirm-generation-mode ${
-              selectedMode === mode ? "active" : ""
-            }`}
+            className={`confirm-generation-mode ${value === model ? "active" : ""}`}
             type="button"
-            aria-pressed={selectedMode === mode}
-            key={mode}
-            onClick={() => onChange(mode)}
+            aria-pressed={value === model}
+            key={model}
+            onClick={() => onChange(model)}
           >
-            {artworkModeLabels[mode]}
+            {artworkImageModelLabels[model]}
           </button>
         ))}
       </div>
+      <small>Automatically retries failed GPT images with Nano Banana 2.1.</small>
     </div>
   );
 }

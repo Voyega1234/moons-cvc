@@ -9,6 +9,8 @@ import {
 import { createPortal } from "react-dom";
 import type { LibraryItem } from "../../../domain/brand";
 import {
+  artworkImageModelLabels,
+  defaultArtworkImageModel,
   artworkOutputSizeLabel,
   artworkOutputSizes,
   inferredReferenceImageRole,
@@ -79,7 +81,7 @@ export function BriefConfirmationModal({
   const [assetView, setAssetView] = useState<"reference" | "material">(
     "reference"
   );
-  const artworkMode = state.artworkMode;
+  const imageModelLabel = artworkImageModelLabels[state.artworkImageModel ?? defaultArtworkImageModel];
   const products = state.brand?.library.products ?? [];
   const selectedProducts = selectedBrandProducts(state);
   const imageReferences = state.referenceImages.filter(
@@ -288,10 +290,10 @@ export function BriefConfirmationModal({
                 <span className="confirm-section-number">4</span>
                 <span>
                   <b>Artwork generation</b>
-                  <small>Final generation mode, visual QC, and output size</small>
+                  <small>Image model, visual QC, and output size</small>
                 </span>
               </div>
-              <span className="confirm-section-status">GPT Image 2</span>
+              <span className="confirm-section-status">{imageModelLabel}</span>
             </header>
             <div
               className="confirm-generation-grid"
@@ -299,9 +301,9 @@ export function BriefConfirmationModal({
               aria-label="Artwork settings"
             >
               <ArtworkModeSelector
-                value={artworkMode}
-                onChange={(mode) =>
-                  dispatch({ type: "set-artwork-mode", mode })
+                value={state.artworkImageModel}
+                onChange={(model) =>
+                  dispatch({ type: "set-artwork-image-model", model })
                 }
               />
               <div className="confirm-generation-setting">
@@ -309,7 +311,7 @@ export function BriefConfirmationModal({
                   Generation route
                 </span>
                 <span className="confirm-generation-direct-route">
-                  agent_image.md + Campaign input → GPT Image 2 → Visual QC
+                  Campaign input → {imageModelLabel} → Visual QC
                 </span>
               </div>
               <label className="confirm-generation-setting">

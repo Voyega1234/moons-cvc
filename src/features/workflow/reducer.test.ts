@@ -1983,3 +1983,11 @@ describe("workflowReducer", () => {
     expect(state.uploadedMaterials).toEqual([]);
   });
 });
+
+
+it("defaults image generation to GPT and updates only the selected image model", () => {
+  const state = createInitialWorkflowState({ id: "image-model-run", now: "2026-10-28T00:00:00Z" });
+  expect(state.artworkImageModel).toBe("gpt-image-2.5-sunburst");
+  const selected = workflowReducer(state, { type: "set-artwork-image-model", model: "google/gemini-nano-banana-2.1" });
+  expect(selected).toEqual({ ...state, artworkImageModel: "google/gemini-nano-banana-2.1" });
+});

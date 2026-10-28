@@ -83,6 +83,18 @@ export function normalizeFormatBeatsForService(
   if (service === "single-static" || service === "resize") return [];
   return (beats ?? []).map((beat) => beat.trim()).filter(Boolean);
 }
+export const artworkImageModels = [
+  "gpt-image-2.5-sunburst",
+  "google/gemini-nano-banana-2.1"
+] as const;
+export type ArtworkImageModel = (typeof artworkImageModels)[number];
+export const defaultArtworkImageModel: ArtworkImageModel = "gpt-image-2.5-sunburst";
+export const fallbackArtworkImageModel: ArtworkImageModel = "google/gemini-nano-banana-2.1";
+export const artworkImageModelLabels: Record<ArtworkImageModel, string> = {
+  "gpt-image-2.5-sunburst": "GPT Image",
+  "google/gemini-nano-banana-2.1": "Nano Banana 2.1"
+};
+
 export const artworkModes = [
   "standard",
   "design-system",

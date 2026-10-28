@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultArtworkOutputSize } from "../../domain/creative-run";
 import { brands } from "../../data/mock-brands";
 import {
   createInitialWorkspaceState,
@@ -1197,7 +1198,7 @@ describe("workspace serializer", () => {
     ]);
   });
 
-  it("loads older snapshots without an output size as 1088x1360", () => {
+  it("loads older snapshots without an output size using the current default", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -1211,7 +1212,7 @@ describe("workspace serializer", () => {
 
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
-    expect(restored?.runsById["run-1"]?.outputSize).toBe("1088x1360");
+    expect(restored?.runsById["run-1"]?.outputSize).toBe(defaultArtworkOutputSize);
   });
 
   it("migrates older single-format snapshots into one creative-mix row", () => {
@@ -1399,4 +1400,17 @@ describe("workspace serializer", () => {
 
     expect(deserializeWorkspace(JSON.stringify(parsed))).toBeNull();
   });
+});
+
+
+it("preserves the selected image model and defaults old snapshots to GPT", () => {
+  const workspace = createInitialWorkspaceState({ runId: "image-run", now: "2026-10-28T00:00:00Z" });
+  const selected = { ...workspace, runsById: { ...workspace.runsById, [workspace.activeRunId]: {
+    ...workspace.runsById[workspace.activeRunId]!, artworkImageModel: "google/gemini-nano-banana-2.1" as const
+  } } };
+  const serialized = serializeWorkspace(selected, "2026-10-28T00:00:00Z");
+  expect(deserializeWorkspace(serialized)?.runsById[workspace.activeRunId]?.artworkImageModel).toBe("google/gemini-nano-banana-2.1");
+  const legacy = JSON.parse(serialized);
+  delete legacy.data.runsById[workspace.activeRunId].artworkImageModel;
+  expect(deserializeWorkspace(JSON.stringify(legacy))?.runsById[workspace.activeRunId]?.artworkImageModel).toBe("gpt-image-2.5-sunburst");
 });

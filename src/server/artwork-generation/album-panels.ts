@@ -100,7 +100,7 @@ export async function generateIndependentAlbumPanels({
     }))) {
     throw new Error("Album art direction requires one complete shot per panel and a shared style.");
   }
-  const panels: { index: number; bytes: Buffer }[] = [];
+  const panels: { index: number; bytes: Buffer; model?: string }[] = [];
   const shared = [
     prompt,
     "INDEPENDENT ALBUM PANELS — overrides earlier grid, canvas, copy-placement and CTA instructions.",
@@ -137,7 +137,7 @@ export async function generateIndependentAlbumPanels({
       referenceImages: panelReferences, quality: "medium", fetchImpl });
     const reviewed = reviewPanel ? await reviewPanel(image, panel.size, panel.index) : image;
     const bytes = await prepareAlbumPanel(Buffer.from(reviewed.base64, "base64"), panel.size, panel.index);
-    panels.push({ index: panel.index, bytes });
+    panels.push({ index: panel.index, bytes, model: reviewed.model ?? model });
   }
   return { panels, masterBytes: await composeAlbumPreview(panels, format) };
 }

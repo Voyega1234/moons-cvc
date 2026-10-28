@@ -4177,9 +4177,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               ])
             ).length
           }}
-          artworkMode={state.artworkMode}
-          onArtworkModeChange={(mode) =>
-            dispatch({ type: "set-artwork-mode", mode })
+          artworkImageModel={state.artworkImageModel}
+          onArtworkImageModelChange={(model) =>
+            dispatch({ type: "set-artwork-image-model", model })
           }
           outputSize={state.outputSize}
           onOutputSizeChange={(size) =>

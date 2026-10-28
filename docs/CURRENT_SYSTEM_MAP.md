@@ -232,7 +232,7 @@ imports stay stable. Ownership after the first extraction is:
 | Brand selection and setup | `StartStage`, brand setup/profile/library panels |
 | Brief and shared material browser | `stages/brief-stage.tsx` |
 | Pre-generation confirmation | `stages/brief-confirmation-modal.tsx` |
-| Shared artwork mode selector | `stages/artwork-mode-selector.tsx` |
+| Shared artwork image model selector (legacy export `ArtworkModeSelector`) | `stages/artwork-mode-selector.tsx` |
 | Hook selection | `DirectionsStage`, hook edit/regenerate modals |
 | Per-Hook reference image | `stages/hook-reference-image.tsx`, `hook-reference-images.ts` |
 | Before-build idea checks | `stages/preflight-modal.tsx` |
@@ -690,3 +690,27 @@ New artwork, albums, revisions, placeholder edits and UGC thumbnails default to
 output metadata live in `src/services/artwork-generation/openai-image-generation.ts`.
 `OPENAI_IMAGE_GENERATION_MODEL` remains a server-side override for generation
 and revisions; existing saved artwork retains its original model metadata.
+
+
+## Artwork image selection and per-image failover (2026-10-28)
+
+Review & continue and preflight replace the Artwork mode buttons with Image
+model: GPT Image (default) or `google/gemini-nano-banana-2.1`. Existing
+`artworkMode` values still control the saved prompt pipeline. The independent
+`WorkflowState.artworkImageModel` is persisted by `workspace-serializer.ts`;
+legacy runs default to GPT. All generation, regeneration, revision, placeholder
+and UGC thumbnail builders pass that selection. An explicit Google selection
+wins over the legacy `OPENAI_IMAGE_GENERATION_MODEL` override.
+
+`server/artwork-generation/openai-images-client.ts` retains same-model transient
+retries, then retries a failed GPT Image operation with Nano Banana 2.1,
+including safety rejections. Failover stays inside one image operation; it
+preserves prompt and references and never replays completed images or changes
+the run selection. Google uses the same OpenRouter Images endpoint/key, with
+supported `resolution` and `aspect_ratio` parameters in place of GPT's
+`size` and `quality`. Google output is fitted to the requested pixel canvas
+without cropping; unsupported native ratios (such as 2:1 Album panels) may
+receive white padding. A Google failure is surfaced without switching back.
+Generated images carry their actual model into persistence, including separate
+Album panels, edits and thumbnails. Prompt/strategy/QC agents do not switch
+models as part of image failover. Fallback does not guarantee provider acceptance.

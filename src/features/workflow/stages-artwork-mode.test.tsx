@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useReducer } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { defaultArtworkOutputSize, defaultHookGenerationModels, hookGenerationModelLabel } from "../../domain/creative-run";
 import { BrandMemoryProvider } from "../../app/providers/brand-memory-provider";
 import { MockBrandMemoryRepository } from "../../repositories/brand-memory/mock-brand-memory-repository";
 import {
@@ -63,7 +64,7 @@ describe("Artwork generation settings", () => {
     );
 
     const hookModelPicker = screen.getByLabelText("Hook generation models");
-    expect(hookModelPicker.textContent).toContain("Gemini 3.6 Flash");
+    expect(hookModelPicker.textContent).toContain(hookGenerationModelLabel(defaultHookGenerationModels[0]));
     await user.click(hookModelPicker);
     expect(screen.queryByText("Compass New")).toBeNull();
     expect(
@@ -78,7 +79,7 @@ describe("Artwork generation settings", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-hook-generation-models",
       models: [
-        "google/gemini-3.6-flash",
+        ...defaultHookGenerationModels,
         "sakana/sakana-namazu"
       ]
     });
@@ -120,19 +121,12 @@ describe("Artwork generation settings", () => {
       intent: "performance-iteration"
     });
 
-    expect(
-      screen.getByRole("button", { name: "Design system" }).getAttribute(
-        "aria-pressed"
-      )
-    ).toBe("true");
-    expect(
-      screen.getByRole("button", { name: "Design system (new)" })
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Final artwork" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Standard" }));
+    expect(screen.getByRole("button", { name: "GPT Image" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("group", { name: "Artwork mode" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Nano Banana 2.1" }));
     expect(dispatch).toHaveBeenCalledWith({
-      type: "set-artwork-mode",
-      mode: "standard"
+      type: "set-artwork-image-model",
+      model: "google/gemini-nano-banana-2.1"
     });
 
     expect(
@@ -142,7 +136,7 @@ describe("Artwork generation settings", () => {
     const sizeSelect = screen.getByRole("combobox", {
       name: "Output size"
     }) as HTMLSelectElement;
-    expect(sizeSelect.value).toBe("1088x1360");
+    expect(sizeSelect.value).toBe(defaultArtworkOutputSize);
 
     await user.selectOptions(sizeSelect, "3840x2160");
     expect(dispatch).toHaveBeenCalledWith({
@@ -213,7 +207,7 @@ describe("Artwork generation settings", () => {
     ).toBe(false);
   });
 
-  it("presents a saved non-visible artwork mode as Standard", () => {
+  it("defaults to GPT Image for a saved legacy artwork mode", () => {
     const dispatch = vi.fn();
     const state = {
       ...createInitialWorkflowState({
@@ -238,14 +232,14 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Standard" }).getAttribute(
+      screen.getByRole("button", { name: "GPT Image" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("keeps Standard mode visible and selected when it is saved", () => {
+  it("shows a saved Nano Banana selection", () => {
     const dispatch = vi.fn();
     const state = {
       ...createInitialWorkflowState({
@@ -254,6 +248,7 @@ describe("Artwork generation settings", () => {
       }),
       stage: "directions" as const,
       artworkMode: "standard" as const,
+      artworkImageModel: "google/gemini-nano-banana-2.1" as const,
       directions: buildDirectionFixtures("BoneFit")
     };
 
@@ -270,7 +265,7 @@ describe("Artwork generation settings", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Standard" }).getAttribute(
+      screen.getByRole("button", { name: "Nano Banana 2.1" }).getAttribute(
         "aria-pressed"
       )
     ).toBe("true");
@@ -344,7 +339,7 @@ describe("Artwork generation settings", () => {
     expect(
       screen.queryByRole("combobox", { name: "Creative concept model" })
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "Standard" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "GPT Image" })).toBeTruthy();
   });
 
   it("shows Standard as a direct GPT Image 2 route without a concept-model control", () => {
@@ -372,7 +367,7 @@ describe("Artwork generation settings", () => {
 
     expect(
       screen.getByText(
-        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+        "Campaign input → GPT Image → Visual QC"
       )
     ).toBeTruthy();
     expect(
@@ -405,7 +400,7 @@ describe("Artwork generation settings", () => {
 
     expect(
       screen.getByText(
-        "agent_image.md + Campaign input → GPT Image 2 → Visual QC"
+        "Campaign input → GPT Image → Visual QC"
       )
     ).toBeTruthy();
     expect(
