@@ -101,7 +101,7 @@ async function requestPreflightBatch(
         method: "POST",
         headers,
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(270_000)
+        signal: AbortSignal.timeout(170_000)
       });
       text = await response.text();
     } catch (error) {

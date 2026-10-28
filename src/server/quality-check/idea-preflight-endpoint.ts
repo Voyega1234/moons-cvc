@@ -155,7 +155,7 @@ async function callResponsesApi({
       : OPENAI_RESPONSES_ENDPOINT;
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "GPT Luna";
   const response = await fetchImpl(endpoint, {
-    signal: AbortSignal.timeout(75_000),
+    signal: AbortSignal.timeout(50_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",

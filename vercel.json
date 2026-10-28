@@ -15,7 +15,7 @@
       "includeFiles": "agent_prompt/agent_hook.md"
     },
     "api/idea-preflight.ts": {
-      "maxDuration": 300
+      "maxDuration": 180
     },
     "api/artwork-generation.ts": {
       "maxDuration": 900,

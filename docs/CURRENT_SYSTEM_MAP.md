@@ -726,10 +726,10 @@ response. Authentication, validation and ordinary JSON errors are not replayed.
 Persistent transport failures show a retryable Thai message and never become
 successful empty findings; the modal keeps the ideas and check options intact.
 
-`api/idea-preflight.ts` and `vercel.json` allow 300 seconds for the function.
-The provider request has a 75-second deadline per attempt; the shared AI retry
+`api/idea-preflight.ts` and `vercel.json` allow 180 seconds for the function.
+The provider request has a 50-second deadline per attempt; the shared AI retry
 policy allows up to three attempts for transient failures and malformed/empty
 provider output, leaving time to return a JSON error before the function limit.
-The browser also bounds each request to 270 seconds. Final structured JSON is
+The browser also bounds each request to 170 seconds. Final structured JSON is
 read through `shared/structured-output.ts`. These changes reduce timeout and
 transient gateway failures; they do not guarantee upstream availability.
