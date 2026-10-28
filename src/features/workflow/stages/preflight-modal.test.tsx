@@ -716,3 +716,26 @@ describe("PreflightModal", () => {
     unmount();
   });
 });
+
+
+it("keeps Run checks retryable after failure and never shows failed checks as clean", async () => {
+  const user = userEvent.setup();
+  const direction = buildDirectionFixtures("Compass")[0]!;
+  const onContinue = vi.fn();
+  const runChecks = vi.fn().mockRejectedValueOnce(new Error("บริการตรวจไอเดียขัดข้องชั่วคราว กรุณาลองตรวจอีกครั้ง"))
+    .mockResolvedValueOnce([{ directionId: direction.id, findings: [] }]);
+  const view = render(<PreflightModal directions={[direction]} fallbackService="single-static"
+    context={{ runId: "retry-run", brief: "Campaign", brandContext: null }}
+    onArtworkImageModelChange={vi.fn()} outputSize="1024x1024" onOutputSizeChange={vi.fn()}
+    onCancel={vi.fn()} onContinue={onContinue} runChecks={runChecks} />);
+  const modal = within(document.body);
+  await user.click(modal.getByRole("button", { name: "Run checks on 1" }));
+  expect((await modal.findByRole("alert")).textContent).toContain("กรุณาลองตรวจอีกครั้ง");
+  expect(modal.queryByText("Nothing flagged.")).toBeNull();
+  expect(onContinue).not.toHaveBeenCalled();
+  await user.click(modal.getByRole("button", { name: "Run checks on 1" }));
+  expect(await modal.findByRole("button", { name: "Open Create →" })).toBeTruthy();
+  expect(modal.queryByRole("alert")).toBeNull();
+  expect(runChecks).toHaveBeenCalledTimes(2);
+  view.unmount();
+});

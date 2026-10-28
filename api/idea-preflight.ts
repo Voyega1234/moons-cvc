@@ -1,7 +1,7 @@
 import { handleIdeaPreflightRequest } from "../src/server/quality-check/idea-preflight-endpoint.js";
 
 export const config = {
-  maxDuration: 60
+  maxDuration: 300
 };
 
 type VercelRequest = {

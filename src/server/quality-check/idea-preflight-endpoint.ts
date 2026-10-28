@@ -1,3 +1,5 @@
+import { withAiRetry } from "../shared/ai-retry.js";
+import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 
@@ -117,18 +119,16 @@ export async function handleIdeaPreflightRequest({
       provider === "openrouter"
         ? openRouterModel!
         : env.OPENAI_IDEA_PREFLIGHT_MODEL?.trim() || DEFAULT_MODEL;
-    const payload = await callResponsesApi({
-      provider,
-      apiKey,
-      model,
-      fetchImpl,
-      prompt: buildPrompt(input)
+    const results = await withAiRetry(async () => {
+      const payload = await callResponsesApi({
+        provider, apiKey, model, fetchImpl, prompt: buildPrompt(input)
+      });
+      return parseResults(
+        extractStructuredJsonText(payload, "Idea preflight"),
+        input.directions.map(direction => direction.id),
+        new Set(input.checks)
+      );
     });
-    const results = parseResults(
-      extractResponseText(payload),
-      input.directions.map((direction) => direction.id),
-      new Set(input.checks)
-    );
 
     return jsonResponse({ ok: true, model, results });
   } catch (error) {
@@ -155,6 +155,7 @@ async function callResponsesApi({
       : OPENAI_RESPONSES_ENDPOINT;
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "GPT Luna";
   const response = await fetchImpl(endpoint, {
+    signal: AbortSignal.timeout(75_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -549,30 +550,6 @@ function readStringArray(value: unknown, field: string): readonly string[] {
   return value.map((item, index) => readString(item, `${field}[${index}]`));
 }
 
-function extractResponseText(payload: unknown): string {
-  if (isRecord(payload) && typeof payload.output_text === "string") {
-    return payload.output_text;
-  }
-  if (!isRecord(payload) || !Array.isArray(payload.output)) {
-    throw new Error(
-      "GPT Luna idea preflight response did not include output text."
-    );
-  }
-  for (const item of payload.output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) continue;
-    for (const content of item.content) {
-      if (
-        isRecord(content) &&
-        content.type === "output_text" &&
-        typeof content.text === "string"
-      ) {
-        return content.text;
-      }
-    }
-  }
-  throw new Error("GPT Luna idea preflight response did not include output text.");
-}
-
 async function readProviderErrorDetail(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as unknown;
@@ -589,11 +566,11 @@ async function readJsonResponse(
   label: string
 ): Promise<unknown> {
   const text = await response.text();
-  if (!text.trim()) throw new Error(`${label} returned an empty response body.`);
+  if (!text.trim()) throw new StructuredOutputError("empty_output", `${label} returned an empty response body.`);
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new Error(`${label} returned a non-JSON response.`);
+    throw new StructuredOutputError("invalid_json", `${label} returned a non-JSON response.`);
   }
 }
 
@@ -632,5 +609,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown idea preflight error.";
+  return error instanceof Error || error instanceof DOMException
+    ? error.message
+    : "Unknown idea preflight error.";
 }

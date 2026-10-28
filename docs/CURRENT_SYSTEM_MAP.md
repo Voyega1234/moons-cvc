@@ -714,3 +714,22 @@ receive white padding. A Google failure is surfaced without switching back.
 Generated images carry their actual model into persistence, including separate
 Album panels, edits and thumbnails. Prompt/strategy/QC agents do not switch
 models as part of image failover. Fallback does not guarantee provider acceptance.
+
+
+## Idea preflight request recovery (2026-10-28)
+
+`services/quality-check/run-idea-preflight.ts` sends up to three ideas per
+request with at most two requests in flight. Context and enabled checks stay
+identical across batches; returned results retain the selected idea order.
+Only a failed batch retries once on a network failure or non-JSON 500/502/503/504
+response. Authentication, validation and ordinary JSON errors are not replayed.
+Persistent transport failures show a retryable Thai message and never become
+successful empty findings; the modal keeps the ideas and check options intact.
+
+`api/idea-preflight.ts` and `vercel.json` allow 300 seconds for the function.
+The provider request has a 75-second deadline per attempt; the shared AI retry
+policy allows up to three attempts for transient failures and malformed/empty
+provider output, leaving time to return a JSON error before the function limit.
+The browser also bounds each request to 270 seconds. Final structured JSON is
+read through `shared/structured-output.ts`. These changes reduce timeout and
+transient gateway failures; they do not guarantee upstream availability.

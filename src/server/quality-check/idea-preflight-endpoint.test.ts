@@ -341,3 +341,47 @@ describe("handleIdeaPreflightRequest", () => {
     ]);
   });
 });
+
+
+describe("idea preflight provider recovery", () => {
+  const ok = () => new Response(JSON.stringify({ output_text: JSON.stringify({ results: [{ ideaIndex: 1, findings: [] }] }) }));
+
+  it.each(["gateway", "malformed", "empty"])("retries a temporary %s provider response", async failure => {
+    vi.useFakeTimers();
+    try {
+      const first = failure === "gateway" ? new Response("Bad gateway", { status: 502 })
+        : failure === "malformed" ? new Response(JSON.stringify({ output_text: "{incomplete" }))
+        : new Response("");
+      const fetchImpl = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(ok());
+      const pending = handleIdeaPreflightRequest({ request: ideaRequest(), env: { OPENAI_API_KEY: "test" }, fetchImpl });
+      await vi.runAllTimersAsync();
+      const response = await pending;
+      expect(response.status).toBe(200);
+      expect((await response.json()).results).toEqual([{ directionId: "direction-1", findings: [] }]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBeDefined();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not retry a permanent provider rejection", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { message: "Invalid request" } }), { status: 400 }));
+    const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: { OPENAI_API_KEY: "test" }, fetchImpl });
+    expect(response.status).toBe(500);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+it("returns a JSON error after bounded retries instead of hanging on an unavailable provider", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchImpl = vi.fn(async () => { throw new DOMException("Provider timed out", "TimeoutError"); });
+    const pending = handleIdeaPreflightRequest({ request: ideaRequest(), env: { OPENAI_API_KEY: "test" }, fetchImpl });
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({ ok: false, error: "Provider timed out" });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  } finally { vi.useRealTimers(); }
+});

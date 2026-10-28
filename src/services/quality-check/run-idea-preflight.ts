@@ -55,39 +55,87 @@ export interface IdeaPreflightRequest extends IdeaPreflightContext {
   directions: readonly IdeaPreflightDirection[];
 }
 
+const PREFLIGHT_BATCH_SIZE = 3;
+const PREFLIGHT_CONCURRENCY = 2;
+const retryableGatewayStatuses = new Set([500, 502, 503, 504]);
+
 export async function runIdeaPreflight(
   request: IdeaPreflightRequest
 ): Promise<readonly IdeaPreflightResult[]> {
-  const response = await fetch(env.ideaPreflightEndpoint, {
-    method: "POST",
-    headers: await buildHeaders(),
-    body: JSON.stringify(request)
-  });
-  const payload = await readJsonResponse<{
-    results?: readonly IdeaPreflightResult[];
-    error?: string;
-  }>(response);
+  if (!request.directions.length) return [];
+  const headers = await buildHeaders();
+  const results: IdeaPreflightResult[] = [];
+  const groupSize = PREFLIGHT_BATCH_SIZE * PREFLIGHT_CONCURRENCY;
+  for (let offset = 0; offset < request.directions.length; offset += groupSize) {
+    const batches: IdeaPreflightRequest[] = [];
+    for (
+      let index = offset;
+      index < Math.min(offset + groupSize, request.directions.length);
+      index += PREFLIGHT_BATCH_SIZE
+    ) {
+      batches.push({
+        ...request,
+        directions: request.directions.slice(index, index + PREFLIGHT_BATCH_SIZE)
+      });
+    }
+    const outcomes = await Promise.allSettled(
+      batches.map(batch => requestPreflightBatch(batch, headers))
+    );
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") throw outcome.reason;
+      results.push(...outcome.value);
+    }
+  }
+  return results;
+}
 
-  if (!response.ok) {
-    throw new Error(
-      payload.error ?? `Idea preflight failed (${response.status}).`
+async function requestPreflightBatch(
+  request: IdeaPreflightRequest,
+  headers: HeadersInit
+): Promise<readonly IdeaPreflightResult[]> {
+  for (let attempt = 0; ; attempt += 1) {
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetch(env.ideaPreflightEndpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(270_000)
+      });
+      text = await response.text();
+    } catch (error) {
+      if (attempt === 0 && error instanceof TypeError) continue;
+      throw new Error("ระบบตรวจไอเดียไม่ตอบกลับ กรุณาลองตรวจอีกครั้ง โดยไอเดียเดิมยังอยู่ครบ", { cause: error });
+    }
+    let payload: { results?: readonly IdeaPreflightResult[]; error?: string } | null;
+    try {
+      payload = JSON.parse(text) as typeof payload;
+    } catch {
+      if (attempt === 0 && retryableGatewayStatuses.has(response.status)) continue;
+      throw new Error(`บริการตรวจไอเดียขัดข้องชั่วคราว กรุณาลองตรวจอีกครั้ง (HTTP ${response.status})`);
+    }
+    if (!response.ok) {
+      if (response.status >= 500) {
+        throw new Error("ระบบตรวจไอเดียขัดข้องชั่วคราว กรุณาลองตรวจอีกครั้ง โดยไอเดียเดิมยังอยู่ครบ", { cause: payload?.error });
+      }
+      throw new Error(payload?.error ?? `ระบบตรวจไอเดียไม่สำเร็จ (HTTP ${response.status})`);
+    }
+    if (!Array.isArray(payload?.results) || payload.results.some(result =>
+      !result || typeof result.directionId !== "string" || !Array.isArray(result.findings)
+    )) {
+      throw new Error("ระบบตรวจไอเดียตอบกลับไม่ครบ กรุณาลองตรวจอีกครั้ง");
+    }
+    const returnedResults = payload.results;
+    const returnedIds = new Set(returnedResults.map(result => result.directionId));
+    const missing = request.directions.filter(direction => !returnedIds.has(direction.id));
+    if (missing.length) {
+      throw new Error(`ระบบยังตรวจไอเดียไม่ครบ ${missing.length} รายการ กรุณาลองตรวจอีกครั้ง`);
+    }
+    return request.directions.map(direction =>
+      returnedResults.find(result => result.directionId === direction.id)!
     );
   }
-  if (!Array.isArray(payload.results)) {
-    throw new Error("Idea preflight returned no results.");
-  }
-
-  const returnedIds = new Set(payload.results.map((result) => result.directionId));
-  const missing = request.directions.filter(
-    (direction) => !returnedIds.has(direction.id)
-  );
-  if (missing.length) {
-    throw new Error(
-      `Idea preflight did not return ${missing.length} expected ${missing.length === 1 ? "idea" : "ideas"}.`
-    );
-  }
-
-  return payload.results;
 }
 
 async function buildHeaders(): Promise<HeadersInit> {
@@ -105,17 +153,4 @@ async function buildHeaders(): Promise<HeadersInit> {
   }
 
   return headers;
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text();
-  if (!text.trim()) {
-    throw new Error("Idea preflight returned an empty response body.");
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error("Idea preflight returned a non-JSON response.");
-  }
 }
