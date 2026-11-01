@@ -183,6 +183,8 @@ export interface ArtworkRevisionRequest {
   album?: {
     format: AlbumFormat;
     outputIds: readonly string[];
+    sourceImageUrls?: readonly string[];
+    selectedOutputIds?: readonly string[];
   };
   output: {
     size: ArtworkOutputSize;
@@ -353,6 +355,7 @@ export async function reviseAlbumOutputImages({
   sourceImageUrl,
   albumFormat,
   instructions,
+  selectedOutputIds,
   referenceImages = []
 }: {
   run: WorkflowState;
@@ -360,6 +363,7 @@ export async function reviseAlbumOutputImages({
   sourceImageUrl: string;
   albumFormat: AlbumFormat;
   instructions: string;
+  selectedOutputIds?: readonly string[];
   referenceImages?: readonly ArtworkReferenceImage[];
 }): Promise<readonly CreativeOutput[]> {
   const output = outputs[0];
@@ -373,7 +377,12 @@ export async function reviseAlbumOutputImages({
     referenceImages,
     album: {
       format: albumFormat,
-      outputIds: outputs.map((candidate) => candidate.id)
+      outputIds: outputs.map((candidate) => candidate.id),
+      ...(selectedOutputIds ? { selectedOutputIds } : {}),
+      sourceImageUrls: outputs.map((candidate) => {
+        if (!candidate.assetUrl) throw new Error("Every Album panel needs an image before revision.");
+        return candidate.assetUrl;
+      })
     }
   });
   const revised = await requestArtworkRevision(request);
@@ -493,7 +502,11 @@ export async function placeholderizeAlbumOutputImages({
     mode: "placeholder",
     album: {
       format: albumFormat,
-      outputIds: outputs.map((candidate) => candidate.id)
+      outputIds: outputs.map((candidate) => candidate.id),
+      sourceImageUrls: outputs.map((candidate) => {
+        if (!candidate.assetUrl) throw new Error("Every Album panel needs an image before placeholder generation.");
+        return candidate.assetUrl;
+      })
     }
   });
   const revised = await requestArtworkRevision(request);

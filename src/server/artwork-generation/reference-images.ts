@@ -13,7 +13,8 @@ export async function resolveReferenceImages(
   referenceImages: ArtworkGenerationRequest["referenceImages"],
   fetchImpl: FetchLike,
   storage: ArtworkStorageClient,
-  supabaseUrl: string
+  supabaseUrl: string,
+  normalizeForProvider = true
 ): Promise<readonly ReferenceImageInput[]> {
   const resolved = await Promise.all(
     referenceImages.map(async (reference) => {
@@ -60,7 +61,7 @@ export async function resolveReferenceImages(
     })
   );
 
-  return Promise.all(resolved.map(normalizeReferenceImageForOpenAI));
+  return normalizeForProvider ? Promise.all(resolved.map(normalizeReferenceImageForOpenAI)) : resolved;
 }
 
 export async function normalizeReferenceImageForOpenAI(

@@ -7,10 +7,12 @@ import {
   buildArtworkRegenerationRequest,
   buildArtworkRevisionRequest,
   buildUgcThumbnailRequest,
-  normalizeArtworkOutput
+  normalizeArtworkOutput,
+  reviseAlbumOutputImages
 } from "./openai-image-generation";
 import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
 import type { WorkflowState } from "../../features/workflow/model";
+import { emptyApprovalComments, emptyApprovalGate } from "../../domain/creative-run";
 
 const run: WorkflowState = {
   id: "run-1",
@@ -920,6 +922,33 @@ it("reports a gateway timeout without automatically generating the images again"
     expect(fetchMock).toHaveBeenCalledTimes(1);
   } finally {
     Object.assign(env, { artworkGenerationMode: previousMode, artworkGenerationEndpoint: previousEndpoint });
+    vi.unstubAllGlobals();
+  }
+});
+
+it("sends the selected Album panel IDs alongside the complete ordered source list", async () => {
+  const { env } = await import("../../config/env");
+  const previousEndpoint = env.artworkGenerationEndpoint;
+  const outputs: WorkflowState["outputs"] = [1, 2, 3].map(index => ({
+    id: `hook-1-album-${index}`, directionId: "hook-1", format: "Album post",
+    assetUrl: `https://example.com/panel-${index}.png`, revisionCount: 0,
+    status: "draft", clientStatus: "queued", approval: emptyApprovalGate, approvalComments: emptyApprovalComments
+  }));
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ outputs }), {
+    status: 200, headers: { "Content-Type": "application/json" }
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  Object.assign(env, { artworkGenerationEndpoint: "/api/artwork-generation" });
+  try {
+    await reviseAlbumOutputImages({ run, outputs, albumFormat: "three-horizontal",
+      sourceImageUrl: "https://example.com/master.png", instructions: "Change panel 2",
+      selectedOutputIds: [outputs[1]!.id] });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).album).toEqual({
+      format: "three-horizontal", outputIds: outputs.map(output => output.id),
+      sourceImageUrls: outputs.map(output => output.assetUrl), selectedOutputIds: [outputs[1]!.id]
+    });
+  } finally {
+    Object.assign(env, { artworkGenerationEndpoint: previousEndpoint });
     vi.unstubAllGlobals();
   }
 });

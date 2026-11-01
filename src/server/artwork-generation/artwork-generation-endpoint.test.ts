@@ -1122,9 +1122,76 @@ describe("handleArtworkGenerationRequest", () => {
     ]);
   });
 
-  it("revises an Album master with only the user instruction and selected source", async () => {
+  it.each((["revise", "placeholder"] as const).flatMap(mode =>
+    (["three-horizontal", "three-vertical", "four-grid", "four-horizontal"] as const).flatMap(albumFormat =>
+      [undefined, ["panel-2"], ["panel-1", "panel-4"]].map(selectedOutputIds => ({ mode, albumFormat, selectedOutputIds })))
+  ))("$mode edits native $albumFormat Album files with selection $selectedOutputIds and never crops the results", async ({ mode, albumFormat, selectedOutputIds }) => {
+    const ids = ["panel-1", "panel-2", "panel-3", "panel-4"].slice(0, albumFormat.startsWith("three") ? 3 : 4);
+    selectedOutputIds = selectedOutputIds?.filter(id => ids.includes(id));
+    const sourceType = selectedOutputIds?.length === 1 ? "jpeg" : "png";
+    const source = await sharp({ create: { width: 64, height: 64, channels: 3, background: "blue" } }).toFormat(sourceType).toBuffer();
+    const generated: Buffer[] = [];
+    const bodies: { prompt: string; size: string; quality: string; input_references: unknown[] }[] = [];
+    const uploads: { path: string; bytes: Buffer }[] = [];
+    const { client } = fakeStorage();
+    const originalFrom = client.storage.from.bind(client.storage);
+    client.storage.from = (bucket: string) => ({ ...originalFrom(bucket), upload: async (path: string, bytes: Buffer) => {
+      uploads.push({ path, bytes }); return { error: null };
+    } });
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+      if (href.startsWith("https://example.com/panel-")) return new Response(Uint8Array.from(source), { headers: { "content-type": `image/${sourceType}` } });
+      if (href.includes("/api/v1/images")) {
+        const body = JSON.parse(String(init?.body)); bodies.push(body);
+        const [width, height] = body.size.split("x").map(Number);
+        const bytes = await sharp({ create: { width, height, channels: 3, background: "red" } })
+          .extend({ top: 2, bottom: 2, left: 2, right: 2, background: "green" }).png().toBuffer();
+        generated.push(bytes);
+        return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
+      }
+      throw new Error(`Unexpected fetch (master must not be used): ${href}`);
+    });
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", { method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ requestType: "artwork-revision", mode, model: "gpt-image-2.5-sunburst", clientId: "flora",
+          runId: "run-1", outputId: ids[0], directionId: "hook-1", assetVersion: 2, format: "Album post",
+          sourceImageUrl: "https://example.com/master-must-not-be-loaded.png", instructions: "Use placeholder labels where requested.",
+          album: { format: albumFormat, outputIds: ids, sourceImageUrls: ids.map(id => `https://example.com/${id}.png`), selectedOutputIds },
+          output: { size: "1024x1024", format: "png" } }) }),
+      env: { OPENAI_API_KEY: "test", OPENROUTER_API_KEY: "test", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
+      fetchImpl: fetchMock as unknown as typeof fetch, createStorageClient: () => client, writeDebugLog: async () => {}
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const editedIds = selectedOutputIds ? ids.filter(id => selectedOutputIds.includes(id)) : ids;
+    expect(bodies).toHaveLength(editedIds.length);
+    bodies.forEach((body, index) => {
+      const panelIndex = ids.indexOf(editedIds[index]!);
+      const coverSizes = { "three-horizontal": "2048x1024", "three-vertical": "1024x2048", "four-grid": "1024x1024", "four-horizontal": "1920x1280" };
+      expect(body.size).toBe(panelIndex === 0 ? coverSizes[albumFormat] : albumFormat === "four-horizontal" ? "1920x1920" : "1024x1024");
+      expect(body.quality).toBe(mode === "placeholder" ? "low" : "medium");
+      expect(body.prompt).toContain(`ONLY panel ${panelIndex + 1} of ${ids.length}`);
+      expect(body.input_references).toHaveLength(1);
+    });
+    const payload = await response.json();
+    expect(payload.outputs.map((output: { id: string }) => output.id)).toEqual(ids);
+    expect(uploads).toHaveLength(ids.length + 1);
+    for (const [index, output] of payload.outputs.entries()) {
+      const bytes = uploads.find(item => item.path === output.assetStoragePath)?.bytes;
+      if (!editedIds.includes(ids[index]!)) {
+        expect(bytes).toEqual(source);
+      } else if (albumFormat === "four-horizontal") {
+        expect(await sharp(bytes).metadata()).toMatchObject({ width: 1920, height: index === 0 ? 1280 : 1920 });
+      } else {
+        expect(bytes).toEqual(generated[editedIds.indexOf(ids[index]!)]);
+      }
+    }
+  });
+
+  it("splits a legacy Album source before editing standalone panels", async () => {
     const masterImage = await albumMasterPng();
     let editBody: { prompt: string; input_references: unknown[] } | undefined;
+    const editSizes: string[] = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -1140,8 +1207,12 @@ describe("handleArtworkGenerationRequest", () => {
       }
       if (href.includes("/api/v1/images")) {
         editBody = JSON.parse(String(init?.body));
+        const size = JSON.parse(String(init?.body)).size;
+        editSizes.push(size);
+        const [width, height] = size.split("x").map(Number);
+        const panelImage = await sharp({ create: { width, height, channels: 3, background: "red" } }).png().toBuffer();
         return new Response(
-          JSON.stringify({ data: [{ b64_json: masterImage.toString("base64") }] }),
+          JSON.stringify({ data: [{ b64_json: panelImage.toString("base64") }] }),
           { status: 200 }
         );
       }
@@ -1195,10 +1266,11 @@ describe("handleArtworkGenerationRequest", () => {
     expect(String(editBody?.prompt)).toContain(
       "Change only the cover background to blue."
     );
-    expect(String(editBody?.prompt)).toContain("STRICT EDIT ONLY");
+    expect(String(editBody?.prompt)).toContain("Return one complete standalone image");
     expect(editBody?.input_references).toHaveLength(1);
     expect(payload.outputs).toHaveLength(3);
     expect(uploads).toHaveLength(4);
+    expect(editSizes).toEqual(["2048x1024", "1024x1024", "1024x1024"]);
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes("/v1/responses")

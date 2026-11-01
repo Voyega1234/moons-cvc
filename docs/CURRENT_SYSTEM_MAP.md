@@ -600,9 +600,27 @@ visual QC policy remains active (including the existing auto-edit-off setting).
 `composeAlbumPreview` creates a 2046-square preview from completed panels using
 contain resizing. That preview preserves the existing master URL/storage contract;
 it is never used to produce the new generation's full-resolution panel files.
-The experiment does not yet change Album revision/placeholder editing: those
-still edit and split the master, and can reintroduce the original crop risks.
-Do not treat the experiment as a completed replacement for the whole Album flow.
+
+Album Regenerate and Placeholder requests now include `album.sourceImageUrls`
+in the same order as `outputIds`. The parser requires a complete HTTP URL list
+when present. `artwork-revision.ts` edits these original panel files independently,
+validates returned ratios, then assembles the preview. Older clients supplying
+only a saved master have that source split BEFORE editing; the edited images
+are never split. Original missing/cropped content is not automatically restored.
+Instructions are scoped to each panel (cover/support/closing) and unrelated
+content is instructed to remain unchanged. No new cross-panel semantic gate or
+automatic storyboard agent is introduced.
+
+Regenerate draft includes an image selector in `review/output-grid.tsx`, starting
+with the cover selected. Users can select individual panels or all images;
+an empty selection cannot be submitted. `reviseAlbumOutputImages` forwards
+`album.selectedOutputIds`, validated as a non-empty unique subset of the album
+IDs. `artwork-revision.ts` calls the image model only for selected panels and
+copies the original bytes and MIME type for the others, then builds the combined
+preview. All panels are saved together as one album version so restoring an
+earlier version also restores its complete preview and panel set. Legacy requests
+without a selection and Placeholder requests continue to edit every panel.
+
 There is no new cross-panel semantic QC gate; compare style and copy visually.
 Wrong image ratios or a failed panel stop generation before assets are persisted.
 

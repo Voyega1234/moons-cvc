@@ -55,7 +55,21 @@ export function parseRevisionRequestBody(value: unknown): ArtworkRevisionRequest
     if (outputIds.length !== albumFormatPanelCount(format)) {
       throw new Error("album.outputIds must match the album panel count.");
     }
-    album = { format, outputIds };
+    const sourceImageUrls = albumRecord.sourceImageUrls === undefined ? undefined
+      : readStringArray(albumRecord.sourceImageUrls, "album.sourceImageUrls");
+    if (sourceImageUrls && (sourceImageUrls.length !== outputIds.length ||
+      sourceImageUrls.some(url => !/^https?:\/\//i.test(url)))) {
+      throw new Error("album.sourceImageUrls must provide an HTTP image URL for every panel.");
+    }
+    const selectedOutputIds = albumRecord.selectedOutputIds === undefined ? undefined
+      : readStringArray(albumRecord.selectedOutputIds, "album.selectedOutputIds");
+    if (selectedOutputIds && (!selectedOutputIds.length ||
+      new Set(selectedOutputIds).size !== selectedOutputIds.length ||
+      selectedOutputIds.some(id => !outputIds.includes(id)))) {
+      throw new Error("album.selectedOutputIds must select one or more unique album output IDs.");
+    }
+    album = { format, outputIds, ...(sourceImageUrls ? { sourceImageUrls } : {}),
+      ...(selectedOutputIds ? { selectedOutputIds } : {}) };
   }
 
   const mode =

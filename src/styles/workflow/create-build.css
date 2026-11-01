@@ -344,6 +344,64 @@
   font-weight: 700;
 }
 
+.compass-app .output-album-selection {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #e3e6ec;
+  border-radius: 12px;
+}
+
+.compass-app .output-album-selection legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compass-app .output-album-selection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.compass-app .output-album-selection-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.compass-app .output-album-selection-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #e3e6ec;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.compass-app .output-album-selection-list label.selected {
+  border-color: #65b83f;
+  background: #f4ffdc;
+}
+
+.compass-app .output-album-selection-list input {
+  accent-color: #65b83f;
+}
+
+.compass-app .output-album-selection-list img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
 .compass-app .output-regenerate-version-instructions {
   margin: 0;
   overflow: hidden;

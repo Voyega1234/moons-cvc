@@ -727,6 +727,7 @@ function OutputRegenerateModal({
     useState<OutputReferenceAttachment | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [selectedPanelIds, setSelectedPanelIds] = useState<readonly string[]>([output.id]);
   const album = isAlbumOutput(output);
   const isFirstUgcThumbnail = isUgcOutput(output) && !output.assetUrl;
   const busy = phase !== "idle";
@@ -790,6 +791,11 @@ function OutputRegenerateModal({
       return;
     }
 
+    if (album && !selectedPanelIds.length) {
+      setError("Select at least one image to regenerate.");
+      return;
+    }
+
     setPhase("regenerating");
     setError(null);
     setNotice(null);
@@ -848,7 +854,8 @@ function OutputRegenerateModal({
       const updatedOutputs = album
         ? await reviseAlbumOutputImages({
             run,
-            outputs,
+            outputs: previewOutputs,
+            selectedOutputIds: selectedPanelIds,
             instructions: revisionInstructions,
             sourceImageUrl:
               selectedAsset?.albumMasterAssetUrl ??
@@ -915,7 +922,10 @@ function OutputRegenerateModal({
                   updated.albumMasterAssetStoragePath
               }
             : {}),
-          instructions: revisionInstructions
+          instructions: revisionInstructions,
+          ...(album && !selectedPanelIds.includes(currentOutput.id)
+            ? { isPlaceholder: Boolean(currentOutput.isPlaceholder) }
+            : {})
         });
       });
       setSelectedVersion(output.revisionCount + 2);
@@ -1093,6 +1103,39 @@ function OutputRegenerateModal({
             </div>
           </div>
         </div>
+        {album ? (
+          <fieldset className="output-album-selection" disabled={busy}>
+            <legend>Select images to regenerate</legend>
+            <div className="output-album-selection-head">
+              <span>{selectedPanelIds.length} / {outputs.length} selected · Other images stay unchanged.</span>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setSelectedPanelIds(
+                  selectedPanelIds.length === outputs.length ? [] : outputs.map((panel) => panel.id)
+                )}
+              >
+                {selectedPanelIds.length === outputs.length ? "Deselect all" : "Select all"}
+              </button>
+            </div>
+            <div className="output-album-selection-list">
+              {previewOutputs.map((panel, index) => (
+                <label key={panel.id} className={selectedPanelIds.includes(panel.id) ? "selected" : ""}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Regenerate image ${index + 1}${index === 0 ? " (cover)" : ""}`}
+                    checked={selectedPanelIds.includes(panel.id)}
+                    onChange={(event) => setSelectedPanelIds((current) =>
+                      event.target.checked ? [...current, panel.id] : current.filter((id) => id !== panel.id)
+                    )}
+                  />
+                  {panel.assetUrl ? <img src={panel.assetUrl} alt="" /> : null}
+                  <span>{index === 0 ? "1 · Cover" : `Image ${index + 1}`}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         <div className="output-chat-composer">
           {referenceAttachment ? (
             <div className="output-chat-attachment">
@@ -1142,7 +1185,7 @@ function OutputRegenerateModal({
               type="button"
               aria-label={album ? "Regenerate album" : "Regenerate image"}
               disabled={
-                busy || attaching || (!isFirstUgcThumbnail && !prompt.trim())
+                busy || attaching || (album && !selectedPanelIds.length) || (!isFirstUgcThumbnail && !prompt.trim())
               }
               onClick={() => void handleRegenerate()}
             >

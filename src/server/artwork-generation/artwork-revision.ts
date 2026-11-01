@@ -9,13 +9,14 @@ import {
 import type { ArtworkStorageClient } from "./artwork-generation-types.js";
 import { persistArtworkOutput } from "./artwork-persistence.js";
 import { composeImagePrompt } from "./prompt-runtime.js";
-import { resolveReferenceImages } from "./reference-images.js";
+import { normalizeReferenceImageForOpenAI, resolveReferenceImages } from "./reference-images.js";
 import {
   editImage,
   editImageWithAspectRatio,
   gptImageAspectRatioForOutputSize
 } from "./openai-images-client.js";
 import { splitAlbumMaster } from "./album-master.js";
+import { albumPanelSize, composeAlbumPreview, prepareAlbumPanel } from "./album-panels.js";
 import { planArtworkRevision } from "./design-system-flow-agent.js";
 
 const REVISION_PLANNING_MODEL = "openai/gpt-5.6-sol";
@@ -81,11 +82,52 @@ export async function reviseAlbumArtworkOutputs(
   const { input, model, storage, debugLogDirectory, writeDebugLog } = options;
   if (!input.album) throw new Error("Album revision details are required.");
   const album = input.album;
-  const { image, effectiveInstructions } = await generateRevisedArtwork(
-    options
-  );
-  const imageBytes = Buffer.from(image.base64, "base64");
-  const panels = await splitAlbumMaster(imageBytes, album.format);
+  // Older clients only supply the saved master. Split that source BEFORE editing;
+  // never crop a newly generated multi-panel image.
+  const sources = album.sourceImageUrls
+    ? await resolveReferenceImages(album.sourceImageUrls.map((url, index) => ({
+        kind: "url" as const, url, label: `Album panel ${index + 1}`
+      })), options.fetchImpl, storage, options.supabaseUrl, false)
+    : await (async () => {
+        if (!input.sourceImageUrl) throw new Error("Album source artwork is required.");
+        const [master] = await resolveReferenceImages([
+          { kind: "url", url: input.sourceImageUrl }
+        ], options.fetchImpl, storage, options.supabaseUrl);
+        if (!master) throw new Error("Could not load the Album source artwork.");
+        return (await splitAlbumMaster(master.bytes, album.format)).map(panel => ({
+          bytes: panel.bytes, mimeType: "image/png", label: `Album panel ${panel.index}`
+        }));
+      })();
+  if (sources.length !== album.outputIds.length) throw new Error("Incomplete Album source images.");
+  const additionalReferences = await resolveReferenceImages(input.referenceImages ?? [],
+    options.fetchImpl, storage, options.supabaseUrl);
+  const panels: { index: number; bytes: Buffer; model?: string; mimeType?: string }[] = [];
+  const effectiveInstructions = input.instructions;
+  for (const [offset, source] of sources.entries()) {
+    const index = offset + 1;
+    if (album.selectedOutputIds && !album.selectedOutputIds.includes(album.outputIds[offset]!)) {
+      // Keep album versions in sync while preserving unselected image bytes exactly.
+      panels.push({ index, bytes: source.bytes, mimeType: source.mimeType });
+      continue;
+    }
+    const size = albumPanelSize(album.format, index);
+    const prompt = composeImagePrompt([
+      buildArtworkRevisionPrompt(effectiveInstructions),
+      `Image 1 is ONLY panel ${index} of ${sources.length} (${index === 1 ? "cover" : index === sources.length ? "closing panel" : "supporting panel"}). Apply the request only where it concerns this panel. Preserve this panel unchanged when the request concerns another panel.`,
+      "Return one complete standalone image, never a grid or collage. Preserve this panel's original content and visual identity. Keep all intended text, logo and CTA fully visible inside the canvas. Do not move content from another panel into this one."
+    ]);
+    const references = [await normalizeReferenceImageForOpenAI(source), ...additionalReferences];
+    const debug = buildImageRequestDebugBundle({ model, runId: input.runId,
+      hook: { id: `${input.directionId}-album-${index}` }, prompt, size,
+      quality: "medium", references });
+    await writeDebugLog(debugLogDirectory, debug.entry, debug.assets);
+    const revised = await editImage({ apiKey: options.apiKey, model, prompt, size,
+      quality: input.mode === "placeholder" ? "low" : "medium",
+      referenceImages: references, fetchImpl: options.fetchImpl });
+    const bytes = await prepareAlbumPanel(Buffer.from(revised.base64, "base64"), size, index);
+    panels.push({ index, bytes, model: revised.model ?? model });
+  }
+  const imageBytes = await composeAlbumPreview(panels, album.format);
   const persistenceInput = {
     runId: input.runId,
     brand: { id: input.clientId }
@@ -97,9 +139,9 @@ export async function reviseAlbumArtworkOutputs(
     directionId: input.directionId,
     assetVersion: input.assetVersion,
     format: input.format,
-    model: image.model ?? model,
+    model,
     imageBytes,
-    mimeType: image.mimeType,
+    mimeType: "image/png",
     storage,
     debugLogDirectory,
     writeDebugLog
@@ -115,9 +157,9 @@ export async function reviseAlbumArtworkOutputs(
         directionId: input.directionId,
         assetVersion: input.assetVersion,
         format: input.format,
-        model: image.model ?? model,
+        model: panel.model ?? model,
         imageBytes: panel.bytes,
-        mimeType: "image/png",
+        mimeType: panel.mimeType ?? "image/png",
         storage,
         debugLogDirectory,
         writeDebugLog
