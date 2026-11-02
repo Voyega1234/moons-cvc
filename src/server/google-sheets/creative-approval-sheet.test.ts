@@ -19,6 +19,12 @@ function row(overrides: Record<number, string> = {}) {
 }
 
 describe("Creative Approval row selection", () => {
+  it("treats empty tabs and unsupported columns as optional context", () => {
+    for (const rows of [[], [[cell("Notes")]], [[cell("STATUS")], [cell("Caption")]]]) {
+      expect(selectCreativeApprovalRows(rows)).toEqual([]);
+      expect(selectAdsPostRows(rows)).toEqual([]);
+    }
+  });
   it("uses the latest populated revision and keeps prior feedback and matching caption", () => {
     const result = selectCreativeApprovalRows([...headers, row({ 8: "ระบุขนาดให้ชัด", 10: image("revision1"), 12: "Revised caption", 13: "ราคาไม่ตรงสินค้า", 16: image("revision2") })]);
     expect(result).toEqual([{ rowNumber: 3, label: "AW1", status: "Ads Active", version: 2, imageUrl: image("revision2"), caption: "Revised caption", feedback: ["ระบุขนาดให้ชัด", "ราคาไม่ตรงสินค้า"] }]);
@@ -77,6 +83,25 @@ describe("Ads Post row selection", () => {
 });
 
 describe("Creative Approval Google reader", () => {
+  it.each(["Creative Approval", "Ads Post"])("keeps usable images when the other %s tab has no artwork columns", async unsupported => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const range = url.searchParams.get("ranges");
+      if (!range) return Response.json({ sheets: [
+        { properties: { title: "Creative Approval", sheetId: 1 } },
+        { properties: { title: "Ads Post", sheetId: 2 } }
+      ] });
+      const title = range.includes("Creative Approval") ? "Creative Approval" : "Ads Post";
+      const values = title === unsupported ? [[cell("STATUS")], [cell("Caption only")]]
+        : title === "Creative Approval" ? [...headers, row()]
+        : [...adsHeaders, ["Active", "", "Dark Post", "", "", image("ad")].map(cell)];
+      return Response.json({ sheets: [{ data: [{ rowData: values.map(values => ({ values })) }] }] });
+    });
+    const result = await readCreativeApprovalSheet({ sheetUrl: "https://docs.google.com/spreadsheets/d/portal/edit", accessToken: "token", fetchImpl });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.sheetTitle).not.toBe(unsupported);
+    expect(result.sources.find(source => source.sheetTitle === unsupported)?.candidateCount).toBe(0);
+  });
   it("reads only the metadata-derived tab and bounded range, regardless of the URL gid", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(Response.json({ sheets: [{ properties: { title: "Creative Approval", sheetId: 42, gridProperties: { rowCount: 366, columnCount: 21 } } }] }))
       .mockResolvedValueOnce(Response.json({ sheets: [{ data: [{ rowData: [...headers, row()].map(values => ({ values })) }] }] }));

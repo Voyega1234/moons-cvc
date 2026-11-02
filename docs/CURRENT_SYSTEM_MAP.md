@@ -101,6 +101,9 @@ images (up to 100 image entries, no recursive folder traversal). The final
 sample interleaves both sources, deduplicates image IDs and remains capped at
 six images total. Each example retains its exact tab URL, row and folder/file
 provenance. Source summaries distinguish missing tabs from no usable images.
+Missing/empty tabs or layouts without status/artwork-link columns provide no
+examples and are skipped independently, so an unsupported Ads Post layout cannot
+discard valid Creative Approval examples (or vice versa).
 
 `creative-approval-analyzer.ts` downloads image bytes through the Drive API with
 the user's Google token and sends high-detail images to the configured OpenRouter
@@ -116,7 +119,11 @@ re-read. The doc is updated only after a complete successful extraction and is
 injected into the same run's Hook input before model comparisons start. No new
 database table or pre-Hook vision call is needed for unchanged examples. Missing
 tabs/eligible images produce an empty source document; access/provider failures
-surface without overwriting the previous document. OAuth now requests read-only
+do not overwrite the previous document. This enrichment is optional: initial
+Hook generation, more ideas and rewrites continue using existing brand context
+when the import fails, with a passive fallback status instead of an error gate.
+Hook model/authentication failures still fail normally; the optional-source
+fallback does not change API authorization or persistence checks. OAuth requests read-only
 Sheets and Drive scopes; existing accounts may need the Brief's Reconnect Google
 action once. Source examples guide style only; they do not establish team-wide
 preferences, performance, or current prices, offers and claims.

@@ -54,6 +54,25 @@ describe("Creative Approval endpoint", () => {
     expect(deps.fetchImpl.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
 
+  it("returns an empty optional context when Ads Post exists without artwork columns", async () => {
+    const deps = dependencies();
+    const original = deps.fetchImpl.getMockImplementation()!;
+    deps.fetchImpl.mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.hostname !== "sheets.googleapis.com") return original(input, init);
+      if (!url.searchParams.has("ranges")) return Response.json({ sheets: [{ properties: { title: "Ads Post", sheetId: 2 } }] });
+      return Response.json({ sheets: [{ data: [{ rowData: [
+        { values: [{ formattedValue: "Status" }] },
+        { values: [{ formattedValue: "Caption only" }] }
+      ] }] }] });
+    });
+    const response = await handleCreativeApprovalRequest({ request: request(), env, ...deps });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(JSON.parse(payload.document.description)).toMatchObject({ examples: [], sources: [{ sheetTitle: "Ads Post", candidateCount: 0, imageCount: 0 }] });
+    expect(deps.analyze).toHaveBeenCalledWith(expect.objectContaining({ rows: [] }));
+  });
+
   it("preserves the previous document after an analysis failure and rejects missing Google access", async () => {
     const deps = dependencies({ existing: [document] });
     deps.analyze.mockRejectedValue(new Error("Cannot read artwork"));

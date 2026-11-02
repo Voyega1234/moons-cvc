@@ -32,7 +32,9 @@ describe("Creative Approval user status", () => {
     const view = render(<CreativeApprovalStatus brand={brand} checking />);
     expect(screen.getByRole("status").textContent).toContain("กำลังตรวจ Creative Approval");
     view.rerender(<CreativeApprovalStatus brand={brand} failed />);
-    expect(screen.getByRole("status").textContent).toContain("อ่าน Creative Approval / Ads Post ไม่สำเร็จ");
+    expect(screen.getByRole("status").textContent).toContain("ใช้ข้อมูลแบรนด์ที่มีอยู่และสร้าง Hook ต่อ");
+    expect(screen.getByRole("status").textContent).not.toContain("ยังสร้าง Hook ต่อไม่ได้");
+    expect(screen.getByRole("status").classList.contains("error")).toBe(false);
     view.rerender(<CreativeApprovalStatus brand={withExamples([])} />);
     expect(screen.getByRole("status").textContent).toContain("ผลตรวจเดิมยังไม่มีภาพที่อ่านได้");
   });

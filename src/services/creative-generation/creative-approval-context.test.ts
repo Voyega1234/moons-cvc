@@ -44,8 +44,9 @@ describe("Hook Creative Approval context", () => {
     expect(requireGoogleProviderToken).not.toHaveBeenCalled();
   });
 
-  it("surfaces sync failures rather than generating with stale style context", async () => {
+  it("reports optional sync failures to the caller without modifying existing brand context", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ok: false, error: "Reconnect Google" }, { status: 403 })));
     await expect(withCreativeApprovalContext(brand, "run-1")).rejects.toThrow("Reconnect Google");
+    expect(brand.library.docs).toEqual([{ id: "brief", title: "Brief", description: "Keep this" }]);
   });
 });

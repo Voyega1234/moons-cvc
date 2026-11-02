@@ -72,14 +72,36 @@ describe("useGenerateHooks harness resilience", () => {
     expect(brand.library.docs).toEqual([]);
   });
 
-  it("surfaces context import errors before calling idea models", async () => {
-    const state = createInitialWorkflowState({ id: "style-error-run", now: "2026-11-02T00:00:00Z" });
-    vi.mocked(withCreativeApprovalContext).mockRejectedValue(new Error("Reconnect Google"));
+  it.each(["Ads Post has no Artwork URL / AW Link columns.", "Reconnect Google", "Creative Approval Google read failed: HTTP 404", "Cannot read artwork"])("continues with existing brand context when the optional import fails: %s", async message => {
+    const document = { id: "saved", title: "Existing brand context", description: "Keep this" };
+    const brand: Brand = { id: "brand", name: "Brand", category: "", initials: "B", mappingClientPortalUrl: "https://docs.google.com/spreadsheets/d/portal/edit", library: { brand: [], products: [], refs: [], docs: [document] }, memory: { working: [], avoid: [] } };
+    const state = { ...createInitialWorkflowState({ id: "style-error-run", now: "2026-11-02T00:00:00Z", brand }), hookGenerationModels: ["google/gemini-3.8-flash"] };
+    vi.mocked(withCreativeApprovalContext).mockRejectedValue(new Error(message));
+    vi.mocked(generateDirectionsWithHarness).mockResolvedValue([buildDirectionFixtures("Fallback")[0]!]);
+    const { result } = renderHook(() => {
+      const [current, dispatch] = useReducer(workflowReducer, state);
+      return { ...useGenerateHooks(current, dispatch), state: current };
+    });
+    act(() => result.current.generate());
+    await waitFor(() => expect(generateDirectionsWithHarness).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(generateDirectionsWithHarness).toHaveBeenCalledWith(expect.objectContaining({ run: expect.objectContaining({ brand }) }));
+    expect(result.current.state.brand?.library.docs).toEqual([document]);
+    expect(result.current.state.directions).toHaveLength(1);
+    expect(result.current.creativeApprovalFailed).toBe(true);
+    expect(result.current.checkingCreativeApproval).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("still surfaces a real Hook failure after an optional context failure", async () => {
+    const state = { ...createInitialWorkflowState({ id: "model-error-run", now: "2026-11-02T00:00:00Z" }), hookGenerationModels: ["google/gemini-3.8-flash"] };
+    vi.mocked(withCreativeApprovalContext).mockRejectedValue(new Error("Cannot read optional sheet"));
+    vi.mocked(generateDirectionsWithHarness).mockRejectedValue(new Error("Unauthorized"));
     const dispatch = vi.fn();
     const { result } = renderHook(() => useGenerateHooks(state, dispatch));
     act(() => result.current.generate());
-    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: "fail-idea-generation", message: "Reconnect Google" }));
-    expect(generateDirectionsWithHarness).not.toHaveBeenCalled();
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: "fail-idea-generation", message: "Unauthorized" }));
+    expect(generateDirectionsWithHarness).toHaveBeenCalledTimes(1);
   });
 
   it("starts all five OpenRouter models concurrently without preliminary Research", async () => {

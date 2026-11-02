@@ -173,9 +173,10 @@ async function generateDirectionsForState(
       if (brand && brand !== state.brand) onContextReady?.(brand);
       state = { ...state, brand };
       if (canRead) onContextStatus?.("ready");
-    } catch (error) {
+    } catch {
       if (canRead) onContextStatus?.("failed");
-      throw error;
+      // Portal examples enrich the brief; their availability must not gate Hook generation.
+      console.warn("Optional Creative Approval / Ads Post context could not be refreshed; using existing brand context.");
     }
   }
   const models = selectedHookGenerationModels(state);

@@ -111,13 +111,13 @@ export async function readCreativeApprovalSheet({
 
 export function selectCreativeApprovalRows(rows: readonly (readonly SheetCell[])[], rowNumbers?: readonly number[]): CreativeApprovalRow[] {
   const headerIndex = rows.findIndex(row => row.some(cell => /^status$/i.test(cellText(cell))));
-  if (headerIndex < 0) throw new Error("Creative Approval has no STATUS header.");
+  if (headerIndex < 0) return [];
   const header = rows[headerIndex]!;
   const detailHeader = rows[headerIndex + 1] ?? [];
   const statusIndex = header.findIndex(cell => /^status$/i.test(cellText(cell)));
   const typeIndex = header.findIndex(cell => /^type$/i.test(cellText(cell)));
   const imageColumns = detailHeader.flatMap((cell, index) => /^image\s*link$/i.test(cellText(cell)) ? [index] : []);
-  if (!imageColumns.length) throw new Error("Creative Approval has no IMAGE LINK columns.");
+  if (!imageColumns.length) return [];
   const selected: CreativeApprovalRow[] = [];
   for (let index = headerIndex + 2; index < rows.length; index += 1) {
     const row = rows[index]!;
@@ -153,7 +153,7 @@ function normalizeSheetTitle(title: string): string {
 
 export function selectAdsPostRows(rows: readonly (readonly SheetCell[])[], rowNumbers?: readonly number[]): CreativeApprovalRow[] {
   const headerIndex = rows.findIndex(row => row.some(cell => /^status$/i.test(cellText(cell))));
-  if (headerIndex < 0) throw new Error("Ads Post has no STATUS header.");
+  if (headerIndex < 0) return [];
   const header = rows[headerIndex]!;
   const detail = rows[headerIndex + 1] ?? [];
   const statusIndex = header.findIndex(cell => /^status$/i.test(cellText(cell)));
@@ -161,7 +161,7 @@ export function selectAdsPostRows(rows: readonly (readonly SheetCell[])[], rowNu
   const captionIndex = header.findIndex(cell => /^caption(?:\s|$)/i.test(cellText(cell)));
   const labelIndex = header.findIndex(cell => /ad name/i.test(cellText(cell)));
   const imageColumns = header.flatMap((cell, index) => /^(?:artwork url|aw link|image link)$/i.test(cellText(cell)) || /^(?:artwork url|aw link|image link)$/i.test(cellText(detail[index])) ? [index] : []);
-  if (!imageColumns.length) throw new Error("Ads Post has no Artwork URL / AW Link columns.");
+  if (!imageColumns.length) return [];
   const selected: CreativeApprovalRow[] = [];
   for (let index = headerIndex + 2; index < rows.length; index += 1) {
     const row = rows[index]!;
