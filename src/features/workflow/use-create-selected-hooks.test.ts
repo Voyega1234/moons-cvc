@@ -4,6 +4,8 @@ import { generateArtworkForSelectedHooks } from "../../services/artwork-generati
 import { createInitialWorkflowState } from "./reducer";
 import { buildDirectionFixtures } from "./test-fixtures";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
+import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval";
+import { defaultArtworkContextSelection } from "./model";
 
 vi.mock("../../services/artwork-generation/openai-image-generation", () => ({
   artworkReferencesFromSelections: vi.fn(() => []),
@@ -19,6 +21,27 @@ beforeEach(() => {
 });
 
 describe("useCreateSelectedHooks", () => {
+  it("refreshes CI observations from Brand Docs and respects the CI and color context switches", async () => {
+    vi.mocked(generateArtworkForSelectedHooks).mockResolvedValue([]);
+    const document = { id: "style", title: CREATIVE_APPROVAL_DOCUMENT_TITLE, description: JSON.stringify({ examples: [{ visualStyle: { colors: ["dark blue"], typography: ["bold Thai"], layout: [], imagery: [], moodTone: ["confident"], brandElements: [] } }] }) };
+    const repository = { listBrandRules: vi.fn().mockResolvedValue([]), listGuidelines: vi.fn().mockResolvedValue([document]) };
+    const state = createInitialWorkflowState({ id: "fresh-ci-run", now: "2026-11-02T00:00:00Z", brand: { id: "brand", name: "Brand", category: "", initials: "B", library: { brand: [], products: [], docs: [], refs: [] }, memory: { working: [], avoid: [] } } });
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useCreateSelectedHooks(state, dispatch, repository));
+    act(() => result.current.create());
+    await waitFor(() => expect(generateArtworkForSelectedHooks).toHaveBeenCalledTimes(1));
+    expect(generateArtworkForSelectedHooks).toHaveBeenLastCalledWith(expect.objectContaining({ run: expect.objectContaining({ brand: expect.objectContaining({ library: expect.objectContaining({ docs: [document] }) }) }) }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "sync-brand-guidelines", items: [document] });
+    act(() => result.current.create({ ...defaultArtworkContextSelection, brandColors: false }));
+    await waitFor(() => expect(generateArtworkForSelectedHooks).toHaveBeenCalledTimes(2));
+    const filtered = vi.mocked(generateArtworkForSelectedHooks).mock.lastCall?.[0].run.brand?.library.docs[0];
+    expect(JSON.parse(filtered!.description).examples[0].visualStyle).toMatchObject({ colors: [], typography: ["bold Thai"], moodTone: ["confident"] });
+    expect(JSON.parse(document.description).examples[0].visualStyle.colors).toEqual(["dark blue"]);
+    act(() => result.current.create({ ...defaultArtworkContextSelection, brandCi: false }));
+    await waitFor(() => expect(generateArtworkForSelectedHooks).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(generateArtworkForSelectedHooks).mock.lastCall?.[0].run.brand?.library.docs).toEqual([]);
+  });
+
   it("keeps generation blocked after the Hooks stage remounts", async () => {
     let finishGeneration: ((outputs: []) => void) | undefined;
     const pendingGeneration = new Promise<[]>((resolve) => {

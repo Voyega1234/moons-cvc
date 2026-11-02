@@ -7,6 +7,7 @@ import type {
   ImagePromptProvider
 } from "./image-prompt-agent.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
+import { isCreativeApprovalStyleDocument } from "./creative-approval-visual-context.js";
 
 type FetchLike = typeof fetch;
 
@@ -336,7 +337,7 @@ export function buildCreativeStrategyEvidence(
         ["offer", "proof", "differentiator"]
       )
     ),
-    ...input.brandLibrary.docs.map((item, index) =>
+    ...input.brandLibrary.docs.filter(item => !isCreativeApprovalStyleDocument(item)).map((item, index) =>
       evidenceItem(
         `document:${index}`,
         "document",

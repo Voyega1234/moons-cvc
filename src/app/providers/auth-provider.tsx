@@ -21,7 +21,8 @@ import {
 
 const PRODUCTION_AUTH_REDIRECT_URL = "https://creative-compass-os.vercel.app/";
 export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/spreadsheets.readonly"
+  "https://www.googleapis.com/auth/spreadsheets.readonly",
+  "https://www.googleapis.com/auth/drive.readonly"
 ].join(" ");
 
 interface AuthContextValue {
@@ -236,7 +237,7 @@ function SupabaseAuthGate({ children }: { children: ReactNode }) {
           <div className="auth-google-access">
             <b>Only @convertcake.com accounts</b>
             <span>
-              Used only to read onboarding questionnaire Google Sheets.
+              Used to read Questionnaire sheets and artwork linked from Creative Approval / Ads Post.
             </span>
           </div>
 

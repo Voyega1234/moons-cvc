@@ -26,3 +26,7 @@ export function useBrandMemoryRepository(): BrandMemoryRepository {
   }
   return repository;
 }
+
+export function useOptionalBrandMemoryRepository(): BrandMemoryRepository | null {
+  return useContext(BrandMemoryContext);
+}

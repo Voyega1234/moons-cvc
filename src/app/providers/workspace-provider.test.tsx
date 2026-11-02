@@ -6,6 +6,7 @@ import {
   screen,
   waitFor
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceState } from "../../features/workflow/model";
 import {
@@ -69,6 +70,22 @@ function WorkspaceProbe() {
 }
 
 describe("WorkspaceProvider", () => {
+  it("shares the initial cloud read during Strict Mode replay without autosaving before hydration", async () => {
+    const persisted = createInitialWorkspaceState({ runId: "strict-run", now: "2026-11-02T00:00:00Z" });
+    let resolveLoad: (value: WorkspaceState) => void = () => {};
+    const repository = {
+      load: vi.fn(() => new Promise<WorkspaceState>(resolve => { resolveLoad = resolve; })),
+      save: vi.fn(async () => undefined),
+      clear: vi.fn(async () => undefined)
+    };
+    render(<StrictMode><WorkspaceProvider repository={repository}><WorkspaceProbe /></WorkspaceProvider></StrictMode>);
+    expect(repository.load).toHaveBeenCalledTimes(1);
+    expect(repository.save).not.toHaveBeenCalled();
+    await act(async () => resolveLoad(persisted));
+    expect(await screen.findByText("strict-run")).toBeTruthy();
+    await waitFor(() => expect(repository.save).toHaveBeenCalledWith(persisted));
+  });
+
   it("loads persisted state before starting autosave", async () => {
     const persisted = createInitialWorkspaceState({
       runId: "persisted-run",

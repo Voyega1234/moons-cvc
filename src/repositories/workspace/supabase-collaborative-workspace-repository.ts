@@ -55,7 +55,6 @@ export class SupabaseCollaborativeWorkspaceRepository
   private async loadWorkspace(
     includeArchived: boolean
   ): Promise<WorkspaceState | null> {
-    const legacyWorkspace = await this.legacy.load();
     let query = this.client
       .schema("moons")
       .from("runs")
@@ -63,9 +62,10 @@ export class SupabaseCollaborativeWorkspaceRepository
       .not("workspace_run_id", "is", null)
       .not("snapshot", "is", null);
     if (!includeArchived) query = query.neq("status", "archived");
-    const { data, error } = await query.order("updated_at", {
-      ascending: false
-    });
+    const [legacyWorkspace, { data, error }] = await Promise.all([
+      this.legacy.load(),
+      query.order("updated_at", { ascending: false })
+    ]);
 
     if (error) throw error;
     const sharedRuns = (data ?? []).flatMap((row) => {

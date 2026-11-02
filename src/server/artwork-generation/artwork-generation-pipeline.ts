@@ -63,6 +63,7 @@ import {
   type ImagePromptProvider
 } from "./image-prompt-agent.js";
 import { buildReferenceLedImagePrompt } from "./reference-led-image-prompt.js";
+import { buildCreativeApprovalVisualContext, buildCreativeApprovalVisualInstruction, isCreativeApprovalStyleDocument } from "./creative-approval-visual-context.js";
 import { interpretReferenceDesign } from "./reference-interpreter.js";
 import {
   enrichCreativeStrategy,
@@ -787,10 +788,11 @@ async function generateOutputForHook({
       : !input.referenceLed && input.artworkMode === "reference-library"
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
+  const brandVisualInstruction = buildCreativeApprovalVisualInstruction(input);
   if (isAlbum && independentAlbumPanels) {
     const assetVersion = input.assetVersion ?? 1;
     const { panels, masterBytes } = await generateIndependentAlbumPanels({
-      hook, format: albumFormat, prompt: composeImagePrompt(promptParts),
+      hook, format: albumFormat, prompt: composeImagePrompt(promptParts, brandVisualInstruction),
       usePlaceholderCopy: input.usePlaceholderCopy,
       references: generationReferences, apiKey: imageApiKey, model, runId: input.runId,
       fetchImpl, debugLogDirectory, writeDebugLog,
@@ -817,7 +819,7 @@ async function generateOutputForHook({
     const assetVersion = input.assetVersion ?? 1;
     const masterPrompt = composeImagePrompt(
       promptParts,
-      buildAlbumMasterInstruction(hook, albumFormat)
+      [brandVisualInstruction, buildAlbumMasterInstruction(hook, albumFormat)].filter(Boolean).join("\n\n")
     );
     const masterHook = { ...hook, id: `${hook.id}-album-master` };
     const imageRequestDebug = buildImageRequestDebugBundle({
@@ -931,7 +933,7 @@ async function generateOutputForHook({
     );
   }
 
-  const imagePrompt = composeImagePrompt(promptParts);
+  const imagePrompt = composeImagePrompt(promptParts, brandVisualInstruction);
   const imageRequestDebug = buildImageRequestDebugBundle({
     model,
     runId: input.runId,
@@ -1063,7 +1065,8 @@ async function applyPostGenerationVisualQc({
         headline: hook.hook,
         concept: hook.concept,
         setDirection: setDirection ?? "",
-        shotOpportunity: shotOpportunity ?? ""
+        shotOpportunity: shotOpportunity ?? "",
+        brandVisualIdentity: buildCreativeApprovalVisualContext(input)
       },
       writeTrace: async (trace) => {
         await writeDebugLog(
@@ -1614,6 +1617,7 @@ async function buildDirectDesignSystemPrompt({
   const factualDocumentItems = input.brandLibrary.docs.filter(
     (item) =>
       !isEditableBrandGuidelineItem(item) &&
+      !isCreativeApprovalStyleDocument(item) &&
       !isRepeatedCampaignDirectionItem(item)
   );
   const relevantProductOrService = selectRelevantProductOrServiceTruth({
@@ -1647,6 +1651,7 @@ async function buildDirectDesignSystemPrompt({
    * - brandMemory.working visual patterns
    */
   const imageTruthContext = {
+    observedBrandVisualIdentity: buildCreativeApprovalVisualContext(input),
     brand: input.brand
       ? {
           name: compactPromptText(input.brand.name, 180),
@@ -1869,6 +1874,7 @@ async function buildDirectFinalArtworkPrompt({
     guidelineItems.map((item) => item.id).filter(Boolean)
   );
   const brandContext = {
+    observedBrandVisualIdentity: buildCreativeApprovalVisualContext(input),
     brand: input.brand
       ? {
           name: input.brand.name,

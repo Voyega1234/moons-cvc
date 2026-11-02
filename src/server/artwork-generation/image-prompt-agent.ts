@@ -9,6 +9,7 @@ import {
 } from "../../domain/creative-run.js";
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
+import { buildCreativeApprovalVisualContext } from "./creative-approval-visual-context.js";
 
 type FetchLike = typeof fetch;
 
@@ -641,6 +642,7 @@ function renderLegacyV6CreativeConceptPrompt(
     (item) => !selectedProductIds.size || (item.id && selectedProductIds.has(item.id))
   );
   const runtimeInput = {
+    observedBrandVisualIdentity: buildCreativeApprovalVisualContext(input),
     brand: {
       name: input.brand?.name ?? "OMIT",
       category: input.brand?.category ?? "OMIT",
@@ -801,6 +803,7 @@ export function buildCompactCampaignInput(input: ImagePromptAgentInput) {
           isStandardStyleReferenceRole(reference.role)
         );
   return {
+    observedBrandVisualIdentity: buildCreativeApprovalVisualContext(input),
     brand: {
       name: input.brand?.name ?? "Unknown",
       category: input.brand?.category ?? "Unknown",
@@ -1113,6 +1116,7 @@ function buildReferenceLibraryRuntimeInputBlock(
       }
     : null;
   const runtimeInput = {
+    observedBrandVisualIdentity: buildCreativeApprovalVisualContext(input),
     workingBrief: {
       priority: "highest",
       instruction: input.brief || "Not provided."

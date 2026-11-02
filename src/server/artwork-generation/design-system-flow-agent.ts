@@ -152,6 +152,7 @@ export async function reviewGeneratedArtwork({
     concept: string;
     setDirection: string;
     shotOpportunity: string;
+    brandVisualIdentity?: unknown;
   };
   writeTrace?: DesignSystemFlowTraceWriter;
   loadPrompt?: () => Promise<string>;

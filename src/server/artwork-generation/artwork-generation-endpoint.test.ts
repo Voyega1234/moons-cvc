@@ -1,3 +1,4 @@
+import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval";
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
@@ -1276,6 +1277,33 @@ describe("handleArtworkGenerationRequest", () => {
         String(url).includes("/v1/responses")
       )
     ).toBe(false);
+  });
+
+  it("passes observed CI to the final image model without reusing historical campaign copy", async () => {
+    const requests: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) return Response.json({ email: "team@convertcake.com" });
+      if (href.includes("/rest/v1/")) return Response.json([]);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push({ url: href, body });
+      if (href.includes("/api/v1/images")) return Response.json({ data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }] });
+      if (href.includes("/v1/responses")) return standardAgentResponse(init);
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const document = { title: CREATIVE_APPROVAL_DOCUMENT_TITLE, description: JSON.stringify({ sourceUrl: "https://docs.google.com/spreadsheets/d/portal/edit", examples: [{ rowNumber: 12, status: "Published", version: 1, headline: "OLD HEADLINE", caption: "OLD OFFER 1999", visualStyle: { colors: ["soft white"], typography: ["bold Thai"], layout: ["open whitespace"], imagery: ["natural photography"], moodTone: ["quiet and reassuring"], brandElements: ["logo upper right"] }, uncertainties: [] }] }) };
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", { method: "POST", headers: { authorization: "Bearer user-token" }, body: JSON.stringify({ ...requestBody, brand: { ...requestBody.brand, colors: ["#FFFFFF"] }, brandLibrary: { brand: [{ title: "Brand CI Guideline", description: "Official white and restrained typography" }], products: [], docs: [document], refs: [] } }) }),
+      env: { OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon-key" },
+      fetchImpl: fetchMock as typeof fetch,
+      createStorageClient: () => fakeStorage().client
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const finalPrompt = requests.find(item => item.url.includes("/api/v1/images"))?.body.prompt as string;
+    expect(finalPrompt).toContain("quiet and reassuring");
+    expect(finalPrompt).toContain("Official white and restrained typography");
+    expect(finalPrompt).not.toContain("OLD OFFER");
+    expect(finalPrompt).not.toContain("OLD HEADLINE");
   });
 
   it("generates and uploads artwork for each selected hook", async () => {

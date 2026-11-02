@@ -73,12 +73,19 @@ export function WorkspaceProvider({
   const workspaceRef = useRef<WorkspaceState | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveVersionRef = useRef(0);
+  const initialLoadRef = useRef<{
+    repository: WorkspaceRepository;
+    promise: Promise<WorkspaceState | null>;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
-
-    void repository
-      .load()
+    // Strict Mode replays this effect locally. Share the in-flight read within
+    // this provider instance, never across signed-in users or repositories.
+    if (initialLoadRef.current?.repository !== repository) {
+      initialLoadRef.current = { repository, promise: repository.load() };
+    }
+    void initialLoadRef.current.promise
       .then((persisted) => {
         if (!active) return;
         setWorkspace(

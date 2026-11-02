@@ -49,6 +49,21 @@ describe("mergeCollaborativeWorkspace", () => {
 });
 
 describe("SupabaseCollaborativeWorkspaceRepository.loadLatest", () => {
+  it("starts shared reads before legacy hydration finishes and preserves both sources", async () => {
+    const legacy = createInitialWorkspaceState({ runId: "private-draft", now: "2026-11-02T00:00:00Z" });
+    const shared = createInitialWorkspaceState({ runId: "shared-run", now: "2026-11-02T01:00:00Z" });
+    let resolveLegacy: (value: WorkspaceState) => void = () => {};
+    const legacyRepository = { ...memoryRepository(), load: vi.fn(() => new Promise<WorkspaceState>(resolve => { resolveLegacy = resolve; })) };
+    const { client } = createLoadClient([sharedRunRow(shared)]);
+    const schema = vi.spyOn(client, "schema");
+    const loading = new SupabaseCollaborativeWorkspaceRepository(legacyRepository, client).load();
+    expect(schema).toHaveBeenCalledWith("moons");
+    resolveLegacy(legacy);
+    const result = await loading;
+    expect(result?.runOrder).toEqual(["shared-run", "private-draft"]);
+    expect(result?.activeRunId).toBe("private-draft");
+  });
+
   it("includes an archived cloud snapshot when the user explicitly reloads", async () => {
     const legacy = createInitialWorkspaceState({
       runId: "run-1",

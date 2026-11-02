@@ -7,6 +7,10 @@
     }
   ],
   "functions": {
+    "api/creative-approval.ts": {
+      "includeFiles": "agent_prompt/agent_creative_approval.md",
+      "maxDuration": 300
+    },
     "api/hook-generation-harness.ts": {
       "includeFiles": "{agent_prompt/agent_hook.md,agent_prompt/agent_hook_research.md,agent_prompt/agent_hook_highlight.md,agent_prompt/agent_ugc_script.md,agent_prompt/agent_ugc_brief.md}",
       "maxDuration": 900

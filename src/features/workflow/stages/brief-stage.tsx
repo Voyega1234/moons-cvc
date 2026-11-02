@@ -18,7 +18,8 @@ import type { WorkflowAction, WorkflowState } from "../model";
 import { creativeMixItems, selectedBrandProducts, selectedUploadedMaterials, totalCreativeMixQuantity } from "../model";
 import { workflowActionBlockReason } from "../rules";
 import { presentBrandMemoryText } from "../brand-memory-presentation";
-import { useGenerateHooks } from "../use-generate-hooks";
+import { selectedHookGenerationModels, useGenerateHooks } from "../use-generate-hooks";
+import { CreativeApprovalStatus } from "./creative-approval-status";
 import { BriefConfirmationModal } from "./brief-confirmation-modal";
 import {
   DecisionCard,
@@ -2892,6 +2893,8 @@ function brandAssetFolderSubtreeIds(
 
 export function BriefStage({ state, dispatch }: StageProps) {
   const brandMemoryRepository = useBrandMemoryRepository();
+  const auth = useOptionalAuth();
+  const [googleReconnectPending, setGoogleReconnectPending] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const materialsInitialCategory: ReferenceLibraryCategory | null = null;
@@ -2904,7 +2907,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
     type: "generate-directions",
     directions: []
   });
-  const { generate, loading, error } = useGenerateHooks(state, dispatch);
+  const { generate, loading, error, checkingCreativeApproval, creativeApprovalFailed } = useGenerateHooks(state, dispatch);
   const activeProducts = selectedBrandProducts(state);
   const presentedWorkingSignals = (state.brand?.memory.working ?? [])
     .map((value) => presentBrandMemoryText(value).text)
@@ -3024,27 +3027,30 @@ export function BriefStage({ state, dispatch }: StageProps) {
           >
             ← Back to signal
           </button>
-          <div className="compass-brief-generate-actions">
-            <HookIdeaModeSelect
-              disabled={loading}
-              state={state}
-              dispatch={dispatch}
-            />
-            <HookGenerationModelSelect
-              disabled={loading}
-              state={state}
-              dispatch={dispatch}
-            />
-            <button
-              className="btn orange"
-              type="button"
-              disabled={Boolean(generateBlocked) || loading}
-              title={generateBlocked ?? undefined}
-              onClick={() => setConfirmationOpen(true)}
-            >
-              {loading ? <Spinner /> : null}
-              {loading ? "Generating angles…" : "Review & continue →"}
-            </button>
+          <div className="compass-brief-generation">
+            <CreativeApprovalStatus brand={state.brand} checking={checkingCreativeApproval} failed={creativeApprovalFailed} autoSync={env.dataSource === "supabase" && env.hookGenerationMode === "harness" && selectedHookGenerationModels(state).some(model => model !== "n8n-compass-new")} />
+            <div className="compass-brief-generate-actions">
+              <HookIdeaModeSelect
+                disabled={loading}
+                state={state}
+                dispatch={dispatch}
+              />
+              <HookGenerationModelSelect
+                disabled={loading}
+                state={state}
+                dispatch={dispatch}
+              />
+              <button
+                className="btn orange"
+                type="button"
+                disabled={Boolean(generateBlocked) || loading}
+                title={generateBlocked ?? undefined}
+                onClick={() => setConfirmationOpen(true)}
+              >
+                {loading ? <Spinner /> : null}
+                {loading ? checkingCreativeApproval ? "กำลังอ่าน Creative Approval / Ads Post…" : "Generating angles…" : "Review & continue →"}
+              </button>
+            </div>
           </div>
         </>
       }
@@ -3079,6 +3085,16 @@ export function BriefStage({ state, dispatch }: StageProps) {
         }}
       />
       {error ? <p className="repository-message error">{error}</p> : null}
+      {error && /Google access|Reconnect Google|Continue with Google|session has expired/i.test(error) && auth?.enabled ? (
+        <button className="btn secondary" type="button" disabled={googleReconnectPending} onClick={() => {
+          setGoogleReconnectPending(true);
+          void auth.reconnectGoogle().catch((caught: unknown) => {
+            dispatch({ type: "fail-idea-generation", message: caught instanceof Error ? caught.message : "Could not reconnect Google." });
+          }).finally(() => setGoogleReconnectPending(false));
+        }}>
+          {googleReconnectPending ? "Connecting to Google…" : "Reconnect Google"}
+        </button>
+      ) : null}
       <div className="brief-grid compass-brief-layout">
         <div className="brief-main">
           <section className="compass-workflow-module brief-setup-module">

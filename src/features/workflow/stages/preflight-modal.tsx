@@ -6,6 +6,8 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
+import type { Brand } from "../../../domain/brand";
+import { CreativeApprovalStatus } from "./creative-approval-status";
 import {
   albumFormatPanelCount,
   artworkOutputSizeLabel,
@@ -197,6 +199,7 @@ export function PreflightModal({
   contextSelection = defaultArtworkContextSelection,
   onContextSelectionChange = () => undefined,
   contextAvailability,
+  creativeApprovalBrand,
   artworkImageModel = defaultArtworkImageModel,
   onArtworkImageModelChange,
   outputSize,
@@ -225,6 +228,7 @@ export function PreflightModal({
     brandCiCount: number;
     brandColorCount: number;
   };
+  creativeApprovalBrand?: Brand | null;
   artworkImageModel?: ArtworkImageModel;
   onArtworkImageModelChange: (model: ArtworkImageModel) => void;
   outputSize: ArtworkOutputSize;
@@ -832,6 +836,7 @@ export function PreflightModal({
                   description="Only enabled inputs will be included in the GPT Image 2 request."
                 />
               </header>
+              <CreativeApprovalStatus brand={creativeApprovalBrand} stage="artwork" disabled={!contextSelection.brandCi} />
               <div className="preflight-context-grid">
                 {[
                   {

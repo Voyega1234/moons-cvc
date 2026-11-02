@@ -77,3 +77,30 @@
     min-height: 64px;
   }
 }
+.compass-app .compass-brief-generation {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 76%;
+}
+
+.compass-app .compass-brief-generation .repository-message {
+  margin: 0;
+  max-width: 640px;
+  text-align: right;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .compass-app .compass-brief-generation {
+    width: 100%;
+    max-width: none;
+    align-items: stretch;
+  }
+
+  .compass-app .compass-brief-generation .repository-message {
+    text-align: left;
+  }
+}

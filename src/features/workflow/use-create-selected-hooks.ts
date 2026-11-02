@@ -2,6 +2,7 @@ import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
 import { activeBrandKitItems } from "../../domain/brand";
+import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval";
 import {
   inferredReferenceImageRole,
   normalizeUserSelectableArtworkMode,
@@ -39,7 +40,14 @@ function applyArtworkContextSelection(
             if (!selection.brandCi && !colorRule) return false;
             return true;
           }),
-          docs: selection.brandCi ? run.brand.library.docs : [],
+          docs: selection.brandCi ? run.brand.library.docs.map(item => {
+            if (selection.brandColors || item.title !== CREATIVE_APPROVAL_DOCUMENT_TITLE) return item;
+            try {
+              const context = JSON.parse(item.description);
+              if (!Array.isArray(context.examples)) return item;
+              return { ...item, description: JSON.stringify({ ...context, examples: context.examples.map((example: Record<string, unknown>) => ({ ...example, visualStyle: { ...(example.visualStyle as object), colors: [] } })) }) };
+            } catch { return item; }
+          }) : [],
           refs: selection.imageReferences ? run.brand.library.refs : []
         }
       }
@@ -61,7 +69,7 @@ function applyArtworkContextSelection(
 export function useCreateSelectedHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>,
-  brandMemoryRepository?: Pick<BrandMemoryRepository, "listBrandRules">
+  brandMemoryRepository?: Pick<BrandMemoryRepository, "listBrandRules"> & Partial<Pick<BrandMemoryRepository, "listGuidelines">>
 ) {
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
   const [progress, setProgress] = useState<{
@@ -86,15 +94,17 @@ export function useCreateSelectedHooks(
       const generation = async () => {
         let run = state;
         if (state.brand && brandMemoryRepository) {
-          const items = await brandMemoryRepository.listBrandRules(
-            state.brand.id
-          );
+          const [items, documents] = await Promise.all([
+            brandMemoryRepository.listBrandRules(state.brand.id),
+            brandMemoryRepository.listGuidelines?.(state.brand.id) ?? Promise.resolve(state.brand.library.docs)
+          ]);
           dispatch({ type: "sync-brand-rules", items });
+          if (brandMemoryRepository.listGuidelines) dispatch({ type: "sync-brand-guidelines", items: documents });
           run = {
             ...state,
             brand: {
               ...state.brand,
-              library: { ...state.brand.library, brand: items }
+              library: { ...state.brand.library, brand: items, docs: documents }
             }
           };
         }

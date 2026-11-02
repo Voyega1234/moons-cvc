@@ -7,6 +7,7 @@ import {
 } from "./prompt-context.js";
 import { compactPromptLibrary } from "./prompt-runtime.js";
 import type { ReferenceDesignGrammar } from "./reference-interpreter.js";
+import { buildCreativeApprovalVisualContext } from "./creative-approval-visual-context.js";
 
 export async function buildReferenceLedImagePrompt(
   input: ImagePromptAgentInput,
@@ -40,6 +41,7 @@ export async function buildReferenceLedImagePrompt(
           colors: input.brand?.colors ?? []
         },
         brandCI: {
+          observedVisualIdentity: buildCreativeApprovalVisualContext(input),
           authority: "MANDATORY — overrides every conflicting reference trait",
           guidelines: compactPromptLibrary(brandGuidelines, 4, 1_200),
           brandRules: compactPromptLibrary(input.brandLibrary.brand, 6, 600)

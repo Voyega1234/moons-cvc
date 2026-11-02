@@ -4150,6 +4150,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           directions={preflightDirections}
           fallbackService={state.service}
           context={preflightContext}
+          creativeApprovalBrand={state.brand}
           revisionFeedbackByDirectionId={preflightRevisionFeedback}
           artworkBrief={state.artworkBrief}
           onArtworkBriefChange={(brief) =>

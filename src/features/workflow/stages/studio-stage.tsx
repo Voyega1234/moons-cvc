@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOptionalWorkspace } from "../../../app/providers/workspace-provider";
+import { useOptionalBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import type { WorkflowAction } from "../model";
 import { workflowActionBlockReason } from "../rules";
 import { createStageClientSlideItems, openCreateStageSlidesInGoogleSlides } from "../export-client-slides-pptx";
@@ -30,6 +31,7 @@ export function StudioStage({
   canEdit = true
 }: StageProps & { canEdit?: boolean }) {
   const createCheckpoint = useOptionalWorkspace()?.createCheckpoint;
+  const brandMemoryRepository = useOptionalBrandMemoryRepository();
   const [sendingToQc, setSendingToQc] = useState(false);
   const [sendToQcError, setSendToQcError] = useState<string | null>(null);
   const [slidesImporting, setSlidesImporting] = useState(false);
@@ -61,7 +63,7 @@ export function StudioStage({
     loading: regeneratingAllArtwork,
     error: regenerateAllArtworkError,
     progress: regenerateAllArtworkProgress
-  } = useCreateSelectedHooks(state, dispatch);
+  } = useCreateSelectedHooks(state, dispatch, brandMemoryRepository ?? undefined);
   const creativeCount = reviewCreativeCount(state.outputs);
   const downloadableCount = state.outputs.filter(
     (output) => output.assetUrl

@@ -1,6 +1,9 @@
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { env } from "../../config/env";
+import { withCreativeApprovalContext } from "../../services/creative-generation/creative-approval-context";
+import type { Brand } from "../../domain/brand";
+import { creativeApprovalSourceUrl } from "../../domain/creative-approval";
 import type {
   HookGenerationModel,
   ServiceType
@@ -158,8 +161,23 @@ function generateDirectionsForModel(
 
 async function generateDirectionsForState(
   state: WorkflowState,
-  extraInstructions: string
+  extraInstructions: string,
+  onContextReady?: (brand: Brand) => void,
+  onContextStatus?: (status: "checking" | "ready" | "failed") => void
 ) {
+  if (env.hookGenerationMode === "harness" && selectedHookGenerationModels(state).some(model => model !== "n8n-compass-new")) {
+    const canRead = env.dataSource === "supabase" && !!creativeApprovalSourceUrl(state.brand);
+    if (canRead) onContextStatus?.("checking");
+    try {
+      const brand = await withCreativeApprovalContext(state.brand, state.id);
+      if (brand && brand !== state.brand) onContextReady?.(brand);
+      state = { ...state, brand };
+      if (canRead) onContextStatus?.("ready");
+    } catch (error) {
+      if (canRead) onContextStatus?.("failed");
+      throw error;
+    }
+  }
   const models = selectedHookGenerationModels(state);
   const compared = models.length > 1;
   const directModels = models.filter(
@@ -219,7 +237,9 @@ export function useGenerateHooks(
   state: WorkflowState,
   dispatch: Dispatch<WorkflowAction>
 ) {
+  const [contextImport, setContextImport] = useState<{ runId: string; status: "checking" | "ready" | "failed" } | null>(null);
   const generate = useCallback(() => {
+    setContextImport(null);
     dispatch({ type: "start-idea-generation" });
 
     const extraInstructions = withCreativeMixInstructions(
@@ -228,7 +248,10 @@ export function useGenerateHooks(
     );
 
     const generation = Promise.resolve().then(() =>
-      generateDirectionsForState(state, extraInstructions)
+      generateDirectionsForState(state, extraInstructions,
+        brand => dispatch({ type: "sync-brand-guidelines", items: brand.library.docs }),
+        status => setContextImport({ runId: state.id, status })
+      )
     );
 
     void generation
@@ -250,6 +273,8 @@ export function useGenerateHooks(
   return {
     generate,
     loading: state.ideaGenerationStatus === "running",
+    checkingCreativeApproval: contextImport?.runId === state.id && contextImport.status === "checking" && state.ideaGenerationStatus === "running",
+    creativeApprovalFailed: contextImport?.runId === state.id && contextImport.status === "failed",
     error:
       state.ideaGenerationStatus === "failed"
         ? state.ideaGenerationError
@@ -303,7 +328,8 @@ export function useGenerateMoreHooks(
       );
       const generation = generateDirectionsForState(
         targetedState,
-        combinedInstructions
+        combinedInstructions,
+        brand => dispatch({ type: "sync-brand-guidelines", items: brand.library.docs })
       );
 
       void generation
@@ -390,7 +416,8 @@ export function useRegenerateHook(
 
       const generation = generateDirectionsForState(
         targetedState,
-        extraInstructions
+        extraInstructions,
+        brand => dispatch({ type: "sync-brand-guidelines", items: brand.library.docs })
       );
 
       try {
@@ -510,7 +537,8 @@ export function useRegenerateAllHooks(
           ].join("\n"));
           const generated = await generateDirectionsForState(
             targetedState,
-            extraInstructions
+            extraInstructions,
+            brand => dispatch({ type: "sync-brand-guidelines", items: brand.library.docs })
           );
 
           if (generated.length < originals.length) {

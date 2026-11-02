@@ -35,6 +35,13 @@ The stage IDs are defined in `src/features/workflow/config.ts`:
 `src/app/App.tsx` chooses the visible stage and supplies a run-bound dispatch.
 Async results must continue targeting the run that started the request.
 
+Workspace startup shares the initial load promise within each WorkspaceProvider
+instance so React Strict Mode does not download the same cloud workspace twice.
+The collaborative repository reads legacy workspace state and shared run snapshots
+concurrently, then applies the existing merge/version rules. It still waits for
+both authoritative sources before enabling autosave; it does not expose a stale
+local cache or silently omit projects to make startup appear faster.
+
 ## Behavioral source of truth
 
 | Concern | File |
@@ -51,6 +58,8 @@ Async results must continue targeting the run that started the request.
 | Local Hook generation debug logs | `src/server/hook-generation/hook-generation-debug-log.ts` |
 | Client ingestion and recovery | `src/server/client-ingestion/client-ingestion-harness.ts`, `openai-brand-discovery-search.ts`, `openai-brand-visual-analyzer.ts` |
 | Google Sheet questionnaire extraction | `src/server/google-sheets/mapping-client-sheet.ts`, `questionnaire-extraction-qc-agent.ts` |
+| Creative Approval / Ads Post image-copy context | `src/server/google-sheets/creative-approval-sheet.ts`, `creative-approval-endpoint.ts`, `src/server/client-ingestion/creative-approval-analyzer.ts`, `src/services/creative-generation/creative-approval-context.ts` |
+| Observed CI and mood/tone from portal artwork | `src/server/artwork-generation/creative-approval-visual-context.ts`, `src/features/workflow/use-create-selected-hooks.ts` |
 | AI token/image usage ledger | `src/server/shared/ai-usage-recorder.ts`, `moons.ai_usage_events` |
 | Artwork generation | `src/features/workflow/use-create-selected-hooks.ts` |
 | GPT Luna idea preflight | `stages/preflight-modal.tsx`, `services/quality-check/run-idea-preflight.ts`, `server/quality-check/idea-preflight-endpoint.ts` |
@@ -72,6 +81,70 @@ the provider's Structured Output shape but may be `""` when no supporting line
 adds distinct value; empty subheadlines skip the emphasis pass and stay hidden
 in review UI. Missing `subheadline` fields in legacy saved runs still fall back
 to the stored concept.
+
+Before normal harness Hook generation (including more ideas and rewrites),
+`creative-approval-context.ts` syncs the selected brand's Questionnaire/Client
+Portal URL through `/api/creative-approval`. Supabase-backed runs only; legacy
+n8n-only runs and brands without a valid portal URL keep their existing path.
+The authenticated endpoint applies the caller's client RLS, reads the
+`Creative Approval` and `Ads Post` tabs, normalizing emoji prefixes and whitespace.
+Reads are bounded to 1,000 rows / 60 columns, retaining the header and newest
+rows on larger tabs. The endpoint selects up to six
+recent distinct Drive-linked static images with Approved, Published or Ads Active
+status in Creative Approval, or Active / End / completed status in Ads Post.
+Ads Post uses named Artwork URL / AW Link columns rather than Facebook post links.
+The rightmost populated Creative Approval revision wins. Unresolved comments on that
+revision exclude the row; prior feedback remains attached to its source row.
+Unsupported or missing image links do not fall back to superseded revisions.
+Drive folders in the selected revision are resolved to supported direct-child
+images (up to 100 image entries, no recursive folder traversal). The final
+sample interleaves both sources, deduplicates image IDs and remains capped at
+six images total. Each example retains its exact tab URL, row and folder/file
+provenance. Source summaries distinguish missing tabs from no usable images.
+
+`creative-approval-analyzer.ts` downloads image bytes through the Drive API with
+the user's Google token and sends high-detail images to the configured OpenRouter
+brand-analysis model. `agent_prompt/agent_creative_approval.md` owns verbatim
+headline/supporting-copy/CTA extraction, uncertainty and scoped style observations.
+Caption and feedback are context, not substitutes for illegible image text.
+Google tokens never reach the model. The resulting examples retain row numbers,
+source URLs, statuses, revisions and feedback in the existing Brand Document
+`Copy style from Creative Approval`. The per-example fingerprint includes the
+selected row, Drive modification/version, extraction prompt and model;
+unchanged examples reuse stored extraction, while changed images or feedback are
+re-read. The doc is updated only after a complete successful extraction and is
+injected into the same run's Hook input before model comparisons start. No new
+database table or pre-Hook vision call is needed for unchanged examples. Missing
+tabs/eligible images produce an empty source document; access/provider failures
+surface without overwriting the previous document. OAuth now requests read-only
+Sheets and Drive scopes; existing accounts may need the Brief's Reconnect Google
+action once. Source examples guide style only; they do not establish team-wide
+preferences, performance, or current prices, offers and claims.
+
+`stages/creative-approval-status.tsx` shows whether the selected brand has imported
+examples, lacks a portal URL, has no eligible images, or has not been imported.
+Brief generation shows a separate Creative Approval checking phase before idea
+generation. Successful imports sync the returned Brand Docs into the originating
+run for initial generation, more ideas and rewrites. The Create preflight shows
+the saved example/visual-context counts or warns when old Hooks have no imported
+context; disabling Brand CI explicitly shows that the context will not be used.
+These are passive status messages; they do not trigger imports or add startup
+requests.
+
+The same vision pass also extracts per-image `visualStyle`: observed palette
+roles, typography character, layout/density, imagery/lighting, mood/tone and
+brand elements. It must not guess official HEX values, font names or logo rules.
+These observations stay in the same source document and cache; no second vision
+call is added. `artwork-generation/creative-approval-visual-context.ts` passes
+only the visual observations (never old campaign copy/offers) to art direction,
+all final image-generation routes and existing Visual QC. Explicit official CI
+and colors outrank observations, and generic references must remain compatible
+with the brand. QC receives this context without changing its existing stage
+gates or auto-revision setting. Style documents are excluded from factual
+commercial evidence. `use-create-selected-hooks.ts` now refreshes both Brand
+Rules and Brand Docs before generation, including Studio regeneration, and
+preserves the user's Brand CI/Brand Colors context selections. Legacy persisted
+`Visual guidance` remains inactive; this is a separate, source-linked context.
 
 Each run stores an explicit Idea intent: explore new angles, develop an
 assigned topic, iterate from supplied performance learnings, or build a

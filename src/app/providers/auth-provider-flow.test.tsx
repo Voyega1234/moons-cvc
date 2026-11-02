@@ -46,7 +46,7 @@ describe("Supabase account flow", () => {
     window.localStorage.clear();
   });
 
-  it("starts Google OAuth with read-only Sheets and Convert Cake domain settings", async () => {
+  it("starts Google OAuth with read-only Sheets/Drive and Convert Cake domain settings", async () => {
     const user = userEvent.setup();
     render(<AuthProvider><div>Private workspace</div></AuthProvider>);
 
@@ -62,7 +62,7 @@ describe("Supabase account flow", () => {
       provider: "google",
       options: {
         redirectTo: "http://localhost:3000",
-        scopes: "https://www.googleapis.com/auth/spreadsheets.readonly",
+        scopes: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
         queryParams: {
           hd: "convertcake.com",
           include_granted_scopes: "false",
@@ -73,7 +73,7 @@ describe("Supabase account flow", () => {
     });
     expect(screen.getByText("Only @convertcake.com accounts")).toBeTruthy();
     expect(
-      screen.getByText("Used only to read onboarding questionnaire Google Sheets.")
+      screen.getByText("Used to read Questionnaire sheets and artwork linked from Creative Approval / Ads Post.")
     ).toBeTruthy();
   });
 
