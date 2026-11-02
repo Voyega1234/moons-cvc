@@ -1248,6 +1248,18 @@ async function readJsonResponse<T>(
   try {
     return JSON.parse(text) as T;
   } catch {
+    if (response.status >= 500) {
+      const code = response.headers.get("x-vercel-error") ??
+        text.match(/\b(?:FUNCTION_INVOCATION_FAILED|FUNCTION_INVOCATION_TIMEOUT|FUNCTION_PAYLOAD_TOO_LARGE|NO_RESPONSE_FROM_FUNCTION)\b/)?.[0];
+      const requestId = response.headers.get("x-vercel-id");
+      // Only expose platform identifiers, never arbitrary HTML or server output.
+      const diagnostics = [code, requestId].filter(
+        (value): value is string => Boolean(value && /^[\w:.-]{1,200}$/.test(value))
+      );
+      throw new Error(
+        `${label} server failed (HTTP ${response.status}) before returning a result.${diagnostics.length ? ` Server reference: ${diagnostics.join(" / ")}.` : ""} Check saved outputs before retrying.`
+      );
+    }
     const contentType = response.headers.get("content-type") ?? "unknown";
     throw new Error(
       `${label} endpoint returned HTTP ${response.status} (${contentType}), not JSON.`

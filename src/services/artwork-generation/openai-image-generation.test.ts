@@ -8,6 +8,7 @@ import {
   buildArtworkRevisionRequest,
   buildUgcThumbnailRequest,
   normalizeArtworkOutput,
+  reviseOutputImage,
   reviseAlbumOutputImages
 } from "./openai-image-generation";
 import { buildN8nArtworkGenerationRequest } from "./n8n-artwork-generation";
@@ -922,6 +923,41 @@ it("reports a gateway timeout without automatically generating the images again"
     expect(fetchMock).toHaveBeenCalledTimes(1);
   } finally {
     Object.assign(env, { artworkGenerationMode: previousMode, artworkGenerationEndpoint: previousEndpoint });
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  ["FUNCTION_INVOCATION_FAILED", {}],
+  ["<html>Internal Server Error</html>", { "x-vercel-error": "FUNCTION_INVOCATION_FAILED" }],
+  ["private server details", {}]
+])("reports a non-JSON revision server failure without replaying the edit: %s", async (body, headers) => {
+  const { env } = await import("../../config/env");
+  const previousEndpoint = env.artworkGenerationEndpoint;
+  const fetchMock = vi.fn().mockResolvedValue(new Response(body, {
+    status: 500,
+    headers: { "content-type": "text/plain; charset=utf-8", "x-vercel-id": "dev1::request-123", ...headers }
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  env.artworkGenerationEndpoint = "/api/artwork-generation";
+  try {
+    const error = await reviseOutputImage({
+      run,
+      output: { id: "output-1", directionId: "hook-1", format: "1:1 Static", status: "draft",
+        clientStatus: "queued", assetUrl: "https://example.com/current.png", revisionCount: 0,
+        approval: emptyApprovalGate, approvalComments: emptyApprovalComments },
+      instructions: "Replace the background with the attached reference.",
+      referenceImages: [{ kind: "url", url: "https://example.com/reference.png" }]
+    }).catch(error => error as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("Artwork revision server failed (HTTP 500)");
+    expect((error as Error).message).toContain("dev1::request-123");
+    expect((error as Error).message).toContain("Check saved outputs before retrying");
+    expect((error as Error).message).not.toMatch(/not JSON|private server details|<html>/);
+    if (body !== "private server details") expect((error as Error).message).toContain("FUNCTION_INVOCATION_FAILED");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    env.artworkGenerationEndpoint = previousEndpoint;
     vi.unstubAllGlobals();
   }
 });

@@ -1,5 +1,5 @@
 import type { Brand } from "./brand";
-import { validateQuestionnaireGoogleSheetUrl } from "./client-ingestion";
+import { validateQuestionnaireGoogleSheetUrl } from "./client-ingestion.js";
 
 export const CREATIVE_APPROVAL_DOCUMENT_TITLE = "Copy style from Creative Approval";
 

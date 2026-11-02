@@ -655,6 +655,17 @@ requires a Vercel plan/runtime supporting that duration and a new deployment.
 It mitigates the former 300-second limit; it does not make long image requests
 independent of HTTP timeouts. The client describes HTTP 504 as a generation
 server timeout and does not automatically resubmit image generation.
+Non-JSON HTTP 5xx responses report a server failure with a validated Vercel error
+code/request ID when available, without exposing raw server output or replaying
+the generation/revision request. These identifiers help diagnose runtime failures;
+they do not establish the cause of a historical HTTP 500.
+
+Shared domain modules loaded by server endpoints must use explicit `.js` paths
+for runtime imports. Vite/Vitest resolve extensionless TypeScript imports, but
+Vercel's native Node ESM loader does not. `creative-approval.ts` imports the
+questionnaire URL validator from `client-ingestion.js`; omitting that extension
+crashes artwork function startup with `ERR_MODULE_NOT_FOUND` before its JSON
+error handler runs.
 
 ## Independent Album panel experiment (2026-09-15)
 
