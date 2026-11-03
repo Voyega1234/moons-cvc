@@ -1143,12 +1143,9 @@ function addUgcClientSlide(
     bold: true,
     color: COLORS.muted
   });
-  slide.addNotes(
-    `[Sources]\n- Brief overview, DO/DON'T guidelines: generated from confirmed workflow data for ${brandName}.\n- Reference video: attach the creator's actual reference clip when available.`
-  );
 
   const scriptSlide = pptx.addSlide();
-  addUgcScriptGridSlide(pptx, scriptSlide, brief, personaLabel, brandName);
+  addUgcScriptGridSlide(pptx, scriptSlide, brief, personaLabel);
 }
 
 const UGC_SCRIPT_GRID_MARGIN_X = 0.4;
@@ -1169,8 +1166,7 @@ function addUgcScriptGridSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
   brief: UgcVideoBrief,
-  personaLabel: string,
-  brandName: string
+  personaLabel: string
 ) {
   addUgcSlideHeader(pptx, slide, `SHORT VIDEO SCRIPT — ${personaLabel}`);
 
@@ -1196,9 +1192,6 @@ function addUgcScriptGridSlide(
     bold: true,
     color: COLORS.muted
   });
-  slide.addNotes(
-    `[Sources]\n- Script beats, visuals, and on-screen text: generated from confirmed workflow data for ${brandName}.`
-  );
 }
 
 function addUgcScriptCard(
@@ -1709,9 +1702,6 @@ function addSinglePageArtworkSlide(
     h: 0,
     line: { color: COLORS.line, width: 1 }
   });
-  slide.addNotes(
-    `[Sources]\n- Headline, sub-headline, creative concept, CTA, and caption: confirmed workflow data for ${brandName}.\n- Artwork: generated creative asset attached to this output.`
-  );
 }
 
 function addClientSlide(
@@ -2083,9 +2073,6 @@ function addClientSlide(
     bold: true,
     color: COLORS.muted
   });
-  slide.addNotes(
-    `[Sources]\n- Concept, key message, visual direction, and CTA: confirmed workflow data for ${brandName}.\n- Creative draft: generated artwork attached to this output.`
-  );
 }
 
 function addCaptionSlide(
@@ -2246,9 +2233,6 @@ function addCaptionSlide(
     color: COLORS.muted,
     breakLine: false
   });
-  slide.addNotes(
-    `[Sources]\n- Full caption and CTA: confirmed workflow data for ${brandName}.\n- Visual: generated creative asset or selected UGC reference attached to this output.`
-  );
 }
 
 // Retained for backward-compatible deck variants; the restored client export
