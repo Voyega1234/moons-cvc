@@ -1,9 +1,9 @@
--- Run as postgres after 202610270001_private_krungthai_axa_life.sql. Leaves no data changes.
+-- Run as postgres after 202611030001_private_toshiba_clients.sql. Leaves no data changes.
 begin;
 
 create temporary table private_run_ids as
   select id from moons.runs
-  where client_id in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058');
+  where client_id in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058', 'toshiba-lifestyle-thailand-1d28a09b', 'toshiba-air-conditioning-30eb5687');
 grant select on private_run_ids to authenticated;
 create temporary table private_test_profiles as
   select user_id, email from moons.team_profiles;
@@ -30,18 +30,20 @@ begin
     )::text, true);
 
     expected_count := case
-      when profile.user_id = '4e919caf-2e01-4efc-9ae8-bf70b2d92e3b'::uuid then 4
+      when profile.user_id = '4e919caf-2e01-4efc-9ae8-bf70b2d92e3b'::uuid then 6
       else 0
     end;
     select count(*) into visible_count from moons.clients
-      where id in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058');
+      where id in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058', 'toshiba-lifestyle-thailand-1d28a09b', 'toshiba-air-conditioning-30eb5687');
     if visible_count <> expected_count then
       raise exception 'Client visibility failed for %: %', profile.email, visible_count;
     end if;
-    if moons.can_view_client('dos-life-d8eded63') <> (expected_count = 4)
-      or moons.can_view_client('fixfit-7f57de77') <> (expected_count = 4)
-      or moons.can_view_client('you-9135008f') <> (expected_count = 4)
-      or moons.can_view_client('krungthai-axa-life-b2a19058') <> (expected_count = 4) then
+    if moons.can_view_client('dos-life-d8eded63') <> (expected_count = 6)
+      or moons.can_view_client('fixfit-7f57de77') <> (expected_count = 6)
+      or moons.can_view_client('you-9135008f') <> (expected_count = 6)
+      or moons.can_view_client('krungthai-axa-life-b2a19058') <> (expected_count = 6)
+      or moons.can_view_client('toshiba-lifestyle-thailand-1d28a09b') <> (expected_count = 6)
+      or moons.can_view_client('toshiba-air-conditioning-30eb5687') <> (expected_count = 6) then
       raise exception 'Client permission helper failed for %', profile.email;
     end if;
     if not moons.can_access_private_client('unrestricted-client')
@@ -49,7 +51,7 @@ begin
       raise exception 'Unrelated clients were restricted for %', profile.email;
     end if;
 
-    if expected_count = 4 then
+    if expected_count = 6 then
       select count(*) into visible_count from moons.runs
         where id in (select id from private_run_ids);
       if visible_count <> (select count(*) from private_run_ids) then
@@ -59,7 +61,7 @@ begin
 
     if expected_count = 0 then
       if exists (select 1 from storage.objects
-        where split_part(name, '/', 1) in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058')) then
+        where split_part(name, '/', 1) in ('dos-life-d8eded63', 'fixfit-7f57de77', 'you-9135008f', 'krungthai-axa-life-b2a19058', 'toshiba-lifestyle-thailand-1d28a09b', 'toshiba-air-conditioning-30eb5687')) then
         raise exception 'Private storage paths exposed to %', profile.email;
       end if;
       for target in
@@ -67,7 +69,7 @@ begin
         where schemaname = 'moons' and policyname = 'private client_id access'
       loop
         execute format(
-          'select count(*) from moons.%I where client_id in (''dos-life-d8eded63'', ''fixfit-7f57de77'', ''you-9135008f'', ''krungthai-axa-life-b2a19058'')',
+          'select count(*) from moons.%I where client_id in (''dos-life-d8eded63'', ''fixfit-7f57de77'', ''you-9135008f'', ''krungthai-axa-life-b2a19058'', ''toshiba-lifestyle-thailand-1d28a09b'', ''toshiba-air-conditioning-30eb5687'')',
           target.tablename
         ) into visible_count;
         if visible_count <> 0 then
@@ -111,5 +113,5 @@ end;
 $$;
 
 reset role;
-select 'PASS: Wave sees all four private clients; all other team accounts (including admins) see no private client or run rows.' as result;
+select 'PASS: Wave sees all six private clients; all other team accounts (including admins) see no private client or run rows.' as result;
 rollback;

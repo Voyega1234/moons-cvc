@@ -449,6 +449,17 @@ ownership. The rollback trial (including a repeated migration) and post-apply
 access check passed. No other user's persisted workspace contained this client
 at rollout. `npm run typecheck` and `npm run build` also passed.
 
+`supabase/migrations/202611030001_private_toshiba_clients.sql` extends the
+same guards to Toshiba Lifestyle Thailand (`toshiba-lifestyle-thailand-1d28a09b`)
+and Toshiba Air Conditioning (`toshiba-air-conditioning-30eb5687`) after the
+Krungthai-AXA Life migration. Existing run ownership is preserved. The shared
+SQL check covers all six private clients, their run rows, Storage paths and
+handoff restrictions under every existing team account.
+Applied to the live project on 2026-11-03 (Asia/Bangkok). The rollback trial
+(including a repeated migration) and post-apply access check passed. Neither
+client appeared in another user's persisted workspace at rollout.
+`npm run typecheck` and `npm run build` also passed.
+
 Seed prototype clients with:
 
 ```text
