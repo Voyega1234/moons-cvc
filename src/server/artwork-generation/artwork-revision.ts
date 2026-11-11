@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import type {
   ArtworkGenerationResponse,
   ArtworkRevisionRequest
@@ -124,7 +125,10 @@ export async function reviseAlbumArtworkOutputs(
     const revised = await editImage({ apiKey: options.apiKey, model, prompt, size,
       quality: input.mode === "placeholder" ? "low" : "medium",
       referenceImages: references, fetchImpl: options.fetchImpl });
-    const bytes = await prepareAlbumPanel(Buffer.from(revised.base64, "base64"), size, index);
+    const raw = Buffer.from(revised.base64, "base64");
+    const returned = await sharp(raw).metadata();
+    console.info(`[album-revise] panel ${index} model=${revised.model ?? model} requested=${size} returned=${returned.width}x${returned.height}`);
+    const bytes = await prepareAlbumPanel(raw, size, index);
     panels.push({ index, bytes, model: revised.model ?? model });
   }
   const imageBytes = await composeAlbumPreview(panels, album.format);
