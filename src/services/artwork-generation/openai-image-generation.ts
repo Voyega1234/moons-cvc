@@ -668,7 +668,6 @@ export function buildArtworkGenerationRequests({
     if (item.service === "ugc-video") return [];
     const hooks = selectedHooks
       .filter(({ service }) => service === item.service)
-      .slice(0, item.quantity)
       .map(({ direction }) => direction);
     return batchHooksByReferenceImage(hooks, ARTWORK_REQUEST_BATCH_SIZE).map(
       (batch) => {

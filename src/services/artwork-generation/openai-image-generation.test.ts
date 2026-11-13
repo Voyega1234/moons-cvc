@@ -706,6 +706,30 @@ describe("buildArtworkGenerationRequest", () => {
     expect(requests[0]?.selectedHooks[0]?.id).toBe("hook-static-replacement");
   });
 
+  it.each(["single-static", "album-post"] as const)(
+    "generates all five selected %s hooks when the planned quantity is three",
+    (service) => {
+      const directions = Array.from({ length: 6 }, (_, index) => ({
+        ...run.directions[0]!,
+        id: `hook-${index + 1}`,
+        service,
+        selected: index < 5
+      }));
+      const requests = buildArtworkGenerationRequests({
+        run: {
+          ...run,
+          creativeMix: [{ id: "mix-visual", service, quantity: 3 }],
+          quantity: 3,
+          directions
+        }
+      });
+
+      expect(requests.map((request) => request.quantity)).toEqual([4, 1]);
+      expect(requests.flatMap((request) => request.selectedHooks.map((hook) => hook.id)))
+        .toEqual(directions.filter((direction) => direction.selected).map((direction) => direction.id));
+    }
+  );
+
   it("splits high-volume artwork into bounded batches", () => {
     const source = run.directions[0];
     if (!source) throw new Error("Expected a direction fixture.");
@@ -908,6 +932,47 @@ describe("buildArtworkGenerationRequest", () => {
   });
 });
 
+
+it("generates all five selected UGC thumbnails when the planned quantity is three", async () => {
+  const { env } = await import("../../config/env");
+  const previousMode = env.artworkGenerationMode;
+  const previousEndpoint = env.artworkGenerationEndpoint;
+  const directions = Array.from({ length: 6 }, (_, index) => ({
+    ...run.directions[0]!,
+    id: `ugc-${index + 1}`,
+    service: "ugc-video" as const,
+    selected: index < 5
+  }));
+  const fetchMock = vi.fn().mockImplementation(async (_url, init) => {
+    const request = JSON.parse(String(init.body));
+    return new Response(JSON.stringify({ outputs: [{
+      id: request.outputId,
+      directionId: request.directionId,
+      format: request.format,
+      assetUrl: `https://example.com/${request.directionId}.png`
+    }] }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  Object.assign(env, { artworkGenerationMode: "openai", artworkGenerationEndpoint: "/api/artwork-generation" });
+  try {
+    const outputs = await generateArtworkForSelectedHooks({ run: {
+      ...run,
+      creativeMix: [{ id: "mix-ugc", service: "ugc-video", quantity: 3 }],
+      quantity: 3,
+      directions
+    } });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init.body)).mode))
+      .toEqual(Array(5).fill("ugc-thumbnail"));
+    expect(outputs.map((output) => output.directionId)).toEqual(
+      directions.filter((direction) => direction.selected).map((direction) => direction.id)
+    );
+    expect(outputs.every((output) => Boolean(output.assetUrl))).toBe(true);
+  } finally {
+    Object.assign(env, { artworkGenerationMode: previousMode, artworkGenerationEndpoint: previousEndpoint });
+    vi.unstubAllGlobals();
+  }
+});
 
 it("reports a gateway timeout without automatically generating the images again", async () => {
   const { env } = await import("../../config/env");
