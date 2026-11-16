@@ -149,7 +149,7 @@ export function createInitialWorkflowState({
     ],
     service: "single-static",
     hookIdeaMode: defaultHookIdeaMode,
-    hookGenerationModel: "google/gemini-3.8-flash",
+    hookGenerationModel: "google/gemini-4-hydrogen",
     hookGenerationModels: defaultHookGenerationModels,
     artworkMode: defaultArtworkMode,
     artworkImageModel: defaultArtworkImageModel,

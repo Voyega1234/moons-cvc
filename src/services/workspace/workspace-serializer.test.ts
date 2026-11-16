@@ -1129,10 +1129,10 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "google/gemini-3.8-flash"
+      "google/gemini-4-hydrogen"
     );
     expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
-      "google/gemini-3.8-flash"
+      "google/gemini-4-hydrogen"
     ]);
   });
 

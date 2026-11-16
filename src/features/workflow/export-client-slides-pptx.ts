@@ -1021,7 +1021,8 @@ function addUgcClientSlide(
   slide: PptxGenJS.Slide,
   direction: CreativeDirection | undefined,
   brandName: string,
-  mockupImage?: UgcPreviewImage
+  mockupImage?: UgcPreviewImage,
+  brandPronunciation?: string
 ) {
   const brief = resolvedUgcBrief(direction, brandName);
   const personaLabel = clampText(brief.persona, 40) || "Persona";
@@ -1064,6 +1065,9 @@ function addUgcClientSlide(
   const fieldX = col1X + 0.22;
   const fieldW = UGC_BRIEF_COLUMN_WIDTH - 0.44;
   y = addUgcBriefField(slide, fieldX, y, fieldW, "Brand", brief.product);
+  if (brandPronunciation) {
+    y = addUgcBriefField(slide, fieldX, y, fieldW, "Pronunciation", brandPronunciation);
+  }
   y = addUgcBriefField(
     slide,
     fieldX,
@@ -1714,12 +1718,13 @@ function addClientSlide(
   albumMasterData?: string,
   referenceImageData: readonly string[] = [],
   extractedCopy?: ExtractedArtworkCopy,
-  ugcMockupImage?: UgcPreviewImage
+  ugcMockupImage?: UgcPreviewImage,
+  brandPronunciation?: string
 ) {
   const { output, direction } = item;
   const slide = pptx.addSlide();
   if (isUgcOutput(output)) {
-    addUgcClientSlide(pptx, slide, direction, brandName, ugcMockupImage);
+    addUgcClientSlide(pptx, slide, direction, brandName, ugcMockupImage, brandPronunciation);
     return;
   }
   addSinglePageArtworkSlide(
@@ -2285,6 +2290,14 @@ async function buildClientSlidesPptx(
   const { default: PptxGenJSConstructor } = await import("pptxgenjs");
   const pptx = new PptxGenJSConstructor();
   const brandName = cleanText(state.brand?.name, "Client");
+  const questionnaireFields = state.brand?.onboardingQuestionnaire?.extractedFields;
+  const pronunciation = questionnaireFields
+    ?.find((field) => field.key === "brand_name_pronunciation")?.value.trim();
+  const thaiBrandName = questionnaireFields
+    ?.find((field) => field.key === "brand_name_th")?.value.trim() || brandName;
+  const brandPronunciation = pronunciation
+    ? `${thaiBrandName} (${pronunciation})`
+    : undefined;
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Creative Compass";
   pptx.company = "Creative Compass";
@@ -2338,7 +2351,8 @@ async function buildClientSlidesPptx(
       albumMasterData,
       referenceImageData,
       extractedCopyByOutputId.get(item.output.id),
-      ugcMockupImageByOutputId.get(item.output.id)
+      ugcMockupImageByOutputId.get(item.output.id),
+      brandPronunciation
     );
   }
 

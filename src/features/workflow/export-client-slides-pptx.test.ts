@@ -51,6 +51,47 @@ function ugcScript(overrides: Partial<UgcScriptDocument> = {}): UgcScriptDocumen
   };
 }
 
+it.each([
+  ["ตรี-เพ็ด-อี-ซู-ซุ-ลิส-ซิ่ง", "ตรีเพชรอีซูซุลิสซิ่ง (ตรี-เพ็ด-อี-ซู-ซุ-ลิส-ซิ่ง)"],
+  ["   ", undefined],
+  [undefined, undefined]
+])("exports the client portal pronunciation only when supplied: %s", async (pronunciation, expected) => {
+  const state = createInitialWorkflowState({ id: "ugc", now: "2026-11-16T00:00:00Z" });
+  const direction = { ...buildDirectionFixtures("Brand")[0]!, service: "ugc-video" as const };
+  const pptx = await buildCreateStageSlidesPptx({
+    ...state,
+    brand: {
+      id: "brand", name: "Tri Petch Isuzu Leasing", category: "Leasing", initials: "TP",
+      library: { brand: [], products: [], docs: [], refs: [] },
+      memory: { working: [], avoid: [] },
+      onboardingQuestionnaire: {
+        text: "", preview: "", facebookUrls: [],
+        extractedFields: [
+          { key: "brand_name_th", label: "Brand name TH", value: "ตรีเพชรอีซูซุลิสซิ่ง" },
+          ...(pronunciation === undefined ? [] : [
+            { key: "brand_name_pronunciation", label: "Pronunciation", value: pronunciation }
+          ])
+        ]
+      }
+    },
+    directions: [direction],
+    outputs: [{
+      id: "ugc-output", directionId: direction.id, format: "UGC video",
+      status: "draft", clientStatus: "queued", revisionCount: 0,
+      approval: emptyApprovalGate, approvalComments: emptyApprovalComments
+    }]
+  });
+  const slides = (pptx as unknown as { _slides: unknown[] })._slides;
+  expect(slides).toHaveLength(2);
+  const brief = JSON.stringify(slides[0]);
+  if (expected) {
+    expect(brief).toContain('"Pronunciation"');
+    expect(brief).toContain(expected);
+  } else {
+    expect(brief).not.toContain('"Pronunciation"');
+  }
+});
+
 describe("resolvedUgcBrief", () => {
   it("synthesizes the fixed 6-beat fallback with generic guidelines when no ugcBrief was generated", () => {
     const brief = resolvedUgcBrief(undefined, "Test Brand");

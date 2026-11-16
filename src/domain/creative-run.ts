@@ -154,6 +154,7 @@ export const hookGenerationModels = [
   "gpt-5.6-terra",
   "google/gemini-3.6-flash",
   "google/gemini-3.8-flash",
+  "google/gemini-4-hydrogen",
   "anthropic/claude-sonnet-5",
   "openai/gpt-5.6-terra",
   "n8n-compass-new"
@@ -163,13 +164,14 @@ export type HookGenerationModel = string;
 export const openRouterHookGenerationModels = [
   "google/gemini-3.6-flash",
   "google/gemini-3.8-flash",
+  "google/gemini-4-hydrogen",
   "anthropic/claude-sonnet-5",
   "openai/gpt-5.6-terra"
 ] as const satisfies readonly HookGenerationModel[];
 export type OpenRouterHookGenerationModel =
   (typeof openRouterHookGenerationModels)[number];
 export const defaultHookGenerationModels = [
-  "google/gemini-3.8-flash"
+  "google/gemini-4-hydrogen"
 ] as const satisfies readonly HookGenerationModel[];
 export const MAX_HOOK_GENERATION_MODELS = 5;
 
@@ -199,6 +201,8 @@ export function hookGenerationModelLabel(model: HookGenerationModel): string {
   switch (model) {
     case "google/gemini-3.6-flash":
       return "Gemini 3.6 Flash";
+    case "google/gemini-4-hydrogen":
+      return "Gemini 4 Hydrogen";
     case "google/gemini-3.8-flash":
       return "Gemini 3.8 Flash";
     case "anthropic/claude-sonnet-5":

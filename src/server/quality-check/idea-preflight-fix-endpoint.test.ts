@@ -27,14 +27,14 @@ function fixRequest(overrides: Record<string, unknown> = {}) {
 }
 
 describe("handleIdeaPreflightFixRequest", () => {
-  it("asks OpenRouter's Gemini 3.8 Flash to revise only the flagged field", async () => {
+  it("asks OpenRouter's Gemini 4 Hydrogen to revise only the flagged field", async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
       const requestBody = JSON.parse(String(init?.body)) as {
         model: string;
         messages: readonly { content: string }[];
       };
-      expect(requestBody.model).toBe("google/gemini-3.8-flash");
+      expect(requestBody.model).toBe("google/gemini-4-hydrogen");
       expect(requestBody.messages[0]?.content).toContain(
         "Field ที่ต้องแก้: Hook"
       );

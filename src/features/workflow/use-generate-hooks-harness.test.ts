@@ -36,7 +36,7 @@ beforeEach(() => {
 describe("useGenerateHooks harness resilience", () => {
   it("shows the Creative Approval phase and retains the imported context in the run", async () => {
     const brand = { id: "brand", name: "Brand", category: "", initials: "B", mappingClientPortalUrl: "https://docs.google.com/spreadsheets/d/portal/edit", library: { brand: [], products: [], refs: [], docs: [] }, memory: { working: [], avoid: [] } };
-    const initial = { ...createInitialWorkflowState({ id: "status-run", now: "2026-11-02T00:00:00Z" }), brand, hookGenerationModel: "google/gemini-3.8-flash", hookGenerationModels: ["google/gemini-3.8-flash"] };
+    const initial = { ...createInitialWorkflowState({ id: "status-run", now: "2026-11-02T00:00:00Z" }), brand, hookGenerationModel: "google/gemini-4-hydrogen", hookGenerationModels: ["google/gemini-4-hydrogen"] };
     const document = { id: "style", title: "Copy style from Creative Approval", description: "Saved context" };
     let finish: (brand: Brand | null) => void = () => {};
     vi.mocked(withCreativeApprovalContext).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
@@ -57,7 +57,7 @@ describe("useGenerateHooks harness resilience", () => {
   it("syncs image-copy context once before starting model comparisons and sends it to every model", async () => {
     const state = {
       ...createInitialWorkflowState({ id: "style-context-run", now: "2026-11-02T00:00:00Z" }),
-      hookGenerationModels: ["google/gemini-3.8-flash", "openai/gpt-5.6-terra"]
+      hookGenerationModels: ["google/gemini-4-hydrogen", "openai/gpt-5.6-terra"]
     };
     const brand = { id: "brand-1", name: "Sendo", category: "", initials: "S", memory: { working: [], avoid: [] }, library: { brand: [], products: [], refs: [], docs: [] } };
     const document = { id: "style", title: "Copy style from Creative Approval", description: "ประหยัดค่าแรง ค่าสีไม่ต้องทาซ้ำ" };
@@ -75,7 +75,7 @@ describe("useGenerateHooks harness resilience", () => {
   it.each(["Ads Post has no Artwork URL / AW Link columns.", "Reconnect Google", "Creative Approval Google read failed: HTTP 404", "Cannot read artwork"])("continues with existing brand context when the optional import fails: %s", async message => {
     const document = { id: "saved", title: "Existing brand context", description: "Keep this" };
     const brand: Brand = { id: "brand", name: "Brand", category: "", initials: "B", mappingClientPortalUrl: "https://docs.google.com/spreadsheets/d/portal/edit", library: { brand: [], products: [], refs: [], docs: [document] }, memory: { working: [], avoid: [] } };
-    const state = { ...createInitialWorkflowState({ id: "style-error-run", now: "2026-11-02T00:00:00Z", brand }), hookGenerationModels: ["google/gemini-3.8-flash"] };
+    const state = { ...createInitialWorkflowState({ id: "style-error-run", now: "2026-11-02T00:00:00Z", brand }), hookGenerationModels: ["google/gemini-4-hydrogen"] };
     vi.mocked(withCreativeApprovalContext).mockRejectedValue(new Error(message));
     vi.mocked(generateDirectionsWithHarness).mockResolvedValue([buildDirectionFixtures("Fallback")[0]!]);
     const { result } = renderHook(() => {
@@ -94,7 +94,7 @@ describe("useGenerateHooks harness resilience", () => {
   });
 
   it("still surfaces a real Hook failure after an optional context failure", async () => {
-    const state = { ...createInitialWorkflowState({ id: "model-error-run", now: "2026-11-02T00:00:00Z" }), hookGenerationModels: ["google/gemini-3.8-flash"] };
+    const state = { ...createInitialWorkflowState({ id: "model-error-run", now: "2026-11-02T00:00:00Z" }), hookGenerationModels: ["google/gemini-4-hydrogen"] };
     vi.mocked(withCreativeApprovalContext).mockRejectedValue(new Error("Cannot read optional sheet"));
     vi.mocked(generateDirectionsWithHarness).mockRejectedValue(new Error("Unauthorized"));
     const dispatch = vi.fn();
@@ -111,7 +111,7 @@ describe("useGenerateHooks harness resilience", () => {
         now: "2026-08-11T06:10:00.000Z"
       }),
       hookGenerationModels: [
-        "google/gemini-3.8-flash",
+        "google/gemini-4-hydrogen",
         "qwen/qwen3.8-max",
         "sakana/sakana-namazu",
         "openai/gpt-5.6-terra",
@@ -153,7 +153,7 @@ describe("useGenerateHooks harness resilience", () => {
         now: "2026-08-11T06:00:00.000Z"
       }),
       hookGenerationModels: [
-        "google/gemini-3.8-flash",
+        "google/gemini-4-hydrogen",
         "qwen/qwen3.8-max"
       ]
     };
@@ -174,7 +174,7 @@ describe("useGenerateHooks harness resilience", () => {
         type: "generate-directions",
         directions: [
           expect.objectContaining({
-            generationModel: "google/gemini-3.8-flash"
+            generationModel: "google/gemini-4-hydrogen"
           })
         ]
       })

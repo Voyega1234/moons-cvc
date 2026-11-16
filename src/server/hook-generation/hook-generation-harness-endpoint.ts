@@ -152,7 +152,7 @@ interface ResearchAudit {
   citationUrls: readonly string[];
 }
 
-const DEFAULT_HOOK_MODEL = "google/gemini-3.8-flash";
+const DEFAULT_HOOK_MODEL = "google/gemini-4-hydrogen";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
 const DEFAULT_SUPPORT_MODEL = "gpt-5.6-luna";
 // gemini-3.8-flash forces reasoning on every call; captions don't need that

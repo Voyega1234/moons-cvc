@@ -1297,7 +1297,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       plugins?: readonly Record<string, unknown>[];
       provider?: { require_parameters?: boolean };
     };
-    expect(generationBody.model).toBe("google/gemini-3.8-flash");
+    expect(generationBody.model).toBe("google/gemini-4-hydrogen");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
     expect(generationBody.messages[0]?.content).toHaveLength(1);
     expect(generationBody.response_format).toMatchObject({
@@ -1349,7 +1349,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { model: string; tools?: unknown[]; tool_choice?: string };
-    expect(researchBody.model).toBe("google/gemini-3.8-flash");
+    expect(researchBody.model).toBe("google/gemini-4-hydrogen");
     expect(researchBody.tools).toEqual([
       expect.objectContaining({ type: "openrouter:web_search", parameters: expect.objectContaining({ engine: "native" }) })
     ]);

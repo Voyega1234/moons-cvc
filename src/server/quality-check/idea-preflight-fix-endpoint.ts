@@ -42,7 +42,7 @@ interface IdeaPreflightFixRequest {
   brandAvoid: readonly string[];
 }
 
-const DEFAULT_MODEL = "google/gemini-3.8-flash";
+const DEFAULT_MODEL = "google/gemini-4-hydrogen";
 const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
   "https://openrouter.ai/api/v1/chat/completions";
 const CHECK_IDS = new Set<CheckId>(["quality", "spelling", "policy"]);

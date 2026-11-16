@@ -70,6 +70,12 @@ local cache or silently omit projects to make startup appear faster.
 | Personal work queue | `src/features/workflow/my-work.tsx` |
 | Client PPTX / Google Slides export | `src/features/workflow/export-client-slides-pptx.ts` |
 
+UGC Brief Overview slides include Pronunciation from the linked Client Portal's
+saved questionnaire field `brand_name_pronunciation`, paired with `brand_name_th`
+(or the current brand name). Empty/missing pronunciation omits the field; export
+does not infer a reading or request another portal sync. PPTX and Google Slides
+use the same export builder.
+
 Hook generation uses `agent_prompt/agent_hook.md` as the single creative-policy
 source of truth. The runtime endpoint adds only changing campaign evidence,
 Research availability, quotas, format contracts, and JSON transport; it must
