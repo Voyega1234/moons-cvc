@@ -234,11 +234,12 @@ export async function handleHookGenerationHarnessRequest({
         operation: "hook-generation"
       }
     });
+    const fixedGeminiModel = input.generationModel === "google/gemini-3.8-flash" || input.generationModel === "google/gemini-4-hydrogen";
     const googleMode = env.HOOK_GEMINI_PROVIDER?.trim() || "openrouter";
-    if (!["openrouter", "gemini", "vertex"].includes(googleMode)) {
+    if (!fixedGeminiModel && !["openrouter", "gemini", "vertex"].includes(googleMode)) {
       return jsonResponse({ ok: false, error: "HOOK_GEMINI_PROVIDER must be openrouter, gemini, or vertex." }, 500);
     }
-    const generationProvider: HookProvider =
+    const generationProvider: HookProvider = fixedGeminiModel ? "gemini" :
       input.generationModel.startsWith("google/gemini-") && googleMode !== "openrouter"
         ? googleMode as "gemini" | "vertex"
         : isOpenRouterHookGenerationModel(input.generationModel) ? "openrouter" : "openai";
@@ -253,7 +254,7 @@ export async function handleHookGenerationHarnessRequest({
       return jsonResponse({ ok: false, error: `${keyName} is required.` }, 500);
     }
     const model = googleProvider
-      ? env.GEMINI_HOOK_GENERATION_MODEL?.trim() || input.generationModel.slice("google/".length)
+      ? (fixedGeminiModel ? input.generationModel.slice("google/".length) : env.GEMINI_HOOK_GENERATION_MODEL?.trim() || input.generationModel.slice("google/".length))
       : generationProvider === "openrouter" ? input.generationModel
       : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || input.generationModel || DEFAULT_OPENAI_MODEL;
     const supportModel =
@@ -370,9 +371,10 @@ export async function handleHookGenerationHarnessRequest({
     let directions = ideaDirections;
     if (nativeHookSearch) {
       const captionPrompt = await readFile(join(process.cwd(), "agent_prompt", "agent_hook_caption.md"), "utf8");
+      const captionBatchSize = googleProvider ? 3 : HOOK_GENERATION_BATCH_SIZE;
       const captionBatches: typeof ideaDirections[] = [];
-      for (let offset = 0; offset < ideaDirections.length; offset += HOOK_GENERATION_BATCH_SIZE) {
-        captionBatches.push(ideaDirections.slice(offset, offset + HOOK_GENERATION_BATCH_SIZE));
+      for (let offset = 0; offset < ideaDirections.length; offset += captionBatchSize) {
+        captionBatches.push(ideaDirections.slice(offset, offset + captionBatchSize));
       }
       const captionResults = await mapWithConcurrency(captionBatches, HOOK_GENERATION_CONCURRENCY, async (batch) => {
         const inputText = [
@@ -386,17 +388,26 @@ export async function handleHookGenerationHarnessRequest({
           "# Search evidence returned to the Hook Agent",
           JSON.stringify(directTraces.map((trace) => captionSearchEvidence(trace.rawResponse)))
         ].join("\n\n");
-        const rawResponse = await withTransientRetry(() => callResponsesApi({
-          apiKey: generationApiKey, model: googleProvider ? model : HOOK_CAPTION_MODEL, provider: generationProvider,
-          fetchImpl: providerFetchImpl, content: [{ type: "input_text", text: inputText }],
-          schemaName: "moons_hook_captions", schema: hookCaptionsSchema,
-          maxTokens: Math.min(24000, 1500 + batch.length * 1400)
-        }));
-        return {
-          inputText,
-          rawResponse,
-          directions: mergeHookCaptions(batch, JSON.parse(unwrapJsonCodeFence(extractResponseText(rawResponse))))
+        // Native Gemini shares its output budget with thinking; reserve room for both.
+        const initialMaxTokens = Math.min(24000, Math.max(googleProvider ? 16000 : 0, 1500 + batch.length * 1400));
+        const requestCaptions = async (maxTokens: number) => {
+          const rawResponse = await withTransientRetry(() => callResponsesApi({
+            apiKey: generationApiKey, model: googleProvider ? model : HOOK_CAPTION_MODEL, provider: generationProvider,
+            fetchImpl: providerFetchImpl, content: [{ type: "input_text", text: inputText }],
+            schemaName: "moons_hook_captions", schema: hookCaptionsSchema, maxTokens
+          }));
+          return {
+            inputText,
+            rawResponse,
+            directions: mergeHookCaptions(batch, JSON.parse(unwrapJsonCodeFence(extractResponseText(rawResponse))))
+          };
         };
+        try {
+          return await requestCaptions(initialMaxTokens);
+        } catch (error) {
+          if (!isTruncatedResponseError(error) || initialMaxTokens >= 24000) throw error;
+          return requestCaptions(24000);
+        }
       });
       directions = captionResults.flatMap((result) => result.directions);
       captionTrace = {

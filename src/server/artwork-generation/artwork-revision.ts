@@ -27,6 +27,7 @@ type ArtworkOutput = ArtworkGenerationResponse["outputs"][number];
 export async function reviseArtworkOutput({
   input,
   apiKey,
+  geminiApiKey,
   model,
   debugLogDirectory,
   writeDebugLog,
@@ -36,6 +37,7 @@ export async function reviseArtworkOutput({
 }: {
   input: ArtworkRevisionRequest;
   apiKey: string;
+  geminiApiKey?: string;
   model: string;
   debugLogDirectory?: string;
   writeDebugLog: ArtworkGenerationDebugLogger;
@@ -46,6 +48,7 @@ export async function reviseArtworkOutput({
   const { image, effectiveInstructions } = await generateRevisedArtwork({
     input,
     apiKey,
+    geminiApiKey,
     model,
     debugLogDirectory,
     writeDebugLog,
@@ -65,6 +68,7 @@ export async function reviseArtworkOutput({
     assetVersion: input.assetVersion,
     format: input.format,
     model: image.model ?? model,
+    provider: (image.model ?? model).startsWith("google/") && geminiApiKey ? "gemini" : undefined,
     imageBytes: Buffer.from(image.base64, "base64"),
     mimeType: image.mimeType,
     storage,
@@ -122,7 +126,7 @@ export async function reviseAlbumArtworkOutputs(
       hook: { id: `${input.directionId}-album-${index}` }, prompt, size,
       quality: "medium", references });
     await writeDebugLog(debugLogDirectory, debug.entry, debug.assets);
-    const revised = await editImage({ apiKey: options.apiKey, model, prompt, size,
+    const revised = await editImage({ apiKey: options.apiKey, geminiApiKey: options.geminiApiKey, model, prompt, size,
       quality: input.mode === "placeholder" ? "low" : "medium",
       referenceImages: references, fetchImpl: options.fetchImpl });
     const raw = Buffer.from(revised.base64, "base64");
@@ -144,6 +148,7 @@ export async function reviseAlbumArtworkOutputs(
     assetVersion: input.assetVersion,
     format: input.format,
     model,
+    provider: model.startsWith("google/") && options.geminiApiKey ? "gemini" : undefined,
     imageBytes,
     mimeType: "image/png",
     storage,
@@ -162,6 +167,7 @@ export async function reviseAlbumArtworkOutputs(
         assetVersion: input.assetVersion,
         format: input.format,
         model: panel.model ?? model,
+        provider: (panel.model ?? model).startsWith("google/") && options.geminiApiKey ? "gemini" : undefined,
         imageBytes: panel.bytes,
         mimeType: panel.mimeType ?? "image/png",
         storage,
@@ -178,6 +184,7 @@ export async function reviseAlbumArtworkOutputs(
 async function generateRevisedArtwork({
   input,
   apiKey,
+  geminiApiKey,
   model,
   debugLogDirectory,
   writeDebugLog,
@@ -194,6 +201,7 @@ async function generateRevisedArtwork({
     );
     const image = await editImageWithAspectRatio({
       apiKey,
+      geminiApiKey,
       model,
       prompt: input.instructions,
       aspectRatio: gptImageAspectRatioForOutputSize(input.output.size),
@@ -230,6 +238,7 @@ async function generateRevisedArtwork({
   if (input.mode === "placeholder") {
     const image = await editImageWithAspectRatio({
       apiKey,
+      geminiApiKey,
       model,
       prompt: input.instructions,
       aspectRatio: input.album
@@ -282,6 +291,7 @@ async function generateRevisedArtwork({
 
   const image = await editImage({
     apiKey,
+    geminiApiKey,
     model,
     prompt,
     size: input.output.size,

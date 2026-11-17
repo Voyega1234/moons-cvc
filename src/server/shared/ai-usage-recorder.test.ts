@@ -12,6 +12,29 @@ const context = {
 };
 
 describe("createAiUsageTrackingFetch", () => {
+  it.each([true, false])("records actual native Gemini image count (image returned: %s)", async hasImage => {
+    let stored: unknown;
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).includes("/rest/v1/ai_usage_events")) {
+        stored = JSON.parse(String(init?.body));
+        return new Response(null, { status: 201 });
+      }
+      return jsonResponse({ candidates: [{ content: { parts: hasImage
+        ? [{ inlineData: { mimeType: "image/png", data: "private-image-bytes" } }]
+        : [{ text: "Cannot render" }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 50 } });
+    });
+    await createAiUsageTrackingFetch({ fetchImpl, context: { ...context, operation: "artwork-generation" } })(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent", {
+        method: "POST", headers: { "x-goog-api-key": "secret-key" }, body: JSON.stringify({
+          contents: [{ parts: [{ text: "secret prompt" }, { inlineData: { mimeType: "image/png", data: "secret-reference" } }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { aspectRatio: "9:16", imageSize: "2K" } }
+        })
+      });
+    expect(stored).toMatchObject({ provider: "gemini", modality: "image", stage: "image-edit",
+      model: "gemini-nano-banana-2.1", image_count: hasImage ? 1 : 0, image_size: "9:16 2K", input_tokens: 10, output_tokens: 50 });
+    expect(JSON.stringify(stored)).not.toMatch(/secret|private-image-bytes/);
+  });
+
   it.each([
     ["gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"],
     ["vertex", "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.8-flash:generateContent"]

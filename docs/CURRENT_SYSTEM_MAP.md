@@ -219,28 +219,18 @@ queries exclude brand and competitor names, while brand/product verification is
 capped at two queries and two selected brand-owned references. Product truth is
 a factual guardrail rather than the default idea seed. Every current signal must
 pass a `Brand truth × Audience tension × Current signal` usefulness gate and
-state the specific content leverage it unlocks before Hook generation. New runs
-default to comparing `google/gemini-3.6-flash`,
-`anthropic/claude-sonnet-5`, and `openai/gpt-5.6-terra` through OpenRouter.
-Saved selections using Qwen 3.8 Max or Claude Sonnet 4.6 are migrated to Claude
-Sonnet 5.
-Users may select one to five Hook models. Direct Hook runs create one Research
-dossier first, reuse it for every selected model, and start all selected model
-requests concurrently. A failed model no longer discards successful results
-from the other models. The client
-records the originating model on every direction and groups the review cards
-into model columns inside each content type. The Hook picker saves custom
-OpenRouter `author/slug` model IDs in a persistent catalog and uses checkboxes
-to select up to five models per run. Unselecting a model does not delete it from
-the catalog. The picker links to the OpenRouter model catalog. The n8n route is hidden from this picker;
-its backend integration remains available for legacy compatibility. Legacy workspaces
-without a saved model list retain their single saved model, while Hook API
-requests without an explicit model still default to
-`google/gemini-3.6-flash`. A targeted rewrite stays on the direction's
-originating model. Normal workflow and Playground comparisons both share one
-validated dossier across models. A non-JSON 500 from the serverless boundary is
-retried only once; ordinary JSON errors and known 504 timeouts are not replayed.
-The OpenAI and n8n Hook routes remain user-selectable for compatibility.
+state the specific content leverage it unlocks before Hook generation. New runs default to `google/gemini-4-hydrogen`. The workflow and Playground
+pickers allow up to three models from Gemini 3.8, Gemini 4 and GPT 6.1 Terra.
+Gemini choices use the Gemini API directly; GPT 6.1 uses OpenRouter. Neither
+picker offers custom model IDs. Removed selections migrate as described under
+Native Google Hook routing below; historical idea metadata is retained.
+Supported model comparisons run concurrently without preliminary Research and
+preserve successful results if another model fails. Results retain model labels
+and review columns by content type. Targeted rewrites of retired model choices
+use the corresponding supported replacement. Legacy backend integrations remain
+available to old API consumers, but are not user-selectable in these pickers.
+A non-JSON 500 from the serverless boundary is retried only once; ordinary JSON
+errors and known 504 timeouts are not replayed.
 The business context sent to Research and the Topic Agent includes Questionnaire,
 Brand name, Brand system, selected Products, Documents, References, and User
 brief. The Hook Agent receives that same context plus the Research dossier,
@@ -782,18 +772,39 @@ persistent outage or after the hosting request deadline.
 
 ## Native Google Hook routing (2026-10-09)
 
-`HOOK_GEMINI_PROVIDER=openrouter|gemini|vertex` switches the server route for
-`google/gemini-*` selections in workflow and Playground; unset keeps OpenRouter.
+Hook and Playground pickers now expose exactly `google/gemini-3.8-flash`,
+`google/gemini-4-hydrogen` (default), and `openai/gpt-6.1-terra`. Custom-model
+entry and saved custom picker catalogs are removed. Workspace selections migrate
+retired GPT 5.6 variants to GPT 6.1 Terra and other retired models to Gemini 4;
+generated ideas and their historical model metadata are preserved. The two
+supported Gemini choices always use the Gemini API and server `GEMINI_API_KEY`,
+ignoring legacy provider/model overrides. GPT 6.1 Terra uses OpenRouter with its
+exact model ID. Legacy backend routes remain for old API consumers, but those
+models cannot be selected in the workflow or Playground. These selection rules
+do not change internal QC, image generation or other non-picker agent models.
+
+
+For legacy API-only Gemini model IDs, `HOOK_GEMINI_PROVIDER=openrouter|gemini|vertex`
+retains its original routing switch; it does not apply to the supported picker IDs.
 `gemini` uses an AI Studio `GEMINI_API_KEY`; `vertex` uses an Express Mode
 `VERTEX_API_KEY` at the global publisher endpoint. Keys stay server-side.
-`GEMINI_HOOK_GENERATION_MODEL` optionally overrides the native model ID; otherwise
-the selected ID loses its `google/` prefix. Other provider selections retain
+`GEMINI_HOOK_GENERATION_MODEL` optionally overrides legacy native model IDs;
+the supported picker IDs always retain their selected model without the `google/` prefix. Other provider selections retain
 existing routing and persisted model IDs stay compatible when switching back.
 `server/hook-generation/google-hook-provider.ts` owns native generateContent
 transport and normalizes final text, grounding citations and truncation/refusal
 signals for existing validators/retries. Native Google uses the selected Gemini
 for Idea, Caption, Highlight and UGC passes. Ideas enable Google Search on demand;
 support passes do not enable search. Separate Caption validation remains mandatory.
+Native Gemini/Vertex captions use batches of at most three ideas, with a
+16,000-token initial output allowance (including thinking) and `low` thinking
+for Gemini 3/4 caption calls only. Hook idea reasoning stays unchanged.
+If a caption batch is truncated, only that batch retries once with a 24,000-token
+allowance; OpenRouter captions use the same bounded truncation recovery while
+retaining their existing batch sizes and initial budgets. Completed Hook ideas
+and sibling caption batches are not replayed. A second truncation fails normally;
+caption ID/completeness validation remains required and partial captions are not
+saved as a successful run.
 Standalone `researchOnly` retains OpenAI/OpenRouter research routing.
 Usage recording recognizes native Google endpoints and token/search metadata.
 Changing server environment requires restarting local functions or redeploying.
@@ -817,18 +828,27 @@ legacy runs default to GPT. All generation, regeneration, revision, placeholder
 and UGC thumbnail builders pass that selection. An explicit Google selection
 wins over the legacy `OPENAI_IMAGE_GENERATION_MODEL` override.
 
-`server/artwork-generation/openai-images-client.ts` retains same-model transient
-retries, then retries a failed GPT Image operation with Nano Banana 2.1,
-including safety rejections. Failover stays inside one image operation; it
-preserves prompt and references and never replays completed images or changes
-the run selection. Google uses the same OpenRouter Images endpoint/key, with
-supported `resolution` and `aspect_ratio` parameters in place of GPT's
-`size` and `quality`. Google output is fitted to the requested pixel canvas
-without cropping; unsupported native ratios (such as 2:1 Album panels) may
-receive white padding. A Google failure is surfaced without switching back.
-Generated images carry their actual model into persistence, including separate
-Album panels, edits and thumbnails. Prompt/strategy/QC agents do not switch
-models as part of image failover. Fallback does not guarantee provider acceptance.
+`server/artwork-generation/openai-images-client.ts` retains same-model retries
+and per-image GPT-to-Nano-Banana failover. `NANO_BANANA_PROVIDER=gemini|openrouter`
+selects the Nano Banana image route (unset defaults to Gemini). Gemini requires
+server-side `GEMINI_API_KEY` and calls `generateContent` through
+`gemini-images-client.ts`; OpenRouter requires `OPENROUTER_API_KEY` and uses
+its Images endpoint even when a Gemini key is also configured. This covers
+new artwork, independent Album panels, revisions, placeholders and UGC thumbnails. The API entrypoint forwards
+the key; it never enters browser state, prompt/debug payloads or stored usage.
+The provider selection also controls the existing GPT image fallback. In Gemini
+mode with a key, fallback uses Gemini; without that key GPT fallback retains
+its legacy OpenRouter route. GPT image operations stay
+on OpenRouter. Prompt/strategy/reference/QC agents retain their existing routes
+and may still require OpenAI/OpenRouter credentials and credits.
+Native calls preserve ordered labeled references and request image output at
+the nearest supported ratio/resolution. Returned images are fitted to the
+requested canvas without cropping; unsupported ratios can receive padding.
+Outputs and usage record the actual image provider. Missing credentials for the
+selected provider and persistent failures surface without silently changing the
+selected Nano Banana provider. Existing stored artwork remains unchanged.
+Changing `NANO_BANANA_PROVIDER` requires a restart/redeploy; set the selected
+provider's server key in the same environment.
 
 
 ## Idea preflight request recovery (2026-10-28)

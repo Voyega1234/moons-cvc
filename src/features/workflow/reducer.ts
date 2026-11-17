@@ -1,3 +1,4 @@
+import { normalizeSelectableHookModel } from "../../domain/creative-run";
 import {
   defaultArtworkMode,
   defaultArtworkImageModel,
@@ -495,11 +496,11 @@ export function workflowReducer(
     case "set-hook-generation-model":
       return {
         ...state,
-        hookGenerationModel: action.model,
-        hookGenerationModels: [action.model]
+        hookGenerationModel: normalizeSelectableHookModel(action.model),
+        hookGenerationModels: [normalizeSelectableHookModel(action.model)]
       };
     case "set-hook-generation-models": {
-      const models = Array.from(new Set(action.models)).slice(
+      const models = Array.from(new Set(action.models.map(normalizeSelectableHookModel))).slice(
         0,
         MAX_HOOK_GENERATION_MODELS
       );

@@ -321,6 +321,23 @@ function openAiAlbumDirectionResponse(
 
 
 describe("handleHookGenerationHarnessRequest", () => {
+  it.each([undefined, "google/gemini-3.8-flash", "google/gemini-4-hydrogen"])(
+    "routes supported Gemini selection %s directly with the Gemini key regardless of legacy overrides", async generationModel => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({ error: { message: "Invalid test request" } }), { status: 400 }));
+      const response = await handleHookGenerationHarnessRequest({
+        request: new Request("https://moons.local/api/hook-generation-harness", { method: "POST",
+          body: JSON.stringify({ ...singleStaticRequestBody, generationModel }) }),
+        env: { GEMINI_API_KEY: "gemini-key", OPENROUTER_API_KEY: "router-key", HOOK_GEMINI_PROVIDER: "openrouter", GEMINI_HOOK_GENERATION_MODEL: "override-must-not-win" }, fetchImpl
+      });
+      expect(response.status).toBe(500);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(String(url)).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${(generationModel ?? "google/gemini-4-hydrogen").slice("google/".length)}:generateContent`);
+      expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+    }
+  );
+
   it("splits high-volume hook quotas into bounded, content-specific batches", () => {
     const batches = buildHookGenerationBatches({
       ...requestBody,
@@ -1087,7 +1104,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       .mockResolvedValueOnce(openRouterHighlightResponse("shared-research-hook", []));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
-        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "openai/gpt-6.1-terra" })
       }),
       env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
@@ -1102,12 +1119,12 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"directions":[' } }] })));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
-        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "openai/gpt-6.1-terra" })
       }),
       env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
     expect(response.status).toBe(500);
-    expect(await response.json()).toMatchObject({ error: expect.stringContaining("moons_hook_generation (google/gemini-3.8-flash) returned malformed JSON") });
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("moons_hook_generation (openai/gpt-6.1-terra) returned malformed JSON") });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -1115,11 +1132,31 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ finish_reason: finishReason, message: { content: null } }] })));
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
-        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "openai/gpt-6.1-terra" })
       }), env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl: fetchMock as typeof fetch
     });
     expect(response.status).toBe(500);
     expect(fetchMock).toHaveBeenCalledTimes(finishReason === "length" ? 2 : 1);
+  });
+
+  it("recovers once from truncated OpenRouter captions without rerunning ideas", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openRouterResearchResponse([openAiStaticDirection()]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: "length", message: { content: '{"captions":[' } }] })))
+      .mockResolvedValueOnce(openRouterJsonResponse({ captions: [{ id: "shared-research-hook", caption: "Complete caption" }] }))
+      .mockResolvedValueOnce(openRouterHighlightResponse("shared-research-hook", []));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("https://moons.local/api/hook-generation-harness", {
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "openai/gpt-6.1-terra" })
+      }), env: { OPENROUTER_API_KEY: "key" }, fetchImpl: fetchMock as typeof fetch
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ directions: [expect.objectContaining({ caption: "Complete caption" })] });
+    const bodies = fetchMock.mock.calls.map(call => JSON.parse(String(call[1]?.body)));
+    expect(bodies.filter(body => body.response_format.json_schema.name === "moons_hook_generation")).toHaveLength(1);
+    const captions = bodies.filter(body => body.response_format.json_schema.name === "moons_hook_captions");
+    expect(captions.map(body => body.max_tokens)).toEqual([2900, 24000]);
+    expect(captions[1].model).toBe(captions[0].model);
   });
 
   it("keeps large OpenRouter caption sets in bounded batches with complete ID coverage", async () => {
@@ -1147,7 +1184,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash", quantity: 13, contentTypeQuotas: [{ service: "single-static", count: 13 }] })
+        body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "openai/gpt-6.1-terra", quantity: 13, contentTypeQuotas: [{ service: "single-static", count: 13 }] })
       }),
       env: { OPENROUTER_API_KEY: "test-key" },
       fetchImpl: fetchMock as typeof fetch
@@ -1159,7 +1196,62 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(payload.directions.every((direction: { id: string; caption: string }) => direction.caption === `Caption ${direction.id}`)).toBe(true);
   });
 
-  it.each(["gemini", "vertex"] as const)("runs all Gemini Hook passes through %s without OpenRouter credentials", async (provider) => {
+  it.each((["gemini", "vertex"] as const).flatMap(provider => [false, true].map(persistent => ({ provider, persistent }))))(
+    "recovers only the truncated $provider caption batch and bounds retries (persistent: $persistent)", async ({ provider, persistent }) => {
+      const directions = Array.from({ length: 4 }, (_, index) => ({
+        ...openAiStaticDirection(), id: `caption-${index}`, sourceCandidateId: `candidate-${index}`, subheadline: "", caption: ""
+      }));
+      const captionCalls: { ids: string[]; maxTokens: number; text: string }[] = [];
+      let ideaCalls = 0;
+      const nativeResponse = (output: unknown, finishReason = "STOP") => new Response(JSON.stringify({
+        candidates: [{ finishReason, content: { parts: [{ text: JSON.stringify(output) }] } }]
+      }));
+      const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        const properties = body.generationConfig.responseJsonSchema.properties;
+        if (properties.directions) {
+          ideaCalls += 1;
+          return nativeResponse({ directions });
+        }
+        if (properties.captions) {
+          const text = body.contents[0].parts[0].text as string;
+          const selected = JSON.parse(text.split("# Selected directions (preserve IDs and strategic meaning)\n")[1]!.split("\n\n# Search evidence")[0]!);
+          const ids = selected.map((direction: { id: string }) => direction.id);
+          const previousAttempts = captionCalls.filter(call => call.ids.length === ids.length).length;
+          captionCalls.push({ ids, maxTokens: body.generationConfig.maxOutputTokens, text });
+          expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
+          if (ids.length === 3 && (persistent || previousAttempts === 0)) {
+            return nativeResponse({ captions: [] }, "MAX_TOKENS");
+          }
+          return nativeResponse({ captions: ids.map((id: string) => ({ id, caption: `Complete ${id}` })) });
+        }
+        throw new Error("Unexpected agent pass");
+      });
+      const response = await handleHookGenerationHarnessRequest({
+        request: new Request("https://moons.local/api/hook-generation-harness", { method: "POST", body: JSON.stringify({
+          ...singleStaticRequestBody, quantity: 4, contentTypeQuotas: [{ service: "single-static", count: 4 }], generationModel: "google/gemini-4-hydrogen"
+        }) }),
+        env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_KEY: "gemini", VERTEX_API_KEY: "vertex" }, fetchImpl
+      });
+      const payload = await response.json();
+      expect(ideaCalls).toBe(1);
+      expect(captionCalls.filter(call => call.ids.length === 1)).toHaveLength(1);
+      const retried = captionCalls.filter(call => call.ids.length === 3);
+      expect(retried.map(call => call.maxTokens)).toEqual([16000, 24000]);
+      expect(retried[0]!.text).toBe(retried[1]!.text);
+      if (persistent) {
+        expect(response.status).toBe(500);
+        expect(payload.error).toContain("moons_hook_captions (gemini-4-hydrogen) response was truncated");
+        expect(payload).not.toHaveProperty("directions");
+      } else {
+        expect(response.status, JSON.stringify(payload)).toBe(200);
+        expect(payload.directions.map((direction: { id: string; caption: string }) => [direction.id, direction.caption]))
+          .toEqual(directions.map(direction => [direction.id, `Complete ${direction.id}`]));
+      }
+    }
+  );
+
+  it.each(["gemini", "vertex"] as const)("forces Gemini 3.8 through Gemini API despite legacy provider setting %s", async (provider) => {
     const direction = {
       id: "native-hook", sourceCandidateId: "candidate-1", service: "single-static",
       hook: "มุมคิดใหม่", subheadline: "รายละเอียดเพิ่มเติม", concept: "Native idea",
@@ -1183,19 +1275,17 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(await response.json()).toMatchObject({ ok: true, directions: [{ id: direction.id, caption: "Native caption" }] });
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    const endpoint = provider === "vertex"
-      ? "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.8-flash:generateContent"
-      : "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+    const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([endpoint, endpoint, endpoint]);
-    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-goog-api-key")).toBe(`${provider}-key`);
+    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-goog-api-key")).toBe("gemini-key");
     expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toHaveProperty("tools", [{ googleSearch: {} }]);
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).not.toHaveProperty("tools");
     expect(writeDebugLog.mock.calls[0]![1]).toMatchObject({ researchAgent: null, topicAgent: null,
-      hookAgent: { provider, model: "gemini-3.8-flash" }, captionAgent: { model: "gemini-3.8-flash" } });
+      hookAgent: { provider: "gemini", model: "gemini-3.8-flash" }, captionAgent: { model: "gemini-3.8-flash" } });
   });
 
   it.each([
-    ["openrouter", "google/gemini-3.8-flash"],
+    ["openrouter", "openai/gpt-6.1-terra"],
     ["vertex", "anthropic/claude-sonnet-5"],
     ["gemini", "anthropic/claude-sonnet-5"]
   ])("keeps OpenRouter routing for mode %s and selection %s", async (mode, generationModel) => {
@@ -1221,7 +1311,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchImpl = vi.fn();
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
-        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
+        method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.6-flash" })
       }), env, fetchImpl
     });
     expect(await response.json()).toMatchObject({ ok: false, error });
@@ -1261,7 +1351,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify(requestWithoutGenerationModel)
+        body: JSON.stringify({ ...requestWithoutGenerationModel, generationModel: "openai/gpt-6.1-terra" })
       }),
       env: {
         OPENAI_API_KEY: "openai-key",
@@ -1297,7 +1387,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       plugins?: readonly Record<string, unknown>[];
       provider?: { require_parameters?: boolean };
     };
-    expect(generationBody.model).toBe("google/gemini-4-hydrogen");
+    expect(generationBody.model).toBe("openai/gpt-6.1-terra");
     expect(generationBody.messages[0]?.content[0]?.type).toBe("text");
     expect(generationBody.messages[0]?.content).toHaveLength(1);
     expect(generationBody.response_format).toMatchObject({
@@ -1349,7 +1439,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const researchBody = JSON.parse(
       String(fetchMock.mock.calls[0]?.[1]?.body)
     ) as { model: string; tools?: unknown[]; tool_choice?: string };
-    expect(researchBody.model).toBe("google/gemini-4-hydrogen");
+    expect(researchBody.model).toBe("openai/gpt-6.1-terra");
     expect(researchBody.tools).toEqual([
       expect.objectContaining({ type: "openrouter:web_search", parameters: expect.objectContaining({ engine: "native" }) })
     ]);
@@ -1370,7 +1460,7 @@ describe("handleHookGenerationHarnessRequest", () => {
         method: "POST",
         body: JSON.stringify({ ...singleStaticRequestBody, researchOnly: true })
       }),
-      env: { OPENAI_API_KEY: "key", OPENROUTER_API_KEY: "key", OPENROUTER_HOOK_RESEARCH_MODEL: "google/gemini-3.8-flash" },
+      env: { OPENAI_API_KEY: "key", OPENROUTER_API_KEY: "key", OPENROUTER_HOOK_RESEARCH_MODEL: "openai/gpt-6.1-terra" },
       fetchImpl: fetchMock as unknown as typeof fetch
     });
     expect(response.status).toBe(200);
@@ -1419,7 +1509,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST",
-        body: JSON.stringify({ ...requestWithoutGenerationModel, brandLibrary: { ...requestWithoutGenerationModel.brandLibrary, docs: [contentDocument] }, researchDossier: validHookResearchDossier() })
+        body: JSON.stringify({ ...requestWithoutGenerationModel, generationModel: "openai/gpt-6.1-terra", brandLibrary: { ...requestWithoutGenerationModel.brandLibrary, docs: [contentDocument] }, researchDossier: validHookResearchDossier() })
       }),
       env: {
         OPENROUTER_API_KEY: "openrouter-key",

@@ -2712,8 +2712,9 @@ describe("handleArtworkGenerationRequest", () => {
     expect(visualQcAuthorizations).toEqual([]);
   });
 
-  it("requires an OpenRouter key for image generation regardless of prompt model", async () => {
+  it("requires an OpenRouter key for GPT image generation after authentication", async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
 
@@ -2732,7 +2733,7 @@ describe("handleArtworkGenerationRequest", () => {
       ok: false,
       error: "OPENROUTER_API_KEY is required for image generation."
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("compiles a sparse, service-relevant Campaign Context for budget allocation", async () => {
@@ -3634,6 +3635,85 @@ describe("handleArtworkGenerationRequest", () => {
 
 
 describe("artwork image model selection", () => {
+  it.each([
+    ["openrouter", "OPENROUTER_API_KEY"],
+    ["invalid-provider", "NANO_BANANA_PROVIDER must be gemini or openrouter"]
+  ])("rejects invalid or unconfigured Nano Banana provider %s without switching providers", async (provider, error) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ email: "team@convertcake.com" })));
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", { method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ ...requestBody, model: "google/gemini-nano-banana-2.1" }) }),
+      env: { ALBUM_GENERATION_MODE: "independent-panels", NANO_BANANA_PROVIDER: provider, GEMINI_API_KEY: "gemini-key", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" }, fetchImpl
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining(error) });
+    expect(fetchImpl.mock.calls.every(([url]) => String(url).includes("/auth/v1/user"))).toBe(true);
+  });
+
+  it.each((["gemini", "openrouter"] as const).flatMap(provider =>
+    ["ugc-thumbnail", "placeholder", "album-placeholder", "album-generation"].map(mode => ({ provider, mode }))))(
+    "uses $provider for Nano Banana $mode", async ({ provider, mode }) => {
+      const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: "red" } }).png().toBuffer();
+      const nativeCalls: unknown[] = [];
+      const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+        const href = String(url);
+        if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+        if (href.includes("/rest/v1/")) return new Response("[]");
+        if (href.startsWith("https://example.com/")) return new Response(Uint8Array.from(bytes), { headers: { "content-type": "image/png" } });
+        if (provider === "openrouter" && href === "https://openrouter.ai/api/v1/images") {
+          expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer router-key");
+          nativeCalls.push(JSON.parse(String(init?.body)));
+          return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
+        }
+        if (provider === "gemini" && href.startsWith("https://generativelanguage.googleapis.com/")) {
+          expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+          nativeCalls.push(JSON.parse(String(init?.body)));
+          return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: {
+            mimeType: "image/png", data: bytes.toString("base64")
+          } }] } }] }));
+        }
+        throw new Error(`Unexpected provider: ${href}`);
+      });
+      const model = "google/gemini-nano-banana-2.1";
+      const body = mode === "album-generation" ? {
+        ...requestBody, model, service: "album-post", albumFormat: "four-grid", artworkMode: "direct-final-artwork",
+        selectedHooks: [{ ...requestBody.selectedHooks[0], albumFormat: "four-grid", formatBeats: ["One", "Two", "Three"] }]
+      } : {
+        requestType: "artwork-revision", model, mode: mode === "album-placeholder" ? "placeholder" : mode,
+        clientId: "flora", runId: "run-1", directionId: "hook-1", outputId: "hook-1-v2", assetVersion: 2,
+        format: mode === "ugc-thumbnail" ? "UGC video" : "Single static",
+        sourceImageUrl: "https://example.com/source.png", instructions: "Preserve the product", output: requestBody.output,
+        ...(mode === "album-placeholder" ? { album: { format: "four-grid", outputIds: ["p1", "p2", "p3", "p4"],
+          sourceImageUrls: Array(4).fill("https://example.com/source.png") } } : {})
+      };
+      const { client } = fakeStorage();
+      const response = await handleArtworkGenerationRequest({
+        request: new Request("https://moons.local/api/artwork-generation", { method: "POST",
+          headers: { authorization: "Bearer user-token" }, body: JSON.stringify(body) }),
+        env: { ALBUM_GENERATION_MODE: "independent-panels", NANO_BANANA_PROVIDER: provider, GEMINI_API_KEY: "gemini-key", OPENROUTER_API_KEY: provider === "openrouter" ? "router-key" : undefined, OPENAI_API_KEY: "text-agent-key",
+          SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
+        fetchImpl, createStorageClient: () => client, writeDebugLog: async () => {}
+      });
+      const payload = await response.json();
+      expect(response.status, JSON.stringify(payload)).toBe(200);
+      expect(nativeCalls).toHaveLength(mode.startsWith("album-") ? 4 : 1);
+      expect(payload.outputs).toHaveLength(mode.startsWith("album-") ? 4 : 1);
+      expect(payload.outputs.every((output: { provider: string }) => output.provider === provider)).toBe(true);
+    }
+  );
+
+  it("requires a Gemini key for selected Nano Banana instead of silently using OpenRouter", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ email: "team@convertcake.com" })));
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", { method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ ...requestBody, model: "google/gemini-nano-banana-2.1" }) }),
+      env: { OPENROUTER_API_KEY: "router", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" }, fetchImpl
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("GEMINI_API_KEY") });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it.each([false, true])("persists the actual model after generation (Google selected: %s)", async googleSelected => {
     const models: string[] = [];
     const imageBytes = await albumMasterPng();
@@ -3641,6 +3721,13 @@ describe("artwork image model selection", () => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
       if (href.includes("/rest/v1/")) return new Response("[]");
+      if (href.includes("generativelanguage.googleapis.com/")) {
+        expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+        models.push("google/gemini-nano-banana-2.1");
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: {
+          mimeType: "image/png", data: imageBytes.toString("base64")
+        } }] } }] }));
+      }
       if (href.endsWith("/api/v1/images")) {
         const body = JSON.parse(String(init?.body));
         models.push(body.model);
@@ -3656,7 +3743,7 @@ describe("artwork image model selection", () => {
         body: JSON.stringify({ ...requestBody, artworkMode: "direct-final-artwork",
           model: googleSelected ? "google/gemini-nano-banana-2.1" : requestBody.model })
       }),
-      env: { OPENAI_IMAGE_GENERATION_MODEL: "gpt-image-2.5-sunburst", OPENROUTER_API_KEY: "test",
+      env: { OPENAI_IMAGE_GENERATION_MODEL: "gpt-image-2.5-sunburst", OPENROUTER_API_KEY: googleSelected ? undefined : "test", GEMINI_API_KEY: "gemini-key",
         SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
       fetchImpl, createStorageClient: () => client
     });
@@ -3664,7 +3751,7 @@ describe("artwork image model selection", () => {
     expect(response.status, JSON.stringify(payload)).toBe(200);
     expect(models).toEqual(googleSelected ? ["google/gemini-nano-banana-2.1"]
       : ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1"]);
-    expect(payload.outputs[0]).toMatchObject({ model: "google/gemini-nano-banana-2.1", provider: "openrouter" });
+    expect(payload.outputs[0]).toMatchObject({ model: "google/gemini-nano-banana-2.1", provider: "gemini" });
     expect(uploads).toHaveLength(1);
   });
 });

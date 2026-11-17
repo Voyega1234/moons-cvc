@@ -101,63 +101,23 @@ describe("buildCreativeMixInstructions", () => {
 });
 
 describe("selectedHookGenerationModels", () => {
-  it("keeps at most five unique models", () => {
-    expect(
-      selectedHookGenerationModels({
-        hookGenerationModel: "google/gemini-3.6-flash",
-        hookGenerationModels: [
-          "google/gemini-3.6-flash",
-          "qwen/qwen3.8-max",
-          "sakana/sakana-namazu",
-          "openai/gpt-5.6-terra",
-          "meta-llama/llama-4-maverick",
-          "qwen/qwen3-max"
-        ]
-      })
-    ).toEqual([
-      "google/gemini-3.6-flash",
-      "qwen/qwen3.8-max",
-      "sakana/sakana-namazu",
-      "openai/gpt-5.6-terra",
-      "meta-llama/llama-4-maverick"
-    ]);
+  it("normalizes retired selections to supported models and deduplicates them", () => {
+    expect(selectedHookGenerationModels({
+      hookGenerationModel: "google/gemini-3.6-flash",
+      hookGenerationModels: ["google/gemini-3.6-flash", "openai/gpt-5.6-terra", "sakana/sakana-namazu", "google/gemini-3.8-flash"]
+    })).toEqual(["google/gemini-4-hydrogen", "openai/gpt-6.1-terra", "google/gemini-3.8-flash"]);
   });
 });
 
 describe("useGenerateMoreHooks", () => {
-  it("routes the new n8n mode to Compass New instead of the legacy webhook", async () => {
-    const state = {
-      ...createInitialWorkflowState({
-        id: "n8n-compass-new-run",
-        now: "2026-08-10T00:00:00.000Z"
-      }),
-      hookGenerationModel: "n8n-compass-new" as const,
-      hookGenerationModels: ["n8n-compass-new"] as const,
-      directions: buildDirectionFixtures("Existing")
-    };
-    const generatedDirection = {
-      ...state.directions[0]!,
-      id: "n8n-new-direction"
-    };
-    vi.mocked(generateDirectionsFromNewCompassWebhook).mockResolvedValue([
-      generatedDirection
-    ]);
-    const dispatch = vi.fn();
-    const { result } = renderHook(() => useGenerateMoreHooks(state, dispatch));
-
+  it("uses the default Gemini model for a retired n8n selection", async () => {
+    const state = { ...createInitialWorkflowState({ id: "legacy", now: "2026-11-17T00:00:00Z" }),
+      hookGenerationModel: "n8n-compass-new", hookGenerationModels: ["n8n-compass-new"], directions: buildDirectionFixtures("Existing") };
+    vi.mocked(generateDirectionsFromWebhook).mockResolvedValue([state.directions[0]!]);
+    const { result } = renderHook(() => useGenerateMoreHooks(state, vi.fn()));
     act(() => result.current.generateMore("single-static"));
-
-    await waitFor(() =>
-      expect(generateDirectionsFromNewCompassWebhook).toHaveBeenCalledWith(
-        expect.objectContaining({
-          service: "single-static"
-        })
-      )
-    );
-    expect(
-      vi.mocked(generateDirectionsFromNewCompassWebhook).mock.calls[0]?.[0]
-    ).not.toHaveProperty("existingHooks");
-    expect(generateDirectionsFromWebhook).not.toHaveBeenCalled();
+    await waitFor(() => expect(generateDirectionsFromWebhook).toHaveBeenCalledTimes(1));
+    expect(generateDirectionsFromNewCompassWebhook).not.toHaveBeenCalled();
   });
 
   it("requests and appends ideas only for the selected content type", async () => {
@@ -227,7 +187,7 @@ describe("useGenerateMoreHooks", () => {
       }),
       hookGenerationModels: [
         "google/gemini-4-hydrogen",
-        "qwen/qwen3.8-max"
+        "openai/gpt-6.1-terra"
       ] as const,
       directions: buildDirectionFixtures("Compared")
     };
@@ -262,7 +222,7 @@ describe("useGenerateMoreHooks", () => {
             generationModel: "google/gemini-4-hydrogen"
           }),
           expect.objectContaining({
-            generationModel: "qwen/qwen3.8-max"
+            generationModel: "openai/gpt-6.1-terra"
           })
         ]
       })

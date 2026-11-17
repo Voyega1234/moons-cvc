@@ -20,6 +20,7 @@ import {
   defaultHookGenerationModels,
   hookGenerationModelLabel,
   hookGenerationModels,
+  normalizeSelectableHookModel,
   hookGenerationProviderLabel,
   isOpenRouterModelId,
   MAX_HOOK_GENERATION_MODELS,
@@ -34,9 +35,7 @@ import {
 import { BrandLogo } from "../../shared/components/brand-logo";
 import type { HookResearchDossier } from "../../server/hook-generation/hook-research-agent";
 
-const playgroundModels: readonly string[] = hookGenerationModels.filter(
-  (model) => model !== "n8n-compass-new"
-);
+const playgroundModels: readonly string[] = hookGenerationModels;
 
 const contentTypes: readonly {
   value: ServiceType;
@@ -110,9 +109,6 @@ export function HookAgentPlayground() {
   const [models, setModels] = useState<readonly string[]>(
     defaultHookGenerationModels
   );
-  const [customModels, setCustomModels] = useState<readonly string[]>([]);
-  const [modelInput, setModelInput] = useState("");
-  const [modelInputError, setModelInputError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [originalPrompt, setOriginalPrompt] = useState("");
   const [promptView, setPromptView] = useState<"edit" | "diff">("edit");
@@ -152,10 +148,7 @@ export function HookAgentPlayground() {
   const promptChangeCount = promptDiff.filter(
     (line) => line.type !== "same"
   ).length;
-  const availableModels = useMemo(
-    () => [...playgroundModels, ...customModels],
-    [customModels]
-  );
+  const availableModels = playgroundModels;
 
   useEffect(() => {
     if (!brand && systemBrands[0]) {
@@ -273,30 +266,6 @@ export function HookAgentPlayground() {
         ? current.filter((candidate) => candidate !== model)
         : [...current, model];
     });
-  }
-
-  function addCustomModel() {
-    const model = modelInput.trim();
-    if (!isValidOpenRouterModelId(model)) {
-      setModelInputError("Use an OpenRouter model ID like provider/model.");
-      return;
-    }
-    if (models.length === PLAYGROUND_MODEL_LIMIT && !models.includes(model)) {
-      setModelInputError(
-        `Remove a model before adding another (maximum ${PLAYGROUND_MODEL_LIMIT}).`
-      );
-      return;
-    }
-    if (!playgroundModels.includes(model)) {
-      setCustomModels((current) =>
-        current.includes(model) ? current : [...current, model]
-      );
-    }
-    setModels((current) =>
-      current.includes(model) ? current : [...current, model]
-    );
-    setModelInput("");
-    setModelInputError(null);
   }
 
   async function runComparison() {
@@ -435,10 +404,7 @@ export function HookAgentPlayground() {
     );
     setService(experiment.request.service);
     setQuantity(experiment.request.quantity);
-    setModels(experiment.models);
-    setCustomModels(
-      experiment.models.filter((model) => !playgroundModels.includes(model))
-    );
+    setModels(Array.from(new Set(experiment.models.map(normalizeSelectableHookModel))));
     setPrompt(experiment.request.agentHookPrompt);
     setOriginalPrompt(experiment.originalPrompt);
     setPromptView("edit");
@@ -807,48 +773,6 @@ export function HookAgentPlayground() {
             </div>
             <span>{models.length} selected</span>
           </header>
-          <div className="playground-custom-model">
-            <div>
-              <input
-                type="text"
-                aria-label="OpenRouter model ID"
-                value={modelInput}
-                onChange={(event) => {
-                  setModelInput(event.target.value);
-                  setModelInputError(null);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    addCustomModel();
-                  }
-                }}
-                placeholder="sakana/sakana-namazu"
-                disabled={running}
-              />
-              <button
-                type="button"
-                disabled={running || !modelInput.trim()}
-                onClick={addCustomModel}
-              >
-                Add model
-              </button>
-            </div>
-            <p className={modelInputError ? "is-error" : ""}>
-              {modelInputError ?? (
-                <>
-                  Paste a model ID from{" "}
-                  <a
-                    href="https://openrouter.ai/models"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    OpenRouter Models
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
           <div className="playground-model-list">
             {availableModels.map((model) => {
               const checked = models.includes(model);

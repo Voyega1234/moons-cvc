@@ -23,6 +23,7 @@ export async function persistArtworkOutput({
   assetVersion = 1,
   format,
   model,
+  provider,
   imageBytes,
   mimeType,
   storage,
@@ -36,6 +37,7 @@ export async function persistArtworkOutput({
   assetVersion?: number;
   format: string;
   model: string;
+  provider?: string;
   imageBytes: Buffer;
   mimeType: string;
   storage: ArtworkStorageClient;
@@ -91,7 +93,7 @@ export async function persistArtworkOutput({
     assetUrl,
     assetStoragePath,
     assetBucket: ARTWORK_BUCKET,
-    provider: model.startsWith("google/") ? "openrouter" : "openai",
+    provider: provider ?? (model.startsWith("google/") ? "openrouter" : "openai"),
     model,
     revisionCount: Math.max(0, assetVersion - 1),
     approval: emptyApprovalGate,

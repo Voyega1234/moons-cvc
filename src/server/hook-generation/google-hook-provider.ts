@@ -29,7 +29,10 @@ export async function callGoogleHookApi({ provider, apiKey, model, fetchImpl, te
       generationConfig: {
         maxOutputTokens: maxTokens,
         responseMimeType: "application/json",
-        responseJsonSchema: schema
+        responseJsonSchema: schema,
+        ...(schemaName === "moons_hook_captions" && /^gemini-(?:3|4)[.-]/.test(model)
+          ? { thinkingConfig: { thinkingLevel: "low" } }
+          : {})
       },
       ...(search ? { tools: [{ googleSearch: {} }] } : {}),
       ...(provider === "vertex" ? { labels: { moons_stage: schemaName } } : {})

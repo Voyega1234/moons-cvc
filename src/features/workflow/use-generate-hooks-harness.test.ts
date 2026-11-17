@@ -57,7 +57,7 @@ describe("useGenerateHooks harness resilience", () => {
   it("syncs image-copy context once before starting model comparisons and sends it to every model", async () => {
     const state = {
       ...createInitialWorkflowState({ id: "style-context-run", now: "2026-11-02T00:00:00Z" }),
-      hookGenerationModels: ["google/gemini-4-hydrogen", "openai/gpt-5.6-terra"]
+      hookGenerationModels: ["google/gemini-4-hydrogen", "openai/gpt-6.1-terra"]
     };
     const brand = { id: "brand-1", name: "Sendo", category: "", initials: "S", memory: { working: [], avoid: [] }, library: { brand: [], products: [], refs: [], docs: [] } };
     const document = { id: "style", title: "Copy style from Creative Approval", description: "ประหยัดค่าแรง ค่าสีไม่ต้องทาซ้ำ" };
@@ -104,19 +104,13 @@ describe("useGenerateHooks harness resilience", () => {
     expect(generateDirectionsWithHarness).toHaveBeenCalledTimes(1);
   });
 
-  it("starts all five OpenRouter models concurrently without preliminary Research", async () => {
+  it("starts all three supported models concurrently without preliminary Research", async () => {
     const state = {
       ...createInitialWorkflowState({
         id: "five-model-run",
         now: "2026-08-11T06:10:00.000Z"
       }),
-      hookGenerationModels: [
-        "google/gemini-4-hydrogen",
-        "qwen/qwen3.8-max",
-        "sakana/sakana-namazu",
-        "openai/gpt-5.6-terra",
-        "meta-llama/llama-4-maverick"
-      ]
+      hookGenerationModels: ["google/gemini-4-hydrogen", "google/gemini-3.8-flash", "openai/gpt-6.1-terra"]
     };
     const direction = buildDirectionFixtures("Concurrent")[0]!;
     let started = 0;
@@ -137,7 +131,7 @@ describe("useGenerateHooks harness resilience", () => {
 
     act(() => result.current.generate());
 
-    await waitFor(() => expect(started).toBe(5));
+    await waitFor(() => expect(started).toBe(3));
     releaseModels();
     await waitFor(() =>
       expect(dispatch).toHaveBeenCalledWith(
@@ -154,7 +148,7 @@ describe("useGenerateHooks harness resilience", () => {
       }),
       hookGenerationModels: [
         "google/gemini-4-hydrogen",
-        "qwen/qwen3.8-max"
+        "openai/gpt-6.1-terra"
       ]
     };
     const dossier = { overallFinding: "Shared evidence" };

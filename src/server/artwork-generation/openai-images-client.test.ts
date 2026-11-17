@@ -16,6 +16,57 @@ const oversizedPrompt = [
   "FINAL REQUIREMENTS — preserve this ending."
 ].join("\n\n");
 
+it.each(["generate", "edit", "aspect-ratio"] as const)("routes Nano Banana %s directly to Gemini with its own key", async operation => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    candidates: [{ content: { parts: [
+      { text: "Image generated" },
+      { inlineData: { mimeType: "image/png", data: validPng.toString("base64") } }
+    ] } }]
+  })));
+  const options = { apiKey: "openrouter-key", geminiApiKey: "gemini-key",
+    model: "google/gemini-nano-banana-2.1", prompt: "Approved campaign", size: "1024x1024" as const, fetchImpl };
+  const references = [{ bytes: validPng, mimeType: "image/png", label: "Official product" }];
+  const result = operation === "generate" ? await generateImage(options)
+    : operation === "edit" ? await editImage({ ...options, referenceImages: references })
+    : await editImageWithAspectRatio({ ...options, aspectRatio: "1:1", referenceImages: references });
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  const [url, init] = fetchImpl.mock.calls[0]!;
+  expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent");
+  expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+  expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+  expect(JSON.stringify(init)).not.toContain("openrouter-key");
+  const body = JSON.parse(String(init?.body));
+  expect(body.generationConfig).toEqual({ responseModalities: ["TEXT", "IMAGE"], imageConfig: { aspectRatio: "1:1", imageSize: "1K" } });
+  const parts = body.contents[0].parts;
+  expect(parts[0]).toEqual({ text: "Approved campaign" });
+  expect(parts.filter((part: { inlineData?: unknown }) => part.inlineData)).toHaveLength(operation === "generate" ? 0 : 1);
+  if (operation !== "generate") {
+    expect(parts[1]).toEqual({ text: "Official product" });
+    expect(parts[2].inlineData.data).toBe(validPng.toString("base64"));
+  }
+  expect(result.model).toBe(options.model);
+  expect(await sharp(Buffer.from(result.base64, "base64")).metadata()).toMatchObject({ width: 1024, height: 1024 });
+});
+
+it("surfaces a native Gemini safety block without switching back to OpenRouter", async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ promptFeedback: { blockReason: "SAFETY" } })));
+  await expect(generateImage({ apiKey: "router", geminiApiKey: "gemini", model: "google/gemini-nano-banana-2.1",
+    prompt: "Campaign", size: "1024x1024", fetchImpl })).rejects.toThrow("refused or blocked");
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
+it("retries a transient native Gemini failure on the same provider", async () => {
+  const fetchImpl = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "Service unavailable" } }), { status: 503 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: {
+      mimeType: "image/png", data: validPng.toString("base64")
+    } }] } }] })));
+  await generateImage({ apiKey: "router", geminiApiKey: "gemini", model: "google/gemini-nano-banana-2.1",
+    prompt: "Campaign", size: "1024x1024", fetchImpl });
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  expect(fetchImpl.mock.calls.every(([url]) => String(url).startsWith("https://generativelanguage.googleapis.com/"))).toBe(true);
+});
+
 function imageResponse(): Response {
   return new Response(
     JSON.stringify({

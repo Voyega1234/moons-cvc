@@ -151,29 +151,25 @@ export const hookIdeaModes = ["standard", "fresh-research"] as const;
 export type HookIdeaMode = (typeof hookIdeaModes)[number];
 export const defaultHookIdeaMode: HookIdeaMode = "fresh-research";
 export const hookGenerationModels = [
-  "gpt-5.6-terra",
-  "google/gemini-3.6-flash",
   "google/gemini-3.8-flash",
   "google/gemini-4-hydrogen",
-  "anthropic/claude-sonnet-5",
-  "openai/gpt-5.6-terra",
-  "n8n-compass-new"
+  "openai/gpt-6.1-terra"
 ] as const;
 export type BuiltInHookGenerationModel = (typeof hookGenerationModels)[number];
 export type HookGenerationModel = string;
-export const openRouterHookGenerationModels = [
-  "google/gemini-3.6-flash",
-  "google/gemini-3.8-flash",
-  "google/gemini-4-hydrogen",
-  "anthropic/claude-sonnet-5",
-  "openai/gpt-5.6-terra"
-] as const satisfies readonly HookGenerationModel[];
-export type OpenRouterHookGenerationModel =
-  (typeof openRouterHookGenerationModels)[number];
+// Legacy export name retained for callers; these are the supported picker models.
+export const openRouterHookGenerationModels = hookGenerationModels;
+export type OpenRouterHookGenerationModel = BuiltInHookGenerationModel;
 export const defaultHookGenerationModels = [
   "google/gemini-4-hydrogen"
 ] as const satisfies readonly HookGenerationModel[];
-export const MAX_HOOK_GENERATION_MODELS = 5;
+
+export function normalizeSelectableHookModel(model: string): BuiltInHookGenerationModel {
+  if ((hookGenerationModels as readonly string[]).includes(model)) return model as BuiltInHookGenerationModel;
+  if (model === "gpt-5.6-terra" || model === "openai/gpt-5.6-terra") return "openai/gpt-6.1-terra";
+  return defaultHookGenerationModels[0];
+}
+export const MAX_HOOK_GENERATION_MODELS = 3;
 
 export function isOpenRouterHookGenerationModel(
   model: HookGenerationModel
@@ -199,6 +195,8 @@ export function isHookGenerationModel(value: unknown): value is HookGenerationMo
 
 export function hookGenerationModelLabel(model: HookGenerationModel): string {
   switch (model) {
+    case "openai/gpt-6.1-terra":
+      return "GPT 6.1 Terra";
     case "google/gemini-3.6-flash":
       return "Gemini 3.6 Flash";
     case "google/gemini-4-hydrogen":
@@ -223,6 +221,7 @@ export function hookGenerationModelLabel(model: HookGenerationModel): string {
 export function hookGenerationProviderLabel(
   model: HookGenerationModel
 ): string {
+  if (model === "google/gemini-3.8-flash" || model === "google/gemini-4-hydrogen") return "Gemini API";
   if (isOpenRouterHookGenerationModel(model)) return "OpenRouter";
   return model === "n8n-compass-new" ? "n8n" : "OpenAI";
 }

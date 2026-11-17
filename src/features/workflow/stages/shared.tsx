@@ -4,49 +4,16 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type FormEvent,
   type ReactNode
 } from "react";
 import {
-  defaultHookGenerationModels,
   hookGenerationModelLabel,
-  isOpenRouterModelId,
+  normalizeSelectableHookModel,
   MAX_HOOK_GENERATION_MODELS,
   openRouterHookGenerationModels,
   type HookGenerationModel
 } from "../../../domain/creative-run";
 import type { WorkflowAction, WorkflowState } from "../model";
-
-const SAVED_HOOK_MODELS_STORAGE_KEY = "moons.saved-hook-models.v1";
-
-function readSavedHookModels(): readonly HookGenerationModel[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed: unknown = JSON.parse(
-      window.localStorage.getItem(SAVED_HOOK_MODELS_STORAGE_KEY) ?? "[]"
-    );
-    return Array.isArray(parsed)
-      ? Array.from(
-          new Set(
-            parsed.filter(
-              (model): model is HookGenerationModel =>
-                isOpenRouterModelId(model)
-            )
-          )
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHookModels(models: readonly HookGenerationModel[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    SAVED_HOOK_MODELS_STORAGE_KEY,
-    JSON.stringify(models.filter(isOpenRouterModelId))
-  );
-}
 
 export interface StageProps {
   state: WorkflowState;
@@ -93,30 +60,16 @@ export function HookGenerationModelSelect({
   dispatch: Dispatch<WorkflowAction>;
 }) {
   const [open, setOpen] = useState(false);
-  const [modelDraft, setModelDraft] = useState("");
   const [modelError, setModelError] = useState<string | null>(null);
-  const [savedModels, setSavedModels] =
-    useState<readonly HookGenerationModel[]>(readSavedHookModels);
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const storedModels = state.hookGenerationModels?.length
     ? state.hookGenerationModels
     : [state.hookGenerationModel];
-  const visibleStoredModels = storedModels.filter(
-    (model) => model !== "n8n-compass-new"
-  );
-  const selectedModels = visibleStoredModels.length
-    ? visibleStoredModels
-    : [...defaultHookGenerationModels];
-  const selectedSet = new Set(selectedModels);
-  const savedModelCatalog = Array.from(
-    new Set<HookGenerationModel>([
-      ...openRouterHookGenerationModels,
-      ...savedModels,
-      ...selectedModels
-    ])
-  );
+  const selectedModels = Array.from(new Set(storedModels.map(normalizeSelectableHookModel))).slice(0, MAX_HOOK_GENERATION_MODELS);
+  const selectedSet = new Set<string>(selectedModels);
+  const savedModelCatalog = openRouterHookGenerationModels;
   const summary =
     selectedModels.length === 1
       ? hookGenerationModelLabel(selectedModels[0]!)
@@ -157,34 +110,6 @@ export function HookGenerationModelSelect({
       dispatch({ type: "set-hook-generation-models", models: selectedModels });
     }
   }, [dispatch, selectedModels, storedModels]);
-
-  function addModel(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const model = modelDraft.trim();
-    if (!isOpenRouterModelId(model)) {
-      setModelError("Use an OpenRouter model ID in provider/model format.");
-      return;
-    }
-    if (savedModelCatalog.includes(model)) {
-      setModelError("This model is already saved.");
-      return;
-    }
-    const nextSavedModels = [...savedModels, model];
-    setSavedModels(nextSavedModels);
-    saveHookModels(nextSavedModels);
-    if (selectedModels.length < MAX_HOOK_GENERATION_MODELS) {
-      dispatch({
-        type: "set-hook-generation-models",
-        models: [...selectedModels, model]
-      });
-    } else {
-      setModelError("Model saved. Unselect another model to use it.");
-    }
-    setModelDraft("");
-    if (selectedModels.length < MAX_HOOK_GENERATION_MODELS) {
-      setModelError(null);
-    }
-  }
 
   function toggleModel(model: HookGenerationModel) {
     if (selectedSet.has(model)) {
@@ -233,8 +158,8 @@ export function HookGenerationModelSelect({
         >
           <h3 id={titleId}>Hook models</h3>
           <p>
-            Save OpenRouter model IDs, then select up to {MAX_HOOK_GENERATION_MODELS}
-            {" "}to run together.
+            Select up to {MAX_HOOK_GENERATION_MODELS} models to run together.
+            Gemini uses the Gemini API; GPT uses OpenRouter.
           </p>
           <div className="compass-hook-model-options" aria-label="Saved models">
             {savedModelCatalog.map((model) => (
@@ -258,46 +183,12 @@ export function HookGenerationModelSelect({
               </label>
             ))}
           </div>
-          <form className="compass-hook-model-form" onSubmit={addModel}>
-            <label className="sr-only" htmlFor={`${titleId}-input`}>
-              OpenRouter model ID
-            </label>
-            <input
-              id={`${titleId}-input`}
-              type="text"
-              value={modelDraft}
-              placeholder="provider/model"
-              autoComplete="off"
-              disabled={disabled}
-              aria-describedby={modelError ? `${titleId}-error` : undefined}
-              onChange={(event) => {
-                setModelDraft(event.target.value);
-                setModelError(null);
-              }}
-            />
-            <button
-              type="submit"
-              disabled={
-                disabled ||
-                !modelDraft.trim()
-              }
-            >
-              Add model
-            </button>
-          </form>
           {modelError ? (
             <p className="compass-hook-model-error" id={`${titleId}-error`} role="alert">
               {modelError}
             </p>
           ) : null}
-          <a
-            className="compass-hook-model-catalog-link"
-            href="https://openrouter.ai/models"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Browse OpenRouter models
-          </a>
+
         </div>
       ) : null}
     </div>

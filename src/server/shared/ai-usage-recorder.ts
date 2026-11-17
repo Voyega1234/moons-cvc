@@ -127,7 +127,10 @@ function parseProviderRequest(
   const isGoogle = (isGemini || isVertex) && url.pathname.endsWith(":generateContent");
   if (!isOpenAi && !isOpenRouter && !isGoogle) return null;
 
-  const isImage =
+  const body = parseRequestBody(init?.body);
+  const googleImage = isGoogle && isRecord(body) && isRecord(body.generationConfig) &&
+    Array.isArray(body.generationConfig.responseModalities) && body.generationConfig.responseModalities.some(value => String(value).toUpperCase() === "IMAGE");
+  const isImage = googleImage ||
     /^\/v1\/images\/(?:generations|edits)$/.test(url.pathname) ||
     url.pathname === "/api/v1/images";
   const isText =
@@ -135,12 +138,11 @@ function parseProviderRequest(
     url.pathname === "/api/v1/chat/completions" || isGoogle;
   if (!isImage && !isText) return null;
 
-  const body = parseRequestBody(init?.body);
   const model = readBodyString(body, "model") || (isGoogle ? decodeURIComponent(url.pathname.split("/").at(-1)!.replace(":generateContent", "")) : "unknown");
   const schemaName =
     nestedString(body, ["text", "format", "name"]) ||
     nestedString(body, ["response_format", "json_schema", "name"]) ||
-    nestedString(body, ["labels", "moons_stage"]) || (isGoogle ? "hook-generation" : "");
+    nestedString(body, ["labels", "moons_stage"]) || (googleImage ? "" : isGoogle ? "hook-generation" : "");
   const imageOperation =
     url.pathname.endsWith("/edits") || bodyHasInputReferences(body)
       ? "image-edit"
@@ -152,7 +154,7 @@ function parseProviderRequest(
     modality: isImage ? "image" : "text",
     model,
     stage: schemaName || imageOperation,
-    imageSize: readBodyString(body, "size") || null,
+    imageSize: readBodyString(body, "size") || (googleImage ? [nestedString(body, ["generationConfig", "imageConfig", "aspectRatio"]), nestedString(body, ["generationConfig", "imageConfig", "imageSize"])].filter(Boolean).join(" ") : "") || null,
     imageQuality: readBodyString(body, "quality") || null,
     requestedImageCount: readBodyNumber(body, "n") || (isImage ? 1 : 0)
   };
@@ -190,7 +192,13 @@ function buildUsageEvent({
     usage.completion_tokens, usage.candidatesTokenCount
   );
   const responseImageCount =
-    isRecord(payload) && Array.isArray(payload.data) ? payload.data.length : 0;
+    isRecord(payload) && Array.isArray(payload.data) ? payload.data.length
+      : isRecord(payload) && Array.isArray(payload.candidates) ? payload.candidates.filter(isRecord).reduce((count, candidate) => {
+          const content = isRecord(candidate.content) ? candidate.content : {};
+          return count + (Array.isArray(content.parts) ? content.parts.filter(part =>
+            isRecord(part) && part.thought !== true && isRecord(part.inlineData) &&
+            typeof part.inlineData.mimeType === "string" && part.inlineData.mimeType.startsWith("image/")).length : 0);
+        }, 0) : 0;
 
   return {
     owner_user_id: context.ownerUserId || "",
@@ -225,7 +233,7 @@ function buildUsageEvent({
       firstNumber(usage.total_tokens, usage.totalTokenCount) || inputTokens + outputTokens,
     web_search_requests: countWebSearchRequests(payload),
     image_count: response.ok
-      ? responseImageCount || providerRequest.requestedImageCount
+      ? responseImageCount || (providerRequest.provider === "gemini" || providerRequest.provider === "vertex" ? 0 : providerRequest.requestedImageCount)
       : 0,
     image_size: providerRequest.imageSize,
     image_quality: providerRequest.imageQuality,
@@ -373,11 +381,11 @@ function readBodyString(value: unknown, key: string): string {
 }
 
 function bodyHasInputReferences(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.input_references) &&
-    value.input_references.length > 0
-  );
+  if (!isRecord(value)) return false;
+  if (Array.isArray(value.input_references) && value.input_references.length > 0) return true;
+  return Array.isArray(value.contents) && value.contents.some(content =>
+    isRecord(content) && Array.isArray(content.parts) && content.parts.some(part =>
+      isRecord(part) && isRecord(part.inlineData)));
 }
 
 function readBodyNumber(value: unknown, key: string): number {

@@ -273,44 +273,18 @@ describe("workflowReducer", () => {
     expect(updated.imagePromptModel).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("defaults hook generation to OpenRouter Gemini and allows OpenAI", () => {
-    expect(initialWorkflowState.hookGenerationModel).toBe(
-      "google/gemini-4-hydrogen"
-    );
-    expect(initialWorkflowState.hookGenerationModels).toEqual([
-      "google/gemini-4-hydrogen"
-    ]);
-
-    const updated = workflowReducer(initialWorkflowState, {
-      type: "set-hook-generation-model",
-      model: "gpt-5.6-terra"
-    });
-
-    expect(updated.hookGenerationModel).toBe("gpt-5.6-terra");
-    expect(updated.hookGenerationModels).toEqual(["gpt-5.6-terra"]);
+  it("defaults Hook generation to Gemini 4 and migrates the old GPT selection", () => {
+    expect(initialWorkflowState.hookGenerationModels).toEqual(["google/gemini-4-hydrogen"]);
+    const updated = workflowReducer(initialWorkflowState, { type: "set-hook-generation-model", model: "gpt-5.6-terra" });
+    expect(updated.hookGenerationModel).toBe("openai/gpt-6.1-terra");
+    expect(updated.hookGenerationModels).toEqual(["openai/gpt-6.1-terra"]);
   });
 
-  it("keeps up to five comparison models and uses the first as compatibility alias", () => {
-    const updated = workflowReducer(initialWorkflowState, {
-      type: "set-hook-generation-models",
-      models: [
-        "qwen/qwen3.8-max",
-        "google/gemini-3.6-flash",
-        "sakana/sakana-namazu",
-        "gpt-5.6-terra",
-        "openai/gpt-5.6-terra",
-        "meta-llama/llama-4-maverick"
-      ]
-    });
-
-    expect(updated.hookGenerationModel).toBe("qwen/qwen3.8-max");
-    expect(updated.hookGenerationModels).toEqual([
-      "qwen/qwen3.8-max",
-      "google/gemini-3.6-flash",
-      "sakana/sakana-namazu",
-      "gpt-5.6-terra",
-      "openai/gpt-5.6-terra"
-    ]);
+  it("keeps only supported comparison models and uses the first as alias", () => {
+    const updated = workflowReducer(initialWorkflowState, { type: "set-hook-generation-models",
+      models: ["google/gemini-4-hydrogen", "google/gemini-3.8-flash", "openai/gpt-6.1-terra", "anthropic/claude-sonnet-5"] });
+    expect(updated.hookGenerationModel).toBe("google/gemini-4-hydrogen");
+    expect(updated.hookGenerationModels).toEqual(["google/gemini-4-hydrogen", "google/gemini-3.8-flash", "openai/gpt-6.1-terra"]);
   });
 
   it("defaults output size to 4:5 portrait and allows larger landscape output", () => {

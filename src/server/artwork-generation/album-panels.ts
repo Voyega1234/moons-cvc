@@ -74,7 +74,7 @@ export async function composeAlbumPreview(panels: readonly { bytes: Buffer }[], 
 }
 
 export async function generateIndependentAlbumPanels({
-  hook, format, prompt, references, apiKey, model, runId, fetchImpl, debugLogDirectory, writeDebugLog, reviewPanel, usePlaceholderCopy, artDirection
+  hook, format, prompt, references, apiKey, geminiApiKey, model, runId, fetchImpl, debugLogDirectory, writeDebugLog, reviewPanel, usePlaceholderCopy, artDirection
 }: {
   reviewPanel?: (image: GeneratedImage, size: ImageGenerationSize, index: number) => Promise<GeneratedImage>;
   usePlaceholderCopy?: boolean;
@@ -84,6 +84,7 @@ export async function generateIndependentAlbumPanels({
   prompt: string;
   references: readonly ReferenceImageInput[];
   apiKey: string;
+  geminiApiKey?: string;
   model: string;
   runId: string;
   fetchImpl: typeof fetch;
@@ -133,7 +134,7 @@ export async function generateIndependentAlbumPanels({
       hook: { id: `${hook.id}-album-${panel.index}` }, prompt: panelPrompt,
       size: panel.size, quality: "medium", references: panelReferences });
     await writeDebugLog(debugLogDirectory, debug.entry, debug.assets);
-    const image = await editImage({ apiKey, model, prompt: panelPrompt, size: panel.size,
+    const image = await editImage({ apiKey, geminiApiKey, model, prompt: panelPrompt, size: panel.size,
       referenceImages: panelReferences, quality: "medium", fetchImpl });
     const reviewed = reviewPanel ? await reviewPanel(image, panel.size, panel.index) : image;
     const bytes = await prepareAlbumPanel(Buffer.from(reviewed.base64, "base64"), panel.size, panel.index);

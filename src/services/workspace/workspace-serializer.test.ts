@@ -1136,7 +1136,7 @@ describe("workspace serializer", () => {
     ]);
   });
 
-  it("migrates saved legacy Claude and Qwen hook models to Claude Sonnet 5", () => {
+  it("migrates saved legacy Claude and Qwen hook models to default Gemini 4", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -1162,21 +1162,21 @@ describe("workspace serializer", () => {
     const restored = deserializeWorkspace(JSON.stringify(parsed));
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "anthropic/claude-sonnet-5"
+      "google/gemini-4-hydrogen"
     );
     expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
-      "anthropic/claude-sonnet-5"
+      "google/gemini-4-hydrogen"
     ]);
 
     run.hookGenerationModel = "qwen/qwen3.8-max";
     run.hookGenerationModels = ["qwen/qwen3.8-max"];
     const restoredQwen = deserializeWorkspace(JSON.stringify(parsed));
     expect(restoredQwen?.runsById["run-1"]?.hookGenerationModels).toEqual([
-      "anthropic/claude-sonnet-5"
+      "google/gemini-4-hydrogen"
     ]);
   });
 
-  it("preserves a custom OpenRouter hook model ID", () => {
+  it("replaces a retired custom model with default Gemini 4", () => {
     const workspace = createInitialWorkspaceState({
       runId: "run-1",
       now: "2026-06-23T10:00:00.000Z"
@@ -1191,10 +1191,10 @@ describe("workspace serializer", () => {
     );
 
     expect(restored?.runsById["run-1"]?.hookGenerationModel).toBe(
-      "sakana/sakana-namazu"
+      "google/gemini-4-hydrogen"
     );
     expect(restored?.runsById["run-1"]?.hookGenerationModels).toEqual([
-      "sakana/sakana-namazu"
+      "google/gemini-4-hydrogen"
     ]);
   });
 

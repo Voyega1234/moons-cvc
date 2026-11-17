@@ -131,6 +131,8 @@ export interface ArtworkGenerationEndpointEnv {
   OPENAI_IMAGE_PROMPT_MODEL?: string;
   OPENAI_CREATIVE_STRATEGY_MODEL?: string;
   OPENROUTER_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  NANO_BANANA_PROVIDER?: string;
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
   OPENROUTER_REFERENCE_INTERPRETER_MODEL?: string;
   ARTWORK_GENERATION_DEBUG_LOG_DIR?: string;
@@ -173,13 +175,12 @@ export async function handleArtworkGenerationRequest({
 
   try {
     const apiKey = env.OPENAI_API_KEY?.trim();
-    const imageApiKey = env.OPENROUTER_API_KEY?.trim();
-    if (!imageApiKey) {
-      return jsonResponse(
-        { ok: false, error: "OPENROUTER_API_KEY is required for image generation." },
-        500
-      );
+    const imageApiKey = env.OPENROUTER_API_KEY?.trim() ?? "";
+    const nanoBananaProvider = env.NANO_BANANA_PROVIDER?.trim() || "gemini";
+    if (nanoBananaProvider !== "gemini" && nanoBananaProvider !== "openrouter") {
+      throw new Error("NANO_BANANA_PROVIDER must be gemini or openrouter.");
     }
+    const geminiApiKey = nanoBananaProvider === "gemini" ? env.GEMINI_API_KEY?.trim() : undefined;
 
     const auth = await resolveConvertCakeAuthorization(request, env, fetchImpl);
     if (!auth.authorized) {
@@ -206,6 +207,13 @@ export async function handleArtworkGenerationRequest({
       ? parseRevisionRequestBody(requestBody)
       : null;
     const input = revisionInput ? null : parseRequestBody(requestBody);
+    const selectedImageModel = revisionInput?.model ?? input?.model;
+    if (selectedImageModel?.startsWith("google/") && nanoBananaProvider === "gemini" && !geminiApiKey) {
+      return jsonResponse({ ok: false, error: "GEMINI_API_KEY is required for Nano Banana image generation." }, 500);
+    }
+    if ((!selectedImageModel?.startsWith("google/") || nanoBananaProvider === "openrouter" ) && !imageApiKey) {
+      return jsonResponse({ ok: false, error: "OPENROUTER_API_KEY is required for image generation." }, 500);
+    }
     const providerFetchImpl = createAiUsageTrackingFetch({
       fetchImpl,
       context: {
@@ -231,7 +239,7 @@ export async function handleArtworkGenerationRequest({
           : env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || revisionInput.model;
       const revisionOptions = {
         input: revisionInput,
-        apiKey: imageApiKey,
+        apiKey: imageApiKey, geminiApiKey,
         model,
         debugLogDirectory: env.ARTWORK_GENERATION_DEBUG_LOG_DIR?.trim(),
         writeDebugLog,
@@ -346,6 +354,7 @@ export async function handleArtworkGenerationRequest({
       input,
       apiKey: apiKey ?? "",
       imageApiKey,
+      geminiApiKey,
       model,
       promptModel,
       promptProvider,
@@ -422,6 +431,7 @@ async function generateOutputsForSelectedHooks({
   input,
   apiKey,
   imageApiKey,
+  geminiApiKey,
   model,
   promptModel,
   promptProvider,
@@ -440,6 +450,7 @@ async function generateOutputsForSelectedHooks({
   input: ArtworkGenerationRequest;
   apiKey: string;
   imageApiKey: string;
+  geminiApiKey?: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -485,6 +496,7 @@ async function generateOutputsForSelectedHooks({
         hook,
         apiKey,
         imageApiKey,
+        geminiApiKey,
         model,
         promptModel,
         promptProvider,
@@ -596,6 +608,7 @@ async function generateOutputForHook({
   hook,
   apiKey,
   imageApiKey,
+  geminiApiKey,
   model,
   promptModel,
   promptProvider,
@@ -617,6 +630,7 @@ async function generateOutputForHook({
   hook: SelectedHook;
   apiKey: string;
   imageApiKey: string;
+  geminiApiKey?: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -794,18 +808,19 @@ async function generateOutputForHook({
     const { panels, masterBytes } = await generateIndependentAlbumPanels({
       hook, format: albumFormat, prompt: composeImagePrompt(promptParts, brandVisualInstruction),
       usePlaceholderCopy: input.usePlaceholderCopy,
-      references: generationReferences, apiKey: imageApiKey, model, runId: input.runId,
+      references: generationReferences, apiKey: imageApiKey, geminiApiKey, model, runId: input.runId,
       fetchImpl, debugLogDirectory, writeDebugLog,
       reviewPanel: (image, size, index) => applyPostGenerationVisualQc({
         input, hook: { ...hook, id: `${hook.id}-album-${index}` }, image,
-        setDirection, shotOpportunity, apiKey, imageApiKey, model,
+        setDirection, shotOpportunity, apiKey, imageApiKey, geminiApiKey, model,
         promptModel, promptProvider, promptApiKey, generationSize: size,
         debugLogDirectory, writeDebugLog, fetchImpl
       })
     });
     const persist = (id: string, imageBytes: Buffer, actualModel?: string) => persistArtworkOutput({
       input, hook: { ...hook, id }, outputId: `${id}-v${assetVersion}`,
-      directionId: hook.id, assetVersion, format, model: actualModel ?? model, imageBytes,
+      directionId: hook.id, assetVersion, format, model: actualModel ?? model,
+      provider: (actualModel ?? model).startsWith("google/") && geminiApiKey ? "gemini" : undefined, imageBytes,
       mimeType: "image/png", storage, debugLogDirectory, writeDebugLog
     });
     const master = await persist(`${hook.id}-album-master`, masterBytes);
@@ -839,7 +854,7 @@ async function generateOutputForHook({
     const generatedImage =
       generationReferences.length > 0
         ? await editImage({
-            apiKey: imageApiKey,
+            apiKey: imageApiKey, geminiApiKey,
             model,
             prompt: masterPrompt,
             size: generationSize,
@@ -848,7 +863,7 @@ async function generateOutputForHook({
             fetchImpl
           })
         : await generateImage({
-            apiKey: imageApiKey,
+            apiKey: imageApiKey, geminiApiKey,
             model,
             prompt: masterPrompt,
             size: generationSize,
@@ -862,6 +877,7 @@ async function generateOutputForHook({
       shotOpportunity,
       apiKey,
       imageApiKey,
+      geminiApiKey,
       model,
       promptModel,
       promptProvider,
@@ -886,6 +902,7 @@ async function generateOutputForHook({
       panels,
       apiKey,
       imageApiKey,
+      geminiApiKey,
       model,
       promptModel:
         promptProvider === "openai" ? promptModel : "gpt-5.6-terra",
@@ -905,6 +922,7 @@ async function generateOutputForHook({
       assetVersion,
       format,
       model: finalMasterImage.model ?? model,
+      provider: (finalMasterImage.model ?? model).startsWith("google/") && geminiApiKey ? "gemini" : undefined,
       imageBytes,
       mimeType: finalMasterImage.mimeType,
       storage,
@@ -921,6 +939,7 @@ async function generateOutputForHook({
           assetVersion,
           format,
           model: finalMasterImage.model ?? model,
+          provider: (finalMasterImage.model ?? model).startsWith("google/") && geminiApiKey ? "gemini" : undefined,
           imageBytes: panel.bytes,
           mimeType: "image/png",
           storage,
@@ -951,7 +970,7 @@ async function generateOutputForHook({
   const generatedImage =
     generationReferences.length > 0
       ? await editImage({
-          apiKey: imageApiKey,
+          apiKey: imageApiKey, geminiApiKey,
           model,
           prompt: imagePrompt,
           size: generationSize,
@@ -960,7 +979,7 @@ async function generateOutputForHook({
           fetchImpl
         })
       : await generateImage({
-          apiKey: imageApiKey,
+          apiKey: imageApiKey, geminiApiKey,
           model,
           prompt: imagePrompt,
           size: generationSize,
@@ -974,6 +993,7 @@ async function generateOutputForHook({
     shotOpportunity,
     apiKey,
     imageApiKey,
+    geminiApiKey,
     model,
     promptModel,
     promptProvider,
@@ -993,6 +1013,7 @@ async function generateOutputForHook({
       assetVersion: input.assetVersion ?? 1,
       format,
       model: image.model ?? model,
+      provider: (image.model ?? model).startsWith("google/") && geminiApiKey ? "gemini" : undefined,
       imageBytes: Buffer.from(image.base64, "base64"),
       mimeType: image.mimeType,
       storage,
@@ -1010,6 +1031,7 @@ async function applyPostGenerationVisualQc({
   shotOpportunity,
   apiKey,
   imageApiKey,
+  geminiApiKey,
   model,
   promptModel,
   promptProvider,
@@ -1026,6 +1048,7 @@ async function applyPostGenerationVisualQc({
   shotOpportunity?: string;
   apiKey: string;
   imageApiKey: string;
+  geminiApiKey?: string;
   model: string;
   promptModel?: string;
   promptProvider: ImagePromptProvider;
@@ -1103,7 +1126,7 @@ async function applyPostGenerationVisualQc({
       imageRequestDebug.assets
     );
     return await editImage({
-      apiKey: imageApiKey,
+      apiKey: imageApiKey, geminiApiKey,
       model,
       prompt: revisionPrompt,
       size: generationSize,
@@ -1128,6 +1151,7 @@ async function applyAlbumPanelSeparationQc({
   panels,
   apiKey,
   imageApiKey,
+  geminiApiKey,
   model,
   promptModel,
   generationSize,
@@ -1142,6 +1166,7 @@ async function applyAlbumPanelSeparationQc({
   panels: Awaited<ReturnType<typeof splitAlbumMaster>>;
   apiKey: string;
   imageApiKey: string;
+  geminiApiKey?: string;
   model: string;
   promptModel?: string;
   generationSize: ArtworkOutputSize;
@@ -1206,7 +1231,7 @@ async function applyAlbumPanelSeparationQc({
       imageRequestDebug.assets
     );
     const repairedMaster = await editImage({
-      apiKey: imageApiKey,
+      apiKey: imageApiKey, geminiApiKey,
       model,
       prompt: revisionPrompt,
       size: generationSize,

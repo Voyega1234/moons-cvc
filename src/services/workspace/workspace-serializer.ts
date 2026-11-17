@@ -15,6 +15,7 @@ import {
   imagePromptModels,
   isHookGenerationModel,
   MAX_HOOK_GENERATION_MODELS,
+  normalizeSelectableHookModel,
   normalizeHookReferenceImages,
   normalizeFormatBeatsForService,
   referenceImageRoles,
@@ -48,9 +49,6 @@ import {
 import { QUANTITY_LIMITS } from "../../shared/constants/ui";
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
-const LEGACY_CLAUDE_HOOK_MODEL = "anthropic/claude-sonnet-4.6";
-const LEGACY_QWEN_HOOK_MODEL = "qwen/qwen3.8-max";
-const CLAUDE_HOOK_MODEL = "anthropic/claude-sonnet-5";
 
 interface WorkspaceSnapshotV1 {
   schemaVersion: 1;
@@ -359,12 +357,8 @@ function parseRun(value: unknown): WorkflowState | null {
   };
 }
 
-function migrateHookGenerationModel<T extends string | null>(model: T): T {
-  return (
-    model === LEGACY_CLAUDE_HOOK_MODEL || model === LEGACY_QWEN_HOOK_MODEL
-      ? CLAUDE_HOOK_MODEL
-      : model
-  ) as T;
+function migrateHookGenerationModel(model: string | null): string | null {
+  return model === null ? null : normalizeSelectableHookModel(model);
 }
 
 function parseCreativeMix(value: unknown): readonly CreativeMixItem[] | null {

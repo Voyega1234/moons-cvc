@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { generateGeminiImage } from "./gemini-images-client.js";
 import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { fallbackArtworkImageModel, type ArtworkOutputSize } from "../../domain/creative-run.js";
@@ -14,6 +15,7 @@ export interface GeneratedImage {
 
 export interface GenerateImageOptions {
   apiKey: string;
+  geminiApiKey?: string;
   model: string;
   prompt: string;
   size: ImageGenerationSize;
@@ -49,6 +51,7 @@ export interface ReferenceImageInput {
 
 export interface EditImageOptions {
   apiKey: string;
+  geminiApiKey?: string;
   model: string;
   prompt: string;
   size: ImageGenerationSize;
@@ -59,6 +62,7 @@ export interface EditImageOptions {
 
 export async function editImage({
   apiKey,
+  geminiApiKey,
   model,
   prompt,
   size,
@@ -67,6 +71,11 @@ export async function editImage({
   fetchImpl
 }: EditImageOptions): Promise<GeneratedImage> {
   return withImageModelFallback(model, async (activeModel) => {
+  if (activeModel.startsWith("google/") && geminiApiKey) {
+    const image = await generateGeminiImage({ apiKey: geminiApiKey, model: activeModel,
+      prompt: fitOpenAIImagePrompt(prompt), ...imageParameters(activeModel, size, quality), referenceImages, fetchImpl });
+    return imageResult({ data: [{ b64_json: image.base64 }] }, activeModel, size);
+  }
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -155,6 +164,7 @@ export function gptImageAspectRatioForOutputSize(
 
 export interface EditImageWithAspectRatioOptions {
   apiKey: string;
+  geminiApiKey?: string;
   model: string;
   prompt: string;
   aspectRatio: GptImageAspectRatio;
@@ -166,6 +176,7 @@ export interface EditImageWithAspectRatioOptions {
 
 export async function editImageWithAspectRatio({
   apiKey,
+  geminiApiKey,
   model,
   prompt,
   aspectRatio,
@@ -175,6 +186,13 @@ export async function editImageWithAspectRatio({
   fetchImpl
 }: EditImageWithAspectRatioOptions): Promise<GeneratedImage> {
   return withImageModelFallback(model, async (activeModel) => {
+  if (activeModel.startsWith("google/") && geminiApiKey) {
+    const parameters = size ? imageParameters(activeModel, size, quality)
+      : { aspect_ratio: aspectRatio === "auto" ? "1:1" : aspectRatio, resolution: "2K" };
+    const image = await generateGeminiImage({ apiKey: geminiApiKey, model: activeModel,
+      prompt: fitOpenAIImagePrompt(prompt), ...parameters, referenceImages, fetchImpl });
+    return imageResult({ data: [{ b64_json: image.base64 }] }, activeModel, size);
+  }
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {
@@ -220,12 +238,18 @@ export async function editImageWithAspectRatio({
 
 export async function generateImage({
   apiKey,
+  geminiApiKey,
   model,
   prompt,
   size,
   fetchImpl
 }: GenerateImageOptions): Promise<GeneratedImage> {
   return withImageModelFallback(model, async (activeModel) => {
+  if (activeModel.startsWith("google/") && geminiApiKey) {
+    const image = await generateGeminiImage({ apiKey: geminiApiKey, model: activeModel,
+      prompt: fitOpenAIImagePrompt(prompt), ...imageParameters(activeModel, size, "medium"), fetchImpl });
+    return imageResult({ data: [{ b64_json: image.base64 }] }, activeModel, size);
+  }
   const response = await fetchImpl(OPENROUTER_IMAGES_ENDPOINT, {
     method: "POST",
     headers: {

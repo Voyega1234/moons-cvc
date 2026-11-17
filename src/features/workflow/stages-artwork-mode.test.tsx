@@ -67,21 +67,12 @@ describe("Artwork generation settings", () => {
     expect(hookModelPicker.textContent).toContain(hookGenerationModelLabel(defaultHookGenerationModels[0]));
     await user.click(hookModelPicker);
     expect(screen.queryByText("Compass New")).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "Browse OpenRouter models" })
-        .getAttribute("href")
-    ).toBe("https://openrouter.ai/models");
-    await user.type(
-      screen.getByRole("textbox", { name: "OpenRouter model ID" }),
-      "sakana/sakana-namazu"
-    );
-    await user.click(screen.getByRole("button", { name: "Add model" }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.queryByRole("textbox", { name: "OpenRouter model ID" })).toBeNull();
+    await user.click(screen.getByRole("checkbox", { name: "Select openai/gpt-6.1-terra" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "set-hook-generation-models",
-      models: [
-        ...defaultHookGenerationModels,
-        "sakana/sakana-namazu"
-      ]
+      models: [...defaultHookGenerationModels, "openai/gpt-6.1-terra"]
     });
     fireEvent.pointerDown(document.body);
     expect(
@@ -164,47 +155,17 @@ describe("Artwork generation settings", () => {
     });
   });
 
-  it("saves added Hook models separately from per-run selection", async () => {
+  it("ignores obsolete saved models and offers only the three supported models", async () => {
+    window.localStorage.setItem("moons.saved-hook-models.v1", JSON.stringify(["sakana/sakana-namazu", "anthropic/claude-sonnet-5"]));
     const user = userEvent.setup();
-    const firstView = render(<StatefulHookModelPicker />);
-
-    await user.click(screen.getByLabelText("Hook generation models"));
-    await user.type(
-      screen.getByRole("textbox", { name: "OpenRouter model ID" }),
-      "sakana/sakana-namazu"
-    );
-    await user.click(screen.getByRole("button", { name: "Add model" }));
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Unselect sakana/sakana-namazu"
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(true);
-
-    await user.click(
-      screen.getByRole("checkbox", {
-        name: "Unselect sakana/sakana-namazu"
-      })
-    );
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Select sakana/sakana-namazu"
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(false);
-
-    firstView.unmount();
     render(<StatefulHookModelPicker />);
     await user.click(screen.getByLabelText("Hook generation models"));
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Select sakana/sakana-namazu"
-        }) as HTMLInputElement
-      ).checked
-    ).toBe(false);
+    expect(screen.getAllByRole("checkbox").map(input => input.getAttribute("aria-label"))).toEqual([
+      "Select google/gemini-3.8-flash", "Unselect google/gemini-4-hydrogen", "Select openai/gpt-6.1-terra"
+    ]);
+    expect(screen.queryByRole("button", { name: "Add model" })).toBeNull();
+    await user.click(screen.getByRole("checkbox", { name: "Select google/gemini-3.8-flash" }));
+    expect((screen.getByRole("checkbox", { name: "Unselect google/gemini-3.8-flash" }) as HTMLInputElement).checked).toBe(true);
   });
 
   it("defaults to GPT Image for a saved legacy artwork mode", () => {

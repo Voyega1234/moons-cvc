@@ -1,3 +1,4 @@
+import { normalizeSelectableHookModel } from "../../domain/creative-run";
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { env } from "../../config/env";
@@ -119,7 +120,7 @@ export function selectedHookGenerationModels(
     state.hookGenerationModels[0] === state.hookGenerationModel
       ? state.hookGenerationModels
       : [state.hookGenerationModel];
-  return Array.from(new Set(selected)).slice(0, MAX_HOOK_GENERATION_MODELS);
+  return Array.from(new Set(selected.map(normalizeSelectableHookModel))).slice(0, MAX_HOOK_GENERATION_MODELS);
 }
 
 function generateDirectionsForModel(
@@ -128,6 +129,7 @@ function generateDirectionsForModel(
   model: HookGenerationModel,
   researchDossier?: unknown
 ) {
+  model = normalizeSelectableHookModel(model);
   const modelState: WorkflowState = {
     ...state,
     hookGenerationModel: model,

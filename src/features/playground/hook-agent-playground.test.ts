@@ -13,8 +13,8 @@ import {
 } from "./hook-agent-playground";
 
 describe("Playground model selection", () => {
-  it("allows up to five compared models", () => {
-    expect(PLAYGROUND_MODEL_LIMIT).toBe(5);
+  it("allows the three supported comparison models", () => {
+    expect(PLAYGROUND_MODEL_LIMIT).toBe(3);
   });
 });
 

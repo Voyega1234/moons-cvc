@@ -2588,7 +2588,7 @@ describe("redesigned workflow stages", () => {
     await user.click(
       stage.getByRole("button", { name: "Hook generation models" })
     );
-    expect(stage.getByText(/Save OpenRouter model IDs/)).toBeTruthy();
+    expect(stage.getByText(/Gemini uses the Gemini API/)).toBeTruthy();
 
     await user.selectOptions(researchMode, "standard");
 
