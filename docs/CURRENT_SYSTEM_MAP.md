@@ -914,8 +914,8 @@ requests that omit the defer flag retain their complete-generation behavior.
 `four-horizontal` is generated as one unified square master even when independent
 panels are enabled. This preserves whole-album art direction and scene continuity.
 The layout instruction fixes the horizontal divider at 66.667% and lower vertical
-dividers at 33.333% / 66.667%. Geometry is inspected before splitting; one targeted
-image edit is allowed for drift, then persistent misalignment stops before saving.
-The final master is checked again after boundary QC. Fixed cuts produce the 3:2
+dividers at 33.333% / 66.667%. Divider detection is advisory after boundary QC;
+approximate placement does not trigger another image edit or block saving.
+Whole-album coherence takes priority over pixel-perfect dividers. Fixed cuts produce the 3:2
 cover and three 1:1 supports. Existing unrelated standalone panels require fresh
 master generation to restore a unified composition.

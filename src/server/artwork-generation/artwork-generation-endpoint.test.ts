@@ -1576,8 +1576,8 @@ describe("handleArtworkGenerationRequest", () => {
       output.albumMasterAssetStoragePath === "flora/run-1/outputs/hook-1-album-master-v1.png")).toBe(true);
   });
 
-  it.each([false, true])("repairs horizontal master geometry once and rejects persistent drift (persistent: %s)", async persistent => {
-    const bad = await fourHorizontalMasterPng(0.55);
+  it.each([0.55, 0.63])("keeps a unified master with approximate divider %s without an extra geometry edit", async horizontal => {
+    const bad = await fourHorizontalMasterPng(horizontal);
     const good = await fourHorizontalMasterPng();
     expect((await inspectFourHorizontalMasterAlignment(bad)).valid).toBe(false);
     expect((await inspectFourHorizontalMasterAlignment(good)).valid).toBe(true);
@@ -1589,7 +1589,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/v1/responses")) return standardAgentResponse(init);
       if (href.includes("/api/v1/images")) {
         imageCalls++;
-        return new Response(JSON.stringify({ data: [{ b64_json: (imageCalls === 1 || persistent ? bad : good).toString("base64") }] }));
+        return new Response(JSON.stringify({ data: [{ b64_json: bad.toString("base64") }] }));
       }
       throw new Error(`Unexpected fetch: ${href}`);
     });
@@ -1601,10 +1601,10 @@ describe("handleArtworkGenerationRequest", () => {
       env: { OPENAI_API_KEY: "test", OPENROUTER_API_KEY: "test", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
       fetchImpl, createStorageClient: () => client
     });
-    expect(imageCalls).toBe(2);
-    expect(response.status, await response.clone().text()).toBe(persistent ? 500 : 200);
-    if (persistent) expect(uploads).toHaveLength(0);
-    else expect((await response.json()).outputs).toHaveLength(4);
+    expect(imageCalls).toBe(1);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(uploads).toHaveLength(5);
+    expect((await response.json()).outputs).toHaveLength(4);
   });
 
   it("generates a three-panel master and keeps both the master and adaptive crops", async () => {
