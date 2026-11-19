@@ -4272,6 +4272,43 @@ describe("redesigned workflow stages", () => {
     );
   });
 
+  it.each([true, false])("downloads only the Album master image when available: %s", async (hasMaster) => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    const source = base.outputs[0]!;
+    const masterUrl = "https://storage.example.com/album-master.png";
+    const state = {
+      ...base,
+      outputs: [1, 2, 3].map((panel) => ({
+        ...source,
+        id: `${source.directionId}-album-${panel}-v1`,
+        format: "Album post",
+        assetUrl: `https://storage.example.com/panel-${panel}.png`,
+        assetStoragePath: `outputs/panel-${panel}.png`,
+        albumMasterAssetUrl: hasMaster && panel === 2 ? masterUrl : undefined,
+        albumMasterAssetStoragePath: hasMaster && panel === 2 ? "outputs/album-master.png" : undefined
+      }))
+    };
+    const blob = new Blob(["master"], { type: "image/png" });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: async () => blob });
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn().mockReturnValue("blob:master") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    let fileName = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { fileName = this.download; });
+    const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
+    const button = within(view.container).getByRole("button", { name: "Download master" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(!hasMaster);
+    if (hasMaster) {
+      await user.click(button);
+      await waitFor(() => expect(fileName).toBe("album-master.png"));
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(masterUrl);
+      expect(URL.createObjectURL).toHaveBeenCalledWith(blob);
+    } else {
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  });
+
   it("downloads artwork from its Create card", async () => {
     const user = userEvent.setup();
     const base = buildCreativeState();

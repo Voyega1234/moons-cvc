@@ -125,7 +125,8 @@ export function OutputGrid({
   async function downloadDraft(
     output: CreativeOutput,
     outputs: readonly CreativeOutput[],
-    albumIndex: number
+    albumIndex: number,
+    masterOnly = false
   ) {
     setDownloadingOutputId(output.id);
     setDownloadErrorByOutputId((current) => ({
@@ -133,7 +134,15 @@ export function OutputGrid({
       [output.id]: ""
     }));
     try {
-      if (isAlbumOutput(output)) {
+      if (masterOnly) {
+        const master = outputs.find((candidate) => candidate.albumMasterAssetUrl);
+        if (!master) throw new Error("This album has no downloadable master image.");
+        await downloadOutputAsset({
+          ...master,
+          assetUrl: master.albumMasterAssetUrl,
+          assetStoragePath: master.albumMasterAssetStoragePath
+        }, albumIndex);
+      } else if (isAlbumOutput(output)) {
         await downloadAlbumArchive(sortAlbumOutputs(outputs), albumIndex);
       } else {
         await downloadOutputAsset(
@@ -426,6 +435,17 @@ export function OutputGrid({
                       </p>
                     ) : null}
                     <footer className="compass-build-output-foot">
+                      {album ? (
+                        <button
+                          className="btn secondary small"
+                          type="button"
+                          disabled={downloading || !reviewOutputs.some((candidate) => candidate.albumMasterAssetUrl)}
+                          title="Download the album master as an image"
+                          onClick={() => void downloadDraft(output, reviewOutputs, reviewIndex, true)}
+                        >
+                          Download master
+                        </button>
+                      ) : null}
                       <button
                         className="btn secondary small"
                         type="button"
