@@ -449,8 +449,8 @@ failure stops Album generation. Slide export places every Album format inside a
 square preview so its native panel ratios are not stretched.
 
 The `four-horizontal` Album format adds a 1920×1280 (3:2) cover with three
-1920×1920 supporting images below it. `album-panels.ts` requests these exact
-sizes and normalizes standalone generation results without cropping; legacy
+1920×1920 supporting images below it. This format uses one unified master,
+validated dividers and fixed crops to retain whole-album art direction; legacy
 master generation/revision splitting, Hook instructions, preflight/review layouts, saved
 workspace formats and PPTX placements also support this geometry. Its picker
 is owned by `stages/album-format-modal.tsx`; thumbnail/review styles live in
@@ -911,9 +911,11 @@ briefs fail creation so the user can retry. Successful briefs persist through
 and unselected directions are retained. Legacy direct harness and Playground
 requests that omit the defer flag retain their complete-generation behavior.
 
-`four-horizontal` always uses standalone panels, including when legacy
-`ALBUM_GENERATION_MODE=master` is set. The cover is 1920×1280 and each of the
-three supporting files is 1920×1920; the preview is assembled deterministically.
-This prevents a model-placed master divider from turning the lower row into
-portrait panels. Existing generated masters require fresh generation to recover
-content composed for the wrong panel geometry.
+`four-horizontal` is generated as one unified square master even when independent
+panels are enabled. This preserves whole-album art direction and scene continuity.
+The layout instruction fixes the horizontal divider at 66.667% and lower vertical
+dividers at 33.333% / 66.667%. Geometry is inspected before splitting; one targeted
+image edit is allowed for drift, then persistent misalignment stops before saving.
+The final master is checked again after boundary QC. Fixed cuts produce the 3:2
+cover and three 1:1 supports. Existing unrelated standalone panels require fresh
+master generation to restore a unified composition.

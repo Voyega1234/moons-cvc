@@ -11,7 +11,7 @@ import {
   normalizeReferenceImageForOpenAI,
   type ArtworkStorageClient
 } from "./artwork-generation-endpoint";
-import { splitAlbumMaster } from "./album-master";
+import { splitAlbumMaster, inspectFourHorizontalMasterAlignment } from "./album-master";
 
 const requestBody = {
   model: "gpt-image-2.5-sunburst",
@@ -358,6 +358,15 @@ async function fourGridMasterPng({
   })
     .png()
     .toBuffer();
+}
+
+async function fourHorizontalMasterPng(horizontal = 2 / 3): Promise<Buffer> {
+  const side = 600;
+  const pixels = Buffer.alloc(side * side);
+  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
+    pixels[y * side + x] = y < side * horizontal ? 20 : x < 200 ? 80 : x < 400 ? 140 : 220;
+  }
+  return sharp(pixels, { raw: { width: side, height: side, channels: 1 } }).png().toBuffer();
 }
 
 function fakeStorage(): {
@@ -1495,7 +1504,6 @@ describe("handleArtworkGenerationRequest", () => {
 
   it.each([
     ["three-horizontal", ["2048x1024", "1024x1024", "1024x1024"]],
-    ["four-horizontal", ["1920x1280", "1920x1920", "1920x1920", "1920x1920"]]
   ] as const)("persists independent panels and an assembled preview for %s", async (albumFormat, sizes) => {
     const bodies: Record<string, unknown>[] = [];
     const { client } = fakeStorage();
@@ -1531,10 +1539,11 @@ describe("handleArtworkGenerationRequest", () => {
       output.albumMasterAssetStoragePath === "flora/run-1/outputs/hook-1-album-master-v1.png")).toBe(true);
   });
 
-  it("keeps four-horizontal supports square even with the legacy master setting", async () => {
+  it.each(["master", "independent-panels", undefined])("keeps four-horizontal as one coherent master with square supports (setting: %s)", async albumMode => {
     const albumFormat = "four-horizontal";
     const sizes = ["1920x1280", "1920x1920", "1920x1920", "1920x1920"];
     const bodies: Record<string, unknown>[] = [];
+    const master = await fourHorizontalMasterPng();
     const { client } = fakeStorage();
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
@@ -1543,8 +1552,7 @@ describe("handleArtworkGenerationRequest", () => {
       if (href.includes("/api/v1/images")) {
         const body = JSON.parse(String(init?.body));
         bodies.push(body);
-        const [width, height] = body.size.split("x").map(Number);
-        const bytes = await sharp({ create: { width, height, channels: 3, background: "red" } }).png().toBuffer();
+        const bytes = master;
         return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
       }
       throw new Error(`Unexpected fetch: ${href}`);
@@ -1555,16 +1563,48 @@ describe("handleArtworkGenerationRequest", () => {
         body: JSON.stringify({ ...requestBody, service: "album-post", albumFormat,
           selectedHooks: [{ ...requestBody.selectedHooks[0], formatBeats: ["First benefit", "Second benefit", "Closing benefit"] }] })
       }),
-      env: { ALBUM_GENERATION_MODE: "master", OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key",
+      env: { ALBUM_GENERATION_MODE: albumMode, OPENAI_API_KEY: "test-key", OPENROUTER_API_KEY: "test-key",
         SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon-key" },
       fetchImpl: fetchMock as unknown as typeof fetch, createStorageClient: () => client
     });
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(bodies.map(body => body.size)).toEqual(sizes);
+    expect(bodies.map(body => body.size)).toEqual(["2048x2048"]);
+    expect(bodies[0]?.prompt).toContain("one square master");
     const payload = await response.json();
     expect(payload.outputs.map((output: { id: string }) => output.id)).toEqual(sizes.map((_, index) => `hook-1-album-${index + 1}-v1`));
     expect(payload.outputs.every((output: { albumMasterAssetStoragePath: string }) =>
       output.albumMasterAssetStoragePath === "flora/run-1/outputs/hook-1-album-master-v1.png")).toBe(true);
+  });
+
+  it.each([false, true])("repairs horizontal master geometry once and rejects persistent drift (persistent: %s)", async persistent => {
+    const bad = await fourHorizontalMasterPng(0.55);
+    const good = await fourHorizontalMasterPng();
+    expect((await inspectFourHorizontalMasterAlignment(bad)).valid).toBe(false);
+    expect((await inspectFourHorizontalMasterAlignment(good)).valid).toBe(true);
+    let imageCalls = 0;
+    const { client, uploads } = fakeStorage();
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+      if (href.includes("/v1/responses")) return standardAgentResponse(init);
+      if (href.includes("/api/v1/images")) {
+        imageCalls++;
+        return new Response(JSON.stringify({ data: [{ b64_json: (imageCalls === 1 || persistent ? bad : good).toString("base64") }] }));
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("http://localhost/artwork", { method: "POST", headers: { authorization: "Bearer user-token" }, body: JSON.stringify({
+        ...requestBody, service: "album-post", albumFormat: "four-horizontal",
+        selectedHooks: [{ ...requestBody.selectedHooks[0], formatBeats: ["First", "Second", "Closing"] }]
+      }) }),
+      env: { OPENAI_API_KEY: "test", OPENROUTER_API_KEY: "test", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "anon" },
+      fetchImpl, createStorageClient: () => client
+    });
+    expect(imageCalls).toBe(2);
+    expect(response.status, await response.clone().text()).toBe(persistent ? 500 : 200);
+    if (persistent) expect(uploads).toHaveLength(0);
+    else expect((await response.json()).outputs).toHaveLength(4);
   });
 
   it("generates a three-panel master and keeps both the master and adaptive crops", async () => {

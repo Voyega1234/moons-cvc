@@ -4,6 +4,7 @@ import {
   albumLayoutPrompt,
   buildAlbumMasterInstruction,
   inspectFourGridMasterAlignment,
+  inspectFourHorizontalMasterAlignment,
   normalizeFourGridMaster,
   splitAlbumMaster
 } from "./album-master.js";
@@ -805,9 +806,8 @@ async function generateOutputForHook({
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
   const brandVisualInstruction = buildCreativeApprovalVisualInstruction(input);
-  // Fixed-size panels keep the three square supports intact when the model
-  // would otherwise place a divider incorrectly inside a single master image.
-  if (isAlbum && (independentAlbumPanels || albumFormat === "four-horizontal")) {
+  // This layout is art-directed as one composition, then split at fixed cuts.
+  if (isAlbum && independentAlbumPanels && albumFormat !== "four-horizontal") {
     const assetVersion = input.assetVersion ?? 1;
     const { panels, masterBytes } = await generateIndependentAlbumPanels({
       hook, format: albumFormat, prompt: composeImagePrompt(promptParts, brandVisualInstruction),
@@ -891,9 +891,12 @@ async function generateOutputForHook({
       writeDebugLog,
       fetchImpl
     });
+    const coherentMaster = albumFormat === "four-horizontal"
+      ? await ensureFourHorizontalMasterAlignment({ image, imageApiKey, geminiApiKey, model, generationSize, fetchImpl })
+      : image;
     const alignedImage = await ensureFourGridMasterAlignment({
       albumFormat,
-      image
+      image: coherentMaster
     });
     let finalMasterImage = alignedImage;
     let imageBytes = Buffer.from(finalMasterImage.base64, "base64");
@@ -918,6 +921,10 @@ async function generateOutputForHook({
     finalMasterImage = separationResult.masterImage;
     imageBytes = Buffer.from(finalMasterImage.base64, "base64");
     panels = separationResult.panels;
+    if (albumFormat === "four-horizontal" &&
+        !(await inspectFourHorizontalMasterAlignment(imageBytes)).valid) {
+      throw new Error("Album layout changed during repair. Please regenerate the album; no images were saved.");
+    }
     const masterOutput = await persistArtworkOutput({
       input,
       hook: masterHook,
@@ -1266,6 +1273,28 @@ function buildVisualQcRevisionPrompt(instruction: string): string {
     "Correct the issue across the whole composition so hierarchy, spacing, lighting, shadow, perspective, depth, materials, edges, and asset integration remain coherent.",
     "Do not add new facts, offers, claims, products, decorative modules, or a different campaign idea. Return one finished publication-ready artwork."
   ].join("\n\n");
+}
+
+async function ensureFourHorizontalMasterAlignment({ image, imageApiKey, geminiApiKey, model, generationSize, fetchImpl }: {
+  image: GeneratedImage; imageApiKey: string; geminiApiKey?: string; model: string;
+  generationSize: ImageGenerationSize; fetchImpl: FetchLike;
+}): Promise<GeneratedImage> {
+  const alignment = await inspectFourHorizontalMasterAlignment(Buffer.from(image.base64, "base64"));
+  if (alignment.valid) return image;
+  const repaired = await editImage({
+    apiKey: imageApiKey, geminiApiKey, model, size: generationSize, quality: "medium", fetchImpl,
+    referenceImages: [{ bytes: Buffer.from(image.base64, "base64"), mimeType: image.mimeType, label: "Approved unified Album master — preserve its art direction" }],
+    prompt: [
+      "Correct only the panel geometry of this one unified Album master.",
+      `Observed dividers: horizontal ${alignment.horizontalPercent}%, lower vertical ${alignment.firstColumnPercent}% and ${alignment.secondColumnPercent}%.`,
+      albumLayoutPrompt("four-horizontal"),
+      "Preserve the same campaign concept, people and identity, scene, lighting, typography, palette, official assets and approved copy across the complete composition. Re-layout content inside the correct regions with safe margins. Do not generate four unrelated advertisements, stretch the image or crop away content. Return one square master."
+    ].join("\n\n")
+  });
+  if (!(await inspectFourHorizontalMasterAlignment(Buffer.from(repaired.base64, "base64"))).valid) {
+    throw new Error("Album master dividers are misaligned after repair. Please regenerate; no images were saved.");
+  }
+  return repaired;
 }
 
 async function ensureFourGridMasterAlignment({

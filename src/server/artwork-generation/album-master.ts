@@ -24,6 +24,9 @@ export function buildAlbumMasterInstruction(
         ];
   return [
     "ALBUM MASTER GRID - highest-priority layout instruction:",
+    ...(format === "four-horizontal" ? [
+      "Design the ENTIRE master as one art-directed Album composition first. The lower panels are supporting sections of that same composition: carry the cover's environment, visual motifs, type hierarchy and lighting through the whole layout. Keep supporting headlines subordinate to the cover. Avoid restarting the design, repeating a full hero/brand lockup or making each lower panel a standalone advertisement."
+    ] : []),
     albumLayoutPrompt(format),
     "The prescribed layout is non-negotiable. Do not rotate it, mirror it, replace it with a top-and-bottom mosaic, or invent another grid.",
     "Render one square master artwork containing the complete album. Keep every panel inside its own rectangular area.",
@@ -47,7 +50,7 @@ export function albumLayoutPrompt(format: AlbumFormat): string {
     case "four-vertical":
       return "Use a large vertical cover occupying the full left two-thirds and three equal supporting panels stacked on the right one-third.";
     case "four-horizontal":
-      return "Use a 3:2 horizontal cover occupying the full top two-thirds and three equal square supporting panels side by side across the bottom third. Deliver the cover at 1920x1280 and each supporting panel at 1920x1920.";
+      return "Use one square master: the full-width 3:2 cover occupies y=0–66.667%; three equal 1:1 supporting panels occupy y=66.667–100%, divided at x=33.333% and x=66.667%. The lower row must be exactly one-third of the master height. Compose all four areas together as one continuous campaign design. Deliver the cover at 1920x1280 and each supporting panel at 1920x1920.";
     case "four-grid":
       return "Use exactly four equal panels in a strict two-by-two grid.";
   }
@@ -130,6 +133,28 @@ export async function inspectFourGridMasterAlignment(
       Math.abs(horizontal - expected) <= tolerance,
     verticalPercent: Number(((vertical / side) * 100).toFixed(1)),
     horizontalPercent: Number(((horizontal / side) * 100).toFixed(1))
+  };
+}
+
+export async function inspectFourHorizontalMasterAlignment(imageBytes: Buffer): Promise<{
+  valid: boolean;
+  horizontalPercent: number;
+  firstColumnPercent: number;
+  secondColumnPercent: number;
+}> {
+  const metadata = await sharp(imageBytes).metadata();
+  if (!metadata.width || !metadata.height) throw new Error("Could not read Album master dimensions.");
+  const pixels = await sharp(imageBytes).resize(600, 600, { fit: "fill" }).greyscale().raw().toBuffer();
+  const boundaries = detectAlbumBoundaries({ pixels, width: 600, height: 600, format: "four-horizontal" });
+  const horizontal = boundaries.horizontal ?? 400;
+  const first = boundaries.secondaryVertical ?? 200;
+  const second = boundaries.vertical ?? 400;
+  return {
+    valid: Math.abs(metadata.width / metadata.height - 1) <= 0.02 &&
+      Math.abs(horizontal - 400) <= 12 && Math.abs(first - 200) <= 12 && Math.abs(second - 400) <= 12,
+    horizontalPercent: Number((horizontal / 6).toFixed(1)),
+    firstColumnPercent: Number((first / 6).toFixed(1)),
+    secondColumnPercent: Number((second / 6).toFixed(1))
   };
 }
 
