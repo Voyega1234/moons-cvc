@@ -919,3 +919,17 @@ approximate placement does not trigger another image edit or block saving.
 Whole-album coherence takes priority over pixel-perfect dividers. Fixed cuts produce the 3:2
 cover and three 1:1 supports. Existing unrelated standalone panels require fresh
 master generation to restore a unified composition.
+
+## Central Gemini provider switch
+
+`src/server/shared/gemini-api-provider.ts` owns `GEMINI_API_PROVIDER`:
+`openrouter` (default) or `gemini`. It controls Gemini Hook ideas, Caption,
+Highlight, selected UGC Briefs, Idea Preflight, Campaign Input Preflight,
+Nano Banana images/edits/fallbacks and client-ingestion search fallback.
+All API entrypoints and the ingestion CLI forward this server-only setting.
+OpenRouter mode supersedes legacy per-feature native settings even while
+`GEMINI_API_KEY` remains configured. It requires `OPENROUTER_API_KEY` and uses
+provider-qualified model IDs; native mode requires `GEMINI_API_KEY`.
+Gemini Hook model choices retain their model across supporting passes.
+Change this one variable and restart/redeploy to switch providers. Google
+Sheets/Drive/Slides authentication is unrelated and continues using Google APIs.

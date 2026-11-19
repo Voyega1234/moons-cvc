@@ -31,6 +31,7 @@ export default async function handler(
       OPENROUTER_BRAND_ANALYSIS_MODEL:
         process.env.OPENROUTER_BRAND_ANALYSIS_MODEL,
       OPENROUTER_TERRA_MODEL: process.env.OPENROUTER_TERRA_MODEL,
+      GEMINI_API_PROVIDER: process.env.GEMINI_API_PROVIDER,
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
       GEMINI_GROUNDING_MODEL: process.env.GEMINI_GROUNDING_MODEL
     },

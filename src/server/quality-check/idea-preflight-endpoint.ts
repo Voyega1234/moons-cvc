@@ -1,3 +1,4 @@
+import { geminiApiProvider, openRouterGeminiModel } from "../shared/gemini-api-provider.js";
 import { callGoogleHookApi } from "../hook-generation/google-hook-provider.js";
 import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
@@ -15,6 +16,7 @@ type FixableField =
   | "caption";
 
 export interface IdeaPreflightEndpointEnv {
+  GEMINI_API_PROVIDER?: string;
   GEMINI_API_KEY?: string;
   GEMINI_IDEA_PREFLIGHT_MODEL?: string;
   OPENAI_API_KEY?: string;
@@ -81,9 +83,10 @@ export async function handleIdeaPreflightRequest({
   }
 
   try {
-    const openRouterModel = env.OPENROUTER_IDEA_PREFLIGHT_MODEL?.trim();
-    const geminiModel = env.GEMINI_IDEA_PREFLIGHT_MODEL?.trim();
-    const provider = geminiModel ? "gemini" : openRouterModel && env.OPENROUTER_API_KEY?.trim()
+    const openRouterModel = env.OPENROUTER_IDEA_PREFLIGHT_MODEL?.trim() ||
+      (env.GEMINI_IDEA_PREFLIGHT_MODEL?.trim() ? openRouterGeminiModel(env.GEMINI_IDEA_PREFLIGHT_MODEL.trim()) : undefined);
+    const geminiModel = geminiApiProvider(env) === "gemini" ? env.GEMINI_IDEA_PREFLIGHT_MODEL?.trim() : undefined;
+    const provider = geminiModel ? "gemini" : openRouterModel
       ? "openrouter"
       : "openai";
     const apiKey =

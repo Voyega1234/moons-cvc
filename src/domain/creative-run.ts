@@ -221,7 +221,7 @@ export function hookGenerationModelLabel(model: HookGenerationModel): string {
 export function hookGenerationProviderLabel(
   model: HookGenerationModel
 ): string {
-  if (model === "google/gemini-3.8-flash" || model === "google/gemini-4-hydrogen") return "Gemini API";
+  if (model === "google/gemini-3.8-flash" || model === "google/gemini-4-hydrogen") return "Gemini";
   if (isOpenRouterHookGenerationModel(model)) return "OpenRouter";
   return model === "n8n-compass-new" ? "n8n" : "OpenAI";
 }

@@ -94,10 +94,13 @@ export const defaultBrief =
   "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า และยึดข้อเท็จจริง ให้แต่ละไอเดียต่างกันที่มุมคิดหรือวิธีเล่า เขียน Headline ให้ชัด มีเสน่ห์ และตรงเสียงแบรนด์ ใช้คำเล่น ไทยผสมอังกฤษ หรือตัวเลขเมื่อช่วยให้สารน่าสนใจขึ้น ใช้ [Placeholder] สำหรับข้อมูลที่รอยืนยัน";
 
 export const defaultArtworkBrief = `Creative Direction Priority:
-- Avoid safe, predictable stock-ad setups; aim for a distinctive, agency-grade creative hook that makes the viewer stop scrolling within 1 second.
-- Vary visual structure and medium boldly across generations—freely choose pure graphic/typographic minimalism or atmospheric photography purely based on what executes the idea strongest.
-- Whenever local people or everyday cultural settings are used, ensure they feel genuinely contemporary and relatable to the target Thai audience rather than generic AI stock.
-- Follow all construction language, density, copy integrity, and layout rules defined in the main system instruction without adding unapproved elements or decorative clutter.`;
+- Prioritize an original, memorable visual idea over literal illustration or safe commercial tropes; distill the message into one clear creative hook that stops the scroll immediately.
+- Choose the visual medium, staging, and color approach strictly based on what serves the brand identity and idea strongest—never assume people, physical locations, or complex scenes are required when restraint or pure graphic craft hits harder.
+- Ground any human casting and setting in the authentic contemporary culture of the brand's actual audience; when multiple people appear, ensure each carries natural individuality rather than repetitive similarity.
+- Maintain strict physical and anatomical plausibility for human subjects: keep actions within what a person can naturally perform simultaneously, and separate any additional product showcase cleanly onto its own compositional layer rather than forcing awkward poses.
+- Keep scenes disciplined and purposeful: every graphic flourish, scale choice, lighting effect, or supporting object must earn its place conceptually—never add unmotivated decoration, synthetic glow effects, arbitrary staging supports, or unapproved microcopy merely to fill space.
+- Keep campaign keywords and supporting facts strictly within designed typography; never let them bleed onto incidental scene surfaces, and keep reflections soft enough that brand lettering remains undistorted.
+- Adhere to all construction, density, copy integrity, and layout principles in the main system instruction.`;
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {

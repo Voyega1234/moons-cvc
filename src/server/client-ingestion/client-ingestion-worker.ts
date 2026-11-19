@@ -1,3 +1,4 @@
+import { geminiApiProvider } from "../shared/gemini-api-provider.js";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../lib/supabase/database.types.js";
 import { createApifyClient } from "./apify-client.js";
@@ -22,6 +23,7 @@ export interface ClientIngestionWorkerEnv {
   OPENROUTER_API_KEY?: string;
   OPENROUTER_BRAND_ANALYSIS_MODEL?: string;
   OPENROUTER_TERRA_MODEL?: string;
+  GEMINI_API_PROVIDER?: string;
   GEMINI_API_KEY?: string;
   GEMINI_GROUNDING_MODEL?: string;
 }
@@ -62,7 +64,7 @@ export function buildClientIngestionWorkerDependencies({
 }: ClientIngestionWorkerDependencyOptions): ClientIngestionRunnerDependencies {
   const requiredEnv = readRequiredClientIngestionWorkerEnv(env);
 
-  const geminiApiKey = env.GEMINI_API_KEY?.trim();
+  const geminiApiKey = geminiApiProvider(env) === "gemini" ? env.GEMINI_API_KEY?.trim() : undefined;
 
   return {
     queue: new SupabaseClientIngestionJobQueue(supabase),
@@ -96,7 +98,10 @@ export function buildClientIngestionWorkerDependencies({
             fetchImpl
           })
         }
-      : {}),
+      : { searchFallback: new OpenAiBrandDiscoverySearch({
+          apiKey: requiredEnv.OPENROUTER_API_KEY, model: requiredEnv.OPENROUTER_BRAND_ANALYSIS_MODEL,
+          provider: "openrouter", fetchImpl
+        }) }),
     brandMemoryWriter: new SupabaseBrandMemoryWriter(supabase)
   };
 }

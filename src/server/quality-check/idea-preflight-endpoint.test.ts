@@ -49,6 +49,21 @@ function ideaRequest(
 }
 
 describe("handleIdeaPreflightRequest", () => {
+  it("routes the configured Gemini model through OpenRouter by default", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/responses");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer router-key");
+      expect(JSON.parse(String(init?.body)).model).toBe("google/gemini-3.8-flash");
+      return new Response(JSON.stringify({ output_text: JSON.stringify({ results: [{ ideaIndex: 1, findings: [] }] }) }));
+    });
+    const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: {
+      GEMINI_API_KEY: "blocked-native-key", GEMINI_IDEA_PREFLIGHT_MODEL: "gemini-3.8-flash",
+      OPENROUTER_API_KEY: "router-key"
+    }, fetchImpl });
+    expect(await response.json()).toMatchObject({ ok: true, model: "google/gemini-3.8-flash", results: [{ directionId: "direction-1", findings: [] }] });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("uses native Gemini before legacy providers and preserves direction mapping", async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent");
@@ -62,7 +77,7 @@ describe("handleIdeaPreflightRequest", () => {
       return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ results: [{ ideaIndex: 1, findings: [] }] }) }] } }] }));
     });
     const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: {
-      GEMINI_API_KEY: "gemini-key", GEMINI_IDEA_PREFLIGHT_MODEL: "google/gemini-3.8-flash",
+      GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key", GEMINI_IDEA_PREFLIGHT_MODEL: "google/gemini-3.8-flash",
       OPENROUTER_API_KEY: "router-key", OPENROUTER_IDEA_PREFLIGHT_MODEL: "legacy-model"
     }, fetchImpl });
     expect(await response.json()).toMatchObject({ ok: true, model: "gemini-3.8-flash", results: [{ directionId: "direction-1", findings: [] }] });
@@ -72,7 +87,7 @@ describe("handleIdeaPreflightRequest", () => {
   it("requires the native Gemini key without falling back to OpenRouter", async () => {
     const fetchImpl = vi.fn();
     const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: {
-      GEMINI_IDEA_PREFLIGHT_MODEL: "gemini-3.8-flash", OPENROUTER_API_KEY: "router-key", OPENROUTER_IDEA_PREFLIGHT_MODEL: "legacy-model"
+      GEMINI_API_PROVIDER: "gemini", GEMINI_IDEA_PREFLIGHT_MODEL: "gemini-3.8-flash", OPENROUTER_API_KEY: "router-key", OPENROUTER_IDEA_PREFLIGHT_MODEL: "legacy-model"
     }, fetchImpl });
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ error: "GEMINI_API_KEY is required." });

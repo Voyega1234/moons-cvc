@@ -98,7 +98,7 @@ describe("buildClientIngestionWorkerDependencies", () => {
     expect(dependencies.brandMemoryWriter).toBeInstanceOf(
       SupabaseBrandMemoryWriter
     );
-    expect(dependencies.searchFallback).toBeUndefined();
+    expect(dependencies.searchFallback).toBeInstanceOf(OpenAiBrandDiscoverySearch);
 
     await dependencies.visualAnalyzer?.analyze({
       client: { id: "client-1", name: "Client One", facebookUrl: "" },
@@ -155,7 +155,7 @@ describe("buildClientIngestionWorkerDependencies", () => {
     const dependencies = buildClientIngestionWorkerDependencies({
       env: {
         ...validEnv,
-        GEMINI_API_KEY: "gemini-key",
+        GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key",
         GEMINI_GROUNDING_MODEL: "gemini-test"
       },
       supabase,

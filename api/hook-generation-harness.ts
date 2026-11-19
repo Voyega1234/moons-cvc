@@ -30,6 +30,7 @@ export default async function handler(
         OPENAI_HOOK_SUPPORT_MODEL: process.env.OPENAI_HOOK_SUPPORT_MODEL,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
         HOOK_GEMINI_PROVIDER: process.env.HOOK_GEMINI_PROVIDER,
+        GEMINI_API_PROVIDER: process.env.GEMINI_API_PROVIDER,
         GEMINI_API_KEY: process.env.GEMINI_API_KEY,
         VERTEX_API_KEY: process.env.VERTEX_API_KEY,
         GEMINI_HOOK_GENERATION_MODEL: process.env.GEMINI_HOOK_GENERATION_MODEL,

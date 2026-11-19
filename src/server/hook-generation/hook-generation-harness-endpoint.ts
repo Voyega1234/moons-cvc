@@ -1,3 +1,4 @@
+import { geminiApiProvider } from "../shared/gemini-api-provider.js";
 import { callGoogleHookApi, googleHookEndpoint, type HookProvider } from "./google-hook-provider.js";
 import { withAiRetry as withTransientRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
@@ -72,6 +73,7 @@ export interface HookGenerationHarnessEndpointEnv {
   OPENAI_HOOK_SUPPORT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   HOOK_GEMINI_PROVIDER?: string;
+  GEMINI_API_PROVIDER?: string;
   GEMINI_API_KEY?: string;
   VERTEX_API_KEY?: string;
   GEMINI_HOOK_GENERATION_MODEL?: string;
@@ -236,14 +238,15 @@ export async function handleHookGenerationHarnessRequest({
     });
     const fixedGeminiModel = input.generationModel === "google/gemini-3.8-flash" || input.generationModel === "google/gemini-4-hydrogen";
     const googleMode = env.HOOK_GEMINI_PROVIDER?.trim() || "openrouter";
-    if (!fixedGeminiModel && !["openrouter", "gemini", "vertex"].includes(googleMode)) {
+    if (!fixedGeminiModel && geminiApiProvider(env) === "gemini" && !["openrouter", "gemini", "vertex"].includes(googleMode)) {
       return jsonResponse({ ok: false, error: "HOOK_GEMINI_PROVIDER must be openrouter, gemini, or vertex." }, 500);
     }
-    const generationProvider: HookProvider = fixedGeminiModel ? "gemini" :
+    const generationProvider: HookProvider = input.generationModel.startsWith("google/gemini-") && geminiApiProvider(env) === "openrouter" ? "openrouter" : fixedGeminiModel ? "gemini" :
       input.generationModel.startsWith("google/gemini-") && googleMode !== "openrouter"
         ? googleMode as "gemini" | "vertex"
         : isOpenRouterHookGenerationModel(input.generationModel) ? "openrouter" : "openai";
     const googleProvider = generationProvider === "gemini" || generationProvider === "vertex";
+    const geminiModelSelected = input.generationModel.startsWith("google/gemini-");
     const generationApiKey = googleProvider
       ? (generationProvider === "vertex" ? env.VERTEX_API_KEY : env.GEMINI_API_KEY)?.trim()
       : generationProvider === "openrouter" ? env.OPENROUTER_API_KEY?.trim() : openAiApiKey;
@@ -397,7 +400,7 @@ export async function handleHookGenerationHarnessRequest({
     let directions = ideaDirections;
     if (nativeHookSearch) {
       const captionPrompt = await readFile(join(process.cwd(), "agent_prompt", "agent_hook_caption.md"), "utf8");
-      const captionBatchSize = googleProvider ? 3 : HOOK_GENERATION_BATCH_SIZE;
+      const captionBatchSize = geminiModelSelected ? 3 : HOOK_GENERATION_BATCH_SIZE;
       const captionBatches: typeof ideaDirections[] = [];
       for (let offset = 0; offset < ideaDirections.length; offset += captionBatchSize) {
         captionBatches.push(ideaDirections.slice(offset, offset + captionBatchSize));
@@ -415,10 +418,10 @@ export async function handleHookGenerationHarnessRequest({
           JSON.stringify(directTraces.map((trace) => captionSearchEvidence(trace.rawResponse)))
         ].join("\n\n");
         // Native Gemini shares its output budget with thinking; reserve room for both.
-        const initialMaxTokens = Math.min(24000, Math.max(googleProvider ? 16000 : 0, 1500 + batch.length * 1400));
+        const initialMaxTokens = Math.min(24000, Math.max(geminiModelSelected ? 16000 : 0, 1500 + batch.length * 1400));
         const requestCaptions = async (maxTokens: number) => {
           const rawResponse = await withTransientRetry(() => callResponsesApi({
-            apiKey: generationApiKey, model: googleProvider ? model : HOOK_CAPTION_MODEL, provider: generationProvider,
+            apiKey: generationApiKey, model: geminiModelSelected ? model : HOOK_CAPTION_MODEL, provider: generationProvider,
             fetchImpl: providerFetchImpl, content: [{ type: "input_text", text: inputText }],
             schemaName: "moons_hook_captions", schema: hookCaptionsSchema, maxTokens
           }));
@@ -449,7 +452,7 @@ export async function handleHookGenerationHarnessRequest({
       runSubheadlineHighlightStep({
         directions,
         apiKey: generationApiKey,
-        model: googleProvider ? model : generationProvider === "openrouter" ? model : supportModel,
+        model: geminiModelSelected ? model : generationProvider === "openrouter" ? model : supportModel,
         provider: generationProvider,
         prompt: subheadlineHighlightPrompt,
         fetchImpl: providerFetchImpl
@@ -610,7 +613,7 @@ async function runGenerationStep({
     HOOK_GENERATION_MAX_TOKENS_CEILING,
     // Gemini counts thinking against this budget too; small UGC runs otherwise
     // exhaust it before producing JSON and replay the entire idea request.
-    Math.max(provider === "gemini" || provider === "vertex" ? 16000 : 0,
+    Math.max(provider === "gemini" || provider === "vertex" || model.startsWith("google/gemini-") ? 16000 : 0,
       4000 + input.quantity * 1000)
   );
   const requestDirections = (requestInputText: string) =>
@@ -1697,6 +1700,8 @@ async function callResponsesApi({
       ? {
           model,
           max_tokens: maxTokens,
+          ...(model.startsWith("google/gemini-") && ["moons_hook_captions", "moons_ugc_brief", "neo_subheadline_highlights"].includes(schemaName)
+            ? { reasoning: { effort: "low" } } : {}),
           messages: [
             {
               role: "user",

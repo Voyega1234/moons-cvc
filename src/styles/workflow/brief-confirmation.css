@@ -764,7 +764,7 @@
 
 .confirm-artwork-brief textarea {
   width: 100%;
-  min-height: 82px;
+  min-height: 240px;
   resize: vertical;
   padding: 10px 11px;
   border: 1px solid var(--line);

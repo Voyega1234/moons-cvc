@@ -327,7 +327,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       const response = await handleHookGenerationHarnessRequest({
         request: new Request("https://moons.local/api/hook-generation-harness", { method: "POST",
           body: JSON.stringify({ ...singleStaticRequestBody, generationModel }) }),
-        env: { GEMINI_API_KEY: "gemini-key", OPENROUTER_API_KEY: "router-key", HOOK_GEMINI_PROVIDER: "openrouter", GEMINI_HOOK_GENERATION_MODEL: "override-must-not-win" }, fetchImpl
+        env: { GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key", OPENROUTER_API_KEY: "router-key", HOOK_GEMINI_PROVIDER: "openrouter", GEMINI_HOOK_GENERATION_MODEL: "override-must-not-win" }, fetchImpl
       });
       expect(response.status).toBe(500);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -366,7 +366,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     });
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [direction] }) }),
-      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+      env: { GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "test-key" }, fetchImpl
     });
     expect(response.status, await response.clone().text()).toBe(200);
     expect((await response.json()).directions[0]).toMatchObject({ id: direction.id, hook: "Approved hook", ugcBrief: { product: brief.product } });
@@ -378,7 +378,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchImpl = vi.fn();
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [{ ...direction, citations: "invalid" }] }) }),
-      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+      env: { GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "test-key" }, fetchImpl
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ error: "directions[0].citations must be a string array." });
@@ -390,10 +390,28 @@ describe("handleHookGenerationHarnessRequest", () => {
     const fetchImpl = vi.fn();
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, quantity: 2, contentTypeQuotas: [{ service: "ugc-video", count: 2 }], generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [direction, direction] }) }),
-      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+      env: { GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "test-key" }, fetchImpl
     });
     expect(response.status).toBe(500);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("uses OpenRouter for every Gemini Hook pass by default despite legacy native settings", async () => {
+    const direction = { ...openAiStaticDirection(), id: "router-gemini", caption: "" };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(openRouterResearchResponse([direction]))
+      .mockResolvedValueOnce(openRouterJsonResponse({ captions: [{ id: direction.id, caption: "Complete caption" }] }))
+      .mockResolvedValueOnce(openRouterHighlightResponse(direction.id, []));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-4-hydrogen" }) }),
+      env: { OPENROUTER_API_KEY: "router-key", GEMINI_API_KEY: "blocked-key", HOOK_GEMINI_PROVIDER: "gemini" }, fetchImpl
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls.every(([url]) => String(url) === "https://openrouter.ai/api/v1/chat/completions")).toBe(true);
+    const bodies = fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies.map(body => body.model)).toEqual(Array(3).fill("google/gemini-4-hydrogen"));
+    expect(bodies[0].reasoning).toBeUndefined();
+    expect(bodies[1].reasoning).toEqual({ effort: "low" });
   });
 
   it("splits high-volume hook quotas into bounded, content-specific batches", () => {
@@ -1291,7 +1309,7 @@ describe("handleHookGenerationHarnessRequest", () => {
         request: new Request("https://moons.local/api/hook-generation-harness", { method: "POST", body: JSON.stringify({
           ...singleStaticRequestBody, quantity: 4, contentTypeQuotas: [{ service: "single-static", count: 4 }], generationModel: "google/gemini-4-hydrogen"
         }) }),
-        env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_KEY: "gemini", VERTEX_API_KEY: "vertex" }, fetchImpl
+        env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini", VERTEX_API_KEY: "vertex" }, fetchImpl
       });
       const payload = await response.json();
       expect(ideaCalls).toBe(1);
@@ -1329,7 +1347,7 @@ describe("handleHookGenerationHarnessRequest", () => {
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.8-flash" })
       }),
-      env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_KEY: "gemini-key", VERTEX_API_KEY: "vertex-key", HOOK_GENERATION_DEBUG_LOG_DIR: "test" },
+      env: { HOOK_GEMINI_PROVIDER: provider, GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key", VERTEX_API_KEY: "vertex-key", HOOK_GENERATION_DEBUG_LOG_DIR: "test" },
       fetchImpl: fetchMock, writeDebugLog
     });
     expect(await response.json()).toMatchObject({ ok: true, directions: [{ id: direction.id, caption: "Native caption" }] });
@@ -1373,7 +1391,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     const response = await handleHookGenerationHarnessRequest({
       request: new Request("https://moons.local/api/hook-generation-harness", {
         method: "POST", body: JSON.stringify({ ...singleStaticRequestBody, generationModel: "google/gemini-3.6-flash" })
-      }), env, fetchImpl
+      }), env: { ...env, GEMINI_API_PROVIDER: "gemini" }, fetchImpl
     });
     expect(await response.json()).toMatchObject({ ok: false, error });
     expect(fetchImpl).not.toHaveBeenCalled();

@@ -10,7 +10,7 @@ Let commercial intent and category dictate density — never cap element count b
 - Consideration: structured proof modules (stat cards, checklists, benefit rows, process steps).
 - Conversion / Promotion: dominant price/offer, explicit CTA, and channel/app signage without apologizing for density. Real Thai commercial work in technical, comparison, B2B, or multi-benefit categories legitimately carries dense labeled callouts, trust badges, and promo banners — this reads as authoritative when unified under one design system.
 
-If a `visualMechanism` field is supplied, make it visibly central to the hero asset. When the mechanism is physically invisible, render it either via photographic light/atmospheric cues or an art-directed graphic device matching the brand's exact palette, lighting, and perspective — never generic stock-icon overlays.
+If a `visualMechanism` field is supplied, make it visibly central to the hero asset. When the mechanism is physically invisible, render it either via photographic light/atmospheric cues or an art-directed graphic device matching the brand's exact palette, lighting, and perspective — never generic stock-icon overlays. Conceptual metaphors, purposeful scale shifts, or stylized visual contrasts are encouraged whenever they serve as the clearest expression of the `visualMechanism`, provided every element remains conceptually justified.
 
 2. VISUAL CONSTRUCTION LANGUAGE
 Treat human presence and real-world environments strictly as creative choices, never as defaults — include them only when the concept genuinely calls for them, and omit them freely when a pure product, graphic, or typographic approach communicates stronger.
@@ -29,27 +29,28 @@ Flow: HERO → SUPPORT → INFORMATION → CTA.
 4. MEDIUM CRAFT & PRODUCT INTEGRITY
 For Photographic Subjects & Real-World Scenes (apply when photographed people or locations are present):
 - Specify physically believable camera position, focal length, and depth of field driven by one primary real-world light source plus realistic bounce. Avoid uniform HDR lighting, excessive bokeh, or blown-out studio glow.
-- Preserve controlled imperfections: natural skin pores, facial asymmetry, fine hairs, fabric creases, and genuine surface wear. Cast real, culturally authentic people of specific ages — never ageless, poreless AI faces or stock posing clichés (winking, fist-pumps, stiff rehearsed smiles).
+- Preserve controlled imperfections: natural skin pores, facial asymmetry, fine hairs, fabric creases, and genuine surface wear. Cast real, culturally authentic people of specific ages — never ageless, poreless AI faces or stock posing clichés. When multiple people appear, give each distinct individuality rather than repetitive twin-like similarity.
+- Maintain strict anatomical plausibility: keep simultaneous actions naturally performable by one body, and separate any additional product or interface showcase onto its own compositional layer rather than forcing awkward poses.
 
 For Studio Graphic & Typographic Layouts (apply when Graphic-Composite uses clean fields or typography-as-hero):
-- Prioritize crisp asset cutout edges, subtle intentional lighting or surface texture across the color field, dynamic scale contrast, and expressive typographic hierarchy (including deliberate rotation, word highlight blocks, or clean vector accents when conceptually justified).
+- Prioritize crisp asset cutout edges, subtle intentional lighting or surface texture across the color field, dynamic scale contrast, and expressive typographic craft when conceptually justified.
 
 For Illustrated/Graphic-Art:
 - Specify art style, medium, and rendering technique instead of camera terms. Maintain identical line weight, shading logic, detail density, and one implied light direction across every element.
 
 Product & Packshot Realism:
 - Supplied product packaging, logos, and labels are immutable (exact proportions, geometry, and branding; redraw faithfully in Illustrated mode).
-- Maintain true-to-life relative scale when held or used by people. In Photographic-Environmental, ground products with accurate perspective, contact shadows, and ambient bounce (allow subtle edge/specular color bounce without shifting official label or logo colors). In Graphic-Composite, mid-air staging requires a consistent cast shadow or reflection from one implied light direction.
+- Maintain true-to-life relative scale during realistic product handling, reserving exaggerated scale strictly for intentional conceptual metaphors. In Photographic-Environmental, ground products with accurate perspective, contact shadows, and ambient bounce (allow subtle edge/specular color bounce without shifting official label or logo colors). In Graphic-Composite, mid-air staging requires a consistent cast shadow or reflection from one implied light direction. Keep surface reflections diffused enough that brand lettering never mirrors into garbled reverse text.
 
 5. COLOR, TYPOGRAPHY & UNIFIED SYSTEM
 - Color Roles: assign one dominant field color, 1–2 structural secondary colors, and functional accent color(s) strictly for focal hierarchy (e.g., CTA vs. key callout). Every hue must have a clear job.
 - Typography: treat type as a core compositional layer with crisp contrast and clear hierarchy. Preserve supplied headline and CTA as fixed copy. Optional supporting copy may only state facts supported by `lockedProductFacts` — never invent claims, slogans, taglines, motivational phrases, or microcopy.
 - Factual & Copy Integrity: render only finalized copy (omit any unresolved placeholder syntax or template brackets), and ensure any depicted items or icon sets match stated quantities in the copy.
 - Thai Script Precision: preserve exact Thai spelling, tone marks, and vowel placement; break lines only at natural Thai phrase boundaries (never mid-word); keep callouts large enough to render crisply without cramped micro-text.
-- Zero Scene Text: never add invented lettering on background walls, signs, clothing, props, or screens unless explicitly required by approved campaign copy.
+- Zero Scene Text: keep incidental scene surfaces and props free of invented or transferred campaign lettering; text appears inside the physical or illustrated world only when it belongs to supplied official branding, approved copy, or is genuinely integral to the core conceptual `visualMechanism`.
 - Unified Containers: whenever claims, steps, or proof cards are boxed, enforce one shared design system (consistent corner radius, border weight, padding, and shadow).
 
 6. ANTI-AI CRAFT STANDARD
-Every graphic device or conceptual effect (split comparisons, cutaways, macro callouts, or device UI mockups when displaying an interface, article, or digital proof serves the concept) must serve real campaign information within the unified grid. Strictly avoid unmotivated decorative clutter, glowing halos, plastic textures, unexplained floating cutouts, or defaulting to neon-on-dark or generic beige backdrops.
+Every graphic device or conceptual effect (such as comparisons, cutaways, macro callouts, or device mockups when showing digital content or interfaces serves the concept) must carry real campaign meaning within the unified grid. Strictly avoid unmotivated decorative clutter, synthetic glow effects, arbitrary staging supports, casual annotation doodles, plastic textures, unexplained floating cutouts, or defaulting to generic dark-neon or neutral beige backdrops.
 
 Final bar: believable enough to pass as senior agency photography + Photoshop compositing, polished studio graphic design, or finished commercial illustration that communicates clearly within 1–3 seconds.

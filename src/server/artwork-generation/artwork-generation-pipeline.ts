@@ -1,3 +1,4 @@
+import { geminiApiProvider, openRouterGeminiModel } from "../shared/gemini-api-provider.js";
 import { generateIndependentAlbumPanels } from "./album-panels.js";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -133,6 +134,7 @@ export interface ArtworkGenerationEndpointEnv {
   GEMINI_CAMPAIGN_PREFLIGHT_MODEL?: string;
   OPENAI_CREATIVE_STRATEGY_MODEL?: string;
   OPENROUTER_API_KEY?: string;
+  GEMINI_API_PROVIDER?: string;
   GEMINI_API_KEY?: string;
   NANO_BANANA_PROVIDER?: string;
   OPENROUTER_IMAGE_PROMPT_MODEL?: string;
@@ -178,10 +180,7 @@ export async function handleArtworkGenerationRequest({
   try {
     const apiKey = env.OPENAI_API_KEY?.trim();
     const imageApiKey = env.OPENROUTER_API_KEY?.trim() ?? "";
-    const nanoBananaProvider = env.NANO_BANANA_PROVIDER?.trim() || "gemini";
-    if (nanoBananaProvider !== "gemini" && nanoBananaProvider !== "openrouter") {
-      throw new Error("NANO_BANANA_PROVIDER must be gemini or openrouter.");
-    }
+    const nanoBananaProvider = geminiApiProvider(env);
     const geminiApiKey = nanoBananaProvider === "gemini" ? env.GEMINI_API_KEY?.trim() : undefined;
 
     const auth = await resolveConvertCakeAuthorization(request, env, fetchImpl);
@@ -285,12 +284,13 @@ export async function handleArtworkGenerationRequest({
     const model = input.model.startsWith("google/")
       ? input.model
       : env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
-    const openRouterImagePromptModel = env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim();
-    const useGeminiPreflight = !input.referenceLed && input.artworkMode === "standard" && Boolean(env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim());
+    const openRouterImagePromptModel = env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() ||
+      (env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim() ? openRouterGeminiModel(env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL.trim()) : undefined);
+    const useGeminiPreflight = !input.referenceLed && input.artworkMode === "standard" && geminiApiProvider(env) === "gemini" && Boolean(env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim());
     const promptProvider: ImagePromptProvider = useGeminiPreflight ? "gemini" :
       !input.referenceLed &&
       (input.artworkMode === "standard"
-        ? Boolean(openRouterImagePromptModel && env.OPENROUTER_API_KEY?.trim())
+        ? Boolean(openRouterImagePromptModel)
         : input.imagePromptModel === "anthropic/claude-sonnet-4.6")
         ? "openrouter"
         : "openai";
@@ -314,11 +314,11 @@ export async function handleArtworkGenerationRequest({
     }
     const promptModel = promptProvider === "gemini" ? env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim() :
       promptProvider === "openrouter"
-        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
+        ? openRouterImagePromptModel || input.imagePromptModel
         : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
     const creativeStrategyModel =
       promptProvider === "openrouter"
-        ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
+        ? openRouterImagePromptModel || input.imagePromptModel
         : env.OPENAI_CREATIVE_STRATEGY_MODEL?.trim() || undefined;
     const referenceInterpreterModel =
       env.OPENROUTER_REFERENCE_INTERPRETER_MODEL?.trim();
