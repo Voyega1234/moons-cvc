@@ -6,6 +6,7 @@ import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval
 import {
   inferredReferenceImageRole,
   normalizeUserSelectableArtworkMode,
+  syncSharedMaterialsIntoDirections,
   syncSharedReferenceImagesIntoDirections
 } from "../../domain/creative-run";
 import type { BrandMemoryRepository } from "../../ports/brand-memory-repository";
@@ -126,6 +127,23 @@ export function useCreateSelectedHooks(
               type: "set-direction-reference-images",
               id: direction.id,
               images: direction.referenceImages ?? []
+            });
+          });
+          run = { ...run, directions };
+        }
+
+        {
+          const directions = syncSharedMaterialsIntoDirections(
+            run.directions,
+            run.uploadedMaterials,
+            { excludeDirectionIds: ugcVideoDirectionIds(run) }
+          );
+          directions.forEach((direction, index) => {
+            if (direction === run.directions[index]) return;
+            dispatch({
+              type: "set-direction-uploaded-materials",
+              id: direction.id,
+              materials: direction.uploadedMaterials ?? []
             });
           });
           run = { ...run, directions };

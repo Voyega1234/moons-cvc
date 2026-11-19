@@ -1502,6 +1502,41 @@ describe("workflowReducer", () => {
     ).toEqual([]);
   });
 
+  it("syncs shared materials into selected image hooks while preserving their own materials", () => {
+    const [hook] = buildDirectionFixtures("Materials fan-out");
+    if (!hook) throw new Error("Expected a direction fixture.");
+    const own = {
+      id: "own", name: "Own", mediaType: "image/png",
+      role: "product" as const, description: "", url: "https://example.com/own.png"
+    };
+    const shared = { ...own, id: "shared", name: "Shared", url: "https://example.com/shared.png", selected: false };
+    let state: WorkflowState = {
+      ...initialWorkflowState,
+      directions: [
+        { ...hook, id: "first", service: "single-static" as const, selected: true, uploadedMaterials: [own] },
+        { ...hook, id: "second", service: "album-post" as const, selected: true },
+        { ...hook, id: "unselected", service: "single-static" as const, selected: false },
+        { ...hook, id: "ugc", service: "ugc-video" as const, selected: true }
+      ]
+    };
+    state = workflowReducer(state, { type: "add-uploaded-materials", items: [shared] });
+    expect(state.directions[0]?.uploadedMaterials).toEqual([own]);
+    state = workflowReducer(state, { type: "update-uploaded-material", id: shared.id, changes: { selected: true } });
+    expect(state.directions[0]?.uploadedMaterials).toEqual([own, expect.objectContaining({ id: shared.id })]);
+    expect(state.directions[1]?.uploadedMaterials).toEqual([expect.objectContaining({ id: shared.id })]);
+    expect(state.directions[2]?.uploadedMaterials).toBeUndefined();
+    expect(state.directions[3]?.uploadedMaterials).toBeUndefined();
+    state = workflowReducer(state, { type: "update-uploaded-material", id: shared.id, changes: { role: "supporting-component" } });
+    expect(state.directions[1]?.uploadedMaterials?.[0]?.role).toBe("supporting-component");
+    state = workflowReducer(state, { type: "update-uploaded-material", id: shared.id, changes: { selected: false } });
+    expect(state.directions[0]?.uploadedMaterials).toEqual([own]);
+    expect(state.directions[1]?.uploadedMaterials).toEqual([]);
+    state = workflowReducer(state, { type: "update-uploaded-material", id: shared.id, changes: { selected: true } });
+    state = workflowReducer(state, { type: "remove-uploaded-material", id: shared.id });
+    expect(state.directions[0]?.uploadedMaterials).toEqual([own]);
+    expect(state.directions[1]?.uploadedMaterials).toEqual([]);
+  });
+
   it("never fans a shared reference image into a selected UGC hook", () => {
     const [ugcHook] = buildDirectionFixtures("UGC fan-out");
     if (!ugcHook) throw new Error("Expected at least one direction fixture.");

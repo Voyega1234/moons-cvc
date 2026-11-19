@@ -868,3 +868,9 @@ provider output, leaving time to return a JSON error before the function limit.
 The browser also bounds each request to 170 seconds. Final structured JSON is
 read through `shared/structured-output.ts`. These changes reduce timeout and
 transient gateway failures; they do not guarantee upstream availability.
+
+Shared Image Materials selections sync into selected non-UGC directions through
+`syncSharedMaterialsIntoDirections` in `src/domain/creative-run.ts`, both on
+material changes in the workflow reducer and before artwork generation.
+`fromSharedMaterial` tracks shared copies so deselection/removal preserves
+hook-specific attachments. Existing per-hook deduplication and limits apply.

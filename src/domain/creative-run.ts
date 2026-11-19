@@ -442,8 +442,34 @@ export interface UploadedCreativeMaterial {
    * New uploads/imports start unselected so adding an asset never changes a brief.
    */
   selected?: boolean;
+  /** Tracks materials copied from the shared picker, preserving hook-specific picks. */
+  fromSharedMaterial?: boolean;
   storagePath?: string;
   storageBucket?: string;
+}
+
+export function syncSharedMaterialsIntoDirections<
+  T extends Pick<CreativeDirection, "id" | "selected" | "uploadedMaterials">
+>(
+  directions: readonly T[],
+  sharedMaterials: readonly UploadedCreativeMaterial[],
+  options?: { excludeDirectionIds?: ReadonlySet<string> }
+): readonly T[] {
+  const tagged = sharedMaterials
+    .filter((material) => material.selected !== false)
+    .map((material) => ({ ...material, fromSharedMaterial: true }));
+  return directions.map((direction) => {
+    if (!direction.selected || options?.excludeDirectionIds?.has(direction.id)) {
+      return direction;
+    }
+    const existing = direction.uploadedMaterials ?? [];
+    const uploadedMaterials = normalizeHookUploadedMaterials([
+      ...existing.filter((material) => !material.fromSharedMaterial),
+      ...tagged
+    ]);
+    if (JSON.stringify(existing) === JSON.stringify(uploadedMaterials)) return direction;
+    return { ...direction, uploadedMaterials };
+  });
 }
 
 export const MAX_HOOK_MATERIALS = 4;

@@ -25,6 +25,18 @@ describe("workspace serializer", () => {
     expect(restored?.runsById[workspace.activeRunId]?.directions[0]?.albumFormat).toBe("four-horizontal");
   });
 
+  it("preserves shared and hook-specific materials after reload", () => {
+    const workspace = createInitialWorkspaceState({ runId: "materials", now: "2026-11-19T00:00:00Z" });
+    const run = workspace.runsById[workspace.activeRunId]!;
+    const own = { id: "own", name: "Own", mediaType: "image/png", role: "product" as const, description: "", url: "https://example.com/own.png" };
+    const materials = [own, { ...own, id: "shared", url: "https://example.com/shared.png", fromSharedMaterial: true }];
+    const saved = { ...workspace, runsById: { [run.id]: {
+      ...run, directions: [{ ...buildDirectionFixtures("Brand")[0]!, uploadedMaterials: materials }]
+    } } };
+    const restored = deserializeWorkspace(serializeWorkspace(saved, "2026-11-19T00:00:00Z"));
+    expect(restored?.runsById[run.id]?.directions[0]?.uploadedMaterials).toEqual(materials);
+  });
+
   it("preserves a per-Hook reference image", () => {
     let workspace = createInitialWorkspaceState({
       runId: "hook-reference-run",

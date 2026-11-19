@@ -17,6 +17,7 @@ import {
   MAX_HOOK_GENERATION_MODELS,
   normalizeSelectableHookModel,
   normalizeHookReferenceImages,
+  normalizeHookUploadedMaterials,
   normalizeFormatBeatsForService,
   referenceImageRoles,
   serviceTypes,
@@ -603,6 +604,7 @@ function parseUploadedMaterials(
       description,
       url,
       ...(selected !== undefined ? { selected } : {}),
+      ...(item.fromSharedMaterial === true ? { fromSharedMaterial: true } : {}),
       ...(storagePath ? { storagePath } : {}),
       ...(storageBucket ? { storageBucket } : {})
     };
@@ -679,6 +681,7 @@ function parseDirections(
               return legacyReference ? [legacyReference] : null;
             })()
           : [];
+    const uploadedMaterials = parseUploadedMaterials(item.uploadedMaterials);
     const ugcBrief =
       item.ugcBrief === undefined ? undefined : parseUgcVideoBrief(item.ugcBrief);
     // A malformed ugcScript degrades gracefully (omitted, direction still loads)
@@ -722,6 +725,7 @@ function parseDirections(
       formatBeats === null ||
       (item.albumFormat !== undefined && !albumFormat) ||
       referenceImages === null ||
+      uploadedMaterials === null ||
       ugcBrief === null ||
       (item.ctaActionType !== undefined && !ctaActionType) ||
       ctaDestination === null ||
@@ -757,6 +761,9 @@ function parseDirections(
       albumFormat: albumFormat ?? undefined,
       referenceImages: referenceImages.length
         ? normalizeHookReferenceImages(referenceImages)
+        : undefined,
+      uploadedMaterials: uploadedMaterials.length
+        ? normalizeHookUploadedMaterials(uploadedMaterials)
         : undefined,
       ugcBrief: ugcBrief ?? undefined,
       ugcScript,

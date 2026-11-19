@@ -15,6 +15,7 @@ import {
   normalizeHookUploadedMaterials,
   normalizeFormatBeatsForService,
   syncSharedReferenceImagesIntoDirections,
+  syncSharedMaterialsIntoDirections,
   type ApprovalRole
 } from "../../domain/creative-run";
 import {
@@ -583,24 +584,25 @@ export function workflowReducer(
     case "attach-files":
       return { ...state, attachments: action.names };
     case "add-uploaded-materials":
-      return {
-        ...state,
-        uploadedMaterials: [...state.uploadedMaterials, ...action.items]
-      };
     case "update-uploaded-material":
+    case "remove-uploaded-material": {
+      const uploadedMaterials = action.type === "add-uploaded-materials"
+        ? [...state.uploadedMaterials, ...action.items]
+        : action.type === "update-uploaded-material"
+          ? state.uploadedMaterials.map((item) =>
+              item.id === action.id ? { ...item, ...action.changes } : item
+            )
+          : state.uploadedMaterials.filter((item) => item.id !== action.id);
       return {
         ...state,
-        uploadedMaterials: state.uploadedMaterials.map((item) =>
-          item.id === action.id ? { ...item, ...action.changes } : item
+        uploadedMaterials,
+        directions: syncSharedMaterialsIntoDirections(
+          state.directions,
+          uploadedMaterials,
+          { excludeDirectionIds: ugcVideoDirectionIds(state) }
         )
       };
-    case "remove-uploaded-material":
-      return {
-        ...state,
-        uploadedMaterials: state.uploadedMaterials.filter(
-          (item) => item.id !== action.id
-        )
-      };
+    }
     case "toggle-product-context": {
       const products = state.brand?.library.products ?? [];
       if (!products.some((product) => product.id === action.id)) return state;
