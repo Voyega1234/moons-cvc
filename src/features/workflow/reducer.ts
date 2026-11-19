@@ -94,12 +94,11 @@ export const defaultBrief =
   "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า และยึดข้อเท็จจริง ให้แต่ละไอเดียต่างกันที่มุมคิดหรือวิธีเล่า เขียน Headline ให้ชัด มีเสน่ห์ และตรงเสียงแบรนด์ ใช้คำเล่น ไทยผสมอังกฤษ หรือตัวเลขเมื่อช่วยให้สารน่าสนใจขึ้น ใช้ [Placeholder] สำหรับข้อมูลที่รอยืนยัน";
 
 export const defaultArtworkBrief = `Creative Direction Priority:
-- Prioritize an original, memorable visual idea over literal illustration or safe commercial tropes; distill the message into one clear creative hook that stops the scroll immediately.
-- Choose the visual medium, staging, and color approach strictly based on what serves the brand identity and idea strongest—never assume people, physical locations, or complex scenes are required when restraint or pure graphic craft hits harder.
-- Ground any human casting and setting in the authentic contemporary culture of the brand's actual audience; when multiple people appear, ensure each carries natural individuality rather than repetitive similarity.
-- Maintain strict physical and anatomical plausibility for human subjects: keep actions within what a person can naturally perform simultaneously, and separate any additional product showcase cleanly onto its own compositional layer rather than forcing awkward poses.
-- Keep scenes disciplined and purposeful: every graphic flourish, scale choice, lighting effect, or supporting object must earn its place conceptually—never add unmotivated decoration, synthetic glow effects, arbitrary staging supports, or unapproved microcopy merely to fill space.
-- Keep campaign keywords and supporting facts strictly within designed typography; never let them bleed onto incidental scene surfaces, and keep reflections soft enough that brand lettering remains undistorted.
+- Practice strict editorial restraint: choose one clear focal idea, generous breathing room, and effortless thumb-size readability over busy visual spectacle.
+- Harmonize image, background, and typography as one unified composition—keep backgrounds quiet and subordinate, match typographic personality cleanly to the brand and visual mood, and never force elements to compete for attention simultaneously.
+- Choose the visual medium and staging purely on what communicates the idea cleanest—never assume people, physical locations, or complex props are required when minimal graphic, typographic, or product craft hits harder.
+- Keep scenes purposeful and uncluttered: avoid unmotivated decoration, synthetic glow effects, stacked type effects, arbitrary staging supports, naturally text-bearing background clutter, repetitive patterns, or unapproved microcopy.
+- Keep campaign facts strictly within designed typography; never let them bleed onto incidental surfaces, and keep reflections soft enough that brand lettering remains clean.
 - Adhere to all construction, density, copy integrity, and layout principles in the main system instruction.`;
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
