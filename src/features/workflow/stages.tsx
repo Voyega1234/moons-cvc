@@ -4048,7 +4048,9 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
           >
             {creating ? <Spinner /> : null}
             {creating
-              ? artworkProgress?.total
+              ? artworkProgress?.phase === "ugc-brief"
+                ? "Preparing selected UGC brief…"
+                : artworkProgress?.total
                 ? `Generating artwork ${artworkProgress.completed}/${artworkProgress.total}…`
                 : "Preparing artwork…"
               : "Confirm hooks & create →"}

@@ -8,15 +8,18 @@ const answer = (finishReason = "STOP", text = '{"ok":true}') => ({
 });
 
 describe("Google Hook transport", () => {
-  it.each(["gemini-4-hydrogen", "gemini-3.8-flash"])("uses low thinking only for %s captions", async model => {
+  it.each(["gemini-4-hydrogen", "gemini-3.8-flash"])("uses low thinking for %s supporting passes while preserving idea reasoning", async model => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(answer())));
-    for (const schemaName of ["moons_hook_generation", "moons_hook_captions"]) {
+    for (const schemaName of ["moons_hook_generation", "moons_hook_captions", "moons_ugc_brief", "neo_subheadline_highlights", "moons_idea_preflight"]) {
       await callGoogleHookApi({ provider: "gemini", apiKey: "secret", model, fetchImpl,
         text: "brief", schema: {}, schemaName, maxTokens: 16000, search: false });
     }
     const configs = fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).generationConfig);
     expect(configs[0]).not.toHaveProperty("thinkingConfig");
-    expect(configs[1].thinkingConfig).toEqual({ thinkingLevel: "low" });
+    for (const config of configs.slice(1, 4)) {
+      expect(config.thinkingConfig).toEqual({ thinkingLevel: "low" });
+    }
+    expect(configs[4]).not.toHaveProperty("thinkingConfig");
   });
 
   it.each(["gemini", "vertex"] as const)("sends native %s schema, search, and header key", async (provider) => {

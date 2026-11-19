@@ -15,6 +15,7 @@ import {
 } from "./hook-generation-types";
 import {
   creativeMixItems,
+  ugcVideoDirectionIds,
   hookGenerationContentTypeQuotas,
   selectedBrandProducts,
   selectedUploadedMaterials,
@@ -30,6 +31,8 @@ export interface HookGenerationHarnessRequest {
   agentHookPrompt?: string;
   /** Playground-only operation that returns the Research dossier without ideas. */
   researchOnly?: boolean;
+  deferUgcBrief?: boolean;
+  ugcBriefDirections?: readonly unknown[];
   /** Playground-only validated dossier reused across compared model requests. */
   researchDossier?: unknown;
   albumFormat?: AlbumFormatPreference;
@@ -82,9 +85,7 @@ export async function generateDirectionsWithHarness({
   const payload = await postHarnessRequest<
     Partial<HookGenerationHarnessResponse>
   >(
-    researchDossier === undefined
-      ? requestBody
-      : { ...requestBody, researchDossier },
+    { ...requestBody, deferUgcBrief: true, ...(researchDossier === undefined ? {} : { researchDossier }) },
     "Harness hook generation"
   );
 
@@ -92,7 +93,43 @@ export async function generateDirectionsWithHarness({
     throw new Error("Harness hook generation returned no hooks.");
   }
 
-  return normalizeCreativeDirections(payload.directions);
+  return normalizeCreativeDirections(payload.directions).map((direction, index) =>
+    direction.service === "ugc-video" && !payload.directions![index]?.ugcBrief
+      ? { ...direction, ugcBrief: undefined }
+      : direction
+  );
+}
+
+export async function prepareSelectedUgcBriefs(run: HookGenerationRunInput["run"]): Promise<readonly CreativeDirection[]> {
+  const ugcIds = ugcVideoDirectionIds(run);
+  const selected = run.directions.filter(direction => direction.selected && ugcIds.has(direction.id) && !direction.ugcBrief);
+  if (!selected.length) return run.directions;
+  const groups = new Map<HookGenerationModel, CreativeDirection[]>();
+  for (const direction of selected) {
+    const model = direction.generationModel ?? run.hookGenerationModel;
+    groups.set(model, [...(groups.get(model) ?? []), direction]);
+  }
+  const completed = await Promise.all([...groups].map(async ([model, directions]) => {
+    const request = buildHookGenerationHarnessRequest({ run: { ...run, hookGenerationModel: model } });
+    const payload = await postHarnessRequest<{ directions?: readonly RawDirection[] }>({
+      ...request, quantity: directions.length, service: "ugc-video",
+      contentTypeQuotas: [{ service: "ugc-video", count: directions.length }],
+      ugcBriefDirections: directions.map(direction => ({ ...direction, service: "ugc-video", score: 0, reasoning: "" }))
+    }, "UGC brief generation");
+    if (!Array.isArray(payload.directions) || payload.directions.length !== directions.length) {
+      throw new Error("UGC brief generation returned incomplete results. Please retry.");
+    }
+    const byId = new Map(payload.directions.map(direction => [direction.id, direction]));
+    if (byId.size !== directions.length) throw new Error("UGC brief generation returned duplicate IDs.");
+    return directions.map(direction => {
+      const result = byId.get(direction.id);
+      if (!result?.ugcBrief) throw new Error("Could not prepare the selected UGC brief. Please retry.");
+      const normalized = normalizeCreativeDirections([{ ...direction, ugcBrief: result.ugcBrief }])[0]!;
+      return { ...direction, ugcBrief: normalized.ugcBrief };
+    });
+  }));
+  const byId = new Map(completed.flat().map(direction => [direction.id, direction]));
+  return run.directions.map(direction => byId.get(direction.id) ?? direction);
 }
 
 export async function generateHookResearchWithHarness(

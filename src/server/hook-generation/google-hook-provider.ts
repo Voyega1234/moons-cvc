@@ -30,7 +30,7 @@ export async function callGoogleHookApi({ provider, apiKey, model, fetchImpl, te
         maxOutputTokens: maxTokens,
         responseMimeType: "application/json",
         responseJsonSchema: schema,
-        ...(schemaName === "moons_hook_captions" && /^gemini-(?:3|4)[.-]/.test(model)
+        ...(["moons_hook_captions", "moons_ugc_brief", "neo_subheadline_highlights"].includes(schemaName) && /^gemini-(?:3|4)[.-]/.test(model)
           ? { thinkingConfig: { thinkingLevel: "low" } }
           : {})
       },

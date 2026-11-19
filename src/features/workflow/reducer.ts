@@ -858,6 +858,12 @@ export function workflowReducer(
         clientSent: false,
         done: false
       };
+    case "set-direction-ugc-brief":
+      return {
+        ...state,
+        directions: state.directions.map(direction => direction.id === action.id
+          ? { ...direction, ugcBrief: action.brief } : direction)
+      };
     case "set-direction-reference-images":
       return {
         ...state,

@@ -18,6 +18,7 @@ import type {
   ReferenceImageSelection,
   ReferenceImageRole,
   UploadedCreativeMaterial,
+  UgcVideoBrief,
   ReviewDecision,
   ServiceType,
     ArtworkOutputSize,
@@ -197,6 +198,7 @@ export type WorkflowAction =
       type: "generate-more-directions";
       directions: readonly CreativeDirection[];
     }
+  | { type: "set-direction-ugc-brief"; id: string; brief: UgcVideoBrief }
   | { type: "replace-direction"; id: string; direction: CreativeDirection }
   | { type: "replace-directions"; directions: readonly CreativeDirection[] }
   | { type: "set-direction-album-format"; id: string; format: AlbumFormat }

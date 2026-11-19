@@ -1,8 +1,10 @@
+import { normalizeCreativeDirections } from "./hook-generation-types";
 import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import {
   buildHookGenerationHarnessRequest,
   generateDirectionsWithHarness,
+  prepareSelectedUgcBriefs,
   generateHookResearchWithHarness
 } from "./harness-hook-generation";
 import type { WorkflowState } from "../../features/workflow/model";
@@ -733,5 +735,43 @@ describe("buildHookGenerationHarnessRequest", () => {
     );
 
     vi.stubGlobal("fetch", originalFetch);
+  });
+});
+
+
+describe("deferred UGC briefs", () => {
+  const raw = { id: "ugc", service: "ugc-video", hook: "Approved headline", concept: "Approved concept", visual: "Kitchen", caption: "Approved caption" };
+  const ready = { ...normalizeCreativeDirections([raw])[0]!, selected: true };
+  it("defers missing UGC briefs instead of persisting a generated fallback", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ directions: [raw] })));
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const directions = await generateDirectionsWithHarness({ run });
+      expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)).deferUgcBrief).toBe(true);
+      expect(directions[0]?.ugcBrief).toBeUndefined();
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("requests only selected missing briefs and preserves existing edits and ready briefs", async () => {
+    const pending = { ...ready, ugcBrief: undefined, generationModel: "google/gemini-4-hydrogen" as const };
+    const unselected = { ...pending, id: "unselected", selected: false };
+    const existing = { ...ready, id: "ready" };
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ directions: [{ id: pending.id, ugcBrief: ready.ugcBrief }] })));
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const result = await prepareSelectedUgcBriefs({ ...run, directions: [pending, unselected, existing] });
+      const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+      expect(body.quantity).toBe(1);
+      expect(body.generationModel).toBe("google/gemini-4-hydrogen");
+      expect(body.ugcBriefDirections.map((d: { id: string }) => d.id)).toEqual([pending.id]);
+      expect(result[0]).toMatchObject({ hook: pending.hook, caption: pending.caption, ugcBrief: expect.any(Object) });
+      expect(result[1]).toBe(unselected);
+      expect(result[2]).toBe(existing);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("fails on missing selected brief results so creation can be retried", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ directions: [] }))));
+    try {
+      await expect(prepareSelectedUgcBriefs({ ...run, directions: [{ ...ready, ugcBrief: undefined }] })).rejects.toThrow("incomplete results");
+    } finally { vi.unstubAllGlobals(); }
   });
 });

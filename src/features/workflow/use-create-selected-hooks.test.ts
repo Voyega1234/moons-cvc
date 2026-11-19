@@ -1,3 +1,5 @@
+import { prepareSelectedUgcBriefs } from "../../services/creative-generation/harness-hook-generation";
+import { normalizeCreativeDirections } from "../../services/creative-generation/hook-generation-types";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
@@ -6,6 +8,12 @@ import { buildDirectionFixtures } from "./test-fixtures";
 import { useCreateSelectedHooks } from "./use-create-selected-hooks";
 import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval";
 import { defaultArtworkContextSelection } from "./model";
+
+vi.mock("../../config/env", async importOriginal => {
+  const actual = await importOriginal<typeof import("../../config/env")>();
+  return { ...actual, env: { ...actual.env, hookGenerationMode: "harness" } };
+});
+vi.mock("../../services/creative-generation/harness-hook-generation", () => ({ prepareSelectedUgcBriefs: vi.fn() }));
 
 vi.mock("../../services/artwork-generation/openai-image-generation", () => ({
   artworkReferencesFromSelections: vi.fn(() => []),
@@ -21,6 +29,35 @@ beforeEach(() => {
 });
 
 describe("useCreateSelectedHooks", () => {
+  it("waits for the selected UGC brief and persists it before creating outputs", async () => {
+    const ready = normalizeCreativeDirections([{ id: "ugc", service: "ugc-video", hook: "Hook", concept: "Concept", visual: "Kitchen" }])[0]!;
+    const pending = { ...ready, selected: true, ugcBrief: undefined };
+    let finish: ((directions: typeof ready[]) => void) | undefined;
+    vi.mocked(prepareSelectedUgcBriefs).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    vi.mocked(generateArtworkForSelectedHooks).mockResolvedValue([]);
+    const dispatch = vi.fn();
+    const state = { ...createInitialWorkflowState({ id: "ugc-create", now: "2026-11-19T00:00:00Z" }), directions: [pending] };
+    const { result } = renderHook(() => useCreateSelectedHooks(state, dispatch));
+    act(() => result.current.create());
+    expect(generateArtworkForSelectedHooks).not.toHaveBeenCalled();
+    expect(result.current.progress?.phase).toBe("ugc-brief");
+    await act(async () => { finish!([{ ...ready, selected: true }]); });
+    await waitFor(() => expect(generateArtworkForSelectedHooks).toHaveBeenCalledTimes(1));
+    expect(dispatch).toHaveBeenCalledWith({ type: "set-direction-ugc-brief", id: ready.id, brief: ready.ugcBrief });
+    expect(vi.mocked(generateArtworkForSelectedHooks).mock.calls[0]?.[0].run.directions[0]?.ugcBrief).toBe(ready.ugcBrief);
+  });
+
+  it("keeps creation retryable when the selected UGC brief fails", async () => {
+    const ready = normalizeCreativeDirections([{ id: "ugc", service: "ugc-video", hook: "Hook", concept: "Concept", visual: "Kitchen" }])[0]!;
+    vi.mocked(prepareSelectedUgcBriefs).mockRejectedValue(new Error("Brief failed"));
+    const dispatch = vi.fn();
+    const state = { ...createInitialWorkflowState({ id: "ugc-failed", now: "2026-11-19T00:00:00Z" }), directions: [{ ...ready, selected: true, ugcBrief: undefined }] };
+    const { result } = renderHook(() => useCreateSelectedHooks(state, dispatch));
+    act(() => result.current.create());
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: "fail-artwork-generation", message: "Brief failed" }));
+    expect(generateArtworkForSelectedHooks).not.toHaveBeenCalled();
+  });
+
   it("refreshes CI observations from Brand Docs and respects the CI and color context switches", async () => {
     vi.mocked(generateArtworkForSelectedHooks).mockResolvedValue([]);
     const document = { id: "style", title: CREATIVE_APPROVAL_DOCUMENT_TITLE, description: JSON.stringify({ examples: [{ visualStyle: { colors: ["dark blue"], typography: ["bold Thai"], layout: [], imagery: [], moodTone: ["confident"], brandElements: [] } }] }) };

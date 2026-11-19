@@ -889,3 +889,24 @@ Google structured-output transport with no search, existing validation/retries,
 and a 50-second deadline per provider request. Image generation and Visual QC
 retain their existing providers. Local model settings require a server restart;
 production needs the same variables and a redeploy.
+
+Native Gemini Hook idea requests reserve at least 16,000 output tokens including
+thinking, avoiding small runs consuming their entire 5,000–7,000-token budget
+before JSON output. The existing bounded 24,000-token truncation recovery remains.
+Gemini 3/4 Caption, UGC Brief and subheadline Highlight passes use low thinking;
+Hook idea reasoning and all validators are unchanged. Selecting one UGC deliverable
+still creates three idea options under the existing +2-per-content-type policy.
+
+The normal application harness request sets `deferUgcBrief: true`: Hook ideas,
+Caption and Highlight return before UGC production briefs are generated.
+`generateDirectionsWithHarness` leaves deferred UGC briefs absent (rather than
+persisting a synthesized fallback). On Review & continue → Create,
+`use-create-selected-hooks.ts` refreshes brand context, then
+`prepareSelectedUgcBriefs` requests only selected UGC directions lacking a brief,
+grouped by their original generation model. The authenticated harness's
+`ugcBriefDirections` operation validates bounded unique UGC IDs and generates
+briefs directly, without rerunning Research, Hook ideas or Caption. Missing/failed
+briefs fail creation so the user can retry. Successful briefs persist through
+`set-direction-ugc-brief` before templates/thumbnails are created; existing briefs
+and unselected directions are retained. Legacy direct harness and Playground
+requests that omit the defer flag retain their complete-generation behavior.

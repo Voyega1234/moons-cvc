@@ -338,6 +338,51 @@ describe("handleHookGenerationHarnessRequest", () => {
     }
   );
 
+  it("returns Hook ideas without generating UGC briefs when deferred", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(validHookResearchResponse())
+      .mockResolvedValueOnce(validHookTopicShortlistResponse())
+      .mockResolvedValueOnce(openAiUgcDirectionResponse("เลือกกระทะจากการใช้งานจริง"))
+      .mockResolvedValueOnce(highlightResponse("ugc-natural-thai", []));
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, deferUgcBrief: true }) }),
+      env: { OPENAI_API_KEY: "test-key" }, fetchImpl
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.directions[0].ugcBrief).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+
+  it("generates only the selected UGC brief with native Gemini without regenerating ideas or captions", async () => {
+    const direction = JSON.parse((await openAiUgcDirectionResponse("Approved hook").json()).output_text).directions[0];
+    const brief = JSON.parse((await openAiUgcBriefResponse().json()).output_text);
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.generationConfig.responseJsonSchema.properties).toHaveProperty("scenes");
+      expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
+      expect(body.tools).toBeUndefined();
+      return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(brief) }] } }] }));
+    });
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [direction] }) }),
+      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect((await response.json()).directions[0]).toMatchObject({ id: direction.id, hook: "Approved hook", ugcBrief: { product: brief.product } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects duplicate selected UGC IDs before calling the provider", async () => {
+    const direction = JSON.parse((await openAiUgcDirectionResponse("Approved hook").json()).output_text).directions[0];
+    const fetchImpl = vi.fn();
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, quantity: 2, contentTypeQuotas: [{ service: "ugc-video", count: 2 }], generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [direction, direction] }) }),
+      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+    });
+    expect(response.status).toBe(500);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("splits high-volume hook quotas into bounded, content-specific batches", () => {
     const batches = buildHookGenerationBatches({
       ...requestBody,
@@ -1210,6 +1255,8 @@ describe("handleHookGenerationHarnessRequest", () => {
         const body = JSON.parse(String(init?.body));
         const properties = body.generationConfig.responseJsonSchema.properties;
         if (properties.directions) {
+          expect(body.generationConfig.maxOutputTokens).toBe(16000);
+          expect(body.generationConfig.thinkingConfig).toBeUndefined();
           ideaCalls += 1;
           return nativeResponse({ directions });
         }
@@ -1279,6 +1326,7 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([endpoint, endpoint, endpoint]);
     expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-goog-api-key")).toBe("gemini-key");
     expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toHaveProperty("tools", [{ googleSearch: {} }]);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)).generationConfig.maxOutputTokens).toBe(16000);
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).not.toHaveProperty("tools");
     expect(writeDebugLog.mock.calls[0]![1]).toMatchObject({ researchAgent: null, topicAgent: null,
       hookAgent: { provider: "gemini", model: "gemini-3.8-flash" }, captionAgent: { model: "gemini-3.8-flash" } });

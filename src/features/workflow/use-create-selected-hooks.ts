@@ -1,3 +1,5 @@
+import { prepareSelectedUgcBriefs } from "../../services/creative-generation/harness-hook-generation";
+import { env } from "../../config/env";
 import { useCallback, useState, type Dispatch } from "react";
 import { useOptionalWorkspace } from "../../app/providers/workspace-provider";
 import { generateArtworkForSelectedHooks } from "../../services/artwork-generation/openai-image-generation";
@@ -76,6 +78,7 @@ export function useCreateSelectedHooks(
   const [progress, setProgress] = useState<{
     completed: number;
     total: number;
+    phase?: "ugc-brief";
   } | null>(null);
   const loading = state.artworkGenerationStatus === "running";
   const error =
@@ -108,6 +111,19 @@ export function useCreateSelectedHooks(
               library: { ...state.brand.library, brand: items, docs: documents }
             }
           };
+        }
+        if (env.hookGenerationMode === "harness" && run.directions.some(direction =>
+          direction.selected && ugcVideoDirectionIds(run).has(direction.id) && !direction.ugcBrief
+        )) {
+          setProgress({ completed: 0, total: 0, phase: "ugc-brief" });
+          const directions = await prepareSelectedUgcBriefs(run);
+          directions.forEach((direction, index) => {
+            if (direction !== run.directions[index] && direction.ugcBrief) {
+              dispatch({ type: "set-direction-ugc-brief", id: direction.id, brief: direction.ugcBrief });
+            }
+          });
+          run = { ...run, directions };
+          setProgress({ completed: 0, total: 0 });
         }
         run = applyArtworkContextSelection(run, contextSelection);
         run = {

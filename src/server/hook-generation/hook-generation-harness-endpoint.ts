@@ -257,6 +257,25 @@ export async function handleHookGenerationHarnessRequest({
       ? (fixedGeminiModel ? input.generationModel.slice("google/".length) : env.GEMINI_HOOK_GENERATION_MODEL?.trim() || input.generationModel.slice("google/".length))
       : generationProvider === "openrouter" ? input.generationModel
       : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || input.generationModel || DEFAULT_OPENAI_MODEL;
+    if (input.ugcBriefDirections !== undefined) {
+      const directions = parseHookGenerationResult(JSON.stringify({ directions: input.ugcBriefDirections })).directions;
+      if (!directions.length || directions.length > 50 || directions.length !== input.quantity ||
+          directions.some(direction => direction.service !== "ugc-video") ||
+          new Set(directions.map(direction => direction.id)).size !== directions.length || input.researchOnly) {
+        throw new Error("UGC brief requests require unique selected UGC directions matching quantity (1–50).");
+      }
+      const pastPosts = input.brand ? await loadPastPostExamples({ clientId: input.brand.id, env, accessToken: auth.accessToken }) : [];
+      const result = await runUgcBriefStep({
+        directions, input, researchDossier: input.researchDossier as HookResearchDossier | undefined ?? null,
+        pastPosts, apiKey: generationApiKey, model, provider: generationProvider,
+        prompt: await loadUgcBriefPrompt(), fetchImpl: providerFetchImpl
+      });
+      if (result.directions.some(direction => !direction.ugcBrief)) {
+        throw new Error("Could not generate the selected UGC brief. Please retry.");
+      }
+      return jsonResponse({ ok: true, directions: result.directions });
+    }
+
     const supportModel =
       env.OPENAI_HOOK_SUPPORT_MODEL?.trim() || DEFAULT_SUPPORT_MODEL;
     const researchOpenRouterModel = env.OPENROUTER_HOOK_RESEARCH_MODEL?.trim();
@@ -415,7 +434,7 @@ export async function handleHookGenerationHarnessRequest({
         rawResponse: captionResults.length === 1 ? captionResults[0]!.rawResponse : captionResults.map((result) => result.rawResponse)
       };
     }
-    const ugcBriefPrompt = await loadUgcBriefPrompt();
+    const ugcBriefPrompt = input.deferUgcBrief ? "" : await loadUgcBriefPrompt();
     // Subheadline highlighting and the UGC brief both derive only from
     // `directions` (not from each other's output), so they run concurrently
     // instead of one waiting on the other.
@@ -428,7 +447,9 @@ export async function handleHookGenerationHarnessRequest({
         prompt: subheadlineHighlightPrompt,
         fetchImpl: providerFetchImpl
       }),
-      runUgcBriefStep({
+      input.deferUgcBrief
+        ? Promise.resolve({ directions, traces: [] })
+        : runUgcBriefStep({
         directions,
         input,
         researchDossier: researchTrace?.output ?? null,
@@ -580,7 +601,10 @@ async function runGenerationStep({
   const HOOK_GENERATION_MAX_TOKENS_CEILING = 24000;
   let currentMaxTokens = Math.min(
     HOOK_GENERATION_MAX_TOKENS_CEILING,
-    4000 + input.quantity * 1000
+    // Gemini counts thinking against this budget too; small UGC runs otherwise
+    // exhaust it before producing JSON and replay the entire idea request.
+    Math.max(provider === "gemini" || provider === "vertex" ? 16000 : 0,
+      4000 + input.quantity * 1000)
   );
   const requestDirections = (requestInputText: string) =>
     callResponsesApi({
@@ -2234,6 +2258,10 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
     generationModel: readHookGenerationModel(value.generationModel),
     agentHookPrompt: readOptionalAgentHookPrompt(value.agentHookPrompt),
     researchOnly: readOptionalBoolean(value.researchOnly, "researchOnly"),
+    deferUgcBrief: readOptionalBoolean(value.deferUgcBrief, "deferUgcBrief"),
+    ...(value.ugcBriefDirections === undefined ? {} : {
+      ugcBriefDirections: readUgcBriefDirections(value.ugcBriefDirections)
+    }),
     researchDossier: readOptionalResearchDossier(value.researchDossier),
     albumFormat: readAlbumFormat(value.albumFormat),
     brand: value.brand === null ? null : parseBrand(value.brand),
@@ -2263,6 +2291,13 @@ function parseRequestBody(value: unknown): HookGenerationHarnessRequest {
       refs: readLibraryItems(brandLibrary.refs, "brandLibrary.refs")
     }
   };
+}
+
+function readUgcBriefDirections(value: unknown): readonly unknown[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 50) {
+    throw new Error("ugcBriefDirections must contain 1–50 selected directions.");
+  }
+  return value;
 }
 
 function readOptionalAgentHookPrompt(value: unknown): string | undefined {
