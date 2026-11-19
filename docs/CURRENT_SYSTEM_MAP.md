@@ -910,3 +910,10 @@ briefs fail creation so the user can retry. Successful briefs persist through
 `set-direction-ugc-brief` before templates/thumbnails are created; existing briefs
 and unselected directions are retained. Legacy direct harness and Playground
 requests that omit the defer flag retain their complete-generation behavior.
+
+`four-horizontal` always uses standalone panels, including when legacy
+`ALBUM_GENERATION_MODE=master` is set. The cover is 1920×1280 and each of the
+three supporting files is 1920×1920; the preview is assembled deterministically.
+This prevents a model-placed master divider from turning the lower row into
+portrait panels. Existing generated masters require fresh generation to recover
+content composed for the wrong panel geometry.

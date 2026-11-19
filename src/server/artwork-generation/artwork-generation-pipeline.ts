@@ -805,7 +805,9 @@ async function generateOutputForHook({
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
   const brandVisualInstruction = buildCreativeApprovalVisualInstruction(input);
-  if (isAlbum && independentAlbumPanels) {
+  // Fixed-size panels keep the three square supports intact when the model
+  // would otherwise place a divider incorrectly inside a single master image.
+  if (isAlbum && (independentAlbumPanels || albumFormat === "four-horizontal")) {
     const assetVersion = input.assetVersion ?? 1;
     const { panels, masterBytes } = await generateIndependentAlbumPanels({
       hook, format: albumFormat, prompt: composeImagePrompt(promptParts, brandVisualInstruction),

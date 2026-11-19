@@ -93,25 +93,11 @@ function computeApproved(outputs: WorkflowState["outputs"]): boolean {
 export const defaultBrief =
   "คิดไอเดียที่น่าสนใจ ตรงแบรนด์ เข้าใจลูกค้า และยึดข้อเท็จจริง ให้แต่ละไอเดียต่างกันที่มุมคิดหรือวิธีเล่า เขียน Headline ให้ชัด มีเสน่ห์ และตรงเสียงแบรนด์ ใช้คำเล่น ไทยผสมอังกฤษ หรือตัวเลขเมื่อช่วยให้สารน่าสนใจขึ้น ใช้ [Placeholder] สำหรับข้อมูลที่รอยืนยัน";
 
-export const defaultArtworkBrief = `รับบท Senior Creative Director & Graphic Designer มืออาชีพ สร้างภาพโฆษณาที่สมจริงระดับเอเจนซี่ มีไอเดียเฉียบคม มีรสนิยม และไร้กลิ่นอายภาพ AI ทั่วไป
-
-1. วิเคราะห์แบรนด์และคิดไอเดีย (Brand-Fit & Creative Concept):
-- ตีความบรีฟก่อนเสมอ: แบรนด์มีบุคลิกแบบไหน (หรูหรา, สนุก, น่าเชื่อถือ, เทค, ออร์แกนิก), กลุ่มเป้าหมายคือใคร และบริบทวัฒนธรรม/สถานที่ใด เพื่อเลือกแคสติ้ง สถานที่ โทนสี และฟอนต์ให้ตรงตัวตนแบรนด์ 100%
-- คิด Visual Concept ที่เชื่อมโยงกับไอเดียแคมเปญอย่างชาญฉลาด (Visual Metaphor, Storytelling ที่สมจริง, มุมกล้องแปลกใหม่ หรือการจัดวางนำสายตา) แทนการแปลจุดขายทื่อๆ
-- ห้ามมุกจำเจของ AI/Stock เด็ดขาด: ขยิบตา, ชูกำปั้น, ยกนิ้วโป้ง, ยิ้มแข็งถือสินค้ากลางโต๊ะ หรือการกองสิ่งของ 5–8 ชิ้นบนโต๊ะเพื่อสื่อถึงหมวดหมู่
-
-2. สไตล์ภาพและความสมจริง (Craft & Anti-AI Slop):
-- สายสมจริง / ไลฟ์สไตล์ / อาหาร / ความงาม / ความน่าเชื่อถือ: จำลองกล้องจริง (ระยะเลนส์และชัดลึกเหมาะสม) ใช้ "แสงจากแหล่งเดียวที่มีที่มาสมเหตุสมผล" (Motivated Single Light) ให้เกิดเงามีมิติ ห้ามแสงฟุ้ง HDR หรือหน้าต่างหลังขาวโอเวอร์ คงความไม่สมบูรณ์จริง (รูขุมขน, ปอยผม, รอยยับผ้า, พื้นผิววัสดุ/อาหารจริง) และแคสต์คนกับสถานที่ให้ตรงบริบทท้องถิ่นจริง ไม่ใช่หน้าพิมพ์นิยมแบบ AI
-- สาย 3D / CGI / Illustration: ต้องเป็น Art Direction เฉพาะตัวของแบรนด์ แสงเงาและวัสดุสมจริงตามหลักฟิสิกส์ ไม่ใช่ 3D มันวาวสไตล์ AI ทั่วไป
-- กฎฉากและสินค้า: จำกัดพร็อพไม่เกิน 1–2 ชิ้น ห้ามตัวอักษรสุ่มในฉากหลัง สัดส่วนสินค้าต้องเท่าจริงเมื่อเทียบกับมือ/วัตถุรอบข้าง แสงสะท้อนกลืนกับฉาก (หากมี Reference สินค้า/โลโก้ ต้องคงดีไซน์เดิม 100%)
-
-3. วินัยกราฟิกและการจัดหน้า (Graphic Design Discipline):
-- Hierarchy & Space: จัดลำดับสายตาให้ชัด (จุดดึงดูดหลัก -> หัวข้อ -> ข้อมูลเสริม -> โลโก้/CTA) อ่านเข้าใจใน 2 วินาที เว้น Negative Space 35–40% และ Safe Margin รอบภาพ 8–10% เสมอ ห้ามอัดเต็มทุกมุม
-- Smart Zoning:
-  • งาน Branding / Awareness: เรียบหรู เหลือแค่ Key Visual + Headline สั้นๆ + Logo ห้ามใส่ Badge หรือข้อมูลยิบย่อย
-  • งาน Promotion / Feature / ราคา: แยกโซนภาพโล่งออกจากโซนข้อมูลอย่างเด็ดขาด รวมราคา ส่วนลด และจุดเด่นไว้ใน Grid หรือแถบ Bar เดียว ห้ามแปะสติกเกอร์หรือไอคอนลอยกลางอากาศรอบตัวแบบ
-- Typography & Contrast: ใช้ฟอนต์ไม่เกิน 2 สไตล์ที่เข้ากับแบรนด์ ห้ามผสมฟอนต์/สีจนรก วางบนพื้น Contrast ชัด (ไม่ทับฉากหลังวุ่นวาย) และหากเป็นสินค้าควบคุม (เช่น การเงิน, อาหารเสริม) ให้เผื่อขอบล่าง 5% สำหรับคำเตือน
-- Color Harmony: เกรดสีภาพถ่ายและกราฟิกให้เป็นโลกสีเดียวกันตาม CI แบรนด์ด้วยหลัก 60-30-10 (สีพื้น 60% / สีรอง 30% / สีเน้นหรือ CTA 10%)`;
+export const defaultArtworkBrief = `Creative Direction Priority:
+- Avoid safe, predictable stock-ad setups; aim for a distinctive, agency-grade creative hook that makes the viewer stop scrolling within 1 second.
+- Vary visual structure and medium boldly across generations—freely choose pure graphic/typographic minimalism or atmospheric photography purely based on what executes the idea strongest.
+- Whenever local people or everyday cultural settings are used, ensure they feel genuinely contemporary and relatable to the target Thai audience rather than generic AI stock.
+- Follow all construction language, density, copy integrity, and layout rules defined in the main system instruction without adding unapproved elements or decorative clutter.`;
 
 function resetCreativeWork(state: WorkflowState): WorkflowState {
   return {
