@@ -763,6 +763,7 @@ describe("deferred UGC briefs", () => {
       expect(body.quantity).toBe(1);
       expect(body.generationModel).toBe("google/gemini-4-hydrogen");
       expect(body.ugcBriefDirections.map((d: { id: string }) => d.id)).toEqual([pending.id]);
+      expect(body.ugcBriefDirections[0].citations).toEqual([]);
       expect(result[0]).toMatchObject({ hook: pending.hook, caption: pending.caption, ugcBrief: expect.any(Object) });
       expect(result[1]).toBe(unselected);
       expect(result[2]).toBe(existing);

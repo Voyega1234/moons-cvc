@@ -258,7 +258,14 @@ export async function handleHookGenerationHarnessRequest({
       : generationProvider === "openrouter" ? input.generationModel
       : env.OPENAI_HOOK_GENERATION_MODEL?.trim() || input.generationModel || DEFAULT_OPENAI_MODEL;
     if (input.ugcBriefDirections !== undefined) {
-      const directions = parseHookGenerationResult(JSON.stringify({ directions: input.ugcBriefDirections })).directions;
+      // Saved workflow directions do not carry model-output citation metadata.
+      // Accept its absence for this operation, while rejecting malformed values.
+      const selectedDirections = input.ugcBriefDirections.map(direction =>
+        isRecord(direction) && direction.citations === undefined
+          ? { ...direction, citations: [] }
+          : direction
+      );
+      const directions = parseHookGenerationResult(JSON.stringify({ directions: selectedDirections })).directions;
       if (!directions.length || directions.length > 50 || directions.length !== input.quantity ||
           directions.some(direction => direction.service !== "ugc-video") ||
           new Set(directions.map(direction => direction.id)).size !== directions.length || input.researchOnly) {

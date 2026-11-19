@@ -114,7 +114,7 @@ export async function prepareSelectedUgcBriefs(run: HookGenerationRunInput["run"
     const payload = await postHarnessRequest<{ directions?: readonly RawDirection[] }>({
       ...request, quantity: directions.length, service: "ugc-video",
       contentTypeQuotas: [{ service: "ugc-video", count: directions.length }],
-      ugcBriefDirections: directions.map(direction => ({ ...direction, service: "ugc-video", score: 0, reasoning: "" }))
+      ugcBriefDirections: directions.map(direction => ({ ...direction, service: "ugc-video", score: 0, reasoning: "", citations: [] }))
     }, "UGC brief generation");
     if (!Array.isArray(payload.directions) || payload.directions.length !== directions.length) {
       throw new Error("UGC brief generation returned incomplete results. Please retry.");

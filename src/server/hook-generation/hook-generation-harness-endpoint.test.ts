@@ -353,8 +353,9 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
-  it("generates only the selected UGC brief with native Gemini without regenerating ideas or captions", async () => {
+  it.each([true, false])("generates selected UGC briefs with a saved direction (citations supplied: %s)", async hasCitations => {
     const direction = JSON.parse((await openAiUgcDirectionResponse("Approved hook").json()).output_text).directions[0];
+    if (!hasCitations) delete direction.citations;
     const brief = JSON.parse((await openAiUgcBriefResponse().json()).output_text);
     const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
@@ -370,6 +371,18 @@ describe("handleHookGenerationHarnessRequest", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect((await response.json()).directions[0]).toMatchObject({ id: direction.id, hook: "Approved hook", ugcBrief: { product: brief.product } });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects malformed citations in selected UGC requests before calling a provider", async () => {
+    const direction = JSON.parse((await openAiUgcDirectionResponse("Approved hook").json()).output_text).directions[0];
+    const fetchImpl = vi.fn();
+    const response = await handleHookGenerationHarnessRequest({
+      request: new Request("http://localhost/hook", { method: "POST", body: JSON.stringify({ ...singleUgcRequestBody, generationModel: "google/gemini-4-hydrogen", ugcBriefDirections: [{ ...direction, citations: "invalid" }] }) }),
+      env: { GEMINI_API_KEY: "test-key" }, fetchImpl
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: "directions[0].citations must be a string array." });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("rejects duplicate selected UGC IDs before calling the provider", async () => {
