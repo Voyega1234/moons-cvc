@@ -1,3 +1,4 @@
+import { callGoogleHookApi } from "../hook-generation/google-hook-provider.js";
 import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText, StructuredOutputError } from "../shared/structured-output.js";
 import { resolveConvertCakeAuthorization } from "../shared/convert-cake-auth.js";
@@ -14,6 +15,8 @@ type FixableField =
   | "caption";
 
 export interface IdeaPreflightEndpointEnv {
+  GEMINI_API_KEY?: string;
+  GEMINI_IDEA_PREFLIGHT_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_IDEA_PREFLIGHT_MODEL?: string;
   OPENROUTER_API_KEY?: string;
@@ -79,11 +82,12 @@ export async function handleIdeaPreflightRequest({
 
   try {
     const openRouterModel = env.OPENROUTER_IDEA_PREFLIGHT_MODEL?.trim();
-    const provider = openRouterModel && env.OPENROUTER_API_KEY?.trim()
+    const geminiModel = env.GEMINI_IDEA_PREFLIGHT_MODEL?.trim();
+    const provider = geminiModel ? "gemini" : openRouterModel && env.OPENROUTER_API_KEY?.trim()
       ? "openrouter"
       : "openai";
     const apiKey =
-      provider === "openrouter"
+      provider === "gemini" ? env.GEMINI_API_KEY?.trim() : provider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
@@ -91,7 +95,7 @@ export async function handleIdeaPreflightRequest({
         {
           ok: false,
           error:
-            provider === "openrouter"
+            provider === "gemini" ? "GEMINI_API_KEY is required." : provider === "openrouter"
               ? "OPENROUTER_API_KEY is required."
               : "OPENAI_API_KEY is required."
         },
@@ -116,7 +120,7 @@ export async function handleIdeaPreflightRequest({
     }
 
     const model =
-      provider === "openrouter"
+      provider === "gemini" ? geminiModel!.replace(/^google\//, "") : provider === "openrouter"
         ? openRouterModel!
         : env.OPENAI_IDEA_PREFLIGHT_MODEL?.trim() || DEFAULT_MODEL;
     const results = await withAiRetry(async () => {
@@ -143,12 +147,20 @@ async function callResponsesApi({
   fetchImpl,
   prompt
 }: {
-  provider: "openai" | "openrouter";
+  provider: "openai" | "openrouter" | "gemini";
   apiKey: string;
   model: string;
   fetchImpl: FetchLike;
   prompt: string;
 }): Promise<unknown> {
+  if (provider === "gemini") {
+    return callGoogleHookApi({
+      provider, apiKey, model,
+      fetchImpl: (url, init) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(50_000) }),
+      text: prompt, schema: resultsSchema, schemaName: "moons_idea_preflight",
+      maxTokens: 16_000, search: false
+    });
+  }
   const endpoint =
     provider === "openrouter"
       ? OPENROUTER_RESPONSES_ENDPOINT

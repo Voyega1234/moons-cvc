@@ -879,3 +879,13 @@ The mapping-sheet reader also reads optional `FB Page 1` into
 `MappingClient.facebookPage1Url`; merging exposes `Brand.mappingFacebookPage1Url`.
 Client setup/analysis offers this as a Facebook source, defaulting to it when no
 saved page exists. Empty/missing columns add no option; existing saved pages remain first.
+
+Native Gemini preflight routing uses `GEMINI_API_KEY` with
+`GEMINI_IDEA_PREFLIGHT_MODEL` (Idea Preflight) and
+`GEMINI_CAMPAIGN_PREFLIGHT_MODEL` (Standard Campaign Input Preflight).
+Explicit native model settings take precedence over legacy OpenRouter settings;
+a missing Gemini key fails rather than falling back. Both use the existing
+Google structured-output transport with no search, existing validation/retries,
+and a 50-second deadline per provider request. Image generation and Visual QC
+retain their existing providers. Local model settings require a server restart;
+production needs the same variables and a redeploy.

@@ -61,7 +61,7 @@ interface ImagePromptAgentDebugLog {
     | "reference-interpreter";
   status: "succeeded" | "failed";
   request: {
-    endpoint: "/v1/responses" | "/api/v1/responses";
+    endpoint: "/v1/responses" | "/api/v1/responses" | `/v1beta/models/${string}:generateContent`;
     store: false;
     inputText: string;
     referenceImages: readonly {
@@ -93,7 +93,7 @@ interface CreativeStrategyAgentDebugLog {
   directionId: string;
   status: "succeeded" | "failed";
   request: {
-    endpoint: "/v1/responses" | "/api/v1/responses";
+    endpoint: "/v1/responses" | "/api/v1/responses" | `/v1beta/models/${string}:generateContent`;
     store: false;
     inputText: string;
     responseFormat: {
@@ -116,7 +116,7 @@ interface DesignSystemFlowAgentDebugLog {
   stage: DesignSystemFlowTrace["stage"];
   status: "succeeded" | "failed";
   request: {
-    endpoint: "/v1/responses" | "/api/v1/responses";
+    endpoint: "/v1/responses" | "/api/v1/responses" | `/v1beta/models/${string}:generateContent`;
     store: false;
     inputText: string;
     referenceImages: readonly {

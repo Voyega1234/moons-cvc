@@ -49,6 +49,36 @@ function ideaRequest(
 }
 
 describe("handleIdeaPreflightRequest", () => {
+  it("uses native Gemini before legacy providers and preserves direction mapping", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent");
+      expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+      expect(init?.signal).toBeDefined();
+      const body = JSON.parse(String(init?.body));
+      expect(body.generationConfig.responseMimeType).toBe("application/json");
+      expect(body.generationConfig.responseJsonSchema).toBeDefined();
+      expect(body.tools).toBeUndefined();
+      return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ results: [{ ideaIndex: 1, findings: [] }] }) }] } }] }));
+    });
+    const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: {
+      GEMINI_API_KEY: "gemini-key", GEMINI_IDEA_PREFLIGHT_MODEL: "google/gemini-3.8-flash",
+      OPENROUTER_API_KEY: "router-key", OPENROUTER_IDEA_PREFLIGHT_MODEL: "legacy-model"
+    }, fetchImpl });
+    expect(await response.json()).toMatchObject({ ok: true, model: "gemini-3.8-flash", results: [{ directionId: "direction-1", findings: [] }] });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires the native Gemini key without falling back to OpenRouter", async () => {
+    const fetchImpl = vi.fn();
+    const response = await handleIdeaPreflightRequest({ request: ideaRequest(), env: {
+      GEMINI_IDEA_PREFLIGHT_MODEL: "gemini-3.8-flash", OPENROUTER_API_KEY: "router-key", OPENROUTER_IDEA_PREFLIGHT_MODEL: "legacy-model"
+    }, fetchImpl });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: "GEMINI_API_KEY is required." });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("runs selected idea checks with GPT Luna and returns structured findings", async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const requestBody = JSON.parse(String(init?.body)) as {

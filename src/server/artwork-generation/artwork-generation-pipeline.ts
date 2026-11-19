@@ -129,6 +129,7 @@ export interface ArtworkGenerationEndpointEnv {
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_GENERATION_MODEL?: string;
   OPENAI_IMAGE_PROMPT_MODEL?: string;
+  GEMINI_CAMPAIGN_PREFLIGHT_MODEL?: string;
   OPENAI_CREATIVE_STRATEGY_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   GEMINI_API_KEY?: string;
@@ -284,14 +285,15 @@ export async function handleArtworkGenerationRequest({
       ? input.model
       : env.OPENAI_IMAGE_GENERATION_MODEL?.trim() || input.model;
     const openRouterImagePromptModel = env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim();
-    const promptProvider: ImagePromptProvider =
+    const useGeminiPreflight = !input.referenceLed && input.artworkMode === "standard" && Boolean(env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim());
+    const promptProvider: ImagePromptProvider = useGeminiPreflight ? "gemini" :
       !input.referenceLed &&
       (input.artworkMode === "standard"
         ? Boolean(openRouterImagePromptModel && env.OPENROUTER_API_KEY?.trim())
         : input.imagePromptModel === "anthropic/claude-sonnet-4.6")
         ? "openrouter"
         : "openai";
-    const promptApiKey =
+    const promptApiKey = promptProvider === "gemini" ? env.GEMINI_API_KEY?.trim() :
       promptProvider === "openrouter"
         ? env.OPENROUTER_API_KEY?.trim()
         : apiKey;
@@ -302,14 +304,14 @@ export async function handleArtworkGenerationRequest({
         {
           ok: false,
           error:
-            promptProvider === "openrouter"
+            promptProvider === "gemini" ? "GEMINI_API_KEY is required." : promptProvider === "openrouter"
               ? "OPENROUTER_API_KEY is required."
               : "OPENAI_API_KEY is required."
         },
         500
       );
     }
-    const promptModel =
+    const promptModel = promptProvider === "gemini" ? env.GEMINI_CAMPAIGN_PREFLIGHT_MODEL?.trim() :
       promptProvider === "openrouter"
         ? env.OPENROUTER_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel
         : env.OPENAI_IMAGE_PROMPT_MODEL?.trim() || input.imagePromptModel;
@@ -2101,7 +2103,7 @@ async function resolveImagePrompt({
   if (input.artworkMode === "standard") {
     const campaignInput = await preflightCampaignInput({
       apiKey: promptApiKey,
-      model: promptProvider === "openrouter" ? promptModel : undefined,
+      model: promptProvider !== "openai" ? promptModel : undefined,
       provider: promptProvider,
       fetchImpl,
       writeTrace: async (trace) => {

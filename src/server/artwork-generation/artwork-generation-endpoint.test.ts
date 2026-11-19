@@ -2629,6 +2629,71 @@ describe("handleArtworkGenerationRequest", () => {
     ]);
   });
 
+  it("routes Standard preflight directly to Gemini even with a legacy OpenRouter model", async () => {
+    const preflightCalls: Array<{ url: string; model: string }> = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url);
+      if (href.includes("/auth/v1/user")) {
+        return new Response(
+          JSON.stringify({ email: "team@convertcake.com" }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("/api/v1/images")) {
+        return new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }]
+          }),
+          { status: 200 }
+        );
+      }
+      if (href.includes("generativelanguage.googleapis.com")) {
+        const body = JSON.parse(String(init?.body));
+        expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
+        expect(body.generationConfig.responseMimeType).toBe("application/json");
+        expect(body.generationConfig.responseJsonSchema).toBeDefined();
+        preflightCalls.push({ url: href, model: "gemini-3.8-flash" });
+        const payload = await campaignInputPreflightResponse("1:1").json();
+        return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: payload.output_text }] } }] }));
+      }
+      if (href.includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body)) as {
+          model: string;
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === "moons_campaign_input_preflight") {
+          preflightCalls.push({ url: href, model: body.model });
+        }
+        return standardAgentResponse(init);
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    const { client } = fakeStorage();
+
+    const response = await handleArtworkGenerationRequest({
+      request: buildRequest({ authorization: "Bearer user-token" }),
+      env: {
+        GEMINI_API_KEY: "gemini-key",
+        GEMINI_CAMPAIGN_PREFLIGHT_MODEL: "gemini-3.8-flash",
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_IMAGE_PROMPT_MODEL: "google/gemini-3.8-flash",
+        SUPABASE_URL: "https://supabase.example.com",
+        SUPABASE_ANON_KEY: "anon-key"
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      createStorageClient: () => client
+    });
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(preflightCalls).toEqual([
+      {
+        url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        model: "gemini-3.8-flash"
+      }
+    ]);
+  });
+
   it("uses Terra on OpenAI for Standard preflight even when Claude is selected elsewhere", async () => {
     const openRouterCalls: string[] = [];
     const preflightCalls: Array<{

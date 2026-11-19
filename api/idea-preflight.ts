@@ -23,6 +23,8 @@ export default async function handler(
   const workerResponse = await handleIdeaPreflightRequest({
     request: toFetchRequest(request),
     env: {
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      GEMINI_IDEA_PREFLIGHT_MODEL: process.env.GEMINI_IDEA_PREFLIGHT_MODEL,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       OPENAI_IDEA_PREFLIGHT_MODEL: process.env.OPENAI_IDEA_PREFLIGHT_MODEL,
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,

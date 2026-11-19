@@ -1,3 +1,4 @@
+import { callGoogleHookApi } from "../hook-generation/google-hook-provider.js";
 import { withAiRetry } from "../shared/ai-retry.js";
 import { extractStructuredJsonText } from "../shared/structured-output.js";
 import { readFile } from "node:fs/promises";
@@ -13,7 +14,7 @@ import { buildCreativeApprovalVisualContext } from "./creative-approval-visual-c
 
 type FetchLike = typeof fetch;
 
-export type ImagePromptProvider = "openai" | "openrouter";
+export type ImagePromptProvider = "openai" | "openrouter" | "gemini";
 
 export interface ImagePromptAgentHook {
   hook: string;
@@ -63,7 +64,7 @@ export interface ImagePromptAgentInput {
 export interface ImagePromptAgentTrace {
   createdAt: string;
   provider: ImagePromptProvider;
-  endpoint: "/v1/responses" | "/api/v1/responses";
+  endpoint: "/v1/responses" | "/api/v1/responses" | `/v1beta/models/${string}:generateContent`;
   model: string;
   mode: ArtworkMode;
   stage?:
@@ -291,14 +292,17 @@ export async function preflightCampaignInput({
   loadPrompt?: () => Promise<string>;
   usePlaceholderCopy?: boolean;
 }): Promise<CampaignInputPreflight> {
-  const resolvedModel = model?.trim() || PREFLIGHT_MODEL;
+  const resolvedModel = provider === "gemini"
+    ? (model?.trim() || "gemini-3.8-flash").replace(/^google\//, "")
+    : model?.trim() || PREFLIGHT_MODEL;
   const endpoint =
     provider === "openrouter"
       ? OPENROUTER_RESPONSES_ENDPOINT
       : OPENAI_RESPONSES_ENDPOINT;
-  const endpointPath =
-    provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
-  const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const endpointPath = provider === "gemini"
+    ? `/v1beta/models/${resolvedModel}:generateContent` as const
+    : provider === "openrouter" ? "/api/v1/responses" : "/v1/responses";
+  const providerLabel = provider === "gemini" ? "Gemini" : provider === "openrouter" ? "OpenRouter" : "OpenAI";
   const inputText = [
     (await loadPrompt()).trim(),
     "",
@@ -317,51 +321,57 @@ export async function preflightCampaignInput({
 
   return withAiRetry(async () => {
   try {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: resolvedModel,
-        store: false,
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_text", text: inputText }]
-          }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "moons_campaign_input_preflight",
-            strict: true,
-            schema: campaignInputPreflightSchema
-          }
-        },
-        ...(provider === "openrouter"
-          ? {
-              trace: {
-                trace_name: "moons_campaign_input_preflight",
-                generation_name: "moons_campaign_input_preflight",
-                feature: "artwork-generation",
-                environment: openRouterTraceEnvironment()
+    const payload = provider === "gemini"
+      ? await callGoogleHookApi({
+          provider, apiKey, model: resolvedModel,
+          fetchImpl: (url, init) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(50_000) }),
+          text: inputText, schema: campaignInputPreflightSchema,
+          schemaName: "moons_campaign_input_preflight", maxTokens: 16_000, search: false
+        })
+      : await (async () => {
+        const response = await fetchImpl(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: resolvedModel,
+            store: false,
+            input: [
+              {
+                role: "user",
+                content: [{ type: "input_text", text: inputText }]
               }
-            }
-          : {})
-      })
-    });
-    if (!response.ok) {
-      const detail = await readProviderErrorDetail(response);
-      throw new Error(
-        `${providerLabel} campaign input preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
-      );
-    }
-    const payload = await readJsonResponse(
-      response,
-      `${providerLabel} campaign input preflight`
-    );
+            ],
+            text: {
+              format: {
+                type: "json_schema",
+                name: "moons_campaign_input_preflight",
+                strict: true,
+                schema: campaignInputPreflightSchema
+              }
+            },
+            ...(provider === "openrouter"
+              ? {
+                  trace: {
+                    trace_name: "moons_campaign_input_preflight",
+                    generation_name: "moons_campaign_input_preflight",
+                    feature: "artwork-generation",
+                    environment: openRouterTraceEnvironment()
+                  }
+                }
+              : {})
+          })
+        });
+        if (!response.ok) {
+          const detail = await readProviderErrorDetail(response);
+          throw new Error(
+            `${providerLabel} campaign input preflight failed: ${response.status}${detail ? ` — ${detail}` : ""}`
+          );
+        }
+        return readJsonResponse(response, `${providerLabel} campaign input preflight`);
+    })();
     const parsed = JSON.parse(extractResponseText(payload)) as unknown;
     const result = parseCampaignInputPreflight(parsed);
     await writeTraceSafely(writeTrace, {
