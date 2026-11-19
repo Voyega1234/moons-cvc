@@ -115,16 +115,19 @@ function mappingSheetResultFromRows(
     clientId: findColumnIndex(header, CLIENT_ID_HEADER_NAMES),
     status: findColumnIndex(header, "Status"),
     serviceStatus: findColumnIndex(header, "Service Status"),
-    clientPortal: findColumnIndex(header, "Client Portal")
+    clientPortal: findColumnIndex(header, "Client Portal"),
+    facebookPage1: findColumnIndex(header, "FB Page 1")
   };
   const clients = dataRows
     .map((row) => {
       const clientPortalUrl = cell(row, indexes.clientPortal);
+      const facebookPage1Url = cell(row, indexes.facebookPage1);
       return {
         clientId: cell(row, indexes.clientId),
         status: cell(row, indexes.status),
         serviceStatus: cell(row, indexes.serviceStatus),
-        ...(clientPortalUrl ? { clientPortalUrl } : {})
+        ...(clientPortalUrl ? { clientPortalUrl } : {}),
+        ...(facebookPage1Url ? { facebookPage1Url } : {})
       };
     })
     .filter((client) => client.clientId);
@@ -132,7 +135,8 @@ function mappingSheetResultFromRows(
     ["Client ID", indexes.clientId],
     ["Status", indexes.status],
     ["Service Status", indexes.serviceStatus],
-    ["Client Portal", indexes.clientPortal]
+    ["Client Portal", indexes.clientPortal],
+    ["FB Page 1", indexes.facebookPage1]
   ]
     .filter(([, index]) => Number(index) >= 0)
     .map(([name]) => String(name));

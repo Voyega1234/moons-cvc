@@ -2054,7 +2054,8 @@ describe("redesigned workflow stages", () => {
               clientId: "Centre Point Group",
               status: "Active",
               serviceStatus: "Active",
-              clientPortalUrl: questionnaireUrl
+              clientPortalUrl: questionnaireUrl,
+              facebookPage1Url: "https://www.facebook.com/centrepoint"
             }
           ],
           readQuestionnaire: async (sourceUrl) => ({
@@ -2090,7 +2091,7 @@ describe("redesigned workflow stages", () => {
     await waitFor(() =>
       expect(createDraftClient).toHaveBeenCalledWith({
         name: "Centre Point Group",
-        facebookUrl: "",
+        facebookUrl: "https://www.facebook.com/centrepoint",
         questionnaire: {
           text: questionnaire,
           sourceUrl: questionnaireUrl

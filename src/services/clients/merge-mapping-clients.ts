@@ -38,6 +38,7 @@ export function mergeMappingClients(
       existingClient.mappingStatus = mappingClient.status;
       existingClient.serviceStatus = mappingClient.serviceStatus;
       existingClient.mappingClientPortalUrl = mappingClient.clientPortalUrl;
+      existingClient.mappingFacebookPage1Url = mappingClient.facebookPage1Url;
       continue;
     }
 
@@ -52,6 +53,7 @@ export function mergeMappingClients(
       mappingStatus: mappingClient.status,
       serviceStatus: mappingClient.serviceStatus,
       mappingClientPortalUrl: mappingClient.clientPortalUrl,
+      mappingFacebookPage1Url: mappingClient.facebookPage1Url,
       source: "mapping"
     });
   }

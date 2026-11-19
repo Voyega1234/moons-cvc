@@ -1013,12 +1013,17 @@ function BrandSetupSources({
 function brandFacebookSourceOptions(
   brand: Brand
 ): readonly FacebookSourceOption[] {
-  const urls = brand.facebookUrl ? [brand.facebookUrl] : [];
-
-  return urls.map((url) => ({
-    url,
-    label: "Current Creative Compass page"
-  }));
+  const options: FacebookSourceOption[] = [];
+  if (brand.facebookUrl) {
+    options.push({ url: brand.facebookUrl, label: "Current Creative Compass page" });
+  }
+  if (
+    brand.mappingFacebookPage1Url &&
+    !options.some((option) => option.url === brand.mappingFacebookPage1Url)
+  ) {
+    options.push({ url: brand.mappingFacebookPage1Url, label: "Mapping: FB Page 1" });
+  }
+  return options;
 }
 
 function GoogleSheetExtractionSummary({

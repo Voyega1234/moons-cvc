@@ -45,6 +45,19 @@ describe("mergeMappingClients", () => {
     );
   });
 
+  it("exposes mapped Facebook pages for existing and new clients without replacing saved pages", () => {
+    const merged = mergeMappingClients(
+      [{ ...systemClient, facebookUrl: "https://www.facebook.com/saved" }],
+      [
+        { clientId: "BoneFit", status: "Active", serviceStatus: "Active", facebookPage1Url: "https://www.facebook.com/mapped" },
+        { clientId: "New", status: "Active", serviceStatus: "Active", facebookPage1Url: "https://www.facebook.com/new" }
+      ]
+    );
+    expect(merged[0]).toMatchObject({ facebookUrl: "https://www.facebook.com/saved", mappingFacebookPage1Url: "https://www.facebook.com/mapped" });
+    expect(merged[1]?.mappingFacebookPage1Url).toBe("https://www.facebook.com/new");
+    expect(mergeMappingClients([systemClient], [{ clientId: "BoneFit", status: "Active", serviceStatus: "Active" }])[0]?.mappingFacebookPage1Url).toBeUndefined();
+  });
+
   it("sorts database clients before sheet-only clients", () => {
     const merged = mergeMappingClients(
       [

@@ -12,7 +12,8 @@ describe("GoogleSheetMappingClientRepository", () => {
               clientId: "Centre Point Group",
               status: "Active",
               serviceStatus: "Active",
-              clientPortalUrl: "https://docs.google.com/client-portal"
+              clientPortalUrl: "https://docs.google.com/client-portal",
+        facebookPage1Url: "https://www.facebook.com/example"
             }
           ]
         }),
@@ -30,7 +31,8 @@ describe("GoogleSheetMappingClientRepository", () => {
         clientId: "Centre Point Group",
         status: "Active",
         serviceStatus: "Active",
-        clientPortalUrl: "https://docs.google.com/client-portal"
+        clientPortalUrl: "https://docs.google.com/client-portal",
+        facebookPage1Url: "https://www.facebook.com/example"
       }
     ]);
     expect(fetchImpl).toHaveBeenCalledWith("/api/mapping-clients", {

@@ -37,6 +37,23 @@ describe("parseGoogleSheetUrl", () => {
 });
 
 describe("readMappingClientsFromGoogleSheet", () => {
+  it("reads optional FB Page 1 values and ignores empty cells", async () => {
+    const result = await readMappingClientsFromGoogleSheet({
+      sheetUrl: "https://docs.google.com/spreadsheets/d/e/published-id/pub?output=csv",
+      accessToken: "",
+      fetchImpl: async () => new Response([
+        "Client ID,Status,Service Status,FB Page 1",
+        "With Page,Active,Active, https://www.facebook.com/example ",
+        "Without Page,Active,Active,"
+      ].join("\n"))
+    });
+    expect(result.clients).toEqual([
+      { clientId: "With Page", status: "Active", serviceStatus: "Active", facebookPage1Url: "https://www.facebook.com/example" },
+      { clientId: "Without Page", status: "Active", serviceStatus: "Active" }
+    ]);
+    expect(result.extraction.fields).toContain("FB Page 1");
+  });
+
   it("reads a published CSV mapping tab without Google credentials", async () => {
     const publishedUrl =
       "https://docs.google.com/spreadsheets/d/e/published-id/pub?gid=147531213&single=true&output=csv";

@@ -5,6 +5,7 @@ export interface MappingClient {
   status: string;
   serviceStatus: string;
   clientPortalUrl?: string;
+  facebookPage1Url?: string;
 }
 
 export interface MappingClientListOptions {

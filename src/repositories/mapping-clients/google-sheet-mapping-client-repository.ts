@@ -125,11 +125,17 @@ function parseMappingClient(value: unknown): MappingClient {
       ? undefined
       : readString(value.clientPortalUrl, "clientPortalUrl");
 
+  const facebookPage1Url =
+    value.facebookPage1Url === undefined
+      ? undefined
+      : readString(value.facebookPage1Url, "facebookPage1Url", true);
+
   return {
     clientId,
     status,
     serviceStatus,
-    ...(clientPortalUrl ? { clientPortalUrl } : {})
+    ...(clientPortalUrl ? { clientPortalUrl } : {}),
+    ...(facebookPage1Url ? { facebookPage1Url } : {})
   };
 }
 

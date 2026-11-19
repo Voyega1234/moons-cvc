@@ -75,6 +75,7 @@ export interface Brand {
   mappingStatus?: string;
   serviceStatus?: string;
   mappingClientPortalUrl?: string;
+  mappingFacebookPage1Url?: string;
   onboardingQuestionnaire?: OnboardingQuestionnaireSource;
   source?: "system" | "mapping";
 }

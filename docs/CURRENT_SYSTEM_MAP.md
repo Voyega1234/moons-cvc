@@ -874,3 +874,8 @@ Shared Image Materials selections sync into selected non-UGC directions through
 material changes in the workflow reducer and before artwork generation.
 `fromSharedMaterial` tracks shared copies so deselection/removal preserves
 hook-specific attachments. Existing per-hook deduplication and limits apply.
+
+The mapping-sheet reader also reads optional `FB Page 1` into
+`MappingClient.facebookPage1Url`; merging exposes `Brand.mappingFacebookPage1Url`.
+Client setup/analysis offers this as a Facebook source, defaulting to it when no
+saved page exists. Empty/missing columns add no option; existing saved pages remain first.
