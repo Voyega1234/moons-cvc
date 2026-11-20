@@ -12,6 +12,24 @@ describe("interpretReferenceDesign", () => {
     artworkConcept: "A", keyVisualGrammar: "B", compositionGrammar: "C", graphicDeviceLogic: "D",
     hierarchyAndDensity: "E", secondaryAndFooterGrammar: "F", conceptTranslation: "G", preserve: [], replace: []
   };
+  it("inspects four materials alongside design references without treating materials as style sources", async () => {
+    const materialReferences = ["serum-front", "serum-side", "serum-dropper", "gel"].map((name) => ({
+      bytes: Buffer.from(name), mimeType: "image/png", label: `Uploaded main object (use as the hero/source object): ${name}.png`
+    }));
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({ output_text: JSON.stringify(validGrammar) })));
+    await interpretReferenceDesign({ ...input, materialReferences, fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    const content = body.input[0].content;
+    expect(content.slice(1)).toEqual([...input.references, ...materialReferences].map((image) => ({
+      type: "input_image", image_url: `data:${image.mimeType};base64,${image.bytes.toString("base64")}`, detail: "high"
+    })));
+    expect(content[0].text).toContain('"kind": "design-reference"');
+    expect(content[0].text).toContain('"kind": "user-material"');
+    expect(content[0].text).toContain("not design references");
+    expect(content[0].text).toContain("MANDATORY USER-SELECTED MAIN OBJECTS");
+    expect(content[0].text).toContain("Image 5: Uploaded main object");
+  });
   it.each([true, false])("retries one transient provider failure, HTTP-200 envelope: %s", async (envelope) => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: "failed", error: { code: "server_error", message: "Temporarily unavailable" } }), { status: envelope ? 200 : 503 }))

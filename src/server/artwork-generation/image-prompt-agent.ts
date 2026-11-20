@@ -11,6 +11,7 @@ import {
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 import { buildCreativeApprovalVisualContext } from "./creative-approval-visual-context.js";
+import { buildRequiredMainObjectInstruction } from "./prompt-context.js";
 
 type FetchLike = typeof fetch;
 
@@ -266,11 +267,10 @@ export async function buildStandardImagePrompt(
   campaignInput: unknown = buildCompactCampaignInput(input),
   usePlaceholderCopy = false
 ): Promise<string> {
-  return renderStandardPrompt(
-    await loadAgentImagePrompt(),
-    campaignInput,
-    usePlaceholderCopy
-  );
+  return [
+    renderStandardPrompt(await loadAgentImagePrompt(), campaignInput, usePlaceholderCopy),
+    buildRequiredMainObjectInstruction(input.referenceImageLabels)
+  ].filter(Boolean).join("\n\n");
 }
 
 export async function preflightCampaignInput({
@@ -316,7 +316,11 @@ export async function preflightCampaignInput({
         ]
       : []),
     "CAMPAIGN INPUT TO PREFLIGHT",
-    JSON.stringify(buildCompactCampaignInput(input), null, 2)
+    JSON.stringify(buildCompactCampaignInput(input), null, 2),
+    ...(input.referenceImages.length ? [
+      "Inspect the attached images when choosing visualMechanism. Identify the actual subjects and distinct products/variants; multiple views of the same product are identity evidence, not separate required copies. Respect each image's supplied role and do not infer unsupported claims from its appearance.",
+      buildRequiredMainObjectInstruction(input.referenceImages.map((image) => image.label))
+    ] : [])
   ].join("\n");
 
   return withAiRetry(async () => {
@@ -326,7 +330,12 @@ export async function preflightCampaignInput({
           provider, apiKey, model: resolvedModel,
           fetchImpl: (url, init) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(50_000) }),
           text: inputText, schema: campaignInputPreflightSchema,
-          schemaName: "moons_campaign_input_preflight", maxTokens: 16_000, search: false
+          schemaName: "moons_campaign_input_preflight", maxTokens: 16_000, search: false,
+          images: input.referenceImages.map((image) => {
+            const data = /^data:(image\/[^;]+);base64,(.+)$/s.exec(image.imageUrl);
+            if (!data) throw new Error("Native Gemini preflight requires resolved image data.");
+            return { mimeType: data[1]!, data: data[2]! };
+          })
         })
       : await (async () => {
         const response = await fetchImpl(endpoint, {
@@ -341,7 +350,12 @@ export async function preflightCampaignInput({
             input: [
               {
                 role: "user",
-                content: [{ type: "input_text", text: inputText }]
+                content: [
+                  { type: "input_text", text: inputText },
+                  ...input.referenceImages.map((image) => ({
+                    type: "input_image", image_url: image.imageUrl, detail: "high"
+                  }))
+                ]
               }
             ],
             text: {

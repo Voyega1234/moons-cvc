@@ -31,6 +31,51 @@ const baseInput = {
 };
 
 describe("generateImagePrompt", () => {
+  it.each(["openai", "openrouter", "gemini"] as const)("sends real material images to %s visualMechanism preflight in the same request", async (provider) => {
+    const referenceImages = ["style", "serum-front", "serum-side", "serum-dropper", "gel"].map((name, index) => ({
+      imageUrl: `data:image/png;base64,${Buffer.from(name).toString("base64")}`,
+      label: index === 0 ? "Primary reference · Style · style.png" : `Uploaded main object (use as the hero/source object): ${name}.png`
+    }));
+    const result = {
+      brand: { name: "Glass Skin", category: "Skincare", colors: [] }, primaryProductOrService: "Serum and gel",
+      objective: "Show both products", targetAudience: "", singleMainMessage: "Daily care", concept: "Product pair", visualMechanism: "Serum and gel together",
+      copy: { headline: "Daily care", cta: "Shop" }, requiredElements: ["Serum", "Gel"], forbiddenElements: [],
+      references: [], lockedProductFacts: [], excludedInformation: [], albumSequence: [], userInstructions: [], output: { service: "static", ratio: "1:1" }
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(provider === "gemini"
+      ? { candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(result) }] } }] }
+      : { output_text: JSON.stringify(result) })));
+    await preflightCampaignInput({ apiKey: "test", provider, fetchImpl,
+      input: { ...baseInput, referenceImages, referenceImageLabels: referenceImages.map((image) => image.label) },
+      loadPrompt: async () => "Think of a visualMechanism using the supplied subjects." });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    const text = provider === "gemini" ? body.contents[0].parts[0].text : body.input[0].content[0].text;
+    expect(text).toContain("MANDATORY USER-SELECTED MAIN OBJECTS");
+    expect(text).toContain("Image 5: Uploaded main object");
+    expect(text).toContain("multiple views of the same product");
+    if (provider === "gemini") {
+      expect(body.contents[0].parts.slice(1)).toEqual(referenceImages.map((image) => ({ inlineData: { mimeType: "image/png", data: image.imageUrl.split(",")[1] } })));
+    } else {
+      expect(body.input[0].content.slice(1)).toEqual(referenceImages.map((image) => ({ type: "input_image", image_url: image.imageUrl, detail: "high" })));
+    }
+  });
+
+  it("keeps Main object requirements in the final Standard prompt even when preflight omits them", async () => {
+    const prompt = await buildStandardImagePrompt({
+      ...baseInput,
+      referenceImageLabels: [
+        "Uploaded main object (use as the hero/source object): serum.png",
+        "Uploaded main object (use as the hero/source object): gel.png"
+      ]
+    }, async () => "ART DIRECTION", { primaryProductOrService: "Serum", references: [] });
+    expect(prompt).toContain("MANDATORY USER-SELECTED MAIN OBJECTS");
+    expect(prompt).toContain("Image 1: Uploaded main object");
+    expect(prompt).toContain("Image 2: Uploaded main object");
+    expect(prompt).toContain("gel.png");
+    expect(prompt).toContain("overrides any simplified product selection");
+  });
+
   it("uses Terra to clean Campaign Input without receiving agent_image.md or creating a visual route", async () => {
     const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchMock = vi.fn(

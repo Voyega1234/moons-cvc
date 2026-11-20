@@ -28,7 +28,11 @@ describe("buildReferenceLedImagePrompt", () => {
           caption: "Caption must not be visible copy."
         },
         textInputs: [],
-        referenceImageLabels: ["Official logo · De Hygienique"],
+        referenceImageLabels: [
+          "Official logo · De Hygienique",
+          "Uploaded main object (use as the hero/source object): first-product.png",
+          "Uploaded main object (use as the hero/source object): second-product.png"
+        ],
         referenceImages: [],
         canvasRatio: "1:1",
         brandLibrary: {
@@ -59,6 +63,9 @@ describe("buildReferenceLedImagePrompt", () => {
     );
 
     expect(prompt).toContain("DESIGN-GRAMMAR-LED GENERATION");
+    expect(prompt).toContain("MANDATORY USER-SELECTED MAIN OBJECTS");
+    expect(prompt).toContain("- Image 2: Uploaded main object");
+    expect(prompt).toContain("- Image 3: Uploaded main object");
     expect(prompt).toContain("Show a new cutaway revealing the mattress layer");
     expect(prompt).toContain("MANDATORY — overrides every conflicting reference trait");
     expect(prompt).toContain("official Thai font");

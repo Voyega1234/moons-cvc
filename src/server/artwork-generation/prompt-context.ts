@@ -5,6 +5,23 @@ import type { ReferenceImageInput } from "./openai-images-client.js";
 import { compactPromptText } from "./prompt-runtime.js";
 
 type SelectedHook = ArtworkGenerationRequest["selectedHooks"][number];
+
+export function buildRequiredMainObjectInstruction(labels: readonly string[]): string {
+  const required = labels.flatMap((label, index) =>
+    /^Uploaded main object\b/i.test(label)
+      ? [`- Image ${index + 1}: ${label}`]
+      : []
+  );
+  if (!required.length) return "";
+  return [
+    "MANDATORY USER-SELECTED MAIN OBJECTS",
+    "Every distinct object/product depicted in the Main object materials below must appear recognizably in the final artwork. These are required subjects, not optional references to choose from; this requirement overrides any simplified product selection in Campaign Input or design grammar.",
+    "Multiple photos/angles of the same product describe one object: use them together for identity accuracy without duplicating that product merely to match the file count. Different products/variants must all be shown; do not replace them with other products from brand context or style references.",
+    "Preserve each object's identity while adapting its staging to one coherent composition. Reference backgrounds and props are not required subjects.",
+    ...required
+  ].join("\n");
+}
+
 export function strategyOptionalCopyCandidates(
   strategy: CreativeStrategyEnrichment | undefined
 ): readonly {

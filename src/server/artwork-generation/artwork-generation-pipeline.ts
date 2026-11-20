@@ -2048,7 +2048,7 @@ async function resolveImagePrompt({
     ),
     referenceImages: attachedReferences.map((reference, index) => ({
       imageUrl:
-        artworkReferences.find(({ image }) => image === reference)?.signedUrl ??
+        (promptProvider !== "gemini" ? artworkReferences.find(({ image }) => image === reference)?.signedUrl : undefined) ??
         `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
       label:
         reference.label ??
@@ -2079,6 +2079,9 @@ async function resolveImagePrompt({
       fetchImpl,
       mode: input.artworkMode,
       references: interpreterReferences,
+      materialReferences: references.filter((reference) =>
+        /^Uploaded /i.test(reference.label ?? "") && !interpreterReferences.includes(reference)
+      ),
       campaign: {
         concept: hook.concept,
         objective: hook.why,

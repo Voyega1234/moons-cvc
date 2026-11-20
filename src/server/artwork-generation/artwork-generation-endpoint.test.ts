@@ -968,7 +968,11 @@ describe("handleArtworkGenerationRequest", () => {
               kind: "url",
               url: "https://example.com/supporting-reference.png",
               label: "Supporting reference · Style · Typography example"
-            }
+            },
+            ...["serum-front", "serum-side", "serum-dropper", "gel"].map((name) => ({
+              kind: "base64", mediaType: "image/png", data: Buffer.from(name).toString("base64"),
+              label: `Uploaded main object (use as the hero/source object): ${name}.png`
+            }))
           ]
         })
       }),
@@ -998,7 +1002,11 @@ describe("handleArtworkGenerationRequest", () => {
     expect(prompt).toContain(
       "Supporting reference · Style · Typography example"
     );
-    expect(editBody?.input_references).toHaveLength(3);
+    expect(editBody?.input_references).toHaveLength(7);
+    for (const name of ["serum-front", "serum-side", "serum-dropper", "gel"]) {
+      expect(JSON.stringify(interpreterBody)).toContain(Buffer.from(name).toString("base64"));
+      expect(prompt).toContain(name);
+    }
     expect(JSON.stringify(interpreterBody)).toContain("input_image");
     expect(JSON.stringify(interpreterBody)).toContain("REFERENCE SCOPE");
     expect(JSON.stringify(interpreterBody)).toContain(
@@ -2707,6 +2715,7 @@ describe("handleArtworkGenerationRequest", () => {
 
   it("routes Standard preflight directly to Gemini even with a legacy OpenRouter model", async () => {
     const preflightCalls: Array<{ url: string; model: string }> = [];
+    const material = await sharp({ create: { width: 32, height: 32, channels: 3, background: "white" } }).png().toBuffer();
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
       if (href.includes("/auth/v1/user")) {
@@ -2728,6 +2737,8 @@ describe("handleArtworkGenerationRequest", () => {
         expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("gemini-key");
         expect(body.generationConfig.responseMimeType).toBe("application/json");
         expect(body.generationConfig.responseJsonSchema).toBeDefined();
+        expect(body.contents[0].parts[0].text).toContain("Uploaded main object");
+        expect(body.contents[0].parts[1].inlineData).toMatchObject({ mimeType: expect.stringMatching(/^image\//), data: expect.any(String) });
         preflightCalls.push({ url: href, model: "gemini-3.8-flash" });
         const payload = await campaignInputPreflightResponse("1:1").json();
         return new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: payload.output_text }] } }] }));
@@ -2748,7 +2759,10 @@ describe("handleArtworkGenerationRequest", () => {
     const { client } = fakeStorage();
 
     const response = await handleArtworkGenerationRequest({
-      request: buildRequest({ authorization: "Bearer user-token" }),
+      request: new Request("https://moons.local/api/artwork-generation", {
+        method: "POST", headers: { authorization: "Bearer user-token" },
+        body: JSON.stringify({ ...requestBody, referenceImages: [{ kind: "base64", mediaType: "image/png", data: material.toString("base64"), label: "Uploaded main object (use as the hero/source object): serum.png" }] })
+      }),
       env: {
         GEMINI_API_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key",
         GEMINI_CAMPAIGN_PREFLIGHT_MODEL: "gemini-3.8-flash",

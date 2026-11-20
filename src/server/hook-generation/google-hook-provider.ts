@@ -9,7 +9,7 @@ export function googleHookEndpoint(provider: "gemini" | "vertex", model: string)
     : `https://generativelanguage.googleapis.com/v1beta/models/${path}:generateContent`;
 }
 
-export async function callGoogleHookApi({ provider, apiKey, model, fetchImpl, text, schema, schemaName, maxTokens, search }: {
+export async function callGoogleHookApi({ provider, apiKey, model, fetchImpl, text, schema, schemaName, maxTokens, search, images = [] }: {
   provider: "gemini" | "vertex";
   apiKey: string;
   model: string;
@@ -19,13 +19,14 @@ export async function callGoogleHookApi({ provider, apiKey, model, fetchImpl, te
   schemaName: string;
   maxTokens: number;
   search: boolean;
+  images?: readonly { mimeType: string; data: string }[];
 }): Promise<unknown> {
   const label = `${provider} ${schemaName} (${model})`;
   const response = await fetchImpl(googleHookEndpoint(provider, model), {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text }] }],
+      contents: [{ role: "user", parts: [{ text }, ...images.map((inlineData) => ({ inlineData }))] }],
       generationConfig: {
         maxOutputTokens: maxTokens,
         responseMimeType: "application/json",

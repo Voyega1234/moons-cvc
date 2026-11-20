@@ -8,6 +8,7 @@ import type {
 } from "./image-prompt-agent.js";
 import type { ReferenceImageInput } from "./openai-images-client.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
+import { buildRequiredMainObjectInstruction } from "./prompt-context.js";
 
 type FetchLike = typeof fetch;
 
@@ -34,6 +35,7 @@ export async function interpretReferenceDesign({
   fetchImpl,
   mode,
   references,
+  materialReferences = [],
   campaign,
   writeTrace,
   loadPrompt = defaultLoadPrompt,
@@ -45,6 +47,7 @@ export async function interpretReferenceDesign({
   fetchImpl: FetchLike;
   mode: Parameters<NonNullable<ImagePromptAgentTraceWriter>>[0]["mode"];
   references: readonly ReferenceImageInput[];
+  materialReferences?: readonly ReferenceImageInput[];
   campaign: {
     concept: string;
     objective: string;
@@ -60,6 +63,7 @@ export async function interpretReferenceDesign({
   }
   const endpoint = provider === "openrouter" ? OPENROUTER_ENDPOINT : OPENAI_ENDPOINT;
   const providerLabel = provider === "openrouter" ? "OpenRouter" : "OpenAI";
+  const images = [...references, ...materialReferences];
 
   const inputText = [
     (await loadPrompt()).trim(),
@@ -76,13 +80,18 @@ export async function interpretReferenceDesign({
     "",
     "REFERENCE IMAGE ORDER",
     JSON.stringify(
-      references.map((reference, index) => ({
+      images.map((reference, index) => ({
         image: index + 1,
+        kind: index < references.length ? "design-reference" : "user-material",
         label: reference.label ?? "Primary reference"
       })),
       null,
       2
-    )
+    ),
+    ...(materialReferences.length ? [
+      "USER MATERIALS: Inspect these real subjects when forming artworkConcept, keyVisualGrammar and conceptTranslation. They are subject/identity evidence, not design references: do not inherit their backgrounds, props or staging. Different products must remain distinct; multiple views can describe the same product. Do not substitute products from the design references or invent claims.",
+      buildRequiredMainObjectInstruction(images.map((image) => image.label ?? ""))
+    ] : [])
   ].join("\n");
 
   return withAiRetry(async () => {
@@ -101,7 +110,7 @@ export async function interpretReferenceDesign({
               role: "user",
               content: [
                 { type: "input_text", text: inputText },
-                ...references.map((reference) => ({
+                ...images.map((reference) => ({
                   type: "input_image" as const,
                   image_url: `data:${reference.mimeType};base64,${reference.bytes.toString("base64")}`,
                   detail: "high" as const

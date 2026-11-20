@@ -548,6 +548,18 @@ describe("buildArtworkGenerationRequest", () => {
     );
   });
 
+  it("sends all four Main object materials without dropping other product views", () => {
+    const urls = ["serum-front", "serum-side", "serum-dropper", "gel"].map((name) => `https://example.com/${name}.png`);
+    const request = buildArtworkGenerationRequest({ run: {
+      ...run,
+      uploadedMaterials: urls.map((url, index) => ({
+        id: `material-${index}`, name: `material-${index}.png`, mediaType: "image/png", role: "main-object", description: "", url
+      }))
+    } });
+    expect(request.referenceImages.map((image) => image.kind === "url" ? image.url : "")).toEqual(urls);
+    expect(request.referenceImages.every((image) => image.label?.startsWith("Uploaded main object"))).toBe(true);
+  });
+
   it("compacts brand identity fields for the Standard prompt", () => {
     const request = buildArtworkGenerationRequest({
       run: {

@@ -413,6 +413,23 @@ and its existing pipeline.
 
 ## Artwork prompt pipeline
 
+`prompt-context.ts` derives mandatory subject instructions from user-selected
+`Uploaded main object` labels. Standard's final image prompt and the reference-led
+prompt retain every distinct Main object even when Preflight simplifies product
+selection. Multiple angles of one product describe one subject; different
+products/variants must remain visible. Style and supporting references are not
+promoted to required subjects. This is an image-generation instruction, not a
+post-generation visual completeness check.
+
+Standard Campaign Input Preflight receives the actual ordered images alongside
+their role mapping when choosing `visualMechanism`. OpenAI/OpenRouter use image
+content parts; native Gemini uses the already resolved bytes as inline image
+parts through `google-hook-provider.ts`, with no extra image download. The
+reference-led interpreter receives design references followed by user-uploaded
+materials, explicitly distinguishing design grammar from subject/identity
+evidence. Both paths include the mandatory Main object constraints during
+planning, without adding an AI request. Final image attachment order is unchanged.
+
 Artwork requests are built in
 `src/services/artwork-generation/openai-image-generation.ts` and executed by
 the thin façade at

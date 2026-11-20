@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ImagePromptAgentInput } from "./image-prompt-agent.js";
 import {
+  buildRequiredMainObjectInstruction,
   isBrandGuidelineItem,
   isEditableBrandGuidelineItem
 } from "./prompt-context.js";
@@ -24,6 +25,7 @@ export async function buildReferenceLedImagePrompt(
   return [
     (await loadPrompt()).trim(),
     "",
+    buildRequiredMainObjectInstruction(input.referenceImageLabels),
     ...(usePlaceholderCopy
       ? [
           "PLACEHOLDER COPY MODE",
