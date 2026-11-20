@@ -367,6 +367,13 @@ actual Script, Visual, and Text Overlay on the right. Do not add separate
 Creative Direction or Artwork & Caption slides unless the export contract is
 intentionally changed.
 
+Create's `Export to Slides (Placeholder)` generates Static/Album placeholder
+assets only for the export's temporary output snapshot. It does not dispatch
+`replace-output-asset`, create a replacement checkpoint, or alter the website's
+current artwork/history. Normal exports continue using the original outputs,
+including after a failed placeholder Slides import. The individual card's
+Placeholder action remains an explicit artwork replacement.
+
 Each Hook may store up to three optional `referenceImages`, each tagged with a
 role via a "Use for" picker — Style, Layout, or Typography — matching
 `referenceBoardRoleOptions` in `domain/creative-run.ts`; picking a role already

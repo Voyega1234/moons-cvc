@@ -19,7 +19,6 @@ import {
 import { OutputGrid } from "../review/output-grid";
 import { downloadAllOutputsArchive } from "../review/downloads";
 import {
-  PLACEHOLDER_INSTRUCTIONS,
   placeholderizeAlbumOutputImages,
   placeholderizeOutputImage
 } from "../../../services/artwork-generation/openai-image-generation";
@@ -129,7 +128,6 @@ export function StudioStage({
     try {
       const groups = groupOutputsForReview(state.outputs);
       const placeholderApplicableIds = new Set<string>();
-      const freshlyGenerated: CreativeOutput[] = [];
 
       const results = await Promise.all(
         groups.map(async (group) => {
@@ -159,49 +157,17 @@ export function StudioStage({
                 )
               })
             );
-            freshlyGenerated.push(...updated);
             return updated;
           }
           const updated = await placeholderizeOutputImage({
             run: state,
             output: primary
           });
-          freshlyGenerated.push(updated);
           return [updated];
         })
       );
 
       const updatedOutputs = results.flat();
-
-      if (freshlyGenerated.length) {
-        await createCheckpoint?.("replace-image", state.id);
-        freshlyGenerated.forEach((updated) => {
-          const assetUrl = updated.assetUrl;
-          if (!assetUrl) return;
-          dispatch({
-            type: "replace-output-asset",
-            id: updated.id,
-            assetUrl,
-            ...(updated.assetStoragePath
-              ? { assetStoragePath: updated.assetStoragePath }
-              : {}),
-            ...(updated.assetBucket
-              ? { assetBucket: updated.assetBucket }
-              : {}),
-            ...(updated.albumMasterAssetUrl
-              ? { albumMasterAssetUrl: updated.albumMasterAssetUrl }
-              : {}),
-            ...(updated.albumMasterAssetStoragePath
-              ? {
-                  albumMasterAssetStoragePath:
-                    updated.albumMasterAssetStoragePath
-                }
-              : {}),
-            instructions: PLACEHOLDER_INSTRUCTIONS,
-            isPlaceholder: true
-          });
-        });
-      }
 
       const mergedOutputs: readonly CreativeOutput[] = state.outputs.map(
         (output) => {
@@ -383,8 +349,8 @@ export function StudioStage({
                 >
                   <b>Export to Slides (Placeholder)</b>
                   <span>
-                    Swap real text for placeholders first — reuses any
-                    placeholder already generated for a creative
+                    Use placeholder images in slides while keeping the original
+                    artwork unchanged
                   </span>
                 </button>
               </div>
