@@ -207,6 +207,7 @@ export function PreflightModal({
   onOutputSizeChange,
   onCancel,
   onContinue,
+  shouldWarnNoMaterials,
   onApplyFinding,
   runChecks = runIdeaPreflight,
   runApplyFix = applyIdeaPreflightFix
@@ -236,6 +237,8 @@ export function PreflightModal({
   onOutputSizeChange: (size: ArtworkOutputSize) => void;
   onCancel: () => void;
   onContinue: () => void;
+  /** Resolves true when nothing is selected as a material although the library has product images. */
+  shouldWarnNoMaterials?: () => Promise<boolean>;
   onApplyFinding?: (
     directionId: string,
     patch: Partial<Record<IdeaPreflightFixableField, string>>
@@ -272,6 +275,25 @@ export function PreflightModal({
   const [visualInputView, setVisualInputView] = useState<
     "reference" | "material"
   >("reference");
+  const [noMaterialWarning, setNoMaterialWarning] = useState(false);
+  const visualInputsRef = useRef<HTMLElement>(null);
+
+  async function handleContinue() {
+    if (shouldWarnNoMaterials && (await shouldWarnNoMaterials())) {
+      setNoMaterialWarning(true);
+      return;
+    }
+    onContinue();
+  }
+
+  function goSelectMaterials() {
+    setNoMaterialWarning(false);
+    setShowResults(false);
+    setVisualInputView("material");
+    window.requestAnimationFrame(() =>
+      visualInputsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  }
 
   const selectedDirections = useMemo(
     () => directions.filter((direction) => selectedIds.has(direction.id)),
@@ -752,7 +774,10 @@ export function PreflightModal({
             </section>
 
             {visualInputs ? (
-              <section className="preflight-section confirm-section full preflight-visual-inputs">
+              <section
+                ref={visualInputsRef}
+                className="preflight-section confirm-section full preflight-visual-inputs"
+              >
                 <header className="preflight-section-head confirm-section-head">
                   <PreflightSectionTitle
                     number={2}
@@ -998,7 +1023,7 @@ export function PreflightModal({
           {showResults ? (
             <span />
           ) : (
-            <button className="btn ghost" type="button" onClick={onContinue}>
+            <button className="btn ghost" type="button" onClick={() => void handleContinue()}>
               Skip and open Create
             </button>
           )}
@@ -1020,7 +1045,7 @@ export function PreflightModal({
                 (!showResults && (selectedIds.size === 0 || !anyCheck))
               }
               onClick={() => {
-                if (showResults) onContinue();
+                if (showResults) void handleContinue();
                 else void handleRunChecks();
               }}
             >
@@ -1034,6 +1059,30 @@ export function PreflightModal({
             </button>
           </div>
         </footer>
+        {noMaterialWarning ? (
+          <div className="preflight-warning-backdrop" role="presentation">
+            <div
+              className="preflight-warning"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="preflight-no-material-title"
+            >
+              <h4 id="preflight-no-material-title">ยังไม่ได้เลือกรูปสินค้า (Materials)</h4>
+              <p>
+                ในคลังของแบรนด์มีรูปสินค้าอยู่ แต่งานนี้ยังไม่ได้เลือกรูปไหนเลย
+                ถ้าเจนต่อ AI จะวาดสินค้าขึ้นเองแทนสินค้าจริงของลูกค้า
+              </p>
+              <div className="preflight-warning-actions">
+                <button className="btn ghost" type="button" onClick={onContinue}>
+                  เจนต่อโดยไม่มีสินค้า
+                </button>
+                <button className="btn primary" type="button" onClick={goSelectMaterials}>
+                  เลือก Materials
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>,
     portalRoot

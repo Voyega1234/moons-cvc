@@ -3897,6 +3897,24 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
     return () => window.clearTimeout(timeout);
   }, [selected, showSelectionFeedback]);
 
+  /** True when the library has product images but none are selected, so AI would invent the product. */
+  async function shouldWarnNoMaterials(): Promise<boolean> {
+    const hasSelected =
+      selectedUploadedMaterials(state).length > 0 ||
+      state.directions.some(
+        (direction) => direction.selected && direction.uploadedMaterials?.length
+      );
+    if (hasSelected || !state.brand || !artworkContextSelection.imageMaterials) {
+      return false;
+    }
+    try {
+      const images = await brandMemoryRepository.listAssetImages(state.brand.id);
+      return images.some((image) => image.kind === "material");
+    } catch {
+      return false;
+    }
+  }
+
   async function handleExportAngles() {
     setExportingAngles(true);
     setExportAnglesError(null);
@@ -4217,6 +4235,7 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
             )
           }}
           onCancel={() => setPreflightOpen(false)}
+          shouldWarnNoMaterials={shouldWarnNoMaterials}
           onContinue={() => {
             setPreflightOpen(false);
             createSelectedHooks(artworkContextSelection);
