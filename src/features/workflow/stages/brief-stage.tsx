@@ -2336,6 +2336,10 @@ export function CreativeMaterialsEditor({
                         assetSelectionKey("image", asset.id)
                       )}
                       draggable
+                      data-chosen={selected}
+                      onClick={(event) => {
+                        if (isCardBodyClick(event)) selectBrandAsset(asset);
+                      }}
                       onDragStart={(event) => {
                         prepareAssetDrag(event, "image", asset.id);
                       }}
@@ -2373,7 +2377,13 @@ export function CreativeMaterialsEditor({
                     item.assetUrl
                   );
                   return (
-                    <article key={`legacy-${item.id}`}>
+                    <article
+                      key={`legacy-${item.id}`}
+                      data-chosen={selected}
+                      onClick={(event) => {
+                        if (isCardBodyClick(event)) selectLegacyReference(item);
+                      }}
+                    >
                       <AssetPreviewImage
                         src={item.assetUrl}
                         alt={item.title}
@@ -2798,6 +2808,16 @@ export function CreativeMaterialsEditor({
         />
       ) : null}
     </div>
+  );
+}
+
+/** Plain click on a card (not its buttons, and not cmd/ctrl/shift multi-select for moving). */
+function isCardBodyClick(event: ReactMouseEvent<HTMLElement>): boolean {
+  return (
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !(event.target as HTMLElement).closest("button, input, label, select, a")
   );
 }
 

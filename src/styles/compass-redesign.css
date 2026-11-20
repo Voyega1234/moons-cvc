@@ -4542,6 +4542,7 @@
 
 .compass-app .compass-persistent-asset-grid article {
   min-width: 0;
+  cursor: pointer;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -4754,6 +4755,12 @@
 .compass-app .compass-persistent-asset-grid > article.compass-asset-drag-source {
   opacity: 0.38;
   transform: scale(0.98);
+}
+
+.compass-app .compass-persistent-asset-grid > article[data-chosen="true"] {
+  border-color: #39ff14;
+  background: rgba(57, 255, 20, 0.08);
+  box-shadow: 0 0 0 1px #39ff14, 0 0 14px rgba(57, 255, 20, 0.55);
 }
 
 .compass-app .compass-asset-drag-preview {

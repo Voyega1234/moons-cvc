@@ -472,7 +472,7 @@ export function syncSharedMaterialsIntoDirections<
   });
 }
 
-export const MAX_HOOK_MATERIALS = 4;
+export const MAX_HOOK_MATERIALS = 8;
 
 export function normalizeHookUploadedMaterials(
   materials: readonly UploadedCreativeMaterial[]
