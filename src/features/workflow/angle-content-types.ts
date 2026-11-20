@@ -79,8 +79,16 @@ export function buildAngleGroups(state: WorkflowState) {
         left.originalIndex - right.originalIndex
     );
 
-  return creativeMixItems(state)
-    .filter((mixItem) => mixItem.quantity > 0)
+  const mixItems = [...creativeMixItems(state)];
+  for (const { direction, service } of entries) {
+    if (direction.manual && !mixItems.some((item) => item.service === service)) {
+      mixItems.push({ id: `manual-${service}`, service, quantity: 0 });
+    }
+  }
+  return mixItems
+    .filter((mixItem) => mixItem.quantity > 0 || entries.some(
+      (entry) => entry.service === mixItem.service && entry.direction.manual
+    ))
     .map((mixItem) => {
       const details = groupDetailsByService[mixItem.service];
       const directions = entries.filter(
@@ -135,6 +143,7 @@ export function buildAngleGroups(state: WorkflowState) {
         required: mixItem.quantity,
         selected: directions.filter((entry) => entry.direction.selected).length,
         directions,
+        isComparing: modelGroups.filter((group) => group.key !== "unattributed").length > 1,
         modelGroups
       };
     })

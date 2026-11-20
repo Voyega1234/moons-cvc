@@ -234,6 +234,14 @@
   padding: 14px;
 }
 
+.compass-app .compass-model-comparison:not(.is-comparing) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.compass-app .compass-model-column.is-unattributed {
+  grid-column: 1 / -1;
+}
+
 .compass-app .compass-model-column {
   min-width: 0;
   overflow: hidden;

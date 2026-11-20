@@ -3287,6 +3287,78 @@ describe("redesigned workflow stages", () => {
     ).toBe(false);
   });
 
+  it.each([
+    ["single-static", "STATIC"],
+    ["album-post", "ALBUM"],
+    ["ugc-video", "UGC VIDEO"]
+  ] as const)("adds a manual %s Hook even when its type is outside the planned quota", async (service, heading) => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    function ManualTypeFlow() {
+      const [state, dispatch] = useReducer(workflowReducer, {
+        ...base,
+        stage: "directions" as const,
+        creativeMix: [
+          { id: "static", service: "single-static" as const, quantity: 1 },
+          { id: "album", service: "album-post" as const, quantity: 0 }
+        ],
+        directions: base.directions.filter((direction) => direction.service === "single-static")
+      });
+      return <DirectionsStage state={state} dispatch={dispatch} />;
+    }
+    const view = render(<BrandMemoryProvider repository={new MockBrandMemoryRepository()}><ManualTypeFlow /></BrandMemoryProvider>);
+    const stage = within(view.container);
+    await user.click(stage.getByRole("button", { name: "+ Add hook manually" }));
+    const dialog = within(stage.getByRole("dialog"));
+    expect(dialog.getByLabelText("Content type")).toHaveProperty("value", "single-static");
+    await user.type(dialog.getByLabelText("Pillar"), "Proof");
+    await user.type(dialog.getByLabelText("Hook"), "Chosen type hook");
+    await user.type(dialog.getByLabelText("CTA"), "Learn more");
+    await user.selectOptions(dialog.getByLabelText("Content type"), service);
+    expect(dialog.getByLabelText("Hook")).toHaveProperty("value", "Chosen type hook");
+    await user.click(dialog.getByRole("button", { name: "Add hook" }));
+    const group = stage.getByRole("heading", { name: heading }).closest(".compass-angle-group")!;
+    expect(within(group as HTMLElement).getByText("Chosen type hook")).toBeTruthy();
+    expect(within(group as HTMLElement).getByText("Manually added")).toBeTruthy();
+  });
+
+  it.each([false, true])("adding a manual Hook preserves the model layout (comparing: %s)", async (comparing) => {
+    const user = userEvent.setup();
+    const base = buildCreativeState();
+    function ManualHookFlow() {
+      const [state, dispatch] = useReducer(workflowReducer, {
+        ...base,
+        stage: "directions" as const,
+        directions: base.directions.map((direction, index) => ({
+          ...direction,
+          generationModel: comparing && index % 2
+            ? "google/gemini-3.8-flash" as const
+            : "google/gemini-4-hydrogen" as const
+        }))
+      });
+      return <DirectionsStage state={state} dispatch={dispatch} />;
+    }
+    const view = render(
+      <BrandMemoryProvider repository={new MockBrandMemoryRepository()}>
+        <ManualHookFlow />
+      </BrandMemoryProvider>
+    );
+    const stage = within(view.container);
+    const comparison = () => view.container.querySelector(".compass-model-comparison")!;
+    expect(comparison().classList.contains("is-comparing")).toBe(comparing);
+    await user.click(stage.getAllByRole("button", { name: "+ Add hook manually" })[0]!);
+    const dialog = within(stage.getByRole("dialog", { name: "Add a STATIC AD topic" }));
+    await user.type(dialog.getByLabelText("Pillar"), "Product proof");
+    await user.type(dialog.getByLabelText("Hook"), "Manual test hook");
+    await user.type(dialog.getByLabelText("CTA"), "Learn more");
+    await user.click(dialog.getByRole("button", { name: "Add hook" }));
+    expect(comparison().classList.contains("is-comparing")).toBe(comparing);
+    const manual = comparison().querySelector(".compass-model-column.is-unattributed");
+    expect(manual).toBeTruthy();
+    expect(within(manual as HTMLElement).getByText("Manual test hook")).toBeTruthy();
+    expect(comparison().querySelectorAll(".compass-model-column")).toHaveLength(comparing ? 3 : 2);
+  });
+
   it("keeps single-model Hook ideas in the three-card review grid", () => {
     const baseState = buildCreativeState();
     const state = {

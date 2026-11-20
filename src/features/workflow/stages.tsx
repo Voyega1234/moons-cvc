@@ -71,7 +71,8 @@ import { createId, nowIso } from "../../shared/utils/id";
 import { serviceLabels, stages } from "./config";
 import {
   buildAngleExportReview,
-  buildAngleGroups
+  buildAngleGroups,
+  serviceContentTypeLabel
 } from "./angle-content-types";
 import type {
   WorkflowAction,
@@ -4294,11 +4295,11 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
               </div>
             </header>
             <div
-              className={`compass-model-comparison ${group.modelGroups.length > 1 ? "is-comparing" : ""}`}
+              className={`compass-model-comparison ${group.isComparing ? "is-comparing" : ""}`}
             >
               {group.modelGroups.map((modelGroup) => (
                 <section
-                  className="compass-model-column"
+                  className={`compass-model-column ${modelGroup.key === "unattributed" ? "is-unattributed" : ""}`}
                   key={`${group.service}-${modelGroup.key}`}
                   aria-label={`${modelGroup.label} comparison`}
                 >
@@ -4513,13 +4514,12 @@ export function DirectionsStage({ state, dispatch }: StageProps) {
       ) : null}
       {manualHookGroup ? (
         <ManualHookModal
-          contentType={manualHookGroup.title}
+          defaultService={manualHookGroup.service}
           defaultObjective={successMetricObjectives[state.successMetric]}
           onClose={() => setManualHookGroup(null)}
           onAdd={(values) => {
             dispatch({
               type: "add-manual-direction",
-              service: manualHookGroup.service,
               ...values
             });
             setManualHookGroup(null);
@@ -4850,15 +4850,16 @@ function HookEditModal({
 }
 
 function ManualHookModal({
-  contentType,
+  defaultService,
   defaultObjective,
   onClose,
   onAdd
 }: {
-  contentType: string;
+  defaultService: ServiceType;
   defaultObjective: string;
   onClose: () => void;
   onAdd: (values: {
+    service: ServiceType;
     pillar: string;
     objective: string;
     hook: string;
@@ -4866,6 +4867,7 @@ function ManualHookModal({
     cta: string;
   }) => void;
 }) {
+  const [service, setService] = useState(defaultService);
   const [pillar, setPillar] = useState("");
   const [objective, setObjective] = useState(defaultObjective);
   const [hook, setHook] = useState("");
@@ -4887,13 +4889,24 @@ function ManualHookModal({
         <div className="output-modal-head">
           <div>
             <p className="eyebrow">Manual hook</p>
-            <h3 id="manual-hook-title">Add a {contentType} topic</h3>
+            <h3 id="manual-hook-title">Add a {serviceContentTypeLabel(service)} topic</h3>
           </div>
           <button className="btn ghost" type="button" onClick={onClose}>
             Close
           </button>
         </div>
         <div className="compass-manual-hook-form">
+          <label className="compass-manual-hook-field full">
+            <span>Content type</span>
+            <select value={service} onChange={(event) => setService(event.target.value as ServiceType)}>
+              <option value="single-static">Single</option>
+              <option value="album-post">Album</option>
+              <option value="ugc-video">UGC</option>
+              {defaultService !== "single-static" && defaultService !== "album-post" && defaultService !== "ugc-video" ? (
+                <option value={defaultService}>{serviceContentTypeLabel(defaultService)}</option>
+              ) : null}
+            </select>
+          </label>
           <label className="compass-manual-hook-field">
             <span>Pillar</span>
             <input
@@ -4962,7 +4975,7 @@ function ManualHookModal({
             type="button"
             disabled={!complete}
             onClick={() =>
-              onAdd({ pillar, objective, hook, subheadline, cta })
+              onAdd({ service, pillar, objective, hook, subheadline, cta })
             }
           >
             Add hook
