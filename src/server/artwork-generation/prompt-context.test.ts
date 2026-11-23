@@ -1,5 +1,14 @@
 import { expect, it } from "vitest";
-import { buildRequiredMainObjectInstruction } from "./prompt-context";
+import { buildCampaignArtifactRole, buildRequiredMainObjectInstruction } from "./prompt-context";
+import { PEOPLE_PHOTO_PREFIX } from "../../domain/people-photos";
+
+it("does not turn people-library photos into required product/logo material based on their filename", () => {
+  const label = `${PEOPLE_PHOTO_PREFIX}woman holding product with logo.jpg`;
+  const role = buildCampaignArtifactRole({ bytes: Buffer.from("person"), mimeType: "image/jpeg", label }, 2);
+  expect(role.kind).toBe("reference");
+  expect(role.instruction).toContain("Optional real-person casting source only");
+  expect(buildRequiredMainObjectInstruction([label])).toBe("");
+});
 
 it("requires every selected main object, preserving image numbers without requiring duplicate products", () => {
   const labels = [

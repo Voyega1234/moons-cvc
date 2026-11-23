@@ -4,6 +4,10 @@ export const ARTWORK_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7;
 export interface ArtworkStorageClient {
   storage: {
     from(bucket: string): {
+      list?(path: string, options: { limit: number; offset?: number; sortBy: { column: string; order: string } }): Promise<{
+        data: { name: string; id?: string | null }[] | null;
+        error: { message: string } | null;
+      }>;
       upload(
         path: string,
         body: Buffer,

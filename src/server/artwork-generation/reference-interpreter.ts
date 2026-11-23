@@ -9,6 +9,7 @@ import type {
 import type { ReferenceImageInput } from "./openai-images-client.js";
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 import { buildRequiredMainObjectInstruction } from "./prompt-context.js";
+import { buildPeoplePhotoInstruction } from "../../domain/people-photos.js";
 
 type FetchLike = typeof fetch;
 
@@ -20,6 +21,7 @@ export interface ReferenceDesignGrammar {
   hierarchyAndDensity: string;
   secondaryAndFooterGrammar: string;
   conceptTranslation: string;
+  peoplePhotoImages?: readonly number[];
   preserve: readonly string[];
   replace: readonly string[];
 }
@@ -91,7 +93,8 @@ export async function interpretReferenceDesign({
     ...(materialReferences.length ? [
       "USER MATERIALS: Inspect these real subjects when forming artworkConcept, keyVisualGrammar and conceptTranslation. They are subject/identity evidence, not design references: do not inherit their backgrounds, props or staging. Different products must remain distinct; multiple views can describe the same product. Do not substitute products from the design references or invent claims.",
       buildRequiredMainObjectInstruction(images.map((image) => image.label ?? ""))
-    ] : [])
+    ] : []),
+    buildPeoplePhotoInstruction(images.map((image) => image.label ?? ""))
   ].join("\n");
 
   return withAiRetry(async () => {
@@ -191,6 +194,7 @@ const referenceDesignGrammarSchema = {
     "hierarchyAndDensity",
     "secondaryAndFooterGrammar",
     "conceptTranslation",
+    "peoplePhotoImages",
     "preserve",
     "replace"
   ],
@@ -202,6 +206,7 @@ const referenceDesignGrammarSchema = {
     hierarchyAndDensity: { type: "string" },
     secondaryAndFooterGrammar: { type: "string" },
     conceptTranslation: { type: "string" },
+    peoplePhotoImages: { type: "array", items: { type: "integer" }, description: "Source image numbers for people depicted in the execution. When library candidates are supplied, any visible human requires a compatible selected source. Pose, wardrobe and scene may be adapted. Return [] for a human-free execution or when no library is supplied." },
     preserve: { type: "array", items: { type: "string" } },
     replace: { type: "array", items: { type: "string" } }
   }

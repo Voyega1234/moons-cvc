@@ -411,6 +411,61 @@ headline, optional single supporting line, CTA, every attachment label, and
 output ratio. Hooks without a per-Hook reference keep the selected Artwork mode
 and its existing pipeline.
 
+### Shared real-people photos
+
+Navigation's **People photos** dialog (`features/people-photos/people-photo-library.tsx`)
+manages the `shared-people-photos/` folder in the existing private `creative-assets`
+Supabase Storage bucket, shared across brands using its existing company-user
+RLS. No new bucket or migration is required. Descriptions and original filenames
+round-trip through safe encoded object keys; no new workspace or client schema
+is required. UI/service ownership is `services/people-photos/people-photo-library.ts`;
+shared labels/shortlisting live in `domain/people-photos.ts`.
+
+The dialog shows an image-only grid with Upload/Close and accessible per-photo
+remove/retry controls. Descriptions, labels and casting fields stay out of the
+UI; existing stored metadata is retained for automatic shortlisting.
+Versioned object keys retain these
+fields without a database migration; old v1 photos remain age/gender unknown
+unless supplied elsewhere. Shortlisting uses this metadata alongside descriptions, and vision
+planning receives it in each source label. Prompts must not infer actual age or
+gender identity from appearance, or treat unknown fields as confirmed matches.
+
+Uploads also call the authenticated `/api/people-photo-analysis` once. It reads
+only validated shared-library object paths through the caller's Storage access,
+normalizes a copy of the image, and uses GPT-5.6 Luna via OpenRouter with
+reasoning disabled for inexpensive visual labeling. `PEOPLE_PHOTO_LABEL_MODEL`
+may override the model; Gemini overrides follow `GEMINI_API_PROVIDER`.
+Results contain a short English visual description, Thai search tags and an
+explicitly estimated apparent age band, never guessed gender/identity or actual
+age. The original photo pixels are retained. Compact v3 keys persist labels for
+later search without repeating AI analysis during artwork generation; bounded
+metadata avoids overlong object keys. Team age metadata overrides AI estimates.
+Successful uploads need no separate Analyze action. Only photos without labels
+offer a retry icon for recovery. Labels remain stored behind the image-only UI.
+An AI failure leaves the uploaded photo intact and shows a retry warning.
+
+`server/artwork-generation/people-photo-library.ts` lists the available photos
+in pages once per generation request, shortlists at most six per Hook by description/name
+and casting metadata (including child-focused briefs),
+normalizes candidate images to sRGB JPEG within 1200px, and shares downloaded
+bytes across Hooks in that request. User-selected artwork sources take priority
+over optional photos when attachment capacity is reached. Missing/empty storage
+does not block normal artwork generation.
+
+Standard Preflight and Reference interpreter see candidate photos in their
+existing vision request and return `peoplePhotoImages` with source image numbers
+or `[]`. Only selected people photos reach the final generator; invalid choices
+cannot turn a product/style reference into a person source. Source indices are
+remapped after filtering. With library candidates, an empty selection adds an
+explicit human-free lock to the final generator, so it cannot silently invent a
+person after the planner declined the library. Selected sources anchor every
+visible person while pose, wardrobe and scene may adapt to the idea. Human
+presence is optional, guided by the visual
+mechanism and user brief; uploaded Main objects remain separate requirements.
+Other legacy/direct artwork modes receive optional casting sources and their
+role instructions without adding a separate planning call. AI may recompose,
+relight and adapt real-person photos; this is not pixel-preserving compositing.
+
 ## Artwork prompt pipeline
 
 `prompt-context.ts` derives mandatory subject instructions from user-selected

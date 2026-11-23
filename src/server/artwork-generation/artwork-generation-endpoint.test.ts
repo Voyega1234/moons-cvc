@@ -1,5 +1,6 @@
 import { CREATIVE_APPROVAL_DOCUMENT_TITLE } from "../../domain/creative-approval";
 import { describe, expect, it, vi } from "vitest";
+import { PEOPLE_PHOTO_BUCKET, PEOPLE_PHOTO_PREFIX, peoplePhotoPath } from "../../domain/people-photos";
 import sharp from "sharp";
 import {
   albumCropRegions,
@@ -865,6 +866,74 @@ describe("handleArtworkGenerationRequest", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it.each([
+    [false, false], [false, true], [true, false], [true, true]
+  ])("lets the visual plan choose optional shared people photos (reference-led: %s, person selected: %s)", async (referenceLed, usePerson) => {
+    const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: "white" } }).png().toBuffer();
+    const path = peoplePhotoPath("office worker portrait", "image/png", { ageBand: "35-44", gender: "woman" });
+    const { client } = fakeStorage();
+    const from = client.storage.from.bind(client.storage);
+    client.storage.from = (bucket) => bucket === PEOPLE_PHOTO_BUCKET ? {
+      ...from(bucket),
+      list: async () => ({ data: [{ name: path.split("/").at(-1)!, id: "person" }], error: null }),
+      download: async () => ({ data: { arrayBuffer: async () => bytes, type: "image/png" } as unknown as Blob, error: null })
+    } : from(bucket);
+    let imageBody: { prompt: string; input_references: unknown[] } | undefined;
+    let planningBody: { input: { content: { text?: string; type: string }[] }[] } | undefined;
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url).includes("/auth/v1/user")) return new Response(JSON.stringify({ email: "team@convertcake.com" }));
+      if (String(url).includes("/api/v1/images")) {
+        imageBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ data: [{ b64_json: bytes.toString("base64") }] }));
+      }
+      if (String(url).includes("/v1/responses")) {
+        const body = JSON.parse(String(init?.body));
+        if (body.text?.format?.name === "moons_reference_design_grammar") {
+          planningBody = body;
+          return new Response(JSON.stringify({ output_text: JSON.stringify({
+            artworkConcept: "Product message", keyVisualGrammar: usePerson ? "Person demonstrates the product" : "Product only",
+            compositionGrammar: "Simple", graphicDeviceLogic: "None", hierarchyAndDensity: "Minimal", secondaryAndFooterGrammar: "None",
+            conceptTranslation: usePerson ? "Use the office worker" : "No people", preserve: [], replace: [], peoplePhotoImages: usePerson ? [3] : []
+          }) }));
+        }
+        if (body.text?.format?.name === "moons_campaign_input_preflight") {
+          planningBody = body;
+          const payload = JSON.parse((await campaignInputPreflightResponse().json()).output_text);
+          payload.visualMechanism = usePerson ? "Person demonstrates the product" : "Product only, no people";
+          payload.peoplePhotoImages = usePerson ? [2] : [];
+          return new Response(JSON.stringify({ output_text: JSON.stringify(payload) }));
+        }
+        return standardAgentResponse(init);
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const product = { kind: "base64", mediaType: "image/png", data: bytes.toString("base64"), label: "Uploaded main object: product.png" };
+    const response = await handleArtworkGenerationRequest({
+      request: new Request("https://moons.local/api/artwork-generation", { method: "POST", headers: { authorization: "Bearer test" }, body: JSON.stringify({
+        ...requestBody, referenceLed,
+        referenceImages: referenceLed ? [{ ...product, label: "Primary reference · Style · sample.png" }, product] : [product]
+      }) }),
+      env: { OPENAI_API_KEY: "test", OPENROUTER_API_KEY: "test", SUPABASE_URL: "https://supabase.example.com", SUPABASE_ANON_KEY: "test" },
+      fetchImpl, createStorageClient: () => client
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(JSON.stringify(planningBody)).toContain(PEOPLE_PHOTO_PREFIX);
+    expect(JSON.stringify(planningBody)).toContain("Age band (team-provided): 35–44");
+    expect(JSON.stringify(planningBody)).toContain("Gender (team-provided): Woman");
+    expect(planningBody?.input[0]?.content.filter((part) => part.type === "input_image")).toHaveLength(referenceLed ? 3 : 2);
+    expect(imageBody?.input_references).toHaveLength((referenceLed ? 2 : 1) + Number(usePerson));
+    expect(imageBody?.prompt.includes(PEOPLE_PHOTO_PREFIX)).toBe(usePerson);
+    if (usePerson) {
+      expect(imageBody?.prompt).toContain("Every visible person must be grounded in a selected real-person source");
+      expect(imageBody?.prompt).not.toContain("HUMAN PRESENCE LOCK: NO PEOPLE");
+    } else {
+      expect(imageBody?.prompt).toContain("HUMAN PRESENCE LOCK: NO PEOPLE");
+      expect(imageBody?.prompt).toContain("even if the headline mentions children");
+    }
+    const planners = fetchImpl.mock.calls.filter(([, init]) => /moons_(?:campaign_input_preflight|reference_design_grammar)/.test(String(init?.body)));
+    expect(planners).toHaveLength(1);
   });
 
   it("interprets every Hook reference and attaches them to the final GPT Image 2 edit", async () => {

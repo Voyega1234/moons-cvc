@@ -71,6 +71,7 @@ import {
 } from "../features/workflow/stages";
 import { MyWork } from "../features/workflow/my-work";
 import { HookAgentPlayground } from "../features/playground/hook-agent-playground";
+import { PeoplePhotoLibrary } from "../features/people-photos/people-photo-library";
 
 const CLEAR_TOAST_ACTION = { type: "clear-toast" } as const;
 
@@ -419,6 +420,7 @@ export function NavigationRail({
   workspaceDispatch: Dispatch<WorkspaceAction>;
   createRun: (keepBrand: boolean) => void;
 }) {
+  const [peopleLibraryOpen, setPeopleLibraryOpen] = useState(false);
   const learnAction: WorkflowAction = { type: "set-stage", stage: "summary" };
   const learnBlocked = workflowActionBlockReason(state, learnAction);
 
@@ -466,6 +468,10 @@ export function NavigationRail({
           <Books size={21} weight="duotone" aria-hidden="true" />
           <span>Library</span>
         </button>
+        <button type="button" onClick={() => setPeopleLibraryOpen(true)}>
+          <Users size={21} weight="duotone" aria-hidden="true" />
+          <span>People photos</span>
+        </button>
         <button
           type="button"
           disabled={Boolean(learnBlocked)}
@@ -476,6 +482,7 @@ export function NavigationRail({
           <span>Learnings</span>
         </button>
       </nav>
+      {peopleLibraryOpen ? <PeoplePhotoLibrary onClose={() => setPeopleLibraryOpen(false)} /> : null}
       <button
         className="compass-rail-create"
         type="button"
