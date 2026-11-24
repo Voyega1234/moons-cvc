@@ -820,6 +820,15 @@ export class SupabaseBrandMemoryRepository implements BrandMemoryRepository {
     return mapAssetImage(inserted.data, publicUrl.publicUrl);
   }
 
+  async updateAssetImageLabel(id: string, aiLabel: string): Promise<void> {
+    const { error } = await getSupabaseClient()
+      .schema("moons")
+      .from("brand_assets")
+      .update({ ai_label: aiLabel })
+      .eq("id", id);
+    if (error) throw error;
+  }
+
   async moveAssetImage(
     input: MoveBrandAssetImageInput
   ): Promise<BrandAssetImage> {
@@ -1137,6 +1146,7 @@ function mapAssetImage(
     mimeType: row.mime_type,
     url,
     storagePath: row.storage_path,
+    ...(row.ai_label ? { aiLabel: row.ai_label } : {}),
     ...(row.source_provider ? { sourceProvider: row.source_provider } : {}),
     ...(row.source_id ? { sourceId: row.source_id } : {})
   };

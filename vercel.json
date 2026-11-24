@@ -21,6 +21,9 @@
     "api/idea-preflight.ts": {
       "maxDuration": 180
     },
+    "api/material-ai.ts": {
+      "maxDuration": 180
+    },
     "api/people-photo-analysis.ts": {
       "maxDuration": 180
     },

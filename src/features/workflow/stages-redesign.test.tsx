@@ -4369,7 +4369,7 @@ describe("redesigned workflow stages", () => {
     let fileName = "";
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { fileName = this.download; });
     const view = render(<StudioStage state={state} dispatch={vi.fn()} />);
-    const button = within(view.container).getByRole("button", { name: "Download master" }) as HTMLButtonElement;
+    const button = within(view.container).getByRole("button", { name: "Download" }) as HTMLButtonElement;
     expect(button.disabled).toBe(!hasMaster);
     if (hasMaster) {
       await user.click(button);

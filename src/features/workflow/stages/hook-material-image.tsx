@@ -110,6 +110,14 @@ export function HookMaterialImage({
                 >
                   {material.name}
                 </span>
+                {material.description ? (
+                  <span
+                    className="hook-reference-image-filename"
+                    title={material.description}
+                  >
+                    {material.description}
+                  </span>
+                ) : null}
                 <select
                   className="hook-reference-image-role"
                   aria-label={`Use ${material.name} as`}

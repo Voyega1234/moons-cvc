@@ -430,7 +430,23 @@ nor a human-free lock. Human presence follows the normal brief and creative
 instructions. User-selected Materials and References continue through their
 existing paths.
 
-## Artwork prompt pipeline
+### Material AI labels and hook prefill
+
+`api/material-ai.ts` → `src/server/material-ai/material-ai-endpoint.ts` (GPT Luna via
+OpenRouter, `MATERIAL_AI_MODEL` override) has two actions: `label` (downloads one
+`asset-library/material/…` image with the user's token and returns a one-line
+description) and `match` (text-only: ideas + labeled library → up to 3 material ids
+per idea, unknown ids dropped). Labels persist in `moons.brand_assets.ai_label`
+(`BrandAssetImage.aiLabel`, `updateAssetImageLabel`). Client logic lives in
+`services/creative-materials/material-ai.ts`: uploads/folder/Drive imports label in
+the background (`labelUploadedMaterials` in `brief-stage.tsx`); after hook generation
+`useGenerateHooks` calls `suggestMaterialsForHooks` (backfills up to 40 unlabeled
+images first) and dispatches `prefill-direction-materials`, which only fills hooks
+with no materials. Skipped when the brief already has selected shared Materials. The
+label is also written to `UploadedCreativeMaterial.description`, so it reaches the
+artwork reference label. Users remove/re-pick per hook with the existing editor.
+
+### Campaign materials
 
 `prompt-context.ts` derives mandatory subject instructions from user-selected
 `Uploaded main object` labels. Standard's final image prompt and the reference-led

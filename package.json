@@ -14,6 +14,7 @@
     "references:build": "node ./node_modules/vite-node/vite-node.mjs scripts/build-artwork-reference-catalog.ts",
     "references:upload": "npm run references:build && node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/upload-artwork-reference-library.ts",
     "clients:import-mapping": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/import-active-mapping-clients.ts",
+    "materials:label": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/backfill-material-labels.ts",
     "worker:client-ingestion": "node --env-file=.env ./node_modules/vite-node/vite-node.mjs scripts/run-client-ingestion-worker.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

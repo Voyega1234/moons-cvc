@@ -888,6 +888,27 @@ export function workflowReducer(
         clientSent: false,
         done: false
       };
+    case "prefill-direction-materials": {
+      const ugcIds = ugcVideoDirectionIds(state);
+      return {
+        ...state,
+        directions: state.directions.map((direction) => {
+          if (ugcIds.has(direction.id)) return direction;
+          const assignment = action.assignments.find(
+            (item) => item.id === direction.id
+          );
+          return assignment?.materials.length &&
+            !direction.uploadedMaterials?.length
+            ? {
+                ...direction,
+                uploadedMaterials: normalizeHookUploadedMaterials(
+                  assignment.materials
+                )
+              }
+            : direction;
+        })
+      };
+    }
     case "add-manual-direction": {
       const hook = action.hook.trim();
       const subheadline = action.subheadline.trim();

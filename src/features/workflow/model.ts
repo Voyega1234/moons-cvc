@@ -213,6 +213,14 @@ export type WorkflowAction =
       materials: readonly UploadedCreativeMaterial[];
     }
   | {
+      /** AI prefill: fills only hooks that still have no materials of their own. */
+      type: "prefill-direction-materials";
+      assignments: readonly {
+        id: string;
+        materials: readonly UploadedCreativeMaterial[];
+      }[];
+    }
+  | {
       type: "set-direction-export-group";
       id: string;
       group: AngleExportGroup | null;

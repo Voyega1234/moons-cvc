@@ -89,6 +89,8 @@ export interface BrandAssetImage {
   mimeType: string;
   url: string;
   storagePath: string;
+  /** GPT Luna description of what the image shows; used to match Materials to ideas. */
+  aiLabel?: string;
   sourceProvider?: "google-drive";
   sourceId?: string;
 }

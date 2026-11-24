@@ -12,6 +12,7 @@ import {
   buildIdeaIntentInstructions,
   buildSuccessMetricInstructions,
   selectedHookGenerationModels,
+  useGenerateHooks,
   useGenerateMoreHooks
 } from "./use-generate-hooks";
 
@@ -227,5 +228,23 @@ describe("useGenerateMoreHooks", () => {
         ]
       })
     );
+  });
+});
+
+describe("useGenerateHooks shared materials", () => {
+  it("puts Materials picked in the brief on every new hook card", async () => {
+    const material = { id: "m1", name: "Pic.jpg", mediaType: "image/jpeg", role: "main-object" as const, description: "", url: "https://x/pic.jpg", selected: true };
+    const state = { ...createInitialWorkflowState({ id: "shared", now: "2026-11-17T00:00:00Z" }),
+      hookGenerationModel: "n8n-compass-new" as const, hookGenerationModels: ["n8n-compass-new" as const], uploadedMaterials: [material] };
+    const directions = buildDirectionFixtures("Shared").slice(0, 2);
+    vi.mocked(generateDirectionsFromNewCompassWebhook).mockResolvedValue(directions);
+    vi.mocked(generateDirectionsFromWebhook).mockResolvedValue(directions);
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useGenerateHooks(state, dispatch));
+    act(() => result.current.generate());
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({
+      type: "prefill-direction-materials",
+      assignments: directions.map(({ id }) => ({ id, materials: [{ ...material, fromSharedMaterial: true }] }))
+    }));
   });
 });

@@ -156,6 +156,7 @@ export interface BrandMemoryRepository {
   moveAssetFolder(input: MoveBrandAssetFolderInput): Promise<BrandAssetFolder>;
   deleteAssetFolder(id: string): Promise<void>;
   createAssetImage(input: CreateBrandAssetImageInput): Promise<BrandAssetImage>;
+  updateAssetImageLabel(id: string, aiLabel: string): Promise<void>;
   moveAssetImage(input: MoveBrandAssetImageInput): Promise<BrandAssetImage>;
   deleteAssetImage(id: string): Promise<void>;
   saveOnboardingQuestionnaire(

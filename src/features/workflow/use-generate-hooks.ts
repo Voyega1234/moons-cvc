@@ -21,6 +21,10 @@ import {
   generateDirectionsFromNewCompassWebhook,
   generateDirectionsFromWebhook
 } from "../../services/creative-generation/n8n-hook-generation";
+import {
+  suggestMaterialsForHooks,
+  type MaterialAiRepository
+} from "../../services/creative-materials/material-ai";
 import { playGenerationSuccessSound } from "../../shared/utils/notification-sound";
 import { serviceLabels } from "./config";
 import {
@@ -238,7 +242,8 @@ async function generateDirectionsForState(
 
 export function useGenerateHooks(
   state: WorkflowState,
-  dispatch: Dispatch<WorkflowAction>
+  dispatch: Dispatch<WorkflowAction>,
+  materialRepository?: MaterialAiRepository
 ) {
   const [contextImport, setContextImport] = useState<{ runId: string; status: "checking" | "ready" | "failed" } | null>(null);
   const generate = useCallback(() => {
@@ -261,6 +266,33 @@ export function useGenerateHooks(
       .then((directions) => {
         dispatch({ type: "generate-directions", directions });
         playGenerationSuccessSound();
+        // Materials the user picked in the brief go onto every card straight
+        // away (tagged as shared so later changes re-sync them). Otherwise let
+        // GPT Luna prefill each idea from the labeled library.
+        const shared = selectedUploadedMaterials(state).map((material) => ({
+          ...material,
+          fromSharedMaterial: true
+        }));
+        if (shared.length) {
+          dispatch({
+            type: "prefill-direction-materials",
+            assignments: directions.map(({ id }) => ({ id, materials: shared }))
+          });
+        } else if (materialRepository && state.brand?.id) {
+          void suggestMaterialsForHooks({
+            clientId: state.brand.id,
+            hooks: directions,
+            repository: materialRepository
+          })
+            .then((assignments) => {
+              if (assignments.length) {
+                dispatch({ type: "prefill-direction-materials", assignments });
+              }
+            })
+            .catch((error: unknown) =>
+              console.warn("Material prefill failed; hooks keep no materials.", error)
+            );
+        }
       })
       .catch((caught: unknown) => {
         dispatch({
@@ -271,7 +303,7 @@ export function useGenerateHooks(
               : "Could not generate hooks."
         });
       });
-  }, [state, dispatch]);
+  }, [state, dispatch, materialRepository]);
 
   return {
     generate,

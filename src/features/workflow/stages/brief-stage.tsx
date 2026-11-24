@@ -7,6 +7,7 @@ import { type BrandAssetFolder, type BrandAssetImage, type BrandAssetKind, type 
 import { creativeMaterialRoles, inferredReferenceImageRole, MAX_HOOK_MATERIALS, MAX_HOOK_REFERENCE_IMAGES, referenceBoardRoleOptions, referenceHoldingRole, referenceImageRoleLabels, type CreativeMaterialRole, type UploadedCreativeMaterial, type ReferenceImageRole, type ReferenceImageSelection, type ServiceType } from "../../../domain/creative-run";
 import { useBrandMemoryRepository } from "../../../app/providers/brand-memory-provider";
 import { useOptionalAuth } from "../../../app/providers/auth-provider";
+import { labelMaterialAssets } from "../../../services/creative-materials/material-ai";
 import { uploadCreativeMaterial } from "../../../services/creative-materials/upload-creative-material";
 import { toThumbnailSupabaseAssetUrl } from "../../../lib/supabase/storage-asset-url";
 import { downloadGoogleDriveMaterial, loadGoogleDriveMaterialFolder, openGoogleDriveMaterialFolder, type GoogleDriveMaterialFolder, type GoogleDriveMaterialImage } from "../../../services/google-drive/google-drive-materials";
@@ -904,6 +905,7 @@ export function CreativeMaterialsEditor({
           )
         );
         setAssetImages((current) => mergeBrandAssetImages(current, items));
+        labelUploadedMaterials(items);
       } else {
         const items = await Promise.all(
           files.map((file) =>
@@ -930,6 +932,17 @@ export function CreativeMaterialsEditor({
     } finally {
       setUploadPending(false);
     }
+  }
+
+  /** Background GPT Luna labels; the upload never waits for or fails on them. */
+  function labelUploadedMaterials(items: readonly BrandAssetImage[]) {
+    const materials = items.filter(
+      (item) => item.kind === "material" && !item.aiLabel
+    );
+    if (!materials.length) return;
+    void labelMaterialAssets(materials, brandMemoryRepository, (labeled) =>
+      setAssetImages((current) => mergeBrandAssetImages(current, [labeled]))
+    );
   }
 
   async function handleFolderUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -1003,6 +1016,7 @@ export function CreativeMaterialsEditor({
         })
       );
       setAssetImages((current) => mergeBrandAssetImages(current, newImages));
+      labelUploadedMaterials(newImages);
     } catch (caught) {
       setUploadError(
         caught instanceof Error ? caught.message : "Could not upload the folder."
@@ -1103,6 +1117,7 @@ export function CreativeMaterialsEditor({
         result.status === "fulfilled" ? [result.value] : []
       );
       setAssetImages((current) => mergeBrandAssetImages(current, imported));
+      labelUploadedMaterials(imported);
       setDriveImportStatuses((statuses) => {
         const next = { ...statuses };
         results.forEach((result, resultIndex) => {
@@ -1737,7 +1752,7 @@ export function CreativeMaterialsEditor({
         name: asset.name,
         mediaType: asset.mimeType,
         role: "main-object",
-        description: "",
+        description: asset.aiLabel ?? "",
         url: asset.url,
         storagePath: asset.storagePath,
         storageBucket: env.brandAssetsBucket
@@ -1761,7 +1776,7 @@ export function CreativeMaterialsEditor({
           name: asset.name,
           mediaType: asset.mimeType,
           role: "main-object",
-          description: "",
+          description: asset.aiLabel ?? "",
           selected: true,
           url: asset.url,
           storagePath: asset.storagePath,
@@ -2346,7 +2361,8 @@ export function CreativeMaterialsEditor({
                       onDragEnd={clearAssetDragTargets}
                     >
                       <AssetPreviewImage src={asset.url} alt={asset.name} />
-                      <b>{asset.name}</b>
+                      <b title={asset.aiLabel}>{asset.name}</b>
+                      {asset.aiLabel ? <small>{asset.aiLabel}</small> : null}
                       <div className="compass-persistent-asset-actions">
                         <button
                           type="button"
@@ -2927,7 +2943,7 @@ export function BriefStage({ state, dispatch }: StageProps) {
     type: "generate-directions",
     directions: []
   });
-  const { generate, loading, error, checkingCreativeApproval, creativeApprovalFailed } = useGenerateHooks(state, dispatch);
+  const { generate, loading, error, checkingCreativeApproval, creativeApprovalFailed } = useGenerateHooks(state, dispatch, brandMemoryRepository);
   const activeProducts = selectedBrandProducts(state);
   const presentedWorkingSignals = (state.brand?.memory.working ?? [])
     .map((value) => presentBrandMemoryText(value).text)

@@ -412,6 +412,15 @@ export class MockBrandMemoryRepository implements BrandMemoryRepository {
     return image;
   }
 
+  async updateAssetImageLabel(id: string, aiLabel: string): Promise<void> {
+    for (const [clientId, images] of this.assetImagesByClient) {
+      this.assetImagesByClient.set(
+        clientId,
+        images.map((image) => (image.id === id ? { ...image, aiLabel } : image))
+      );
+    }
+  }
+
   async moveAssetImage(
     input: MoveBrandAssetImageInput
   ): Promise<BrandAssetImage> {

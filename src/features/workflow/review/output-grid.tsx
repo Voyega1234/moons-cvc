@@ -443,7 +443,7 @@ export function OutputGrid({
                           title="Download the album master as an image"
                           onClick={() => void downloadDraft(output, reviewOutputs, reviewIndex, true)}
                         >
-                          Download master
+                          Download
                         </button>
                       ) : null}
                       <button
@@ -462,7 +462,11 @@ export function OutputGrid({
                         }
                       >
                         {downloading ? <Spinner /> : null}
-                        {downloading ? "Downloading…" : "Download"}
+                        {downloading
+                          ? "Downloading…"
+                          : album
+                            ? "Download Zip"
+                            : "Download"}
                       </button>
                       <button
                         className="btn secondary small"

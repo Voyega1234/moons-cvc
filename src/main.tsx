@@ -8,6 +8,7 @@ import { BrandProvider } from "./app/providers/brand-provider";
 import { ClientIntakeProvider } from "./app/providers/client-intake-provider";
 import { WorkspaceProvider } from "./app/providers/workspace-provider";
 import { RunCollaborationProvider } from "./app/providers/run-collaboration-provider";
+import { ignoreDragOutBackdropClick } from "./shared/utils/ignore-drag-out-backdrop-click";
 import "./styles/app.css";
 import "./styles/compass-redesign.css";
 import "./styles/workflow/brief-confirmation.css";
@@ -41,6 +42,8 @@ window.addEventListener("vite:preloadError", (event) => {
   sessionStorage.setItem(reloadedKey, "1");
   window.location.reload();
 });
+
+ignoreDragOutBackdropClick();
 
 createRoot(root).render(
   <StrictMode>

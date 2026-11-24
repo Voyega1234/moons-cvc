@@ -2000,3 +2000,26 @@ it("defaults image generation to GPT and updates only the selected image model",
   const selected = workflowReducer(state, { type: "set-artwork-image-model", model: "google/gemini-nano-banana-2.1" });
   expect(selected).toEqual({ ...state, artworkImageModel: "google/gemini-nano-banana-2.1" });
 });
+
+describe("prefill-direction-materials", () => {
+  const material = (id: string) => ({ id, name: id, mediaType: "image/png", role: "main-object" as const, description: "", url: `https://x/${id}.png` });
+  it("fills only hooks with no materials of their own", () => {
+    const base = initialWorkflowState;
+    const state = { ...base, directions: [
+      { ...buildDirectionFixtures("Acme")[0]!, id: "a", uploadedMaterials: undefined },
+      { ...buildDirectionFixtures("Acme")[1]!, id: "b", uploadedMaterials: [material("own")] }
+    ] };
+    const next = workflowReducer(state, { type: "prefill-direction-materials", assignments: [
+      { id: "a", materials: [material("ai")] }, { id: "b", materials: [material("ai")] }
+    ] });
+    expect(next.directions[0]!.uploadedMaterials?.map((m) => m.id)).toEqual(["ai"]);
+    expect(next.directions[1]!.uploadedMaterials?.map((m) => m.id)).toEqual(["own"]);
+  });
+  it("never prefills UGC video hooks, matching the shared-materials sync", () => {
+    const state = { ...initialWorkflowState, service: "ugc-video" as const, directions: [
+      { ...buildDirectionFixtures("Acme")[0]!, id: "u", service: "ugc-video" as const, uploadedMaterials: undefined }
+    ] };
+    const next = workflowReducer(state, { type: "prefill-direction-materials", assignments: [{ id: "u", materials: [material("ai")] }] });
+    expect(next.directions[0]!.uploadedMaterials).toBeUndefined();
+  });
+});

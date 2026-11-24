@@ -213,6 +213,7 @@ export type Database = {
           name: string;
           mime_type: "image/png" | "image/jpeg" | "image/webp";
           storage_path: string;
+          ai_label: string | null;
           source_provider: "google-drive" | null;
           source_id: string | null;
           created_by: string | null;
@@ -227,6 +228,7 @@ export type Database = {
           name: string;
           mime_type: "image/png" | "image/jpeg" | "image/webp";
           storage_path: string;
+          ai_label?: string | null;
           source_provider?: "google-drive" | null;
           source_id?: string | null;
           created_by?: string | null;
