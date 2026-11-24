@@ -3,7 +3,6 @@ import type { ArtworkGenerationRequest } from "../../services/artwork-generation
 import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-agent.js";
 import type { ReferenceImageInput } from "./openai-images-client.js";
 import { compactPromptText } from "./prompt-runtime.js";
-import { PEOPLE_PHOTO_PREFIX } from "../../domain/people-photos.js";
 
 type SelectedHook = ArtworkGenerationRequest["selectedHooks"][number];
 
@@ -151,12 +150,6 @@ export function buildCampaignArtifactRole(
 ): CampaignArtifactRole {
   const role = compactPromptText(reference.label ?? "Reference image", 180);
   const normalized = role.toLowerCase();
-  if (reference.label?.startsWith(PEOPLE_PHOTO_PREFIX)) {
-    return {
-      image: index + 1, kind: "reference", role,
-      instruction: "Optional real-person casting source only. Use the face as the identity anchor when the visual mechanism calls for people. Adapt pose, wardrobe, hair styling, camera angle and lighting to the idea; integrate perspective and shadows naturally instead of pasting in the source portrait. Do not force human presence or treat any product, branding or background in this photo as campaign material."
-    };
-  }
   if (/logo|โลโก้/.test(normalized)) {
     return {
       image: index + 1,

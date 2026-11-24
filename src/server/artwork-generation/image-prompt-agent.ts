@@ -12,7 +12,6 @@ import type { CreativeStrategyEnrichment } from "./creative-strategy-enrichment-
 import { openRouterTraceEnvironment } from "../shared/openrouter-trace.js";
 import { buildCreativeApprovalVisualContext } from "./creative-approval-visual-context.js";
 import { buildRequiredMainObjectInstruction } from "./prompt-context.js";
-import { buildPeoplePhotoInstruction, PEOPLE_PHOTO_PREFIX } from "../../domain/people-photos.js";
 
 type FetchLike = typeof fetch;
 
@@ -91,7 +90,6 @@ export interface CampaignInputPreflight {
   singleMainMessage: string;
   concept: string;
   visualMechanism: string;
-  peoplePhotoImages?: readonly number[];
   copy: {
     headline: string;
     cta: string;
@@ -322,8 +320,7 @@ export async function preflightCampaignInput({
     ...(input.referenceImages.length ? [
       "Inspect the attached images when choosing visualMechanism. Identify the actual subjects and distinct products/variants; multiple views of the same product are identity evidence, not separate required copies. Respect each image's supplied role and do not infer unsupported claims from its appearance.",
       buildRequiredMainObjectInstruction(input.referenceImages.map((image) => image.label))
-    ] : []),
-    buildPeoplePhotoInstruction(input.referenceImages.map((image) => image.label))
+    ] : [])
   ].join("\n");
 
   return withAiRetry(async () => {
@@ -1010,9 +1007,6 @@ function albumSequenceInput(input: ImagePromptAgentInput) {
 }
 
 function buildCompactReference(label: string, index: number) {
-  if (label.startsWith(PEOPLE_PHOTO_PREFIX)) {
-    return { id: `optional-person-${index + 1}`, role: "optional-person-source", fidelity: "identity-only" };
-  }
   const normalized = label.trim().toLowerCase();
   const primary = normalized.includes("primary reference");
   const explicitRole = /·\s*(product|logo|style|layout|typography|content)\s*·/.exec(
@@ -1278,7 +1272,6 @@ const campaignInputPreflightSchema = {
     singleMainMessage: { type: "string" },
     concept: { type: "string" },
     visualMechanism: { type: "string" },
-    peoplePhotoImages: { type: "array", items: { type: "integer" }, description: "Source image numbers for people depicted in the execution. When library candidates are supplied, any visible human requires a compatible selected source. Pose, wardrobe and scene may be adapted. Return [] for a human-free execution or when no library is supplied." },
     copy: {
       type: "object",
       additionalProperties: false,
@@ -1327,7 +1320,6 @@ const campaignInputPreflightSchema = {
     "singleMainMessage",
     "concept",
     "visualMechanism",
-    "peoplePhotoImages",
     "copy",
     "requiredElements",
     "forbiddenElements",

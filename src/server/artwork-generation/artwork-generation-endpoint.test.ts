@@ -868,16 +868,15 @@ describe("handleArtworkGenerationRequest", () => {
     expect(response.status).toBe(401);
   });
 
-  it.each([
-    [false, false], [false, true], [true, false], [true, true]
-  ])("lets the visual plan choose optional shared people photos (reference-led: %s, person selected: %s)", async (referenceLed, usePerson) => {
+  it.each([false, true])("generates without consulting People photos (reference-led: %s)", async (referenceLed) => {
     const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: "white" } }).png().toBuffer();
     const path = peoplePhotoPath("office worker portrait", "image/png", { ageBand: "35-44", gender: "woman" });
     const { client } = fakeStorage();
     const from = client.storage.from.bind(client.storage);
+    const listPeople = vi.fn().mockResolvedValue({ data: [{ name: path.split("/").at(-1)!, id: "person" }], error: null });
     client.storage.from = (bucket) => bucket === PEOPLE_PHOTO_BUCKET ? {
       ...from(bucket),
-      list: async () => ({ data: [{ name: path.split("/").at(-1)!, id: "person" }], error: null }),
+      list: listPeople,
       download: async () => ({ data: { arrayBuffer: async () => bytes, type: "image/png" } as unknown as Blob, error: null })
     } : from(bucket);
     let imageBody: { prompt: string; input_references: unknown[] } | undefined;
@@ -893,16 +892,15 @@ describe("handleArtworkGenerationRequest", () => {
         if (body.text?.format?.name === "moons_reference_design_grammar") {
           planningBody = body;
           return new Response(JSON.stringify({ output_text: JSON.stringify({
-            artworkConcept: "Product message", keyVisualGrammar: usePerson ? "Person demonstrates the product" : "Product only",
+            artworkConcept: "Product message", keyVisualGrammar: "Person demonstrates the product",
             compositionGrammar: "Simple", graphicDeviceLogic: "None", hierarchyAndDensity: "Minimal", secondaryAndFooterGrammar: "None",
-            conceptTranslation: usePerson ? "Use the office worker" : "No people", preserve: [], replace: [], peoplePhotoImages: usePerson ? [3] : []
+            conceptTranslation: "Person demonstrates the product", preserve: [], replace: []
           }) }));
         }
         if (body.text?.format?.name === "moons_campaign_input_preflight") {
           planningBody = body;
           const payload = JSON.parse((await campaignInputPreflightResponse().json()).output_text);
-          payload.visualMechanism = usePerson ? "Person demonstrates the product" : "Product only, no people";
-          payload.peoplePhotoImages = usePerson ? [2] : [];
+          payload.visualMechanism = "Person demonstrates the product";
           return new Response(JSON.stringify({ output_text: JSON.stringify(payload) }));
         }
         return standardAgentResponse(init);
@@ -919,19 +917,14 @@ describe("handleArtworkGenerationRequest", () => {
       fetchImpl, createStorageClient: () => client
     });
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(JSON.stringify(planningBody)).toContain(PEOPLE_PHOTO_PREFIX);
-    expect(JSON.stringify(planningBody)).toContain("Age band (team-provided): 35–44");
-    expect(JSON.stringify(planningBody)).toContain("Gender (team-provided): Woman");
-    expect(planningBody?.input[0]?.content.filter((part) => part.type === "input_image")).toHaveLength(referenceLed ? 3 : 2);
-    expect(imageBody?.input_references).toHaveLength((referenceLed ? 2 : 1) + Number(usePerson));
-    expect(imageBody?.prompt.includes(PEOPLE_PHOTO_PREFIX)).toBe(usePerson);
-    if (usePerson) {
-      expect(imageBody?.prompt).toContain("Every visible person must be grounded in a selected real-person source");
-      expect(imageBody?.prompt).not.toContain("HUMAN PRESENCE LOCK: NO PEOPLE");
-    } else {
-      expect(imageBody?.prompt).toContain("HUMAN PRESENCE LOCK: NO PEOPLE");
-      expect(imageBody?.prompt).toContain("even if the headline mentions children");
-    }
+    expect(listPeople).not.toHaveBeenCalled();
+    expect(JSON.stringify(planningBody)).not.toContain(PEOPLE_PHOTO_PREFIX);
+    expect(JSON.stringify(planningBody)).not.toContain("peoplePhotoImages");
+    expect(planningBody?.input[0]?.content.filter((part) => part.type === "input_image")).toHaveLength(referenceLed ? 2 : 1);
+    expect(imageBody?.input_references).toHaveLength(referenceLed ? 2 : 1);
+    expect(imageBody?.prompt).not.toContain(PEOPLE_PHOTO_PREFIX);
+    expect(imageBody?.prompt).not.toContain("HUMAN PRESENCE LOCK");
+    expect(imageBody?.prompt).not.toContain("REAL PERSON SOURCE PHOTOS");
     const planners = fetchImpl.mock.calls.filter(([, init]) => /moons_(?:campaign_input_preflight|reference_design_grammar)/.test(String(init?.body)));
     expect(planners).toHaveLength(1);
   });

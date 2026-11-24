@@ -1,6 +1,4 @@
 import { geminiApiProvider, openRouterGeminiModel } from "../shared/gemini-api-provider.js";
-import { buildPeoplePhotoInstruction, PEOPLE_PHOTO_PREFIX, PEOPLE_FREE_IMAGE_INSTRUCTION } from "../../domain/people-photos.js";
-import { loadPeoplePhotoCandidates, resolvePeoplePhotoCandidates, plannedPeoplePhotos } from "./people-photo-library.js";
 import { generateIndependentAlbumPanels } from "./album-panels.js";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -491,21 +489,11 @@ async function generateOutputsForSelectedHooks({
       : undefined;
 
   const format = outputFormatForService(input.service);
-  const peoplePhotoNames = await loadPeoplePhotoCandidates(storage).catch((error) => {
-    console.warn("Optional people photo library is unavailable; continuing with existing artwork inputs.", error);
-    return [] as readonly string[];
-  });
-  const peoplePhotoCache = new Map<string, Promise<ReferenceImageInput>>();
   const outputGroups = await mapWithConcurrency(
     input.selectedHooks,
     ARTWORK_GENERATION_CONCURRENCY,
-    async (hook) => {
-      const peoplePhotos = await resolvePeoplePhotoCandidates(storage, peoplePhotoNames,
-        [input.brief, hook.hook, hook.concept].join(" "), peoplePhotoCache, Math.min(6, Math.max(0, 16 - references.length))).catch((error) => {
-          console.warn("Optional people photos could not be loaded; continuing with existing artwork inputs.", error);
-          return [] as readonly ReferenceImageInput[];
-        });
-      return generateOutputForHook({
+    (hook) =>
+      generateOutputForHook({
         independentAlbumPanels,
         input,
         hook,
@@ -522,13 +510,12 @@ async function generateOutputsForSelectedHooks({
         referenceInterpreterProvider,
         debugLogDirectory,
         writeDebugLog,
-        references: [...references, ...peoplePhotos],
+        references,
         designSystemNewFlow,
         format,
         storage,
         fetchImpl
-      });
-    }
+      })
   );
   return outputGroups.flat();
 }
@@ -735,16 +722,10 @@ async function generateOutputForHook({
     }
   }
   const promptReferences = [
-    ...references.filter((reference) => !reference.label?.startsWith(PEOPLE_PHOTO_PREFIX)),
-    ...artworkReferences.map(({ image }) => image),
-    ...references.filter((reference) => reference.label?.startsWith(PEOPLE_PHOTO_PREFIX))
+    ...references,
+    ...artworkReferences.map(({ image }) => image)
   ];
-  let generationReferences = promptReferences;
-  let peoplePhotoSelectionMade = false;
-  const applyPeoplePhotoSelection = (selected: readonly ReferenceImageInput[]) => {
-    peoplePhotoSelectionMade = true;
-    generationReferences = promptReferences.filter((reference) => !reference.label?.startsWith(PEOPLE_PHOTO_PREFIX) || selected.includes(reference));
-  };
+  const generationReferences = promptReferences;
   const isDesignSystemMode =
     !input.referenceLed &&
     (input.artworkMode === "design-system" ||
@@ -816,8 +797,7 @@ async function generateOutputForHook({
           shotOpportunity,
           canvasRatio,
           albumFormat,
-          fetchImpl,
-          onPeoplePhotoSelection: applyPeoplePhotoSelection
+          fetchImpl
         });
   const promptParts =
     isDirectFinalArtwork || isDesignSystemMode
@@ -826,9 +806,6 @@ async function generateOutputForHook({
         ? [prompt, buildReferenceLibraryImageInstruction(generationReferences)]
         : [prompt];
   const brandVisualInstruction = buildCreativeApprovalVisualInstruction(input);
-  const peopleInstruction = buildPeoplePhotoInstruction(generationReferences.map((reference) => reference.label ?? ""), true)
-    || (peoplePhotoSelectionMade ? PEOPLE_FREE_IMAGE_INSTRUCTION : "");
-  if (peopleInstruction) promptParts.push(peopleInstruction);
   // This layout is art-directed as one composition, then split at fixed cuts.
   if (isAlbum && independentAlbumPanels && albumFormat !== "four-horizontal") {
     const assetVersion = input.assetVersion ?? 1;
@@ -2032,8 +2009,7 @@ async function resolveImagePrompt({
   shotOpportunity,
   canvasRatio,
   albumFormat,
-  fetchImpl,
-  onPeoplePhotoSelection
+  fetchImpl
 }: {
   input: ArtworkGenerationRequest;
   hook: SelectedHook;
@@ -2053,7 +2029,6 @@ async function resolveImagePrompt({
   canvasRatio: string;
   albumFormat: AlbumFormat;
   fetchImpl: FetchLike;
-  onPeoplePhotoSelection?: (photos: readonly ReferenceImageInput[]) => void;
 }): Promise<string> {
   const attachedReferences = input.referenceLed
     ? references.filter((reference) => !isHookDesignReference(reference))
@@ -2092,28 +2067,11 @@ async function resolveImagePrompt({
     },
     selectedProductIds: input.selectedProductIds
   };
-  const hasPeoplePhotos = references.some((reference) => reference.label?.startsWith(PEOPLE_PHOTO_PREFIX));
-  const selectPeople = (selected: readonly ReferenceImageInput[]) => {
-    onPeoplePhotoSelection?.(selected);
-    const keep = (reference: ReferenceImageInput) => !reference.label?.startsWith(PEOPLE_PHOTO_PREFIX) || selected.includes(reference);
-    const finalReferences = references.filter(keep);
-    return {
-      input: {
-        ...imagePromptInput,
-        referenceImageLabels: finalReferences.map((reference) => reference.label ?? "Reference image"),
-        referenceImages: imagePromptInput.referenceImages.filter((_, index) => keep(attachedReferences[index]!))
-      },
-      indices: new Map(finalReferences.map((reference, index) => [reference, index + 1]))
-    };
-  };
 
   if (input.referenceLed) {
     const designReferences = references.filter(isHookDesignReference);
     const interpreterReferences =
       designReferences.length > 0 ? designReferences : references;
-    const materialReferences = references.filter((reference) =>
-      (/^Uploaded /i.test(reference.label ?? "") || reference.label?.startsWith(PEOPLE_PHOTO_PREFIX)) && !interpreterReferences.includes(reference)
-    );
     const designGrammar = await interpretReferenceDesign({
       apiKey: referenceInterpreterApiKey,
       model: referenceInterpreterModel,
@@ -2121,7 +2079,9 @@ async function resolveImagePrompt({
       fetchImpl,
       mode: input.artworkMode,
       references: interpreterReferences,
-      materialReferences,
+      materialReferences: references.filter((reference) =>
+        /^Uploaded /i.test(reference.label ?? "") && !interpreterReferences.includes(reference)
+      ),
       campaign: {
         concept: hook.concept,
         objective: hook.why,
@@ -2141,11 +2101,9 @@ async function resolveImagePrompt({
         );
       }
     });
-    const selected = hasPeoplePhotos ? plannedPeoplePhotos([...interpreterReferences, ...materialReferences], designGrammar.peoplePhotoImages) : [];
-    const people = hasPeoplePhotos ? selectPeople(selected) : null;
     return buildReferenceLedImagePrompt(
-      people?.input ?? imagePromptInput,
-      people ? { ...designGrammar, peoplePhotoImages: selected.map((reference) => people.indices.get(reference)!) } : designGrammar,
+      imagePromptInput,
+      designGrammar,
       undefined,
       input.usePlaceholderCopy
     );
@@ -2166,20 +2124,10 @@ async function resolveImagePrompt({
       input: imagePromptInput,
       usePlaceholderCopy: input.usePlaceholderCopy
     });
-    const selected = hasPeoplePhotos ? plannedPeoplePhotos(attachedReferences, campaignInput.peoplePhotoImages) : [];
-    const people = hasPeoplePhotos ? selectPeople(selected) : null;
-    const finalCampaignInput = people ? {
-      ...campaignInput,
-      peoplePhotoImages: selected.map((reference) => people.indices.get(reference)!),
-      references: campaignInput.references.flatMap((reference) => {
-        const index = people.indices.get(attachedReferences[reference.image - 1]!);
-        return index ? [{ ...reference, image: index }] : [];
-      })
-    } : campaignInput;
     return buildStandardImagePrompt(
-      people?.input ?? imagePromptInput,
+      imagePromptInput,
       undefined,
-      finalCampaignInput,
+      campaignInput,
       input.usePlaceholderCopy
     );
   }
