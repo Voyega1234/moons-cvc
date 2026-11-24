@@ -154,7 +154,7 @@ export function buildCampaignArtifactRole(
   if (reference.label?.startsWith(PEOPLE_PHOTO_PREFIX)) {
     return {
       image: index + 1, kind: "reference", role,
-      instruction: "Optional real-person casting source only. Use only if the visual mechanism calls for people and this photo fits. Do not force human presence or treat any product, branding or background in this photo as campaign material."
+      instruction: "Optional real-person casting source only. Use the face as the identity anchor when the visual mechanism calls for people. Adapt pose, wardrobe, hair styling, camera angle and lighting to the idea; integrate perspective and shadows naturally instead of pasting in the source portrait. Do not force human presence or treat any product, branding or background in this photo as campaign material."
     };
   }
   if (/logo|โลโก้/.test(normalized)) {

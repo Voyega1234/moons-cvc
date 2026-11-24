@@ -466,7 +466,10 @@ cannot turn a product/style reference into a person source. Source indices are
 remapped after filtering. With library candidates, an empty selection adds an
 explicit human-free lock to the final generator, so it cannot silently invent a
 person after the planner declined the library. Selected sources anchor every
-visible person while pose, wardrobe and scene may adapt to the idea. Human
+visible person by facial structure and distinctive traits only. Pose, wardrobe, hair
+styling, expression, makeup, camera perspective, scene and lighting are art-directed
+for the idea. Matching light direction, color temperature and contact shadows must
+integrate the person as one shoot rather than a pasted portrait. Human
 presence is optional, guided by the visual
 mechanism and user brief; uploaded Main objects remain separate requirements.
 Other legacy/direct artwork modes receive optional casting sources and their

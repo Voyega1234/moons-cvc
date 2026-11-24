@@ -77,3 +77,15 @@ it("lets casting adapt the pose while requiring a source for any planned person"
   expect(instruction).toContain("any person, return at least one");
   expect(instruction).toContain("explicitly human-free");
 });
+
+it("anchors facial identity while art-directing pose, wardrobe and light as one shoot", () => {
+  const labels = [`${PEOPLE_PHOTO_PREFIX}Person in an office`];
+  const planning = buildPeoplePhotoInstruction(labels);
+  expect(planning).toContain("face as the identity anchor only");
+  expect(planning).toContain("original outfit, body pose and light direction must not constrain");
+  const generation = buildPeoplePhotoInstruction(labels, true);
+  expect(generation).toContain("not a pixel-preserving cutout");
+  expect(generation).toContain("wardrobe, hair styling, expression, makeup");
+  expect(generation).toContain("shadows and contact shadows");
+  expect(generation).toContain("never a pasted-in portrait");
+});
