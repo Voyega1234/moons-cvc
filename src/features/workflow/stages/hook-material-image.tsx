@@ -77,7 +77,26 @@ export function HookMaterialImage({
           <ImageSquare aria-hidden="true" size={15} />
           Materials
         </span>
-        <small>{materials.length}/{MAX_HOOK_MATERIALS} materials</small>
+        <div className="hook-reference-image-head-meta">
+          <small>{materials.length}/{MAX_HOOK_MATERIALS} materials</small>
+          {materials.length ? (
+            <button
+              className="hook-reference-image-clear"
+              type="button"
+              disabled={disabled || uploading}
+              onClick={() =>
+                dispatch({
+                  type: "set-direction-uploaded-materials",
+                  id: direction.id,
+                  materials: []
+                })
+              }
+              aria-label={`Clear all materials for ${direction.hook}`}
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
       </div>
       {materials.length ? (
         <div className="hook-reference-image-grid">

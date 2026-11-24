@@ -85,7 +85,26 @@ export function HookReferenceImage({
           <ImageSquare aria-hidden="true" size={15} />
           Reference Image
         </span>
-        <small>{references.length}/{MAX_HOOK_REFERENCE_IMAGES} references</small>
+        <div className="hook-reference-image-head-meta">
+          <small>{references.length}/{MAX_HOOK_REFERENCE_IMAGES} references</small>
+          {references.length ? (
+            <button
+              className="hook-reference-image-clear"
+              type="button"
+              disabled={disabled || uploading}
+              onClick={() =>
+                dispatch({
+                  type: "set-direction-reference-images",
+                  id: direction.id,
+                  images: []
+                })
+              }
+              aria-label={`Clear all references for ${direction.hook}`}
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
       </div>
       {references.length ? (
         <div className="hook-reference-image-grid">
