@@ -42,6 +42,13 @@ concurrently, then applies the existing merge/version rules. It still waits for
 both authoritative sources before enabling autosave; it does not expose a stale
 local cache or silently omit projects to make startup appear faster.
 
+Run ownership lookups (`repositories/run-collaboration/supabase-run-collaboration-repository.ts`)
+use batches of at most 100 distinct workspace run IDs to stay below gateway URL
+limits. A failed batch fails the lookup rather than reporting partial ownership.
+Workboard shows loading only while requests are active; missing profiles and
+failed requests are not shown as perpetual syncing. Ownership resolution is automatic
+and does not require a user retry action.
+
 ## Behavioral source of truth
 
 | Concern | File |

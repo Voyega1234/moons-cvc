@@ -35,15 +35,19 @@ export class SupabaseRunCollaborationRepository
     workspaceRunIds: readonly string[]
   ): Promise<readonly RunOwnership[]> {
     if (!workspaceRunIds.length) return [];
-    const { data, error } = await getSupabaseClient()
-      .schema("moons")
-      .from("runs")
-      .select(
-        "workspace_run_id,current_owner_user_id,version,status,updated_at"
-      )
-      .in("workspace_run_id", [...workspaceRunIds]);
-
-    if (error) throw error;
+    // Hundreds of run IDs exceed the gateway's GET URL limit in one .in() query.
+    const runIds = [...new Set(workspaceRunIds)];
+    const batches = Array.from({ length: Math.ceil(runIds.length / 100) }, (_, index) => runIds.slice(index * 100, (index + 1) * 100));
+    const results = await Promise.all(batches.map(async (ids) => {
+      const { data, error } = await getSupabaseClient()
+        .schema("moons")
+        .from("runs")
+        .select("workspace_run_id,current_owner_user_id,version,status,updated_at")
+        .in("workspace_run_id", ids);
+      if (error) throw error;
+      return data ?? [];
+    }));
+    const data = results.flat();
     return (data ?? [])
       .filter(
         (run): run is typeof run & { workspace_run_id: string } =>

@@ -10,6 +10,8 @@ import {
   workspaceReducer
 } from "./workspace-reducer";
 import { Overview } from "./stages";
+import { useOptionalRunCollaboration } from "../../app/providers/run-collaboration-provider";
+vi.mock("../../app/providers/run-collaboration-provider", () => ({ useOptionalRunCollaboration: vi.fn(() => null) }));
 
 const repository: BrandRepository = {
   async list() {
@@ -22,7 +24,7 @@ const repository: BrandRepository = {
 
 const mappingRepository = { list: async () => [] };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.mocked(useOptionalRunCollaboration).mockReturnValue(null); });
 
 describe("Workboard", () => {
   it("shows ready clients and starts a brand-bound project", async () => {
@@ -47,6 +49,7 @@ describe("Workboard", () => {
         />
       </BrandProvider>
     );
+    await userEvent.setup().click(screen.getByRole("button", { name: "All" }));
 
     await waitFor(() =>
       expect(
@@ -98,6 +101,7 @@ describe("Workboard", () => {
         />
       </BrandProvider>
     );
+    await userEvent.setup().click(screen.getByRole("button", { name: "All" }));
 
     await user.type(
       await screen.findByRole("searchbox", { name: "Search projects" }),
@@ -155,6 +159,7 @@ describe("Workboard", () => {
         />
       </BrandProvider>
     );
+    await userEvent.setup().click(screen.getByRole("button", { name: "All" }));
 
     expect(await screen.findByText("Summer Campaign")).toBeTruthy();
     const launch = screen.getByText("Product Launch");
@@ -239,6 +244,7 @@ describe("Workboard", () => {
         />
       </BrandProvider>
     );
+    await userEvent.setup().click(screen.getByRole("button", { name: "All" }));
 
     expect(await screen.findByText("1 client · 5 projects shown")).toBeTruthy();
     expect(screen.getByText("Campaign 6")).toBeTruthy();
@@ -317,6 +323,7 @@ describe("Workboard", () => {
         />
       </BrandProvider>
     );
+    await userEvent.setup().click(screen.getByRole("button", { name: "All" }));
 
     const brandName = await screen.findByText(currentBrand.name);
     const group = brandName.closest("section");
@@ -327,4 +334,23 @@ describe("Workboard", () => {
     );
     expect(within(group).queryByText("Awaiting brand ingestion")).toBeNull();
   });
+});
+
+it.each(["loading", "failed", "resolved"] as const)("shows %s ownership without a manual retry control", async (status) => {
+  const brand = brands[0]!;
+  let workspace = createInitialWorkspaceState({ runId: "owner-run", now: "2026-11-24T00:00:00Z" });
+  workspace = workspaceReducer(workspace, { type: "apply-run-action", runId: "owner-run", action: { type: "select-brand", brand }, now: "2026-11-24T00:00:00Z" });
+  vi.mocked(useOptionalRunCollaboration).mockReturnValue({
+    enabled: true, currentUserId: "user-1", members: status === "resolved" ? [{ userId: "user-1", email: "person@convertcake.com", displayName: "Project Owner", department: "gd", isAdmin: false }] : [],
+    clientMemberships: [], clientPicByClientId: {},
+    ownershipByRunId: { "owner-run": { workspaceRunId: "owner-run", currentOwnerUserId: "user-1", version: 1, status: "active", updatedAt: "2026-11-24" } },
+    ownershipReady: status !== "loading", loading: status === "loading", error: status === "failed" ? new Error("Bad Request") : null,
+    handoff: vi.fn(), setClientPic: vi.fn(), refresh: vi.fn()
+  });
+  render(<BrandProvider repository={repository} mappingRepository={mappingRepository}>
+    <Overview state={getActiveRun(workspace)} dispatch={vi.fn()} workspace={workspace} workspaceDispatch={vi.fn()} onOpenStudio={vi.fn()} />
+  </BrandProvider>);
+  expect(await screen.findByText(status === "loading" ? "Loading owner…" : status === "failed" ? "Owner unavailable" : "Project Owner")).toBeTruthy();
+  expect(screen.queryByText("Syncing team profile")).toBeNull();
+  expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
 });

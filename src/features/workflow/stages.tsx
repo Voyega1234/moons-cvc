@@ -6744,14 +6744,18 @@ export function Overview({
                     const ownerName = run
                       ? owner?.displayName ??
                         (collaboration?.enabled
-                          ? "Owner pending"
+                          ? collaboration.loading ? "Loading owner…" : "Owner unavailable"
                           : "Current user")
                       : "Not assigned";
                     const ownerMeta = run
                       ? owner
                         ? `${isCurrentOwner ? "You · " : ""}${departmentLabel(owner.department)}`
                         : collaboration?.enabled
-                          ? "Syncing team profile"
+                          ? collaboration.loading
+                            ? "Loading team profile"
+                            : collaboration.error
+                              ? "Team data could not be loaded"
+                              : ownerUserId ? "Team profile not found" : "Ownership has not synced"
                           : "Local workspace"
                       : "Assigned when started";
                     return (
